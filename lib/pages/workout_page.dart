@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../data/curated_exercises.dart';
+import '../widgets/pixel_button.dart';
+import '../widgets/pixel_loader.dart';
 import '../models/workout_models.dart';
 import '../services/favorite_service.dart';
 import '../services/quest_service.dart';
@@ -128,7 +130,7 @@ class _HistoryTabState extends State<_HistoryTab> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: PixelLoader());
     }
 
     return Padding(
@@ -156,15 +158,12 @@ class _HistoryTabState extends State<_HistoryTab> {
             ),
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const CalendarPage()),
-              ).then((_) => _load()),
-              child: const Text('Open Calendar'),
-            ),
+          PixelButton(
+            label: 'Open Calendar',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CalendarPage()),
+            ).then((_) => _load()),
           ),
         ],
       ),
@@ -405,7 +404,7 @@ class _StatsTabState extends State<_StatsTab> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: PixelLoader());
     }
 
     final completed = _sessions.where((s) => !s.isPartial).toList();
@@ -525,7 +524,7 @@ class _StatsTabState extends State<_StatsTab> {
                   Text(
                     '$totalXP / $xpNext XP',
                     style: const TextStyle(
-                      color: Color(0xFFAAA8C0),
+                      color: Color(0xFF6B6B8A),
                       fontSize: 10,
                     ),
                   ),
@@ -584,8 +583,8 @@ class _StatsTabState extends State<_StatsTab> {
                               : Colors.transparent,
                           width: 20,
                           borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(2),
-                            topRight: Radius.circular(2),
+                            topLeft: Radius.circular(4),
+                            topRight: Radius.circular(4),
                           ),
                         ),
                       ],
@@ -665,7 +664,7 @@ class _StatsTabState extends State<_StatsTab> {
           const SizedBox(height: 4),
           Text(
             'Last 30 days',
-            style: const TextStyle(color: Color(0xFFAAA8C0), fontSize: 12),
+            style: const TextStyle(color: Color(0xFF6B6B8A), fontSize: 12),
           ),
           const SizedBox(height: 16),
 
@@ -770,7 +769,7 @@ class _StatsTabState extends State<_StatsTab> {
                                               Text(
                                                 '${entry.value.weight}kg × ${entry.value.reps} reps',
                                                 style: const TextStyle(
-                                                  color: Color(0xFFAAA8C0),
+                                                  color: Color(0xFF6B6B8A),
                                                   fontSize: 12,
                                                 ),
                                               ),
@@ -780,7 +779,7 @@ class _StatsTabState extends State<_StatsTab> {
                                         Text(
                                           _fmtDate(entry.value.date),
                                           style: const TextStyle(
-                                            color: Color(0xFFAAA8C0),
+                                            color: Color(0xFF6B6B8A),
                                             fontSize: 12,
                                           ),
                                         ),
@@ -882,7 +881,7 @@ class _StatPip extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(color: Color(0xFFAAA8C0), fontSize: 9),
+          style: const TextStyle(color: Color(0xFF6B6B8A), fontSize: 9),
         ),
       ],
     );
@@ -913,7 +912,7 @@ class _MuscleBalanceRow extends StatelessWidget {
           width: 56,
           child: Text(
             data.muscle,
-            style: const TextStyle(color: Color(0xFFAAA8C0), fontSize: 12),
+            style: const TextStyle(color: Color(0xFF6B6B8A), fontSize: 12),
           ),
         ),
         const SizedBox(width: 8),
@@ -929,7 +928,7 @@ class _MuscleBalanceRow extends StatelessWidget {
                       height: 8,
                       decoration: BoxDecoration(
                         color: i < filled ? color : const Color(0xFF2A2A4A),
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                     if (i < 9) const SizedBox(width: 4),
@@ -944,7 +943,7 @@ class _MuscleBalanceRow extends StatelessWidget {
           width: 72,
           child: Text(
             '${fmtVol(data.volume)} kg',
-            style: const TextStyle(color: Color(0xFFAAA8C0), fontSize: 12),
+            style: const TextStyle(color: Color(0xFF6B6B8A), fontSize: 12),
             textAlign: TextAlign.right,
           ),
         ),
@@ -1048,7 +1047,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
                 labelStyle: TextStyle(
                   color: selected
                       ? const Color(0xFF0D0D1A)
-                      : const Color(0xFFAAA8C0),
+                      : const Color(0xFF6B6B8A),
                   fontSize: 11,
                 ),
                 onSelected: (_) => setState(() => _selectedGroup = group),

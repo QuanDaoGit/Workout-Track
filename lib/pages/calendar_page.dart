@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/workout_models.dart';
+import '../widgets/pixel_loader.dart';
 import '../services/workout_storage_service.dart';
 import 'Workout session/session_detail.dart';
 
@@ -190,7 +191,7 @@ class _CalendarPageState extends State<CalendarPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('WORKOUT HISTORY')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: PixelLoader())
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -295,7 +296,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                       e.key,
                                       style: const TextStyle(
                                         fontSize: 10,
-                                        color: Color(0xFFAAA8C0),
+                                        color: Color(0xFF6B6B8A),
                                       ),
                                     ),
                                   ],
@@ -317,7 +318,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                   'Rest',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: Color(0xFFAAA8C0),
+                                    color: Color(0xFF6B6B8A),
                                   ),
                                 ),
                               ],
@@ -375,7 +376,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                       subtitle: Text(
                                         '${session.exercises.length} exercises',
                                         style: const TextStyle(
-                                          color: Color(0xFFAAA8C0),
+                                          color: Color(0xFF6B6B8A),
                                         ),
                                       ),
                                       trailing: Text(

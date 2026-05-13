@@ -53,8 +53,8 @@ class ExerciseCard extends StatelessWidget {
             // Thumbnail
             ClipRRect(
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(3),
-                bottomLeft: Radius.circular(3),
+                topLeft: Radius.circular(4),
+                bottomLeft: Radius.circular(4),
               ),
               child: SizedBox(
                 width: 60,
@@ -113,7 +113,7 @@ class ExerciseCard extends StatelessWidget {
                       exercise.levelLabel,
                       style: const TextStyle(
                         fontSize: 10,
-                        color: Color(0xFFAAA8C0),
+                        color: Color(0xFF6B6B8A),
                       ),
                     ),
                   ),
@@ -146,21 +146,9 @@ class ExerciseCard extends StatelessWidget {
             if (showFavorite)
               Padding(
                 padding: EdgeInsets.only(right: showCheckbox ? 0 : 8),
-                child: IconButton(
-                  constraints: const BoxConstraints(),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  icon: ImageIcon(
-                    AssetImage(
-                      isFavorite
-                          ? 'assets/icons/control/icon_heart.png'
-                          : 'assets/icons/control/icon_receptacle.png',
-                    ),
-                    color: isFavorite
-                        ? const Color(0xFFFF2D55)
-                        : const Color(0xFF6B6B8A),
-                    size: 20,
-                  ),
-                  onPressed: onFavoriteToggle,
+                child: _BouncingHeartIcon(
+                  isFavorite: isFavorite,
+                  onToggle: onFavoriteToggle,
                 ),
               ),
             // Checkbox
@@ -182,7 +170,7 @@ class ExerciseCard extends StatelessWidget {
                             : const Color(0xFF2A2A4A),
                         width: 1.5,
                       ),
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(4),
                     ),
                     child: isSelected
                         ? const Icon(
@@ -195,6 +183,64 @@ class ExerciseCard extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BouncingHeartIcon extends StatefulWidget {
+  const _BouncingHeartIcon({
+    required this.isFavorite,
+    this.onToggle,
+  });
+
+  final bool isFavorite;
+  final VoidCallback? onToggle;
+
+  @override
+  State<_BouncingHeartIcon> createState() => _BouncingHeartIconState();
+}
+
+class _BouncingHeartIconState extends State<_BouncingHeartIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 300),
+  );
+
+  late final Animation<double> _scale = TweenSequence<double>([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.5), weight: 1),
+    TweenSequenceItem(tween: Tween(begin: 1.5, end: 1.0), weight: 1),
+  ]).animate(_controller);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      constraints: const BoxConstraints(),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      onPressed: () {
+        _controller.forward(from: 0);
+        widget.onToggle?.call();
+      },
+      icon: ScaleTransition(
+        scale: _scale,
+        child: ImageIcon(
+          AssetImage(
+            widget.isFavorite
+                ? 'assets/icons/control/icon_heart.png'
+                : 'assets/icons/control/icon_receptacle.png',
+          ),
+          color: widget.isFavorite
+              ? const Color(0xFFFF2D55)
+              : const Color(0xFF6B6B8A),
+          size: 20,
         ),
       ),
     );

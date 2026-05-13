@@ -117,7 +117,7 @@ class MyApp extends StatelessWidget {
             color: Color(0xFFE8E8FF),
           ),
           bodySmall: GoogleFonts.shareTechMono(
-            color: const Color(0xFFAAA8C0),
+            color: const Color(0xFF6B6B8A),
             fontSize: 14,
           ),
           bodyMedium: GoogleFonts.shareTechMono(
@@ -128,7 +128,7 @@ class MyApp extends StatelessWidget {
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: Color(0xFF0D0D1A),
           selectedItemColor: Color(0xFF00FF9C),
-          unselectedItemColor: Color(0xFFAAA8C0),
+          unselectedItemColor: Color(0xFF6B6B8A),
         ),
         dialogTheme: const DialogThemeData(
           backgroundColor: Color(0xFF1A1A2E),
