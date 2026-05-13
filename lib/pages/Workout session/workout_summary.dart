@@ -29,6 +29,7 @@ class WorkoutSummaryPage extends StatefulWidget {
 
 class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   bool _saving = false;
+  bool _saved = false;
 
   late final int _estimatedCalories = CalorieService.estimateCalories(
     widget.muscleGroup,
@@ -41,7 +42,18 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
+  int get _totalSets => widget.exerciseLogs.fold<int>(
+    0,
+    (sum, log) => sum + log.sets.length,
+  );
+
   Future<void> _saveAndExit() async {
+    if (_totalSets == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Log at least one set before saving.')),
+      );
+      return;
+    }
     setState(() => _saving = true);
     if (widget.resumeFromSession != null) {
       await WorkoutStorageService().deleteSession(widget.resumeFromSession!.id);
@@ -58,22 +70,33 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         isPartial: widget.isPartial,
       ),
     );
-    if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+    if (mounted) {
+      setState(() {
+        _saving = false;
+        _saved = true;
+      });
+    }
+  }
+
+  void _goHome() {
+    Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
   @override
   Widget build(BuildContext context) {
-    final totalSets = widget.exerciseLogs.fold<int>(
-      0,
-      (sum, log) => sum + log.sets.length,
-    );
+    final totalSets = _totalSets;
 
     return PopScope(
-      canPop: false,
+      canPop: _saved,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _saved) {
+          _goHome();
+        }
+      },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Workout Complete'),
-          automaticallyImplyLeading: false,
+          title: Text(_saved ? 'Workout Saved' : 'Workout Complete'),
+          automaticallyImplyLeading: _saved,
         ),
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -156,11 +179,17 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
 
               const SizedBox(height: 24),
 
-              PixelButton(
-                label: 'Save & Exit',
-                onPressed: _saveAndExit,
-                isLoading: _saving,
-              ),
+              if (_saved)
+                FilledButton(
+                  onPressed: _goHome,
+                  child: const Text('Back to Home'),
+                )
+              else
+                PixelButton(
+                  label: 'Save & Exit',
+                  onPressed: _saveAndExit,
+                  isLoading: _saving,
+                ),
             ],
           ),
         ),

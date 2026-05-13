@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/workout_models.dart';
 import '../../widgets/pixel_button.dart';
@@ -30,38 +31,107 @@ class ActiveWorkoutPage extends StatefulWidget {
   State<ActiveWorkoutPage> createState() => _ActiveWorkoutPageState();
 }
 
-class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
+class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
+    with WidgetsBindingObserver {
+  static const String _startTimeKey = 'session_start_time';
+
   int _elapsedSeconds = 0;
   Timer? _timer;
+  late DateTime _sessionStartTime;
   late Map<String, _ExerciseStatus> _status;
   final Map<String, List<SetEntry>> _loggedSets = {};
+  final Map<String, GlobalKey> _exerciseKeys = {};
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     if (widget.resumeFromSession != null) {
-      _elapsedSeconds = widget.resumeFromSession!.actualDurationSeconds;
+      // Resuming: compute start time so elapsed stays continuous
+      _sessionStartTime = DateTime.now().subtract(
+        Duration(seconds: widget.resumeFromSession!.actualDurationSeconds),
+      );
       for (final log in widget.resumeFromSession!.exercises) {
         if (log.sets.isNotEmpty) {
           _loggedSets[log.exerciseId] = log.sets;
         }
       }
+    } else {
+      _sessionStartTime = DateTime.now();
     }
+
+    _persistStartTime();
+    _updateElapsed();
+
     _status = {
       for (final e in widget.exercises)
         e.id: _loggedSets.containsKey(e.id)
             ? _ExerciseStatus.done
             : _ExerciseStatus.notStarted,
     };
+
+    for (final e in widget.exercises) {
+      _exerciseKeys[e.id] = GlobalKey();
+    }
+
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      setState(() => _elapsedSeconds++);
+      setState(_updateElapsed);
     });
+
+    // Auto-scroll to first incomplete exercise on resume
+    if (widget.resumeFromSession != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToFirstIncomplete();
+      });
+    }
+  }
+
+  void _scrollToFirstIncomplete() {
+    for (final e in widget.exercises) {
+      if (_status[e.id] != _ExerciseStatus.done) {
+        final key = _exerciseKeys[e.id];
+        if (key?.currentContext != null) {
+          Scrollable.ensureVisible(
+            key!.currentContext!,
+            alignment: 0.3,
+            duration: const Duration(milliseconds: 400),
+          );
+        }
+        break;
+      }
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      setState(_updateElapsed);
+    }
+  }
+
+  void _updateElapsed() {
+    _elapsedSeconds = DateTime.now().difference(_sessionStartTime).inSeconds;
+  }
+
+  Future<void> _persistStartTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _startTimeKey,
+      _sessionStartTime.toIso8601String(),
+    );
+  }
+
+  Future<void> _clearStartTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_startTimeKey);
   }
 
   bool get _allDone =>
@@ -108,6 +178,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
 
   void _goToSummary() {
     _timer?.cancel();
+    _clearStartTime();
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -125,6 +196,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
 
   Future<void> _savePartialAndQuit() async {
     _timer?.cancel();
+    _clearStartTime();
     if (widget.resumeFromSession != null) {
       await WorkoutStorageService().deleteSession(widget.resumeFromSession!.id);
     }
@@ -146,6 +218,45 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
       ),
     );
     if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
+  void _discardAndQuit() {
+    _timer?.cancel();
+    _clearStartTime();
+    Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
+  Future<void> _showAbandonDialog() async {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+        ),
+        title: const Text('ABANDON SESSION?'),
+        content: const Text(
+          'All logged sets will be lost. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('KEEP TRAINING'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _discardAndQuit();
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFFF2D55),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('ABANDON'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _confirmEndEarly() async {
@@ -175,6 +286,21 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
                 Navigator.of(ctx).pop();
                 _goToSummary();
               },
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  _showAbandonDialog();
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFFF2D55),
+                  side: const BorderSide(color: Color(0xFFFF2D55)),
+                ),
+                child: const Text('Discard'),
+              ),
             ),
             const SizedBox(height: 8),
             TextButton(
@@ -312,6 +438,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
 
             for (final exercise in widget.exercises) ...[
               Card(
+                key: _exerciseKeys[exercise.id],
                 child: InkWell(
                   onTap: () => _openExercise(exercise),
                   borderRadius: BorderRadius.circular(4),
