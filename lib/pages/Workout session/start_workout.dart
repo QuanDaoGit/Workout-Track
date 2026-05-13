@@ -22,11 +22,9 @@ class StartWorkoutPage extends StatefulWidget {
 class _StartWorkoutPageState extends State<StartWorkoutPage> {
   static const List<String> muscleGroups = ['Chest', 'Back', 'Arms', 'Legs'];
 
-  bool showTimeInput = false;
   String? selectedMuscleGroup;
   int selectedHour = 1;
   int selectedMinute = 30;
-  int? confirmedWorkoutMinutes;
   FixedExtentScrollController? hourPickerController;
   FixedExtentScrollController? minutePickerController;
   Future<List<Exercise>>? exerciseCatalogFuture;
@@ -69,7 +67,11 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     super.dispose();
   }
 
-  int? get workoutMinutes => confirmedWorkoutMinutes;
+  int? get workoutMinutes {
+    final totalMinutes = selectedHour * 60 + selectedMinute;
+    if (totalMinutes <= 0) return null;
+    return totalMinutes;
+  }
 
   int? get recommendedExerciseCount {
     final minutes = workoutMinutes;
@@ -89,25 +91,12 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   void updateSelectedHour(int hour) {
     setState(() {
       selectedHour = hour;
-      confirmedWorkoutMinutes = null;
     });
   }
 
   void updateSelectedMinute(int minute) {
     setState(() {
       selectedMinute = minute;
-      confirmedWorkoutMinutes = null;
-    });
-  }
-
-  void confirmWorkoutTime() {
-    final totalMinutes = selectedHour * 60 + selectedMinute;
-    if (totalMinutes <= 0) {
-      return;
-    }
-
-    setState(() {
-      confirmedWorkoutMinutes = totalMinutes;
     });
   }
 
@@ -120,6 +109,10 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      backgroundColor: const Color(0xFF1A1A2E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+      ),
       builder: (context) {
         return SafeArea(
           child: _ExercisePickerSheet(
@@ -141,7 +134,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       MaterialPageRoute(
         builder: (_) => ActiveWorkoutPage(
           muscleGroup: muscleGroup,
-          durationMinutes: confirmedWorkoutMinutes!,
+          durationMinutes: workoutMinutes!,
           exercises: selected,
         ),
       ),
@@ -151,6 +144,8 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   @override
   Widget build(BuildContext context) {
     final exerciseCount = recommendedExerciseCount;
+    final canPickExercises =
+        selectedMuscleGroup != null && exerciseCount != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Start Workout')),
@@ -159,15 +154,10 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Choose a muscle group',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-            ),
+            const _StepHeader(label: '1. CHOOSE TARGET'),
             const SizedBox(height: 8),
             const Text(
-              'Pick what you want to train first.',
+              'Pick the muscle group for this run.',
               style: TextStyle(color: Color(0xFF6B6B8A)),
             ),
             const SizedBox(height: 20),
@@ -181,98 +171,89 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
                     label: muscleGroup,
                     selected: selectedMuscleGroup == muscleGroup,
                     onSelected: () => selectMuscleGroup(muscleGroup),
-                    labelStyle: selectedMuscleGroup == muscleGroup
-                        ? const TextStyle(
-                            color: Color(0xFF0D0D1A),
-                            fontWeight: FontWeight.bold,
-                          )
-                        : null,
                   ),
               ],
             ),
-            const SizedBox(height: 20),
 
             if (selectedMuscleGroup != null) ...[
-              OutlinedButton(
-                onPressed: () {
-                  setState(() {
-                    showTimeInput = true;
-                  });
-                },
-                child: const Text('Pick your time'),
+              const SizedBox(height: 28),
+              const _StepHeader(label: '2. SET DURATION'),
+              const SizedBox(height: 8),
+              Text(
+                '${workoutMinutes ?? 0} min target',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFFE8E8FF),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              const SizedBox(height: 20),
-            ],
-
-            if (showTimeInput)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 12),
+              Row(
                 children: [
-                  Text(
-                    'Pick your workout time',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF6B6B8A),
+                  Expanded(
+                    child: _TimePickerColumn(
+                      controller: safeHourPickerController,
+                      itemCount: 10,
+                      labelBuilder: (index) {
+                        final unit = index == 1 ? 'hour' : 'hours';
+                        return '$index $unit';
+                      },
+                      onSelectedItemChanged: (index) {
+                        updateSelectedHour(index % 10);
+                      },
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _TimePickerColumn(
-                          controller: safeHourPickerController,
-                          itemCount: 10,
-                          labelBuilder: (index) {
-                            final unit = index == 1 ? 'hour' : 'hours';
-                            return '$index $unit';
-                          },
-                          onSelectedItemChanged: (index) {
-                            updateSelectedHour(index % 10);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _TimePickerColumn(
-                          controller: safeMinutePickerController,
-                          itemCount: minuteOptions.length,
-                          labelBuilder: (index) =>
-                              '${minuteOptions[index]} min',
-                          onSelectedItemChanged: (index) {
-                            final minuteIndex = index % minuteOptions.length;
-                            updateSelectedMinute(minuteOptions[minuteIndex]);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  PixelButton(
-                    label: 'Confirm Time',
-                    onPressed: selectedHour == 0 && selectedMinute == 0
-                        ? null
-                        : confirmWorkoutTime,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _TimePickerColumn(
+                      controller: safeMinutePickerController,
+                      itemCount: minuteOptions.length,
+                      labelBuilder: (index) => '${minuteOptions[index]} min',
+                      onSelectedItemChanged: (index) {
+                        final minuteIndex = index % minuteOptions.length;
+                        updateSelectedMinute(minuteOptions[minuteIndex]);
+                      },
+                    ),
                   ),
                 ],
               ),
-
-            if (exerciseCount != null) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 28),
+              const _StepHeader(label: '3. PICK EXERCISES'),
+              const SizedBox(height: 8),
               Text(
-                'Recommended: $exerciseCount exercises',
+                exerciseCount == null
+                    ? 'Set a duration to unlock exercise picks.'
+                    : 'Recommended: $exerciseCount exercises',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                   color: const Color(0xFF6B6B8A),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               PixelButton(
-                label: 'Pick exercises',
-                onPressed: showExercisePicker,
+                label: 'PICK EXERCISES',
+                onPressed: canPickExercises ? showExercisePicker : null,
               ),
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _StepHeader extends StatelessWidget {
+  const _StepHeader({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontFamily: 'PressStart2P',
+        fontSize: 8,
+        color: Color(0xFFFFD700),
       ),
     );
   }
@@ -523,13 +504,11 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
                       return ExerciseCard(
                         exercise: exercise,
                         showInfoIcon: true,
-                        showFavorite: true,
+                        showFavorite: false,
                         showCheckbox: true,
                         isFavorite: favoriteExerciseIds.contains(exercise.id),
                         isSelected: selectedExerciseIds.contains(exercise.id),
                         onTap: () => toggleSelectedExercise(exercise.id),
-                        onFavoriteToggle: () =>
-                            toggleFavoriteExercise(exercise),
                         onInfoPressed: () => _showExercisePreview(exercise),
                         onCheckboxToggle: () =>
                             toggleSelectedExercise(exercise.id),
@@ -540,11 +519,13 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
               ),
             ),
 
-            if (selectedExerciseIds.isNotEmpty)
-              _SelectionBar(
-                count: selectedExerciseIds.length,
-                onContinue: showSelectionConfirmation,
-              ),
+            _SelectionBar(
+              count: selectedExerciseIds.length,
+              total: widget.recommendedCount,
+              onContinue: selectedExerciseIds.isEmpty
+                  ? null
+                  : showSelectionConfirmation,
+            ),
           ],
         ),
       ),
@@ -599,12 +580,12 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
     });
   }
 
-  Future<void> toggleFavoriteExercise(Exercise exercise) async {
+  Future<bool> toggleFavoriteExercise(Exercise exercise) async {
     final isFavorite = await favoriteService.toggleFavoriteExercise(
       exercise.id,
     );
     if (!mounted) {
-      return;
+      return isFavorite;
     }
 
     setState(() {
@@ -614,103 +595,141 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
         favoriteExerciseIds = {...favoriteExerciseIds}..remove(exercise.id);
       }
     });
+    return isFavorite;
   }
 
   void _showExercisePreview(Exercise exercise) {
     final isSelected = selectedExerciseIds.contains(exercise.id);
+    var isFavorite = favoriteExerciseIds.contains(exercise.id);
     showDialog<void>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(exercise.name),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.asset(
-                        exercise.imageAssetPath,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const ColoredBox(
-                              color: Color(0xFF0D0D1A),
-                              child: Center(
-                                child: ImageIcon(
-                                  AssetImage(
-                                    'assets/icons/control/icon_sword.png',
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(exercise.name),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.asset(
+                          exercise.imageAssetPath,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const ColoredBox(
+                                color: Color(0xFF0D0D1A),
+                                child: Center(
+                                  child: ImageIcon(
+                                    AssetImage(
+                                      'assets/icons/control/icon_sword.png',
+                                    ),
+                                    color: Color(0xFF2A2A4A),
+                                    size: 40,
                                   ),
-                                  color: Color(0xFF2A2A4A),
-                                  size: 40,
                                 ),
                               ),
-                            ),
-                      ),
-                      Container(
-                        color: const Color(0xFF0D0D1A).withValues(alpha: 0.3),
-                      ),
-                    ],
+                        ),
+                        Container(
+                          color: const Color(0xFF0D0D1A).withValues(alpha: 0.3),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFF2A2A4A)),
-                  borderRadius: BorderRadius.circular(4),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFF2A2A4A)),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    exercise.levelLabel,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF6B6B8A),
+                    ),
+                  ),
                 ),
-                child: Text(
-                  exercise.levelLabel,
+                const SizedBox(height: 8),
+                Text(
+                  'Muscles: ${widget.muscleGroup}',
                   style: const TextStyle(
-                    fontSize: 10,
                     color: Color(0xFF6B6B8A),
+                    fontSize: 12,
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Muscles: ${widget.muscleGroup}',
-                style: const TextStyle(color: Color(0xFF6B6B8A), fontSize: 12),
-              ),
-            ],
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () async {
+                    final next = await toggleFavoriteExercise(exercise);
+                    if (context.mounted) {
+                      setDialogState(() => isFavorite = next);
+                    }
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF2A2A3E),
+                    foregroundColor: isFavorite
+                        ? const Color(0xFFFF2D55)
+                        : const Color(0xFF6B6B8A),
+                  ),
+                  icon: Icon(
+                    isFavorite
+                        ? Icons.favorite_sharp
+                        : Icons.favorite_border_sharp,
+                    size: 18,
+                  ),
+                  label: Text(isFavorite ? 'FAVORITE' : 'MARK FAVORITE'),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF2A2A3E),
+                foregroundColor: const Color(0xFFE8E8FF),
+              ),
+              child: const Text('CLOSE'),
+            ),
+            PixelButton(
+              label: isSelected ? 'DESELECT' : 'SELECT',
+              fullWidth: false,
+              onPressed: () {
+                Navigator.pop(context);
+                toggleSelectedExercise(exercise.id);
+              },
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          PixelButton(
-            label: isSelected ? 'Deselect' : 'Select',
-            fullWidth: false,
-            onPressed: () {
-              Navigator.pop(context);
-              toggleSelectedExercise(exercise.id);
-            },
-          ),
-        ],
       ),
     );
   }
 }
 
 class _SelectionBar extends StatelessWidget {
-  const _SelectionBar({required this.count, required this.onContinue});
+  const _SelectionBar({
+    required this.count,
+    required this.total,
+    required this.onContinue,
+  });
 
   final int count;
-  final VoidCallback onContinue;
+  final int total;
+  final VoidCallback? onContinue;
 
   @override
   Widget build(BuildContext context) {
-    final label = count == 1
-        ? '1 exercise selected'
-        : '$count exercises selected';
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFF1A1A2E),
@@ -720,9 +739,20 @@ class _SelectionBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
+            child: Text(
+              '$count / $total SELECTED',
+              style: const TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 8,
+                color: Color(0xFFE8E8FF),
+              ),
+            ),
           ),
-          PixelButton(label: 'Continue', fullWidth: false, onPressed: onContinue),
+          PixelButton(
+            label: 'CONTINUE',
+            fullWidth: false,
+            onPressed: onContinue,
+          ),
         ],
       ),
     );
@@ -734,13 +764,11 @@ class _PulsingChoiceChip extends StatefulWidget {
     required this.label,
     required this.selected,
     required this.onSelected,
-    this.labelStyle,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onSelected;
-  final TextStyle? labelStyle;
 
   @override
   State<_PulsingChoiceChip> createState() => _PulsingChoiceChipState();
@@ -771,11 +799,27 @@ class _PulsingChoiceChipState extends State<_PulsingChoiceChip>
       child: ChoiceChip(
         label: Text(widget.label),
         selected: widget.selected,
+        showCheckmark: false,
+        backgroundColor: const Color(0xFF2A2A3E),
+        selectedColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(
+            color: widget.selected
+                ? const Color(0xFF00FF9C)
+                : const Color(0xFF2A2A4A),
+          ),
+        ),
+        labelStyle: TextStyle(
+          color: widget.selected
+              ? const Color(0xFF00FF9C)
+              : const Color(0xFF6B6B8A),
+          fontWeight: widget.selected ? FontWeight.bold : FontWeight.normal,
+        ),
         onSelected: (_) {
           _controller.forward().then((_) => _controller.reverse());
           widget.onSelected();
         },
-        labelStyle: widget.labelStyle,
       ),
     );
   }
@@ -800,28 +844,47 @@ class _TimePickerColumn extends StatelessWidget {
       height: 130,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFF0D0D1A),
+          color: const Color(0xFF1A1A2E),
           border: Border.all(color: const Color(0xFF00FF9C), width: 1),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: CupertinoPicker(
-          scrollController: controller,
-          itemExtent: 40,
-          looping: true,
-          magnification: 1.08,
-          useMagnifier: true,
-          onSelectedItemChanged: onSelectedItemChanged,
-          children: [
-            for (var index = 0; index < itemCount; index++)
-              Center(
-                child: Text(
-                  labelBuilder(index),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: const Color(0xFFE8E8FF),
+        child: CupertinoTheme(
+          data: const CupertinoThemeData(
+            textTheme: CupertinoTextThemeData(
+              pickerTextStyle: TextStyle(
+                fontFamily: 'ShareTechMono',
+                color: Color(0xFFE8E8FF),
+                fontSize: 18,
+              ),
+            ),
+          ),
+          child: CupertinoPicker(
+            backgroundColor: const Color(0xFF1A1A2E),
+            scrollController: controller,
+            itemExtent: 40,
+            looping: true,
+            magnification: 1.08,
+            useMagnifier: true,
+            selectionOverlay: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A3E),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            onSelectedItemChanged: onSelectedItemChanged,
+            children: [
+              for (var index = 0; index < itemCount; index++)
+                Center(
+                  child: Text(
+                    labelBuilder(index),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: const Color(0xFFE8E8FF),
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

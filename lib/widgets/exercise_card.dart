@@ -32,6 +32,8 @@ class ExerciseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final useSelectedBorder = isSelected && !showCheckbox;
+
     return GestureDetector(
       onTap: onTap,
       onLongPress: onInfoPressed,
@@ -41,10 +43,10 @@ class ExerciseCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A2E),
           border: Border.all(
-            color: isSelected
+            color: useSelectedBorder
                 ? const Color(0xFF00FF9C)
                 : const Color(0xFF2A2A4A),
-            width: isSelected ? 1.5 : 1,
+            width: useSelectedBorder ? 1.5 : 1,
           ),
           borderRadius: BorderRadius.circular(4),
         ),
@@ -190,10 +192,7 @@ class ExerciseCard extends StatelessWidget {
 }
 
 class _BouncingHeartIcon extends StatefulWidget {
-  const _BouncingHeartIcon({
-    required this.isFavorite,
-    this.onToggle,
-  });
+  const _BouncingHeartIcon({required this.isFavorite, this.onToggle});
 
   final bool isFavorite;
   final VoidCallback? onToggle;

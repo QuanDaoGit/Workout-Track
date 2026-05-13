@@ -50,7 +50,10 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage>
       vsync: this,
       duration: const Duration(seconds: _restDurationSeconds),
     );
-    _restAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(_restController);
+    _restAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(_restController);
     _restController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         setState(() => _restActive = false);
@@ -172,10 +175,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage>
           alignment: Alignment.centerLeft,
           child: FractionallySizedBox(
             widthFactor: _restAnimation.value,
-            child: Container(
-              height: 6,
-              color: const Color(0xFF00FF9C),
-            ),
+            child: Container(height: 6, color: const Color(0xFF00FF9C)),
           ),
         ),
       ),
@@ -212,187 +212,198 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage>
           if (_restActive) _buildRestBar(),
           Expanded(
             child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: SizedBox(
-                height: 180,
-                width: double.infinity,
-                child: Image.asset(
-                  widget.exercise.imageAssetPath,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => const ColoredBox(
-                    color: Color(0xFF1A1A2E),
-                    child: Center(
-                      child: ImageIcon(
-                        AssetImage('assets/icons/control/icon_sword.png'),
-                        color: Color(0xFF2A2A4A),
-                        size: 48,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: SizedBox(
+                      height: 180,
+                      width: double.infinity,
+                      child: Image.asset(
+                        widget.exercise.imageAssetPath,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const ColoredBox(
+                          color: Color(0xFF1A1A2E),
+                          child: Center(
+                            child: ImageIcon(
+                              AssetImage('assets/icons/control/icon_sword.png'),
+                              color: Color(0xFF2A2A4A),
+                              size: 48,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
+
+                  const SizedBox(height: 16),
+
+                  Text(
+                    widget.exercise.name,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.exercise.levelLabel,
+                    style: const TextStyle(color: Color(0xFF6B6B8A)),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 32,
+                        child: Text(
+                          'Set',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'Weight (kg)',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Reps',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      const SizedBox(width: 48),
+                    ],
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _rows.length,
+                    itemBuilder: (_, index) {
+                      final row = _rows[index];
+                      final prevSet =
+                          _previousSets != null && index < _previousSets!.length
+                          ? _previousSets![index]
+                          : null;
+                      final weightHint = prevSet != null
+                          ? prevSet.weight.toString()
+                          : '0';
+                      final repsHint = prevSet != null
+                          ? prevSet.reps.toString()
+                          : '0';
+                      final isLocked = _lockedSets.contains(index);
+                      return GestureDetector(
+                        key: _rowKeys[index],
+                        onTap: isLocked ? () => _unlockSet(index) : null,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 400),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _flashIndex == index
+                                ? const Color(0xFF00FF9C).withValues(alpha: 0.2)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 32,
+                                child: Text(
+                                  '${index + 1}',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
+                              Expanded(
+                                child: TextField(
+                                  controller: row.weight,
+                                  decoration: _fieldDeco(weightHint),
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                  enabled: !isLocked,
+                                  onTap: () => _scrollToRow(index),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: row.reps,
+                                  decoration: _fieldDeco(repsHint),
+                                  keyboardType: TextInputType.number,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                  enabled: !isLocked,
+                                  onTap: () => _scrollToRow(index),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 40,
+                                height: 40,
+                                child: isLocked
+                                    ? const Icon(
+                                        Icons.check_circle_sharp,
+                                        color: Color(0xFF00FF9C),
+                                        size: 20,
+                                      )
+                                    : IconButton(
+                                        padding: EdgeInsets.zero,
+                                        icon: const Icon(
+                                          Icons.save_sharp,
+                                          color: Color(0xFFAAA8C0),
+                                          size: 20,
+                                        ),
+                                        onPressed: () => _logSet(index),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  SizedBox(
+                    width: 132,
+                    child: FilledButton(
+                      onPressed: () {
+                        final newIndex = _rows.length;
+                        setState(() {
+                          _rows.add(_SetRow());
+                          _rowKeys.add(GlobalKey());
+                          _flashIndex = newIndex;
+                        });
+                        Future.delayed(const Duration(milliseconds: 400), () {
+                          if (mounted) setState(() => _flashIndex = null);
+                        });
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF1A1A2E),
+                        foregroundColor: const Color(0xFF00FF9C),
+                        side: const BorderSide(color: Color(0xFF00FF9C)),
+                      ),
+                      child: const Text('+ ADD SET'),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  PixelButton(label: 'Finish Exercise', onPressed: _finish),
+                ],
               ),
             ),
-
-            const SizedBox(height: 16),
-
-            Text(
-              widget.exercise.name,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              widget.exercise.levelLabel,
-              style: const TextStyle(color: Color(0xFF6B6B8A)),
-            ),
-
-            const SizedBox(height: 24),
-
-            Row(
-              children: [
-                SizedBox(
-                  width: 32,
-                  child: Text(
-                    'Set',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    'Weight (kg)',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Reps',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-                const SizedBox(width: 48),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _rows.length,
-              itemBuilder: (_, index) {
-                final row = _rows[index];
-                final prevSet = _previousSets != null &&
-                        index < _previousSets!.length
-                    ? _previousSets![index]
-                    : null;
-                final weightHint = prevSet != null
-                    ? prevSet.weight.toString()
-                    : '0';
-                final repsHint = prevSet != null
-                    ? prevSet.reps.toString()
-                    : '0';
-                final isLocked = _lockedSets.contains(index);
-                return GestureDetector(
-                  key: _rowKeys[index],
-                  onTap: isLocked ? () => _unlockSet(index) : null,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 400),
-                    color: _flashIndex == index
-                        ? const Color(0xFF00FF9C).withValues(alpha: 0.25)
-                        : Colors.transparent,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 32,
-                            child: Text(
-                              '${index + 1}',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: row.weight,
-                              decoration: _fieldDeco(weightHint),
-                              keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true,
-                              ),
-                              style: Theme.of(context).textTheme.bodyMedium,
-                              enabled: !isLocked,
-                              onTap: () => _scrollToRow(index),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: row.reps,
-                              decoration: _fieldDeco(repsHint),
-                              keyboardType: TextInputType.number,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                              enabled: !isLocked,
-                              onTap: () => _scrollToRow(index),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: isLocked
-                                ? const Icon(
-                                    Icons.check_circle_sharp,
-                                    color: Color(0xFF00FF9C),
-                                    size: 20,
-                                  )
-                                : IconButton(
-                                    padding: EdgeInsets.zero,
-                                    icon: const Icon(
-                                      Icons.save_sharp,
-                                      color: Color(0xFFAAA8C0),
-                                      size: 20,
-                                    ),
-                                    onPressed: () => _logSet(index),
-                                  ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-
-            const SizedBox(height: 8),
-
-            OutlinedButton(
-              onPressed: () {
-                final newIndex = _rows.length;
-                setState(() {
-                  _rows.add(_SetRow());
-                  _rowKeys.add(GlobalKey());
-                  _flashIndex = newIndex;
-                });
-                Future.delayed(const Duration(milliseconds: 400), () {
-                  if (mounted) setState(() => _flashIndex = null);
-                });
-              },
-              child: const Text('+ Add Set'),
-            ),
-
-            const SizedBox(height: 24),
-
-            PixelButton(
-              label: 'Finish Exercise',
-              onPressed: _finish,
-            ),
-          ],
-        ),
-      ),
           ),
         ],
       ),

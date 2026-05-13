@@ -256,6 +256,7 @@ class HomePageState extends State<HomePage> {
         ? ((_totalXP - xpBase) / (xpNext - xpBase)).clamp(0.0, 1.0)
         : 1.0;
     final rankColor = _rankColor();
+    final titleLabel = _selectedTitle ?? 'untitled';
 
     final card = Container(
       width: double.infinity,
@@ -289,19 +290,22 @@ class HomePageState extends State<HomePage> {
                   _profile.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: 'ShareTechMono',
+                  style: GoogleFonts.shareTechMono(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFFE8E8FF),
+                    color: const Color(0xFFE8E8FF),
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  _rank,
+                  titleLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.shareTechMono(
                     fontSize: 11,
-                    color: Colors.white,
+                    color: _selectedTitle == null
+                        ? const Color(0xFF6B6B8A)
+                        : const Color(0xFFFFD700),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -325,21 +329,7 @@ class HomePageState extends State<HomePage> {
                         ),
                       ),
                     ),
-                    if (_selectedTitle != null) ...[
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _selectedTitle!.toUpperCase(),
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontFamily: 'PressStart2P',
-                            fontSize: 7,
-                            color: Color(0xFFFFD700),
-                          ),
-                        ),
-                      ),
-                    ] else
-                      const Spacer(),
+                    const Spacer(),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -566,9 +556,7 @@ class HomePageState extends State<HomePage> {
               ],
             ],
           ),
-          const SizedBox(height: 6),
-          Container(width: 72, height: 2, color: const Color(0xFF00FF9C)),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

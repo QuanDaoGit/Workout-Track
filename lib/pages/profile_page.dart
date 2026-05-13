@@ -355,7 +355,7 @@ class ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildNameBlock() {
-    final title = _summary!.selectedTitle ?? 'No active title';
+    final title = _summary!.selectedTitle ?? 'untitled';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -363,11 +363,10 @@ class ProfilePageState extends State<ProfilePage> {
           _profile.displayName,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontFamily: 'ShareTechMono',
+          style: GoogleFonts.shareTechMono(
             fontSize: 22,
             fontWeight: FontWeight.w700,
-            color: Color(0xFFE8E8FF),
+            color: const Color(0xFFE8E8FF),
           ),
         ),
         const SizedBox(height: 5),
@@ -394,11 +393,10 @@ class ProfilePageState extends State<ProfilePage> {
             controller: _nameController,
             maxLength: 20,
             onSubmitted: (_) => _saveDisplayName(),
-            style: const TextStyle(
-              fontFamily: 'ShareTechMono',
+            style: GoogleFonts.shareTechMono(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: Color(0xFFE8E8FF),
+              color: const Color(0xFFE8E8FF),
             ),
             decoration: const InputDecoration(
               counterText: '',
