@@ -1,0 +1,15 @@
+{
+  "autoAcceptEdits": true,
+  "skipPermissionPrompts": true,
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze *)",
+      "Bash(curl -L -o \"c:/Users/daomi/develop/project/workout_track/fonts/pressstart2p/PressStart2P-Regular.ttf\" \"https://github.com/google/fonts/raw/main/ofl/pressstart2p/PressStart2P-Regular.ttf\")",
+      "Bash(flutter pub *)",
+      "Bash(Get-ChildItem -Recurse \"c:\\\\Users\\\\daomi\\\\develop\\\\project\\\\workout_track\\\\assets\" -File)",
+      "Bash(Select-Object FullName)",
+      "Bash(Measure-Object)",
+      "Bash(Select-Object Count)"
+    ]
+  }
+}

@@ -1,0 +1,224 @@
+name: workout_track
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+  shared_preferences: ^2.5.5
+  google_fonts: ^8.1.0
+  fl_chart: ^0.69.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^6.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  fonts:
+    - family: Gotham
+      fonts:
+        - asset: fonts/gotham/Gotham/Gotham Regular/Gotham Regular.otf
+          weight: 400
+        - asset: fonts/gotham/Gotham/Gotham Medium/Gotham Medium.otf
+          weight: 500
+        - asset: fonts/gotham/Gotham/Gotham Bold/Gotham Bold.otf
+          weight: 700
+        - asset: fonts/gotham/Gotham/Gotham Bold Italic/Gotham Bold Italic.ttf
+          weight: 700
+          style: italic
+        - asset: fonts/gotham/Gotham/Gotham Italic/Gotham Italic.otf
+          weight: 400
+          style: italic
+    - family: PressStart2P
+      fonts:
+        - asset: fonts/pressstart2p/PressStart2P-Regular.ttf
+          weight: 400
+  # To add assets to your application, add an assets section, like this:
+  assets:
+    - assets/exercises.json
+    - assets/exercises/exercises/Alternate_Hammer_Curl/
+    - assets/exercises/exercises/Alternating_Renegade_Row/
+    - assets/exercises/exercises/Around_The_Worlds/
+    - assets/exercises/exercises/Atlas_Stones/
+    - assets/exercises/exercises/Barbell_Bench_Press_-_Medium_Grip/
+    - assets/exercises/exercises/Barbell_Curl/
+    - assets/exercises/exercises/Barbell_Deadlift/
+    - assets/exercises/exercises/Barbell_Full_Squat/
+    - assets/exercises/exercises/Barbell_Guillotine_Bench_Press/
+    - assets/exercises/exercises/Barbell_Hip_Thrust/
+    - assets/exercises/exercises/Barbell_Incline_Bench_Press_-_Medium_Grip/
+    - assets/exercises/exercises/Barbell_Lunge/
+    - assets/exercises/exercises/Barbell_Squat/
+    - assets/exercises/exercises/Bench_Press_with_Chains/
+    - assets/exercises/exercises/Behind_Head_Chest_Stretch/
+    - assets/exercises/exercises/Bent_Over_Barbell_Row/
+    - assets/exercises/exercises/Bent_Over_Two-Arm_Long_Bar_Row/
+    - assets/exercises/exercises/Bent_Over_Two-Dumbbell_Row/
+    - assets/exercises/exercises/Bent-Arm_Dumbbell_Pullover/
+    - assets/exercises/exercises/Bodyweight_Flyes/
+    - assets/exercises/exercises/Box_Squat_with_Bands/
+    - assets/exercises/exercises/Box_Squat_with_Chains/
+    - assets/exercises/exercises/Butterfly/
+    - assets/exercises/exercises/Cable_Chest_Press/
+    - assets/exercises/exercises/Cable_Crossover/
+    - assets/exercises/exercises/Cable_Hammer_Curls_-_Rope_Attachment/
+    - assets/exercises/exercises/Chin-Up/
+    - assets/exercises/exercises/Clean_and_Jerk/
+    - assets/exercises/exercises/Close-Grip_Barbell_Bench_Press/
+    - assets/exercises/exercises/Close-Grip_Front_Lat_Pulldown/
+    - assets/exercises/exercises/Deadlift_with_Bands/
+    - assets/exercises/exercises/Deadlift_with_Chains/
+    - assets/exercises/exercises/Deficit_Deadlift/
+    - assets/exercises/exercises/Drag_Curl/
+    - assets/exercises/exercises/Dumbbell_Bench_Press/
+    - assets/exercises/exercises/Dumbbell_Bicep_Curl/
+    - assets/exercises/exercises/Dumbbell_Flyes/
+    - assets/exercises/exercises/Dumbbell_Lunges/
+    - assets/exercises/exercises/Dumbbell_One-Arm_Triceps_Extension/
+    - assets/exercises/exercises/Dumbbell_Squat/
+    - assets/exercises/exercises/Dumbbell_Step_Ups/
+    - assets/exercises/exercises/Elevated_Cable_Rows/
+    - assets/exercises/exercises/EZ-Bar_Curl/
+    - assets/exercises/exercises/EZ-Bar_Skullcrusher/
+    - assets/exercises/exercises/Flat_Bench_Cable_Flyes/
+    - assets/exercises/exercises/Front_Barbell_Squat/
+    - assets/exercises/exercises/Front_Squat_Clean_Grip/
+    - assets/exercises/exercises/Full_Range-Of-Motion_Lat_Pulldown/
+    - assets/exercises/exercises/Glute_Ham_Raise/
+    - assets/exercises/exercises/Goblet_Squat/
+    - assets/exercises/exercises/Hack_Squat/
+    - assets/exercises/exercises/Hammer_Curls/
+    - assets/exercises/exercises/Handstand_Push-Ups/
+    - assets/exercises/exercises/High_Cable_Curls/
+    - assets/exercises/exercises/Incline_Cable_Flye/
+    - assets/exercises/exercises/Incline_Dumbbell_Flyes/
+    - assets/exercises/exercises/Incline_Dumbbell_Press/
+    - assets/exercises/exercises/Kettlebell_Pistol_Squat/
+    - assets/exercises/exercises/Kettlebell_Sumo_High_Pull/
+    - assets/exercises/exercises/Kneeling_Cable_Triceps_Extension/
+    - assets/exercises/exercises/Leg_Extensions/
+    - assets/exercises/exercises/Leg_Press/
+    - assets/exercises/exercises/Leg-Over_Floor_Press/
+    - assets/exercises/exercises/Leverage_Chest_Press/
+    - assets/exercises/exercises/Leverage_High_Row/
+    - assets/exercises/exercises/Leverage_Iso_Row/
+    - assets/exercises/exercises/Lying_Cable_Curl/
+    - assets/exercises/exercises/Lying_Dumbbell_Tricep_Extension/
+    - assets/exercises/exercises/Lying_Leg_Curls/
+    - assets/exercises/exercises/Lying_T-Bar_Row/
+    - assets/exercises/exercises/Lying_Triceps_Press/
+    - assets/exercises/exercises/Machine_Bench_Press/
+    - assets/exercises/exercises/Mixed_Grip_Chin/
+    - assets/exercises/exercises/Narrow_Stance_Leg_Press/
+    - assets/exercises/exercises/Neck_Press/
+    - assets/exercises/exercises/One_Leg_Barbell_Squat/
+    - assets/exercises/exercises/One-Arm_Dumbbell_Row/
+    - assets/exercises/exercises/One-Arm_Flat_Bench_Dumbbell_Flye/
+    - assets/exercises/exercises/One-Arm_Kettlebell_Floor_Press/
+    - assets/exercises/exercises/One-Arm_Kettlebell_Snatch/
+    - assets/exercises/exercises/One_Arm_Chin-Up/
+    - assets/exercises/exercises/Overhead_Cable_Curl/
+    - assets/exercises/exercises/Overhead_Lat/
+    - assets/exercises/exercises/Overhead_Squat/
+    - assets/exercises/exercises/Overhead_Triceps/
+    - assets/exercises/exercises/Plyo_Kettlebell_Pushups/
+    - assets/exercises/exercises/Preacher_Curl/
+    - assets/exercises/exercises/Press_Sit-Up/
+    - assets/exercises/exercises/Pullups/
+    - assets/exercises/exercises/Push_Press/
+    - assets/exercises/exercises/Rack_Pull_with_Bands/
+    - assets/exercises/exercises/Rack_Pulls/
+    - assets/exercises/exercises/Reverse_Band_Deadlift/
+    - assets/exercises/exercises/Reverse_Barbell_Preacher_Curls/
+    - assets/exercises/exercises/Reverse_Grip_Bent-Over_Rows/
+    - assets/exercises/exercises/Romanian_Deadlift/
+    - assets/exercises/exercises/Seated_Biceps/
+    - assets/exercises/exercises/Seated_Cable_Rows/
+    - assets/exercises/exercises/Seated_Calf_Raise/
+    - assets/exercises/exercises/Seated_Front_Deltoid/
+    - assets/exercises/exercises/Seated_Leg_Curl/
+    - assets/exercises/exercises/Seated_One-arm_Cable_Pulley_Rows/
+    - assets/exercises/exercises/Single-Arm_Push-Up/
+    - assets/exercises/exercises/Smith_Machine_Bench_Press/
+    - assets/exercises/exercises/Smith_Machine_Leg_Press/
+    - assets/exercises/exercises/Smith_Machine_Squat/
+    - assets/exercises/exercises/Speed_Squats/
+    - assets/exercises/exercises/Standing_Biceps_Cable_Curl/
+    - assets/exercises/exercises/Standing_Calf_Raises/
+    - assets/exercises/exercises/Straight-Arm_Dumbbell_Pullover/
+    - assets/exercises/exercises/Straight-Arm_Pulldown/
+    - assets/exercises/exercises/Sumo_Deadlift/
+    - assets/exercises/exercises/T-Bar_Row_with_Handle/
+    - assets/exercises/exercises/Triceps_Pushdown/
+    - assets/exercises/exercises/Triceps_Pushdown_-_Rope_Attachment/
+    - assets/exercises/exercises/Two-Arm_Kettlebell_Row/
+    - assets/exercises/exercises/Upright_Cable_Row/
+    - assets/exercises/exercises/V-Bar_Pulldown/
+    - assets/exercises/exercises/Wide-Grip_Barbell_Bench_Press/
+    - assets/exercises/exercises/Wide-Grip_Decline_Barbell_Bench_Press/
+    - assets/exercises/exercises/Wide-Grip_Decline_Barbell_Pullover/
+    - assets/exercises/exercises/Wide-Grip_Lat_Pulldown/
+    - assets/exercises/exercises/Zercher_Squats/
+    - assets/exercises/exercises/Zottman_Curl/
+    - assets/icons/control/
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package
