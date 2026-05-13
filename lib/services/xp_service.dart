@@ -13,6 +13,7 @@ class XpService {
   ];
 
   static int calculateSessionXP(WorkoutSession session) {
+    if (session.isPartial && session.exercises.isEmpty) return 0;
     int xp = 50;
     xp += session.exercises.fold(0, (sum, e) => sum + e.sets.length * 5);
     xp += session.actualDurationSeconds ~/ 60;

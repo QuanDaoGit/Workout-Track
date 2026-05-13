@@ -65,6 +65,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage> {
   }
 
   bool get _allDone =>
+      widget.exercises.isNotEmpty &&
       widget.exercises.every((e) => _status[e.id] == _ExerciseStatus.done);
 
   String get _elapsed {

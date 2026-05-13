@@ -207,6 +207,7 @@ flutter:
     - assets/exercises/exercises/Zercher_Squats/
     - assets/exercises/exercises/Zottman_Curl/
     - assets/icons/control/
+    - assets/avatar/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

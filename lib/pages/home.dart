@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/profile_models.dart';
 import '../models/workout_models.dart';
+import '../services/profile_service.dart';
 import '../services/quest_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_service.dart';
@@ -13,9 +15,10 @@ import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, this.onViewQuests});
+  const HomePage({super.key, this.onViewQuests, this.onViewProfile});
 
   final VoidCallback? onViewQuests;
+  final VoidCallback? onViewProfile;
 
   @override
   HomePageState createState() => HomePageState();
@@ -34,6 +37,8 @@ class HomePageState extends State<HomePage> {
   DateTime? _lastWorkoutDate;
   String? _suggestedMuscle;
   String? _selectedTitle;
+  int? _suggestedMissionRewardXP;
+  ProfileData _profile = ProfileData.defaults();
 
   @override
   void initState() {
@@ -46,6 +51,7 @@ class HomePageState extends State<HomePage> {
   Future<void> _loadData() async {
     final all = await WorkoutStorageService().getSessions();
     final questSummary = await QuestService().getSummary(all);
+    final profile = await ProfileService().loadProfile();
     if (!mounted) return;
 
     final completed = all.where((s) => !s.isPartial).toList();
@@ -100,6 +106,14 @@ class HomePageState extends State<HomePage> {
       });
     }
 
+    int? suggestedMissionRewardXP;
+    for (final quest in questSummary.dailyQuests) {
+      if (quest.id == 'suggested_muscle' && !quest.claimed) {
+        suggestedMissionRewardXP = quest.rewardXP;
+        break;
+      }
+    }
+
     setState(() {
       _ongoingSessions = partial;
       _totalXP = totalXP;
@@ -112,6 +126,8 @@ class HomePageState extends State<HomePage> {
       _lastWorkoutDate = lastCompleted?.date;
       _suggestedMuscle = suggestedMuscle;
       _selectedTitle = questSummary.selectedTitle;
+      _suggestedMissionRewardXP = suggestedMissionRewardXP;
+      _profile = profile;
       _loading = false;
     });
   }
@@ -167,6 +183,7 @@ class HomePageState extends State<HomePage> {
         .map((id) => byId[id])
         .whereType<Exercise>()
         .toList();
+    if (exercises.isEmpty) return;
     if (!mounted) return;
     Navigator.push(
       context,
@@ -204,6 +221,19 @@ class HomePageState extends State<HomePage> {
     return '$exerciseLabel · ${_fmtDuration(session.actualDurationSeconds)}';
   }
 
+  String? _missionRewardLabel(WorkoutSession? session) {
+    if (session != null) {
+      final emptySession =
+          session.exercises.isEmpty && session.actualDurationSeconds == 0;
+      final xp = emptySession ? 0 : XpService.calculateSessionXP(session);
+      return '+$xp XP';
+    }
+
+    final xp = _suggestedMissionRewardXP;
+    if (xp == null) return null;
+    return '+$xp XP';
+  }
+
   String _lastWorkoutLabel() {
     final lastDate = _lastWorkoutDate;
     if (lastDate == null) return 'No completed workouts yet';
@@ -227,7 +257,7 @@ class HomePageState extends State<HomePage> {
         : 1.0;
     final rankColor = _rankColor();
 
-    return Container(
+    final card = Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -237,17 +267,17 @@ class HomePageState extends State<HomePage> {
       child: Row(
         children: [
           Container(
-            width: 46,
-            height: 46,
-            padding: const EdgeInsets.all(9),
+            width: 54,
+            height: 54,
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
               color: const Color(0xFF1A1A2E),
               border: Border.all(color: rankColor, width: 1),
               borderRadius: BorderRadius.circular(4),
             ),
-            child: ImageIcon(
-              const AssetImage('assets/icons/control/icon_character.png'),
-              color: rankColor,
+            child: Image.asset(
+              _profile.avatarPath,
+              filterQuality: FilterQuality.none,
             ),
           ),
           const SizedBox(width: 12),
@@ -255,6 +285,18 @@ class HomePageState extends State<HomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(
+                  _profile.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Gotham',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFE8E8FF),
+                  ),
+                ),
+                const SizedBox(height: 6),
                 Row(
                   children: [
                     Container(
@@ -293,28 +335,34 @@ class HomePageState extends State<HomePage> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: xpFraction,
+                    minHeight: 10,
+                    backgroundColor: const Color(0xFF2A2A4A),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFF00FF9C),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 5),
                 Row(
                   children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: xpFraction,
-                          minHeight: 8,
-                          backgroundColor: const Color(0xFF2A2A4A),
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFF00FF9C),
-                          ),
-                        ),
+                    Text(
+                      '$_totalXP / $xpNext XP',
+                      style: GoogleFonts.shareTechMono(
+                        color: const Color(0xFFAAA8C0),
+                        fontSize: 10,
                       ),
                     ),
                     if (_todayXP > 0) ...[
-                      const SizedBox(width: 8),
+                      const Spacer(),
                       Text(
-                        '+$_todayXP XP today',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        '+$_todayXP today',
+                        style: GoogleFonts.shareTechMono(
                           color: const Color(0xFF00FF9C),
-                          fontSize: 11,
+                          fontSize: 10,
                         ),
                       ),
                     ],
@@ -326,6 +374,17 @@ class HomePageState extends State<HomePage> {
           const SizedBox(width: 10),
           _buildLevelStreakBadge(),
         ],
+      ),
+    );
+
+    if (widget.onViewProfile == null) return card;
+    return Semantics(
+      button: true,
+      label: 'Open profile guild card',
+      child: InkWell(
+        onTap: widget.onViewProfile,
+        borderRadius: BorderRadius.circular(4),
+        child: card,
       ),
     );
   }
@@ -464,10 +523,7 @@ class HomePageState extends State<HomePage> {
         : muscle != null
         ? 'Suggested: $muscle'
         : 'Pick a muscle group and start small';
-    final status = session != null ? 'IN PROGRESS' : 'READY';
-    final iconPath = session != null
-        ? 'assets/icons/control/icon_sword.png'
-        : 'assets/icons/control/icon_target.png';
+    final rewardLabel = _missionRewardLabel(session);
 
     final panel = Container(
       width: double.infinity,
@@ -490,69 +546,33 @@ class HomePageState extends State<HomePage> {
                   color: Color(0xFF00FF9C),
                 ),
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00FF9C).withValues(alpha: 0.12),
-                  border: Border.all(color: const Color(0xFF00FF9C)),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  status,
-                  style: const TextStyle(
-                    fontFamily: 'PressStart2P',
-                    fontSize: 7,
-                    color: Color(0xFF00FF9C),
-                  ),
-                ),
-              ),
+              if (rewardLabel != null) ...[
+                const Spacer(),
+                _MissionRewardChip(label: rewardLabel),
+              ],
             ],
           ),
           const SizedBox(height: 6),
           Container(width: 72, height: 2, color: const Color(0xFF00FF9C)),
           const SizedBox(height: 18),
-          Row(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontFamily: 'Gotham',
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFE8E8FF),
-                        height: 1.05,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      detail,
-                      style: GoogleFonts.shareTechMono(
-                        color: const Color(0xFFAAA8C0),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+              Text(
+                title,
+                style: GoogleFonts.shareTechMono(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFFE8E8FF),
+                  height: 1.05,
                 ),
               ),
-              const SizedBox(width: 12),
-              Container(
-                width: 54,
-                height: 54,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0D0D1A),
-                  border: Border.all(color: const Color(0xFF2A2A4A)),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: ImageIcon(
-                  AssetImage(iconPath),
-                  color: const Color(0xFF00FF9C),
+              const SizedBox(height: 8),
+              Text(
+                detail,
+                style: GoogleFonts.shareTechMono(
+                  color: const Color(0xFFAAA8C0),
+                  fontSize: 13,
                 ),
               ),
             ],
@@ -749,6 +769,32 @@ class HomePageState extends State<HomePage> {
             _buildWeeklyQuestsCard(),
             const SizedBox(height: 24),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MissionRewardChip extends StatelessWidget {
+  const _MissionRewardChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFD700).withValues(alpha: 0.12),
+        border: Border.all(color: const Color(0xFFFFD700)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: 'PressStart2P',
+          fontSize: 8,
+          color: Color(0xFFFFD700),
         ),
       ),
     );

@@ -36,10 +36,14 @@ class _RootPageState extends State<RootPage> {
   }
 
   late final List<Widget> _pages = [
-    HomePage(key: _homeKey, onViewQuests: () => _selectTab(2)),
+    HomePage(
+      key: _homeKey,
+      onViewQuests: () => _selectTab(2),
+      onViewProfile: () => _selectTab(3),
+    ),
     WorkoutPage(key: _workoutKey),
     QuestsPage(key: _questsKey, onQuestChanged: _reloadQuestAwarePages),
-    ProfilePage(key: _profileKey, onTitleChanged: _reloadQuestAwarePages),
+    ProfilePage(key: _profileKey, onProfileChanged: _reloadQuestAwarePages),
   ];
 
   @override
