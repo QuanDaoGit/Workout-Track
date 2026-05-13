@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../models/workout_models.dart';
+import '../../widgets/pixel_button.dart';
+import '../../services/workout_storage_service.dart';
 
 class _SetRow {
   _SetRow() : weight = TextEditingController(), reps = TextEditingController();
