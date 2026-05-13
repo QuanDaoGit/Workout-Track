@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../models/workout_models.dart';
-import '../../services/workout_storage_service.dart';
 
 class _SetRow {
   _SetRow() : weight = TextEditingController(), reps = TextEditingController();
@@ -99,7 +98,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage>
 
   InputDecoration _fieldDeco(String hint) => InputDecoration(
     hintText: hint,
-    hintStyle: const TextStyle(color: Color(0xFFAAA8C0)),
+    hintStyle: const TextStyle(color: Color(0xFF6B6B8A)),
     filled: true,
     fillColor: const Color(0xFF1A1A2E),
     border: OutlineInputBorder(
@@ -246,7 +245,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage>
             const SizedBox(height: 4),
             Text(
               widget.exercise.levelLabel,
-              style: const TextStyle(color: Color(0xFFAAA8C0)),
+              style: const TextStyle(color: Color(0xFF6B6B8A)),
             ),
 
             const SizedBox(height: 24),
@@ -385,12 +384,9 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage>
 
             const SizedBox(height: 24),
 
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _finish,
-                child: const Text('Finish Exercise'),
-              ),
+            PixelButton(
+              label: 'Finish Exercise',
+              onPressed: _finish,
             ),
           ],
         ),

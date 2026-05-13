@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'pixel_loader.dart';
+
 class PixelButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
   final bool isLoading;
   final Color? color;
+  final bool fullWidth;
 
   const PixelButton({
     super.key,
@@ -12,13 +15,14 @@ class PixelButton extends StatelessWidget {
     required this.onPressed,
     this.isLoading = false,
     this.color,
+    this.fullWidth = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final bg = color ?? const Color(0xFF00FF9C);
     return SizedBox(
-      width: double.infinity,
+      width: fullWidth ? double.infinity : null,
       child: FilledButton(
         onPressed: isLoading ? null : onPressed,
         style: ButtonStyle(
@@ -41,19 +45,12 @@ class PixelButton extends StatelessWidget {
           ),
         ),
         child: isLoading
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  color: Color(0xFF0D0D1A),
-                  strokeWidth: 2.5,
-                ),
-              )
+            ? const PixelLoader(size: 16, color: Color(0xFF0D0D1A))
             : Text(
                 label,
                 style: const TextStyle(
                   fontFamily: 'PressStart2P',
-                  fontSize: 12,
+                  fontSize: 10,
                 ),
               ),
       ),

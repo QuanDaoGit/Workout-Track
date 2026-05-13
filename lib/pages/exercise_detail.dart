@@ -96,16 +96,13 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                     )
                   else
                     const ColoredBox(color: Color(0xFF1A1A2E)),
-                  // Gradient overlay for readability
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0x00000000), Color(0xCC0D0D1A)],
-                        stops: [0.4, 1.0],
-                      ),
-                    ),
+                  // Solid overlay for readability
+                  const Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 130,
+                    child: ColoredBox(color: Color(0xCC0D0D1A)),
                   ),
                   // Level badge bottom-left
                   Positioned(

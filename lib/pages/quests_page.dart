@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/quest_models.dart';
+import '../widgets/pixel_button.dart';
+import '../widgets/pixel_loader.dart';
 import '../models/workout_models.dart';
 import '../services/quest_service.dart';
 import '../services/workout_storage_service.dart';
@@ -57,7 +59,7 @@ class QuestsPageState extends State<QuestsPage> {
   @override
   Widget build(BuildContext context) {
     if (_loading || _summary == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: PixelLoader()));
     }
 
     final summary = _summary!;
@@ -184,7 +186,7 @@ class _RewardsBar extends StatelessWidget {
                 Text(
                   '$totalXP / $nextXP XP',
                   style: const TextStyle(
-                    color: Color(0xFFAAA8C0),
+                    color: Color(0xFF6B6B8A),
                     fontSize: 11,
                   ),
                 ),
@@ -307,7 +309,7 @@ class _QuestCard extends StatelessWidget {
                   Text(
                     quest.description,
                     style: const TextStyle(
-                      color: Color(0xFFAAA8C0),
+                      color: Color(0xFF6B6B8A),
                       fontSize: 12,
                     ),
                   ),
@@ -368,13 +370,14 @@ class _QuestAction extends StatelessWidget {
       return _StatusBadge(label: 'CLAIMED', color: const Color(0xFF6B6B8A));
     }
     if (quest.claimable) {
-      return FilledButton(
+      return PixelButton(
+        label: '+${quest.rewardXP} XP',
+        fullWidth: false,
         onPressed: onClaim,
-        child: Text('+${quest.rewardXP} XP'),
       );
     }
     if (quest.isManual) {
-      return FilledButton(onPressed: onDone, child: const Text('Done'));
+      return PixelButton(label: 'Done', fullWidth: false, onPressed: onDone);
     }
     return _StatusBadge(
       label: '+${quest.rewardXP} XP',
@@ -423,7 +426,7 @@ class _SegmentedProgressBar extends StatelessWidget {
                 color: i < completed
                     ? const Color(0xFF00FF9C)
                     : const Color(0xFF2A2A4A),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.circular(4),
               ),
             ),
           ),

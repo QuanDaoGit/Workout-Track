@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../widgets/pixel_button.dart';
+import '../widgets/pixel_loader.dart';
+
 import '../models/profile_models.dart';
 import '../models/quest_models.dart';
 import '../models/workout_models.dart';
@@ -153,17 +156,14 @@ class ProfilePageState extends State<ProfilePage> {
               Text(
                 description,
                 style: GoogleFonts.shareTechMono(
-                  color: const Color(0xFFAAA8C0),
+                  color: const Color(0xFF6B6B8A),
                   fontSize: 14,
                 ),
               ),
               const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close'),
-                ),
+              PixelButton(
+                label: 'Close',
+                onPressed: () => Navigator.of(context).pop(),
               ),
             ],
           ),
@@ -175,7 +175,7 @@ class ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     if (_loading || _summary == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: PixelLoader()));
     }
 
     return Scaffold(
@@ -292,7 +292,7 @@ class ProfilePageState extends State<ProfilePage> {
                   Text(
                     '$totalXP / $xpNext XP',
                     style: const TextStyle(
-                      color: Color(0xFFAAA8C0),
+                      color: Color(0xFF6B6B8A),
                       fontSize: 11,
                     ),
                   ),
@@ -364,7 +364,7 @@ class ProfilePageState extends State<ProfilePage> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            fontFamily: 'Gotham',
+            fontFamily: 'ShareTechMono',
             fontSize: 22,
             fontWeight: FontWeight.w700,
             color: Color(0xFFE8E8FF),
@@ -395,7 +395,7 @@ class ProfilePageState extends State<ProfilePage> {
             maxLength: 20,
             onSubmitted: (_) => _saveDisplayName(),
             style: const TextStyle(
-              fontFamily: 'Gotham',
+              fontFamily: 'ShareTechMono',
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: Color(0xFFE8E8FF),
@@ -423,7 +423,7 @@ class ProfilePageState extends State<ProfilePage> {
         ),
         _SmallIconButton(
           iconPath: 'assets/icons/control/icon_clear.png',
-          color: const Color(0xFFAAA8C0),
+          color: const Color(0xFF6B6B8A),
           onPressed: _cancelDisplayNameEdit,
         ),
       ],
@@ -634,14 +634,14 @@ class _ProfileTabs extends StatelessWidget {
             Expanded(
               child: InkWell(
                 onTap: () => onSelect(i),
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: BorderRadius.circular(4),
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   decoration: BoxDecoration(
                     color: selectedIndex == i
                         ? const Color(0xFF00FF9C)
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(3),
+                    borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     _labels[i].toUpperCase(),
@@ -651,7 +651,7 @@ class _ProfileTabs extends StatelessWidget {
                       fontSize: 7,
                       color: selectedIndex == i
                           ? const Color(0xFF0D0D1A)
-                          : const Color(0xFFAAA8C0),
+                          : const Color(0xFF6B6B8A),
                     ),
                   ),
                 ),
@@ -906,7 +906,7 @@ class _TitleRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   const Text(
                     'Side Quest title',
-                    style: TextStyle(color: Color(0xFFAAA8C0), fontSize: 12),
+                    style: TextStyle(color: Color(0xFF6B6B8A), fontSize: 12),
                   ),
                 ],
               ),
@@ -961,7 +961,7 @@ class _InfoPanel extends StatelessWidget {
                 Text(
                   subtitle,
                   style: const TextStyle(
-                    color: Color(0xFFAAA8C0),
+                    color: Color(0xFF6B6B8A),
                     fontSize: 12,
                   ),
                 ),
@@ -1053,7 +1053,7 @@ class _SettingsRow extends StatelessWidget {
                     Text(
                       subtitle,
                       style: const TextStyle(
-                        color: Color(0xFFAAA8C0),
+                        color: Color(0xFF6B6B8A),
                         fontSize: 12,
                       ),
                     ),

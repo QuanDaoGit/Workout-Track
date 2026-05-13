@@ -11,6 +11,7 @@ import '../services/quest_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_service.dart';
 import '../widgets/pixel_button.dart';
+import '../widgets/pixel_loader.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
 
@@ -153,16 +154,15 @@ class HomePageState extends State<HomePage> {
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFFF2D55),
-            ),
+          PixelButton(
+            label: 'Delete',
+            fullWidth: false,
+            color: const Color(0xFFFF2D55),
             onPressed: () async {
               Navigator.of(ctx).pop();
               await WorkoutStorageService().deleteSession(session.id);
               _loadData();
             },
-            child: const Text('Delete'),
           ),
         ],
       ),
@@ -290,10 +290,18 @@ class HomePageState extends State<HomePage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontFamily: 'Gotham',
+                    fontFamily: 'ShareTechMono',
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFFE8E8FF),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _rank,
+                  style: GoogleFonts.shareTechMono(
+                    fontSize: 11,
+                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -339,7 +347,7 @@ class HomePageState extends State<HomePage> {
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: xpFraction,
-                    minHeight: 10,
+                    minHeight: 8,
                     backgroundColor: const Color(0xFF2A2A4A),
                     valueColor: const AlwaysStoppedAnimation<Color>(
                       Color(0xFF00FF9C),
@@ -352,7 +360,7 @@ class HomePageState extends State<HomePage> {
                     Text(
                       '$_totalXP / $xpNext XP',
                       style: GoogleFonts.shareTechMono(
-                        color: const Color(0xFFAAA8C0),
+                        color: const Color(0xFF6B6B8A),
                         fontSize: 10,
                       ),
                     ),
@@ -459,8 +467,8 @@ class HomePageState extends State<HomePage> {
                   'WEEKLY QUESTS',
                   style: TextStyle(
                     fontFamily: 'PressStart2P',
-                    fontSize: 9,
-                    color: Color(0xFF00FF9C),
+                    fontSize: 8,
+                    color: Color(0xFF555577),
                   ),
                 ),
                 const Spacer(),
@@ -494,7 +502,7 @@ class HomePageState extends State<HomePage> {
                         color: i < _weeklyQuestCompleted
                             ? const Color(0xFF00FF9C)
                             : const Color(0xFF2A2A4A),
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                   ),
@@ -538,11 +546,17 @@ class HomePageState extends State<HomePage> {
         children: [
           Row(
             children: [
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_play.png'),
+                size: 14,
+                color: Color(0xFF00FF9C),
+              ),
+              const SizedBox(width: 8),
               const Text(
                 'MAIN MISSION',
                 style: TextStyle(
                   fontFamily: 'PressStart2P',
-                  fontSize: 11,
+                  fontSize: 10,
                   color: Color(0xFF00FF9C),
                 ),
               ),
@@ -571,7 +585,7 @@ class HomePageState extends State<HomePage> {
               Text(
                 detail,
                 style: GoogleFonts.shareTechMono(
-                  color: const Color(0xFFAAA8C0),
+                  color: const Color(0xFF6B6B8A),
                   fontSize: 13,
                 ),
               ),
@@ -628,11 +642,12 @@ class HomePageState extends State<HomePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 16),
-        Text(
+        const Text(
           'ONGOING',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontSize: 9,
-            color: const Color(0xFFAAA8C0),
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: 8,
+            color: Color(0xFFFFD700),
           ),
         ),
         const SizedBox(height: 8),
@@ -672,7 +687,7 @@ class HomePageState extends State<HomePage> {
                     Text(
                       session.muscleGroup,
                       style: const TextStyle(
-                        fontFamily: 'Gotham',
+                        fontFamily: 'ShareTechMono',
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFFE8E8FF),
@@ -682,21 +697,17 @@ class HomePageState extends State<HomePage> {
                     Text(
                       _sessionProgressLabel(session),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFAAA8C0),
+                        color: const Color(0xFF6B6B8A),
                         fontSize: 12,
                       ),
                     ),
                   ],
                 ),
               ),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 34),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
+              PixelButton(
+                label: 'Continue',
+                fullWidth: false,
                 onPressed: () => _continueWorkout(session),
-                child: const Text('Continue'),
               ),
             ],
           ),
@@ -726,7 +737,7 @@ class HomePageState extends State<HomePage> {
           Text(
             _lastWorkoutLabel(),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFFAAA8C0),
+              color: const Color(0xFF6B6B8A),
               fontSize: 12,
             ),
           ),
@@ -738,7 +749,7 @@ class HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(body: Center(child: PixelLoader()));
     }
 
     return Scaffold(

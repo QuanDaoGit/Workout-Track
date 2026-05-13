@@ -8,6 +8,8 @@ import '../../data/curated_exercises.dart';
 import '../../models/workout_models.dart';
 import '../../services/favorite_service.dart';
 import '../../widgets/exercise_card.dart';
+import '../../widgets/pixel_button.dart';
+import '../../widgets/pixel_loader.dart';
 import 'active_workout.dart';
 
 class StartWorkoutPage extends StatefulWidget {
@@ -166,7 +168,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
             const SizedBox(height: 8),
             const Text(
               'Pick what you want to train first.',
-              style: TextStyle(color: Color(0xFFAAA8C0)),
+              style: TextStyle(color: Color(0xFF6B6B8A)),
             ),
             const SizedBox(height: 20),
 
@@ -210,7 +212,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
                     'Pick your workout time',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFFAAA8C0),
+                      color: const Color(0xFF6B6B8A),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -245,11 +247,11 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  FilledButton(
+                  PixelButton(
+                    label: 'Confirm Time',
                     onPressed: selectedHour == 0 && selectedMinute == 0
                         ? null
                         : confirmWorkoutTime,
-                    child: const Text('Confirm Time'),
                   ),
                 ],
               ),
@@ -260,13 +262,13 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
                 'Recommended: $exerciseCount exercises',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFFAAA8C0),
+                  color: const Color(0xFF6B6B8A),
                 ),
               ),
               const SizedBox(height: 8),
-              FilledButton(
+              PixelButton(
+                label: 'Pick exercises',
                 onPressed: showExercisePicker,
-                child: const Text('Pick exercises'),
               ),
             ],
           ],
@@ -477,7 +479,7 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
                 future: widget.exerciseCatalogFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState != ConnectionState.done) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(child: PixelLoader());
                   }
 
                   if (snapshot.hasError) {
@@ -667,14 +669,14 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
                   exercise.levelLabel,
                   style: const TextStyle(
                     fontSize: 10,
-                    color: Color(0xFFAAA8C0),
+                    color: Color(0xFF6B6B8A),
                   ),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Muscles: ${widget.muscleGroup}',
-                style: const TextStyle(color: Color(0xFFAAA8C0), fontSize: 12),
+                style: const TextStyle(color: Color(0xFF6B6B8A), fontSize: 12),
               ),
             ],
           ),
@@ -684,12 +686,13 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
-          FilledButton(
+          PixelButton(
+            label: isSelected ? 'Deselect' : 'Select',
+            fullWidth: false,
             onPressed: () {
               Navigator.pop(context);
               toggleSelectedExercise(exercise.id);
             },
-            child: Text(isSelected ? 'Deselect' : 'Select'),
           ),
         ],
       ),
@@ -719,7 +722,7 @@ class _SelectionBar extends StatelessWidget {
           Expanded(
             child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
           ),
-          FilledButton(onPressed: onContinue, child: const Text('Continue')),
+          PixelButton(label: 'Continue', fullWidth: false, onPressed: onContinue),
         ],
       ),
     );

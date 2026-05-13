@@ -319,7 +319,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       case _ExerciseStatus.notStarted:
         return const Text(
           'Not Started',
-          style: TextStyle(color: Color(0xFFAAA8C0), fontSize: 12),
+          style: TextStyle(color: Color(0xFF6B6B8A), fontSize: 12),
         );
       case _ExerciseStatus.inProgress:
         return const Text(
@@ -353,13 +353,11 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(
+            child: PixelButton(
+              label: 'End Early',
+              fullWidth: false,
+              color: const Color(0xFFFF2D55),
               onPressed: _confirmEndEarly,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFFF2D55),
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('End Early'),
             ),
           ),
         ],
@@ -392,7 +390,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                               style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(
                                     color: const Color(
-                                      0xFFAAA8C0,
+                                      0xFF6B6B8A,
                                     ), // force visible muted white
                                   ),
                             ),
@@ -422,7 +420,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                     Text(
                       '${widget.exercises.length} exercises',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFAAA8C0),
+                        color: const Color(0xFF6B6B8A),
                       ),
                     ),
                   ],
@@ -467,7 +465,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                               Text(
                                 exercise.levelLabel,
                                 style: const TextStyle(
-                                  color: Color(0xFFAAA8C0),
+                                  color: Color(0xFF6B6B8A),
                                   fontSize: 12,
                                 ),
                               ),
@@ -486,12 +484,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
 
             const SizedBox(height: 16),
 
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _allDone ? _goToSummary : null,
-                child: const Text('Finish Workout'),
-              ),
+            PixelButton(
+              label: 'Finish Workout',
+              onPressed: _allDone ? _goToSummary : null,
             ),
           ],
         ),

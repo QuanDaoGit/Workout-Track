@@ -151,7 +151,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                       subtitle: Text(
                         '${log.sets.length} sets · '
                         '${log.totalVolume.toStringAsFixed(0)} kg total',
-                        style: const TextStyle(color: Color(0xFFAAA8C0)),
+                        style: const TextStyle(color: Color(0xFF6B6B8A)),
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
