@@ -4,9 +4,14 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:google_fonts/google_fonts.dart';
+
 import '../../data/curated_exercises.dart';
 import '../../models/workout_models.dart';
 import '../../services/favorite_service.dart';
+import '../../theme/tokens.dart';
+import '../../widgets/arcade_chip.dart';
+import '../../widgets/arcade_route.dart';
 import '../../widgets/exercise_card.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/pixel_loader.dart';
@@ -131,8 +136,8 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     if (!mounted) return;
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ActiveWorkoutPage(
+      arcadeRoute(
+        (_) => ActiveWorkoutPage(
           muscleGroup: muscleGroup,
           durationMinutes: workoutMinutes!,
           exercises: selected,
@@ -167,10 +172,10 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
               runSpacing: 10,
               children: [
                 for (final muscleGroup in muscleGroups)
-                  _PulsingChoiceChip(
+                  ArcadeChip(
                     label: muscleGroup,
                     selected: selectedMuscleGroup == muscleGroup,
-                    onSelected: () => selectMuscleGroup(muscleGroup),
+                    onTap: () => selectMuscleGroup(muscleGroup),
                   ),
               ],
             ),
@@ -253,7 +258,7 @@ class _StepHeader extends StatelessWidget {
       style: const TextStyle(
         fontFamily: 'PressStart2P',
         fontSize: 8,
-        color: Color(0xFFFFD700),
+        color: kAmber,
       ),
     );
   }
@@ -388,66 +393,51 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  ChoiceChip(
-                    label: const Text('All'),
+                  ArcadeChip(
+                    label: 'All',
                     selected: _levelFilter == null && !_showFavoritesOnly,
-                    onSelected: (_) => setState(() {
+                    onTap: () => setState(() {
                       _levelFilter = null;
                       _showFavoritesOnly = false;
                     }),
-                    labelStyle: _levelFilter == null && !_showFavoritesOnly
-                        ? const TextStyle(color: Color(0xFF0D0D1A))
-                        : null,
                   ),
                   const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Beginner'),
+                  ArcadeChip(
+                    label: 'Beginner',
                     selected: _levelFilter == 'beginner',
-                    onSelected: (_) => setState(
+                    onTap: () => setState(
                       () => _levelFilter = _levelFilter == 'beginner'
                           ? null
                           : 'beginner',
                     ),
-                    labelStyle: _levelFilter == 'beginner'
-                        ? const TextStyle(color: Color(0xFF0D0D1A))
-                        : null,
                   ),
                   const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Intermediate'),
+                  ArcadeChip(
+                    label: 'Intermediate',
                     selected: _levelFilter == 'intermediate',
-                    onSelected: (_) => setState(
+                    onTap: () => setState(
                       () => _levelFilter = _levelFilter == 'intermediate'
                           ? null
                           : 'intermediate',
                     ),
-                    labelStyle: _levelFilter == 'intermediate'
-                        ? const TextStyle(color: Color(0xFF0D0D1A))
-                        : null,
                   ),
                   const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Expert'),
+                  ArcadeChip(
+                    label: 'Expert',
                     selected: _levelFilter == 'expert',
-                    onSelected: (_) => setState(
+                    onTap: () => setState(
                       () => _levelFilter = _levelFilter == 'expert'
                           ? null
                           : 'expert',
                     ),
-                    labelStyle: _levelFilter == 'expert'
-                        ? const TextStyle(color: Color(0xFF0D0D1A))
-                        : null,
                   ),
                   const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('\u2665 Favorites'),
+                  ArcadeChip(
+                    label: '\u2665 Favorites',
                     selected: _showFavoritesOnly,
-                    onSelected: (_) => setState(
+                    onTap: () => setState(
                       () => _showFavoritesOnly = !_showFavoritesOnly,
                     ),
-                    labelStyle: _showFavoritesOnly
-                        ? const TextStyle(color: Color(0xFF0D0D1A))
-                        : null,
                   ),
                 ],
               ),
@@ -759,72 +749,6 @@ class _SelectionBar extends StatelessWidget {
   }
 }
 
-class _PulsingChoiceChip extends StatefulWidget {
-  const _PulsingChoiceChip({
-    required this.label,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onSelected;
-
-  @override
-  State<_PulsingChoiceChip> createState() => _PulsingChoiceChipState();
-}
-
-class _PulsingChoiceChipState extends State<_PulsingChoiceChip>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 200),
-  );
-
-  late final Animation<double> _scale = Tween<double>(
-    begin: 1.0,
-    end: 1.12,
-  ).animate(_controller);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: _scale,
-      child: ChoiceChip(
-        label: Text(widget.label),
-        selected: widget.selected,
-        showCheckmark: false,
-        backgroundColor: const Color(0xFF2A2A3E),
-        selectedColor: const Color(0xFF1A1A2E),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-          side: BorderSide(
-            color: widget.selected
-                ? const Color(0xFF00FF9C)
-                : const Color(0xFF2A2A4A),
-          ),
-        ),
-        labelStyle: TextStyle(
-          color: widget.selected
-              ? const Color(0xFF00FF9C)
-              : const Color(0xFF6B6B8A),
-          fontWeight: widget.selected ? FontWeight.bold : FontWeight.normal,
-        ),
-        onSelected: (_) {
-          _controller.forward().then((_) => _controller.reverse());
-          widget.onSelected();
-        },
-      ),
-    );
-  }
-}
-
 class _TimePickerColumn extends StatelessWidget {
   const _TimePickerColumn({
     required this.controller,
@@ -849,11 +773,10 @@ class _TimePickerColumn extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
         ),
         child: CupertinoTheme(
-          data: const CupertinoThemeData(
+          data: CupertinoThemeData(
             textTheme: CupertinoTextThemeData(
-              pickerTextStyle: TextStyle(
-                fontFamily: 'ShareTechMono',
-                color: Color(0xFFE8E8FF),
+              pickerTextStyle: GoogleFonts.shareTechMono(
+                color: kText,
                 fontSize: 18,
               ),
             ),

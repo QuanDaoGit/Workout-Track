@@ -5,6 +5,10 @@ import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
 import '../../services/workout_storage_service.dart';
 import '../../services/xp_service.dart';
+import '../../theme/tokens.dart';
+import '../../widgets/pulse_color_text.dart';
+import '../../widgets/screen_shake.dart';
+import '../../widgets/typewriter_text.dart';
 
 class WorkoutSummaryPage extends StatefulWidget {
   const WorkoutSummaryPage({
@@ -28,13 +32,10 @@ class WorkoutSummaryPage extends StatefulWidget {
   State<WorkoutSummaryPage> createState() => _WorkoutSummaryPageState();
 }
 
-class _WorkoutSummaryPageState extends State<WorkoutSummaryPage>
-    with SingleTickerProviderStateMixin {
+class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   bool _saving = false;
   bool _saved = false;
-
-  late final AnimationController _xpController;
-  late final Animation<double> _xpScale;
+  int _shakeTrigger = 0;
 
   late final int _estimatedCalories = CalorieService.estimateCalories(
     widget.muscleGroup,
@@ -57,22 +58,11 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage>
   @override
   void initState() {
     super.initState();
-    _xpController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _xpScale = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.2), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0), weight: 1),
-    ]).animate(CurvedAnimation(parent: _xpController, curve: Curves.easeOut));
-
-    WidgetsBinding.instance.addPostFrameCallback((_) => _saveAndExit());
-  }
-
-  @override
-  void dispose() {
-    _xpController.dispose();
-    super.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _shakeTrigger++);
+      _saveAndExit();
+    });
   }
 
   String _fmt(int secs) {
@@ -104,7 +94,6 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage>
         _saving = false;
         _saved = true;
       });
-      _xpController.forward(from: 0);
     }
   }
 
@@ -138,88 +127,98 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage>
           title: const Text('Workout Complete'),
           automaticallyImplyLeading: false,
         ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 16),
-              const ImageIcon(
-                AssetImage('assets/icons/control/icon_star.png'),
-                color: Color(0xFF00FF9C),
-                size: 72,
-              ),
-              const SizedBox(height: 12),
-              ScaleTransition(
-                scale: _xpScale,
-                child: Text(
-                  '+$_earnedXP XP EARNED',
+        body: ScreenShake(
+          trigger: _shakeTrigger,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(kSpace4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: kSpace4),
+                const ImageIcon(
+                  AssetImage('assets/icons/control/icon_star.png'),
+                  color: kNeon,
+                  size: 72,
+                ),
+                const SizedBox(height: kSpace3),
+                const TypewriterText(
+                  'SESSION COMPLETE',
+                  style: TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 14,
+                    color: kNeon,
+                  ),
                   textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: kSpace3),
+                PulseColorText(
+                  '+$_earnedXP XP EARNED',
                   style: const TextStyle(
                     fontFamily: 'PressStart2P',
                     fontSize: 16,
-                    color: Color(0xFFFFD700),
                   ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-              const SizedBox(height: 32),
-              if (statBoxes.isNotEmpty)
-                Row(
-                  children: [
-                    for (var i = 0; i < statBoxes.length; i++) ...[
-                      statBoxes[i],
-                      if (i < statBoxes.length - 1) const SizedBox(width: 8),
+                const SizedBox(height: 32),
+                if (statBoxes.isNotEmpty)
+                  Row(
+                    children: [
+                      for (var i = 0; i < statBoxes.length; i++) ...[
+                        statBoxes[i],
+                        if (i < statBoxes.length - 1)
+                          const SizedBox(width: kSpace2),
+                      ],
                     ],
-                  ],
-                ),
-              if (exerciseLogs.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                Text(
-                  'BREAKDOWN',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 12),
-                for (final log in exerciseLogs)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Card(
-                      child: ListTile(
-                        title: Text(log.exerciseName),
-                        subtitle: Text(
-                          '${log.sets.length} sets - '
-                          '${log.totalVolume.toStringAsFixed(0)} kg total',
-                          style: const TextStyle(color: Color(0xFF6B6B8A)),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Image.asset(
-                              'assets/icons/control/icon_particle.png',
-                              width: 16,
-                              height: 16,
-                              color: const Color(0xFF00FF9C),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${CalorieService.exerciseCalories(log, _estimatedCalories, widget.exerciseLogs)} calories',
-                              style: const TextStyle(
-                                color: Color(0xFF00FF9C),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
+                  ),
+                if (exerciseLogs.isNotEmpty) ...[
+                  const SizedBox(height: kSpace5),
+                  Text(
+                    'BREAKDOWN',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: kSpace3),
+                  for (final log in exerciseLogs)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: kSpace2),
+                      child: Card(
+                        child: ListTile(
+                          title: Text(log.exerciseName),
+                          subtitle: Text(
+                            '${log.sets.length} sets - '
+                            '${log.totalVolume.toStringAsFixed(0)} kg total',
+                            style: const TextStyle(color: kMutedText),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Image.asset(
+                                'assets/icons/control/icon_particle.png',
+                                width: 16,
+                                height: 16,
+                                color: kNeon,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: kSpace1),
+                              Text(
+                                '${CalorieService.exerciseCalories(log, _estimatedCalories, widget.exerciseLogs)} calories',
+                                style: const TextStyle(
+                                  color: kNeon,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                ],
+                const SizedBox(height: kSpace5),
+                FilledButton(
+                  onPressed: _saved ? _goHome : null,
+                  child: Text(_saving ? 'SAVING...' : 'BACK TO HOME'),
+                ),
               ],
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: _saved ? _goHome : null,
-                child: Text(_saving ? 'SAVING...' : 'BACK TO HOME'),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -238,19 +237,22 @@ class _StatBox extends StatelessWidget {
     return Expanded(
       child: Card(
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          padding: const EdgeInsets.symmetric(
+            vertical: kSpace4,
+            horizontal: kSpace2,
+          ),
           child: Column(
             children: [
               Text(
                 value,
                 style: GoogleFonts.shareTechMono(
                   fontSize: 18,
-                  color: const Color(0xFF00FF9C),
+                  color: kNeon,
                   fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: kSpace1),
               Text(
                 label,
                 style: Theme.of(context).textTheme.bodySmall,

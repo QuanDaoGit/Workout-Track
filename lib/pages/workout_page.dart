@@ -7,14 +7,15 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../data/curated_exercises.dart';
-import '../widgets/pixel_button.dart';
-import '../widgets/pixel_loader.dart';
 import '../models/workout_models.dart';
 import '../services/favorite_service.dart';
 import '../services/quest_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_service.dart';
+import '../widgets/arcade_route.dart';
 import '../widgets/exercise_card.dart';
+import '../widgets/pixel_button.dart';
+import '../widgets/pixel_loader.dart';
 import 'calendar_page.dart';
 import 'exercise_detail.dart';
 
@@ -162,7 +163,7 @@ class _HistoryTabState extends State<_HistoryTab> {
             label: 'Open Calendar',
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const CalendarPage()),
+              arcadeRoute((_) => const CalendarPage()),
             ).then((_) => _load()),
           ),
         ],
@@ -1097,8 +1098,8 @@ class _ExercisesTabState extends State<_ExercisesTab>
                       showArrow: true,
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => ExerciseDetailPage(exercise: ex),
+                        arcadeRoute(
+                          (_) => ExerciseDetailPage(exercise: ex),
                         ),
                       ),
                       onFavoriteToggle: () => _toggleFavorite(ex.id),

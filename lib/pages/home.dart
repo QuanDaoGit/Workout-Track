@@ -10,8 +10,13 @@ import '../services/profile_service.dart';
 import '../services/quest_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_service.dart';
+import '../theme/tokens.dart';
+import '../widgets/arcade_route.dart';
+import '../widgets/arcade_tap.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
+import '../widgets/pulse_color_text.dart';
+import '../widgets/segmented_progress_bar.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
 
@@ -135,11 +140,11 @@ class HomePageState extends State<HomePage> {
 
   Color _rankColor() {
     return switch (_rank) {
-      'Legend' => const Color(0xFFFF2D55),
-      'Champion' => const Color(0xFFFF2D55),
-      'Knight' => const Color(0xFFFFD700),
-      'Squire' => const Color(0xFF00FF9C),
-      _ => const Color(0xFF6B6B8A),
+      'Legend' => kDanger,
+      'Champion' => kDanger,
+      'Knight' => kAmber,
+      'Squire' => kNeon,
+      _ => kMutedText,
     };
   }
 
@@ -150,14 +155,16 @@ class HomePageState extends State<HomePage> {
         title: const Text('Delete session?'),
         content: const Text('This cannot be undone.'),
         actions: [
-          TextButton(
+          PixelButton(
+            label: 'Cancel',
+            fullWidth: false,
+            color: kBorderDark,
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
           ),
           PixelButton(
             label: 'Delete',
             fullWidth: false,
-            color: const Color(0xFFFF2D55),
+            color: kDanger,
             onPressed: () async {
               Navigator.of(ctx).pop();
               await WorkoutStorageService().deleteSession(session.id);
@@ -187,8 +194,8 @@ class HomePageState extends State<HomePage> {
     if (!mounted) return;
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ActiveWorkoutPage(
+      arcadeRoute(
+        (_) => ActiveWorkoutPage(
           muscleGroup: session.muscleGroup,
           durationMinutes: session.targetDurationMinutes,
           exercises: exercises,
@@ -201,7 +208,7 @@ class HomePageState extends State<HomePage> {
   void _startWorkout() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const StartWorkoutPage()),
+      arcadeRoute((_) => const StartWorkoutPage()),
     ).then((_) => _loadData());
   }
 
@@ -333,16 +340,10 @@ class HomePageState extends State<HomePage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: xpFraction,
-                    minHeight: 8,
-                    backgroundColor: const Color(0xFF2A2A4A),
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      Color(0xFF00FF9C),
-                    ),
-                  ),
+                SegmentedProgressBar(
+                  totalCells: 10,
+                  litCells: (xpFraction * 10).floor().clamp(0, 10),
+                  height: 8,
                 ),
                 const SizedBox(height: 5),
                 Row(
@@ -379,7 +380,7 @@ class HomePageState extends State<HomePage> {
     return Semantics(
       button: true,
       label: 'Open profile guild card',
-      child: InkWell(
+      child: ArcadeTap(
         onTap: widget.onViewProfile,
         borderRadius: BorderRadius.circular(4),
         child: card,
@@ -438,7 +439,7 @@ class HomePageState extends State<HomePage> {
   // ── Weekly Quests card ─────────────────────────────────────────────────────
 
   Widget _buildWeeklyQuestsCard() {
-    return InkWell(
+    return ArcadeTap(
       onTap: widget.onViewQuests,
       borderRadius: BorderRadius.circular(4),
       child: Container(
@@ -784,23 +785,17 @@ class _MissionRewardChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFD700).withValues(alpha: 0.12),
-        border: Border.all(color: const Color(0xFFFFD700)),
+        color: kAmber.withValues(alpha: 0.12),
+        border: Border.all(color: kAmber),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(
+      child: PulseColorText(
         label,
-        style: const TextStyle(
-          fontFamily: 'PressStart2P',
-          fontSize: 8,
-          color: Color(0xFFFFD700),
-        ),
+        style: const TextStyle(fontFamily: 'PressStart2P', fontSize: 8),
       ),
     );
   }
 }
-
-// ── Pressable card (unchanged) ─────────────────────────────────────────────
 
 class _PressableCard extends StatefulWidget {
   const _PressableCard({required this.child, required this.onLongPress});
@@ -818,26 +813,20 @@ class _PressableCardState extends State<_PressableCard> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onLongPress: widget.onLongPress,
       onTapDown: (_) => setState(() => _pressing = true),
       onTapUp: (_) => setState(() => _pressing = false),
       onTapCancel: () => setState(() => _pressing = false),
-      child: AnimatedScale(
-        scale: _pressing ? 0.96 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 100),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: _pressing
-                  ? const Color(0xFF00FF9C)
-                  : const Color(0xFF2A2A4A),
-              width: _pressing ? 1.5 : 0.5,
-            ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: _pressing ? kNeon : kBorder,
+            width: 1,
           ),
-          child: widget.child,
         ),
+        child: widget.child,
       ),
     );
   }

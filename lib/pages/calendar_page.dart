@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/workout_models.dart';
-import '../widgets/pixel_loader.dart';
 import '../services/workout_storage_service.dart';
+import '../widgets/arcade_route.dart';
+import '../widgets/pixel_loader.dart';
 import 'Workout session/session_detail.dart';
 
 const _muscleIcon = {
@@ -356,9 +357,8 @@ class _CalendarPageState extends State<CalendarPage> {
                         child: GestureDetector(
                           onTap: () => Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  SessionDetailPage(session: session),
+                            arcadeRoute(
+                              (_) => SessionDetailPage(session: session),
                             ),
                           ),
                           child: Card(

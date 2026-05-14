@@ -5,9 +5,15 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/workout_models.dart';
-import '../../widgets/pixel_button.dart';
 import '../../services/calorie_service.dart';
 import '../../services/workout_storage_service.dart';
+import '../../theme/tokens.dart';
+import '../../widgets/arcade_route.dart';
+import '../../widgets/arcade_tap.dart';
+import '../../widgets/blinking_colon.dart';
+import '../../widgets/pixel_button.dart';
+import '../../widgets/segmented_progress_bar.dart';
+import '../../widgets/strobe_flash.dart';
 import 'exercise_session.dart';
 import 'workout_summary.dart';
 
@@ -41,7 +47,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   late Map<String, _ExerciseStatus> _status;
   final Map<String, List<SetEntry>> _loggedSets = {};
   final Map<String, GlobalKey> _exerciseKeys = {};
-  String? _flashingExerciseId;
+  final Map<String, int> _flashTriggers = {};
 
   @override
   void initState() {
@@ -74,6 +80,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
 
     for (final e in widget.exercises) {
       _exerciseKeys[e.id] = GlobalKey();
+      _flashTriggers[e.id] = 0;
     }
 
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -143,19 +150,19 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   int get _totalLoggedSets =>
       _loggedSets.values.fold<int>(0, (sum, sets) => sum + sets.length);
 
-  String get _elapsed {
-    final m = _elapsedSeconds ~/ 60;
-    final s = _elapsedSeconds % 60;
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
+  String get _elapsedMinutes =>
+      (_elapsedSeconds ~/ 60).toString().padLeft(2, '0');
+
+  String get _elapsedSecondsPart =>
+      (_elapsedSeconds % 60).toString().padLeft(2, '0');
 
   Future<void> _openExercise(Exercise exercise) async {
     final previousStatus = _status[exercise.id] ?? _ExerciseStatus.notStarted;
     setState(() => _status[exercise.id] = _ExerciseStatus.inProgress);
     final sets = await Navigator.push<List<SetEntry>>(
       context,
-      MaterialPageRoute(
-        builder: (_) => ExerciseSessionPage(
+      arcadeRoute(
+        (_) => ExerciseSessionPage(
           exercise: exercise,
           initialSets: _loggedSets[exercise.id] ?? const [],
         ),
@@ -166,12 +173,8 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       setState(() {
         _loggedSets[exercise.id] = sets;
         _status[exercise.id] = _ExerciseStatus.done;
-        _flashingExerciseId = exercise.id;
-      });
-      Future.delayed(const Duration(milliseconds: 400), () {
-        if (mounted && _flashingExerciseId == exercise.id) {
-          setState(() => _flashingExerciseId = null);
-        }
+        _flashTriggers[exercise.id] =
+            (_flashTriggers[exercise.id] ?? 0) + 1;
       });
     } else {
       setState(() => _status[exercise.id] = previousStatus);
@@ -199,8 +202,8 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _clearStartTime();
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => WorkoutSummaryPage(
+      arcadeRoute(
+        (_) => WorkoutSummaryPage(
           muscleGroup: widget.muscleGroup,
           durationMinutes: widget.durationMinutes,
           elapsedSeconds: _elapsedSeconds,
@@ -342,7 +345,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         return const Text(
           'READY',
           style: TextStyle(
-            color: Color(0xFFFFD700),
+            color: kAmber,
             fontFamily: 'PressStart2P',
             fontSize: 8,
           ),
@@ -351,7 +354,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         return const Text(
           'ACTIVE',
           style: TextStyle(
-            color: Color(0xFF00BFFF),
+            color: kCyan,
             fontFamily: 'PressStart2P',
             fontSize: 8,
           ),
@@ -360,12 +363,12 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         return const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_sharp, color: Color(0xFF00FF9C), size: 16),
+            Icon(Icons.check_sharp, color: kNeon, size: 16),
             SizedBox(width: 4),
             Text(
               'CLEARED',
               style: TextStyle(
-                color: Color(0xFF00FF9C),
+                color: kNeon,
                 fontFamily: 'PressStart2P',
                 fontSize: 8,
               ),
@@ -377,10 +380,6 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
 
   @override
   Widget build(BuildContext context) {
-    final progress = widget.exercises.isEmpty
-        ? 0.0
-        : _completedExerciseCount / widget.exercises.length;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Session'),
@@ -390,7 +389,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
             child: PixelButton(
               label: 'End Early',
               fullWidth: false,
-              color: const Color(0xFFFF2D55),
+              color: kDanger,
               onPressed: _confirmEndEarly,
             ),
           ),
@@ -418,14 +417,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      _elapsed,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: 'PressStart2P',
-                        fontSize: 20,
-                        color: Color(0xFF00FF9C),
-                      ),
+                    _ElapsedDisplay(
+                      minutes: _elapsedMinutes,
+                      seconds: _elapsedSecondsPart,
                     ),
                     const SizedBox(height: 14),
                     Row(
@@ -447,16 +441,12 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                       ],
                     ),
                     const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 6,
-                        backgroundColor: const Color(0xFF2A2A3E),
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0xFF00FF9C),
-                        ),
-                      ),
+                    SegmentedProgressBar(
+                      totalCells: widget.exercises.isEmpty
+                          ? 1
+                          : widget.exercises.length,
+                      litCells: _completedExerciseCount,
+                      height: 8,
                     ),
                   ],
                 ),
@@ -470,55 +460,58 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
             const SizedBox(height: 12),
 
             for (final exercise in widget.exercises) ...[
-              AnimatedContainer(
+              Padding(
                 key: _exerciseKeys[exercise.id],
-                duration: const Duration(milliseconds: 400),
-                decoration: BoxDecoration(
-                  color: _flashingExerciseId == exercise.id
-                      ? const Color(0xFF00FF9C).withValues(alpha: 0.2)
-                      : const Color(0xFF1A1A2E),
-                  border: Border.all(color: const Color(0xFF2A2A4A)),
+                padding: const EdgeInsets.only(bottom: 8),
+                child: StrobeFlash(
+                  trigger: _flashTriggers[exercise.id],
                   borderRadius: BorderRadius.circular(4),
-                ),
-                margin: const EdgeInsets.only(bottom: 8),
-                child: InkWell(
-                  onTap: () => _openExercise(exercise),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: kCard,
+                      border: Border.all(color: kBorder),
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                exercise.name,
-                                style: Theme.of(context).textTheme.bodyLarge
-                                    ?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                exercise.levelLabel,
-                                style: const TextStyle(
-                                  color: Color(0xFF6B6B8A),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
+                    child: ArcadeTap(
+                      onTap: () => _openExercise(exercise),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
                         ),
-                        const SizedBox(width: 12),
-                        _statusWidget(_status[exercise.id]!),
-                      ],
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    exercise.name,
+                                    style: Theme.of(context).textTheme.bodyLarge
+                                        ?.copyWith(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    exercise.levelLabel,
+                                    style: const TextStyle(
+                                      color: kMutedText,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            _statusWidget(_status[exercise.id]!),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -534,6 +527,30 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ElapsedDisplay extends StatelessWidget {
+  const _ElapsedDisplay({required this.minutes, required this.seconds});
+
+  final String minutes;
+  final String seconds;
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(
+      fontFamily: 'PressStart2P',
+      fontSize: 20,
+      color: kNeon,
+    );
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(minutes, style: style),
+        const BlinkingColon(child: Text(':', style: style)),
+        Text(seconds, style: style),
+      ],
     );
   }
 }
