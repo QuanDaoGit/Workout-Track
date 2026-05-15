@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/workout_models.dart';
+import '../../services/battle_scheduler.dart';
 import '../../services/calorie_service.dart';
+import '../../services/stat_engine.dart';
 import '../../services/workout_storage_service.dart';
 import '../../services/xp_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/pulse_color_text.dart';
 import '../../widgets/screen_shake.dart';
+import '../../widgets/strobe_flash.dart';
 import '../../widgets/typewriter_text.dart';
 
 class WorkoutSummaryPage extends StatefulWidget {
@@ -18,6 +21,8 @@ class WorkoutSummaryPage extends StatefulWidget {
     required this.elapsedSeconds,
     required this.exerciseLogs,
     this.isPartial = false,
+    this.isAbandoned = false,
+    this.startedAt,
     this.resumeFromSession,
   });
 
@@ -26,6 +31,8 @@ class WorkoutSummaryPage extends StatefulWidget {
   final int elapsedSeconds;
   final List<ExerciseLog> exerciseLogs;
   final bool isPartial;
+  final bool isAbandoned;
+  final DateTime? startedAt;
   final WorkoutSession? resumeFromSession;
 
   @override
@@ -36,6 +43,8 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   bool _saving = false;
   bool _saved = false;
   int _shakeTrigger = 0;
+  Map<String, int> _statDelta = {};
+  Map<String, int> _combatStats = {};
 
   late final int _estimatedCalories = CalorieService.estimateCalories(
     widget.muscleGroup,
@@ -45,12 +54,14 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   late final WorkoutSession _savedSession = WorkoutSession(
     id: DateTime.now().millisecondsSinceEpoch.toString(),
     date: DateTime.now(),
+    startedAt: widget.startedAt,
     muscleGroup: widget.muscleGroup,
     targetDurationMinutes: widget.durationMinutes,
     actualDurationSeconds: widget.elapsedSeconds,
     exercises: widget.exerciseLogs,
     estimatedCalories: _estimatedCalories,
     isPartial: widget.isPartial,
+    isAbandoned: widget.isAbandoned,
   );
 
   late final int _earnedXP = XpService.calculateSessionXP(_savedSession);
@@ -77,7 +88,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   Future<void> _saveAndExit() async {
     if (_saving || _saved) return;
 
-    if (_totalSets == 0) {
+    if (_totalSets == 0 && !widget.isAbandoned) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Log at least one set before saving.')),
       );
@@ -85,10 +96,20 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     }
 
     setState(() => _saving = true);
-    if (widget.resumeFromSession != null) {
-      await WorkoutStorageService().deleteSession(widget.resumeFromSession!.id);
+    if (widget.isAbandoned) {
+      await WorkoutStorageService().replaceOngoingWithAbandoned(_savedSession);
+    } else {
+      if (widget.resumeFromSession != null) {
+        await WorkoutStorageService().deleteSession(
+          widget.resumeFromSession!.id,
+        );
+      }
+      await WorkoutStorageService().saveSession(_savedSession);
+      await BattleScheduler().scheduleBattle();
+      final engine = StatEngine();
+      _statDelta = await engine.getLastSessionDelta();
+      _combatStats = await engine.getStoredStats();
     }
-    await WorkoutStorageService().saveSession(_savedSession);
     if (mounted) {
       setState(() {
         _saving = false;
@@ -117,6 +138,11 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         _StatBox(label: 'kcal', value: _estimatedCalories.toString()),
     ];
 
+    final titleText = widget.isAbandoned
+        ? 'SESSION ABANDONED'
+        : 'SESSION COMPLETE';
+    final titleColor = widget.isAbandoned ? kAmber : kNeon;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -141,15 +167,23 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                   size: 72,
                 ),
                 const SizedBox(height: kSpace3),
-                const TypewriterText(
-                  'SESSION COMPLETE',
+                TypewriterText(
+                  titleText,
                   style: TextStyle(
                     fontFamily: 'PressStart2P',
                     fontSize: 14,
-                    color: kNeon,
+                    color: titleColor,
                   ),
                   textAlign: TextAlign.center,
                 ),
+                if (widget.isAbandoned) ...[
+                  const SizedBox(height: kSpace2),
+                  Text(
+                    'Time XP only. No mission progress.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
                 const SizedBox(height: kSpace3),
                 PulseColorText(
                   '+$_earnedXP XP EARNED',
@@ -171,6 +205,13 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                     ],
                   ),
                 if (exerciseLogs.isNotEmpty) ...[
+                  if (!widget.isAbandoned && _statDelta.isNotEmpty) ...[
+                    const SizedBox(height: kSpace5),
+                    _StatDeltaSection(
+                      delta: _statDelta,
+                      currentStats: _combatStats,
+                    ),
+                  ],
                   const SizedBox(height: kSpace5),
                   Text(
                     'BREAKDOWN',
@@ -222,6 +263,127 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _StatDeltaSection extends StatelessWidget {
+  const _StatDeltaSection({required this.delta, required this.currentStats});
+
+  final Map<String, int> delta;
+  final Map<String, int> currentStats;
+
+  List<String> get _rankUps {
+    final engine = StatEngine();
+    return [
+      for (final entry in delta.entries)
+        if (StatEngine.volumeStats.contains(entry.key) && entry.value > 0)
+          if (engine.getRank((currentStats[entry.key] ?? 0) - entry.value) !=
+              engine.getRank(currentStats[entry.key] ?? 0))
+            entry.key,
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rankUps = _rankUps;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            ImageIcon(
+              AssetImage('assets/icons/control/icon_sword.png'),
+              size: 16,
+              color: kAmber,
+            ),
+            SizedBox(width: kSpace2),
+            Text(
+              'STAT GAINS',
+              style: TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 8,
+                color: kAmber,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: kSpace3),
+        Wrap(
+          spacing: kSpace4,
+          runSpacing: kSpace2,
+          children: [
+            for (final entry in delta.entries)
+              _StatDeltaText(
+                stat: entry.key,
+                delta: entry.value,
+                rankUp: rankUps.contains(entry.key),
+              ),
+          ],
+        ),
+        if (rankUps.isNotEmpty) ...[
+          const SizedBox(height: kSpace2),
+          for (final stat in rankUps)
+            Text(
+              'RANK UP! $stat [${StatEngine().getRank(currentStats[stat] ?? 0)}]',
+              style: const TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 8,
+                color: kAmber,
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _StatDeltaText extends StatelessWidget {
+  const _StatDeltaText({
+    required this.stat,
+    required this.delta,
+    required this.rankUp,
+  });
+
+  final String stat;
+  final int delta;
+  final bool rankUp;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = delta > 0 ? kNeon : kMutedText;
+    final statLabel = Text(
+      stat,
+      style: GoogleFonts.shareTechMono(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: color,
+      ),
+    );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '+$delta ',
+          style: GoogleFonts.shareTechMono(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+        if (rankUp)
+          StrobeFlash(
+            trigger: stat,
+            fireOnMount: true,
+            color: kAmber,
+            opacity: 0.35,
+            child: statLabel,
+          )
+        else
+          statLabel,
+      ],
     );
   }
 }

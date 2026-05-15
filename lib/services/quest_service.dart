@@ -5,10 +5,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/quest_models.dart';
 import '../models/workout_models.dart';
+import 'rest_service.dart';
 import 'xp_service.dart';
 
 class QuestService {
   static const String _stateKey = 'quest_state_v1';
+  static const String _oldTimeQuestClaimKey = 'side:side_streak_3';
+  static const String _timeQuestClaimKey = 'side:side_minutes_300';
+  static const String _oldTimeTitle = 'Oath Keeper';
+  static const String _timeTitle = 'Time Keeper';
 
   Future<QuestSummary> getSummary(
     List<WorkoutSession> sessions, {
@@ -17,7 +22,25 @@ class QuestService {
     final currentTime = now ?? DateTime.now();
     final state = await _loadState(currentTime);
     final stats = _QuestStats.fromSessions(sessions, currentTime);
-    final baseXP = XpService.calculateTotalXP(sessions) + state.claimedXP;
+    final restService = RestService(nowProvider: () => currentTime);
+    final currentRecoveryXP = await restService.effectiveRecoveryXP(
+      sessions,
+      now: currentTime,
+    );
+    await restService.ensureAutomaticRecoveryForToday(
+      sessions: sessions,
+      baseXP:
+          XpService.calculateTotalXP(sessions) +
+          state.claimedXP +
+          currentRecoveryXP,
+      now: currentTime,
+    );
+    final recoveryXP = await restService.effectiveRecoveryXP(
+      sessions,
+      now: currentTime,
+    );
+    final baseXP =
+        XpService.calculateTotalXP(sessions) + state.claimedXP + recoveryXP;
 
     final daily = _buildDailyQuests(state, stats, baseXP, currentTime);
     final weekly = _buildWeeklyQuests(state, stats, baseXP, currentTime);
@@ -142,13 +165,38 @@ class QuestService {
     String weeklyKey,
   ) {
     var manualDone = state.manualDoneKeys;
+    var claims = Map<String, QuestClaim>.from(state.claims);
+    var selectedTitle = state.selectedTitle;
+
     if (state.dailyPeriodKey != dailyKey) {
       manualDone = manualDone.where((key) => !key.startsWith('daily:')).toSet();
     }
+
+    final oldTimeClaim = claims.remove(_oldTimeQuestClaimKey);
+    if (oldTimeClaim != null && !claims.containsKey(_timeQuestClaimKey)) {
+      claims[_timeQuestClaimKey] = QuestClaim(
+        xp: oldTimeClaim.xp,
+        claimedAt: oldTimeClaim.claimedAt,
+        title: _timeTitle,
+      );
+    }
+    claims = claims.map((key, claim) {
+      if (claim.title != _oldTimeTitle) return MapEntry(key, claim);
+      return MapEntry(
+        key,
+        QuestClaim(xp: claim.xp, claimedAt: claim.claimedAt, title: _timeTitle),
+      );
+    });
+    if (selectedTitle == _oldTimeTitle) {
+      selectedTitle = _timeTitle;
+    }
+
     return state.copyWith(
       dailyPeriodKey: dailyKey,
       weeklyPeriodKey: weeklyKey,
       manualDoneKeys: manualDone,
+      claims: claims,
+      selectedTitle: selectedTitle,
     );
   }
 
@@ -299,10 +347,10 @@ class QuestService {
         8,
       ),
       _SideTemplate(
-        'side_streak_3',
-        'Three-Day Oath',
-        'Reach a 3 day streak',
-        'Oath Keeper',
+        'side_minutes_300',
+        'Time Trial',
+        'Train 300 total minutes',
+        'Time Keeper',
         10,
       ),
       _SideTemplate(
@@ -338,7 +386,7 @@ class QuestService {
     final completed = switch (template.id) {
       'side_first_workout' => stats.lifetimeCompletedSessions >= 1,
       'side_sets_25' => stats.lifetimeSetCount >= 25,
-      'side_streak_3' => stats.streak >= 3,
+      'side_minutes_300' => stats.lifetimeDurationSeconds >= 18000,
       'side_all_muscles' => stats.lifetimeMuscleGroups >= 4,
       'side_volume_10000' => stats.lifetimeVolume >= 10000,
       _ => false,
@@ -395,7 +443,8 @@ class QuestService {
     return switch (id) {
       'side_first_workout' => '${min(stats.lifetimeCompletedSessions, 1)} / 1',
       'side_sets_25' => '${min(stats.lifetimeSetCount, 25)} / 25 sets',
-      'side_streak_3' => '${min(stats.streak, 3)} / 3 days',
+      'side_minutes_300' =>
+        '${min(stats.lifetimeDurationSeconds ~/ 60, 300)} / 300 min',
       'side_all_muscles' => '${min(stats.lifetimeMuscleGroups, 4)} / 4 groups',
       'side_volume_10000' =>
         '${min(stats.lifetimeVolume.round(), 10000)} / 10000 kg',
@@ -505,8 +554,8 @@ class _QuestStats {
     required this.lifetimeCompletedSessions,
     required this.lifetimeSetCount,
     required this.lifetimeMuscleGroups,
+    required this.lifetimeDurationSeconds,
     required this.lifetimeVolume,
-    required this.streak,
     required this.suggestedMuscle,
   });
 
@@ -519,8 +568,8 @@ class _QuestStats {
   final int lifetimeCompletedSessions;
   final int lifetimeSetCount;
   final int lifetimeMuscleGroups;
+  final int lifetimeDurationSeconds;
   final double lifetimeVolume;
-  final int streak;
   final String? suggestedMuscle;
 
   factory _QuestStats.fromSessions(
@@ -562,6 +611,10 @@ class _QuestStats {
             (logSum, log) => logSum + log.totalVolume,
           ),
     );
+    final lifetimeDurationSeconds = completed.fold(
+      0,
+      (sum, session) => sum + session.actualDurationSeconds,
+    );
 
     return _QuestStats(
       todayCompletedSessions: todaySessions.length,
@@ -582,8 +635,8 @@ class _QuestStats {
           .map((session) => session.muscleGroup)
           .toSet()
           .length,
+      lifetimeDurationSeconds: lifetimeDurationSeconds,
       lifetimeVolume: lifetimeVolume,
-      streak: XpService.calculateStreak(completed),
       suggestedMuscle: _suggestedMuscle(completed, now),
     );
   }

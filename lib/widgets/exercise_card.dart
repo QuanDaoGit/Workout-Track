@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/workout_models.dart';
+import 'arcade_image_filter.dart';
+import 'level_badge.dart';
 
 class ExerciseCard extends StatelessWidget {
   const ExerciseCard({
@@ -64,22 +66,26 @@ class ExerciseCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.asset(
-                      exercise.imageAssetPath,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const ColoredBox(
-                            color: Color(0xFF0D0D1A),
-                            child: Center(
-                              child: ImageIcon(
-                                AssetImage(
-                                  'assets/icons/control/icon_sword.png',
+                    ArcadeImageFilter(
+                      borderRadius: BorderRadius.zero,
+                      child: Image.asset(
+                        exercise.imageAssetPath,
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.low,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const ColoredBox(
+                              color: Color(0xFF0D0D1A),
+                              child: Center(
+                                child: ImageIcon(
+                                  AssetImage(
+                                    'assets/icons/control/icon_sword.png',
+                                  ),
+                                  color: Color(0xFF2A2A4A),
+                                  size: 24,
                                 ),
-                                color: Color(0xFF2A2A4A),
-                                size: 24,
                               ),
                             ),
-                          ),
+                      ),
                     ),
                     Container(
                       color: const Color(0xFF0D0D1A).withValues(alpha: 0.4),
@@ -102,23 +108,7 @@ class ExerciseCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFF2A2A4A)),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      exercise.levelLabel,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Color(0xFF6B6B8A),
-                      ),
-                    ),
-                  ),
+                  LevelBadge(exercise: exercise),
                 ],
               ),
             ),

@@ -128,21 +128,20 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       _restActive = true;
       _restCellsRemaining = _restCells;
     });
-    _restTimer = Timer.periodic(
-      const Duration(seconds: _restSecondsPerCell),
-      (t) {
-        if (!mounted) return;
-        if (_restCellsRemaining <= 1) {
-          t.cancel();
-          setState(() {
-            _restActive = false;
-            _restCellsRemaining = 0;
-          });
-          return;
-        }
-        setState(() => _restCellsRemaining--);
-      },
-    );
+    _restTimer = Timer.periodic(const Duration(seconds: _restSecondsPerCell), (
+      t,
+    ) {
+      if (!mounted) return;
+      if (_restCellsRemaining <= 1) {
+        t.cancel();
+        setState(() {
+          _restActive = false;
+          _restCellsRemaining = 0;
+        });
+        return;
+      }
+      setState(() => _restCellsRemaining--);
+    });
   }
 
   void _logSet(int index) {

@@ -5,8 +5,10 @@ import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
 import '../models/workout_models.dart';
 import '../services/quest_service.dart';
+import '../services/rest_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_service.dart';
+import '../widgets/arcade_progress_bar.dart';
 
 class QuestsPage extends StatefulWidget {
   const QuestsPage({super.key, this.onQuestChanged});
@@ -22,6 +24,7 @@ class QuestsPageState extends State<QuestsPage> {
   bool _loading = true;
   List<WorkoutSession> _sessions = [];
   QuestSummary? _summary;
+  int _recoveryXP = 0;
 
   @override
   void initState() {
@@ -32,10 +35,12 @@ class QuestsPageState extends State<QuestsPage> {
   Future<void> reload() async {
     final sessions = await WorkoutStorageService().getSessions();
     final summary = await _questService.getSummary(sessions);
+    final recoveryXP = await RestService().effectiveRecoveryXP(sessions);
     if (!mounted) return;
     setState(() {
       _sessions = sessions;
       _summary = summary;
+      _recoveryXP = recoveryXP;
       _loading = false;
     });
   }
@@ -64,14 +69,12 @@ class QuestsPageState extends State<QuestsPage> {
 
     final summary = _summary!;
     final totalXP =
-        XpService.calculateTotalXP(_sessions) + summary.claimedRewardXP;
-    final level = XpService.getLevel(totalXP);
+        XpService.calculateTotalXP(_sessions) +
+        summary.claimedRewardXP +
+        _recoveryXP;
+    final xpProgress = XpService.progressForTotalXP(totalXP);
+    final level = xpProgress.level;
     final rank = XpService.getRank(level);
-    final xpBase = XpService.xpForCurrentLevel(level);
-    final xpNext = XpService.xpForNextLevel(level);
-    final xpFraction = xpNext > xpBase
-        ? ((totalXP - xpBase) / (xpNext - xpBase)).clamp(0.0, 1.0)
-        : 1.0;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Quests')),
@@ -83,9 +86,8 @@ class QuestsPageState extends State<QuestsPage> {
             _RewardsBar(
               rank: rank,
               level: level,
-              totalXP: totalXP,
-              nextXP: xpNext,
-              xpFraction: xpFraction,
+              xpLabel: xpProgress.label,
+              xpFraction: xpProgress.fraction,
               claimableCount: summary.claimableCount,
             ),
             const SizedBox(height: 24),
@@ -128,16 +130,14 @@ class _RewardsBar extends StatelessWidget {
   const _RewardsBar({
     required this.rank,
     required this.level,
-    required this.totalXP,
-    required this.nextXP,
+    required this.xpLabel,
     required this.xpFraction,
     required this.claimableCount,
   });
 
   final String rank;
   final int level;
-  final int totalXP;
-  final int nextXP;
+  final String xpLabel;
   final double xpFraction;
   final int claimableCount;
 
@@ -178,13 +178,13 @@ class _RewardsBar extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            _ContinuousProgressBar(value: xpFraction),
+            ArcadeProgressBar(value: xpFraction),
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '$totalXP / $nextXP XP',
+                  xpLabel,
                   style: const TextStyle(
                     color: Color(0xFF6B6B8A),
                     fontSize: 11,
@@ -433,25 +433,6 @@ class _SegmentedProgressBar extends StatelessWidget {
           if (i < total - 1) const SizedBox(width: 4),
         ],
       ],
-    );
-  }
-}
-
-class _ContinuousProgressBar extends StatelessWidget {
-  const _ContinuousProgressBar({required this.value});
-
-  final double value;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
-      child: LinearProgressIndicator(
-        value: value,
-        minHeight: 10,
-        backgroundColor: const Color(0xFF2A2A4A),
-        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF00FF9C)),
-      ),
     );
   }
 }

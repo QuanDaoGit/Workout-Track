@@ -71,7 +71,9 @@ class _ArcadeChipState extends State<ArcadeChip> {
     final borderColor = selected
         ? (_blinkOn ? widget.selectedColor : kBorderDark)
         : kBorder;
-    final textColor = selected ? widget.selectedColor : widget.unselectedTextColor;
+    final textColor = selected
+        ? widget.selectedColor
+        : widget.unselectedTextColor;
     final bg = selected ? kCard : const Color(0xFF1F1F35);
 
     return GestureDetector(

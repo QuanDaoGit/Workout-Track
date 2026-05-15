@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../models/workout_models.dart';
 import '../services/favorite_service.dart';
+import '../widgets/arcade_image_filter.dart';
+import '../widgets/level_badge.dart';
 
 class ExerciseDetailPage extends StatefulWidget {
   const ExerciseDetailPage({super.key, required this.exercise});
@@ -35,23 +38,9 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
     setState(() => _isFavorite = isNowFavorite);
   }
 
-  Color _levelColor() {
-    switch (widget.exercise.level) {
-      case 'beginner':
-        return const Color(0xFF00FF9C);
-      case 'intermediate':
-        return const Color(0xFFFFD700);
-      case 'expert':
-        return const Color(0xFFFF2D55);
-      default:
-        return const Color(0xFF6B6B8A);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final exercise = widget.exercise;
-    final levelColor = _levelColor();
 
     return Scaffold(
       body: CustomScrollView(
@@ -88,46 +77,18 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                 fit: StackFit.expand,
                 children: [
                   if (exercise.imageAssetPath.isNotEmpty)
-                    Image.asset(
-                      exercise.imageAssetPath,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stack) =>
-                          const ColoredBox(color: Color(0xFF1A1A2E)),
+                    ArcadeImageFilter(
+                      borderRadius: BorderRadius.zero,
+                      child: Image.asset(
+                        exercise.imageAssetPath,
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.low,
+                        errorBuilder: (context, error, stack) =>
+                            const ColoredBox(color: Color(0xFF1A1A2E)),
+                      ),
                     )
                   else
                     const ColoredBox(color: Color(0xFF1A1A2E)),
-                  // Solid overlay for readability
-                  const Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: 130,
-                    child: ColoredBox(color: Color(0xCC0D0D1A)),
-                  ),
-                  // Level badge bottom-left
-                  Positioned(
-                    bottom: 16,
-                    left: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: levelColor.withValues(alpha: 0.15),
-                        border: Border.all(color: levelColor),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        exercise.levelLabel.toUpperCase(),
-                        style: TextStyle(
-                          fontFamily: 'PressStart2P',
-                          fontSize: 9,
-                          color: levelColor,
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -138,7 +99,8 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
             padding: const EdgeInsets.all(24),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // Exercise name
+                LevelBadge(exercise: exercise),
+                const SizedBox(height: 16),
                 Text(
                   exercise.name,
                   style: Theme.of(context).textTheme.titleLarge,
@@ -183,7 +145,11 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                           Expanded(
                             child: Text(
                               exercise.instructions[i],
-                              style: Theme.of(context).textTheme.bodyMedium,
+                              style: GoogleFonts.shareTechMono(
+                                textStyle: Theme.of(
+                                  context,
+                                ).textTheme.bodyMedium,
+                              ),
                             ),
                           ),
                         ],
@@ -192,7 +158,9 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                 ] else
                   Text(
                     'No instructions available.',
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: GoogleFonts.shareTechMono(
+                      textStyle: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
 
                 const SizedBox(height: 32),

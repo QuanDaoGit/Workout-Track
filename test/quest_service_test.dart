@@ -1,7 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workout_track/models/rest_models.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/services/quest_service.dart';
+import 'package:workout_track/services/rest_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -118,6 +122,76 @@ void main() {
     },
   );
 
+  test(
+    '300 completed lifetime minutes completes the time side quest',
+    () async {
+      final service = QuestService();
+      final now = DateTime(2026, 5, 13, 10);
+      final sessions = [_session(date: now, seconds: 18000)];
+
+      final summary = await service.getSummary(sessions, now: now);
+      final quest = summary.sideQuests.firstWhere(
+        (quest) => quest.id == 'side_minutes_300',
+      );
+
+      expect(quest.title, 'Time Trial');
+      expect(quest.rewardTitle, 'Time Keeper');
+      expect(quest.completed, isTrue);
+      expect(quest.progressLabel, '300 / 300 min');
+    },
+  );
+
+  test('partial sessions do not count toward the time side quest', () async {
+    final service = QuestService();
+    final now = DateTime(2026, 5, 13, 10);
+    final sessions = [
+      _session(date: now, seconds: 18000, isPartial: true, isAbandoned: true),
+      _session(
+        date: now.add(const Duration(minutes: 1)),
+        seconds: 18000,
+        isPartial: true,
+      ),
+    ];
+
+    final summary = await service.getSummary(sessions, now: now);
+    final quest = summary.sideQuests.firstWhere(
+      (quest) => quest.id == 'side_minutes_300',
+    );
+
+    expect(quest.completed, isFalse);
+    expect(quest.progressLabel, '0 / 300 min');
+  });
+
+  test('legacy Oath Keeper claims migrate to Time Keeper', () async {
+    final now = DateTime(2026, 5, 13, 10);
+    SharedPreferences.setMockInitialValues({
+      'quest_state_v1': jsonEncode({
+        'dailyPeriodKey': '2026-05-13',
+        'weeklyPeriodKey': '2026-05-11',
+        'manualDoneKeys': <String>[],
+        'selectedTitle': 'Oath Keeper',
+        'claims': {
+          'side:side_streak_3': {
+            'xp': 123,
+            'claimedAt': now.toIso8601String(),
+            'title': 'Oath Keeper',
+          },
+        },
+      }),
+    });
+
+    final summary = await QuestService().getSummary(const [], now: now);
+    final quest = summary.sideQuests.firstWhere(
+      (quest) => quest.id == 'side_minutes_300',
+    );
+
+    expect(summary.claimedRewardXP, 123);
+    expect(summary.earnedTitles, contains('Time Keeper'));
+    expect(summary.selectedTitle, 'Time Keeper');
+    expect(quest.claimed, isTrue);
+    expect(quest.rewardXP, 123);
+  });
+
   test('claimed side quest titles can be selected and persist', () async {
     final service = QuestService();
     final now = DateTime(2026, 5, 13, 10);
@@ -140,6 +214,36 @@ void main() {
     expect(QuestService.dailyPeriodKey(DateTime(2026, 5, 13)), '2026-05-13');
     expect(QuestService.weeklyPeriodKey(DateTime(2026, 5, 13)), '2026-05-11');
   });
+
+  test(
+    'recovery XP scales quest rewards but does not complete quests',
+    () async {
+      final now = DateTime(2026, 5, 12);
+      SharedPreferences.setMockInitialValues({
+        RestService.stateKey: jsonEncode(
+          RestState.defaults(currentWeekKey: RestService.weekKey(now))
+              .copyWith(
+                recoveryClaims: {
+                  '2026-05-12': RestRecoveryClaim(xp: 500, claimedAt: now),
+                },
+              )
+              .toJson(),
+        ),
+      });
+
+      final summary = await QuestService().getSummary(const [], now: now);
+      final firstWorkout = summary.weeklyQuests.firstWhere(
+        (quest) => quest.id == 'weekly_workout_1',
+      );
+      final side = summary.sideQuests.firstWhere(
+        (quest) => quest.id == 'side_first_workout',
+      );
+
+      expect(firstWorkout.completed, isFalse);
+      expect(side.completed, isFalse);
+      expect(side.rewardXP, 50);
+    },
+  );
 }
 
 WorkoutSession _session({
@@ -147,6 +251,8 @@ WorkoutSession _session({
   String muscleGroup = 'Chest',
   int setCount = 3,
   int seconds = 1800,
+  bool isPartial = false,
+  bool isAbandoned = false,
 }) {
   return WorkoutSession(
     id: date.microsecondsSinceEpoch.toString(),
@@ -165,5 +271,7 @@ WorkoutSession _session({
       ),
     ],
     estimatedCalories: 100,
+    isPartial: isPartial,
+    isAbandoned: isAbandoned,
   );
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'pages/root_page.dart';
+import 'services/stat_engine.dart';
 
 class _ScanlinePainter extends CustomPainter {
   @override
@@ -18,7 +19,9 @@ class _ScanlinePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await StatEngine().applyDecayIfNeeded();
   runApp(const MyApp());
 }
 

@@ -140,10 +140,7 @@ class _PixelButtonState extends State<PixelButton> {
                   ),
                 ),
               ),
-            Transform.translate(
-              offset: Offset(0, translateY),
-              child: core,
-            ),
+            Transform.translate(offset: Offset(0, translateY), child: core),
           ],
         ),
       ),

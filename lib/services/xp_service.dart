@@ -1,4 +1,29 @@
+import 'dart:math';
+
 import '../models/workout_models.dart';
+
+class XpProgress {
+  const XpProgress({
+    required this.totalXP,
+    required this.level,
+    required this.levelBaseXP,
+    required this.nextLevelXP,
+  });
+
+  final int totalXP;
+  final int level;
+  final int levelBaseXP;
+  final int nextLevelXP;
+
+  int get currentLevelXP => max(0, totalXP - levelBaseXP);
+
+  int get levelSpanXP => max(1, nextLevelXP - levelBaseXP);
+
+  double get fraction =>
+      (currentLevelXP / levelSpanXP).clamp(0.0, 1.0).toDouble();
+
+  String get label => '$currentLevelXP / $levelSpanXP XP';
+}
 
 class XpService {
   static const List<int> _xpThresholds = [
@@ -13,16 +38,63 @@ class XpService {
   ];
 
   static int calculateSessionXP(WorkoutSession session) {
-    if (session.isPartial && session.exercises.isEmpty) return 0;
+    if (session.isAbandoned) {
+      return _abandonedTimeXP(session, session.actualDurationSeconds);
+    }
+    if (session.isOngoing) {
+      return _partialPerformanceXP(session, session.actualDurationSeconds);
+    }
+    return _completedSessionXP(session, session.actualDurationSeconds);
+  }
+
+  static int calculateLiveSessionXP(WorkoutSession session, {DateTime? now}) {
+    final currentTime = now ?? DateTime.now();
+    final elapsedSeconds = session.isOngoing
+        ? max(
+            session.actualDurationSeconds,
+            currentTime.difference(session.startedAt).inSeconds,
+          )
+        : session.actualDurationSeconds;
+
+    if (session.isAbandoned) {
+      return _abandonedTimeXP(session, elapsedSeconds);
+    }
+    if (session.isOngoing) {
+      return _partialPerformanceXP(session, elapsedSeconds);
+    }
+    return _completedSessionXP(session, elapsedSeconds);
+  }
+
+  static int _completedSessionXP(WorkoutSession session, int elapsedSeconds) {
     int xp = 50;
     xp += session.exercises.fold(0, (sum, e) => sum + e.sets.length * 5);
-    xp += session.actualDurationSeconds ~/ 60;
-    if (session.isPartial) xp = (xp * 0.5).round();
+    xp += elapsedSeconds ~/ 60;
     return xp;
   }
 
-  static int calculateTotalXP(List<WorkoutSession> sessions) =>
-      sessions.fold(0, (sum, s) => sum + calculateSessionXP(s));
+  static int _partialPerformanceXP(WorkoutSession session, int elapsedSeconds) {
+    if (session.exercises.isEmpty && elapsedSeconds <= 0) return 0;
+    return (_completedSessionXP(session, elapsedSeconds) * 0.5).round();
+  }
+
+  static int _abandonedTimeXP(WorkoutSession session, int elapsedSeconds) {
+    final elapsedMinutes = max(0, elapsedSeconds ~/ 60);
+    return min(elapsedMinutes, session.targetDurationMinutes);
+  }
+
+  static int calculateTotalXP(List<WorkoutSession> sessions) => sessions
+      .where((s) => !s.isOngoing)
+      .fold(0, (sum, s) => sum + calculateSessionXP(s));
+
+  static XpProgress progressForTotalXP(int totalXP) {
+    final level = getLevel(totalXP);
+    return XpProgress(
+      totalXP: totalXP,
+      level: level,
+      levelBaseXP: xpForCurrentLevel(level),
+      nextLevelXP: xpForNextLevel(level),
+    );
+  }
 
   static int getLevel(int totalXP) {
     if (totalXP >= 10000) return 30;
@@ -65,34 +137,5 @@ class XpService {
       if (getLevel(t) <= currentLevel) result = t;
     }
     return result;
-  }
-
-  static int calculateStreak(List<WorkoutSession> sessions) {
-    final days =
-        sessions
-            .where((s) => !s.isPartial)
-            .map((s) => DateTime(s.date.year, s.date.month, s.date.day))
-            .toSet()
-            .toList()
-          ..sort((a, b) => b.compareTo(a));
-
-    if (days.isEmpty) return 0;
-    final today = DateTime(
-      DateTime.now().year,
-      DateTime.now().month,
-      DateTime.now().day,
-    );
-    final yesterday = today.subtract(const Duration(days: 1));
-    if (days.first != today && days.first != yesterday) return 0;
-
-    int streak = 1;
-    for (int i = 0; i < days.length - 1; i++) {
-      if (days[i].difference(days[i + 1]).inDays == 1) {
-        streak++;
-      } else {
-        break;
-      }
-    }
-    return streak;
   }
 }

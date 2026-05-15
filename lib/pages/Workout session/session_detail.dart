@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../models/workout_models.dart';
+import '../../services/xp_service.dart';
+import '../workout_page.dart' show fmtVol;
 
 class SessionDetailPage extends StatelessWidget {
   const SessionDetailPage({super.key, required this.session});
@@ -38,6 +40,14 @@ class SessionDetailPage extends StatelessWidget {
       0,
       (sum, log) => sum + log.sets.length,
     );
+    final totalVolume = session.exercises.fold<double>(
+      0,
+      (sum, log) => sum + log.totalVolume,
+    );
+    final earnedXP = XpService.calculateSessionXP(session);
+    final exerciseLogs = session.exercises
+        .where((log) => log.sets.isNotEmpty)
+        .toList();
 
     return Scaffold(
       appBar: AppBar(title: Text(_fmtDate(session.date))),
@@ -47,6 +57,20 @@ class SessionDetailPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 8),
+
+            if (session.isAbandoned) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'ABANDONED - ${XpService.calculateSessionXP(session)} XP earned from time. No mission progress.',
+                    style: const TextStyle(color: Color(0xFFFFD700)),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
 
             Row(
               children: [
@@ -68,67 +92,80 @@ class SessionDetailPage extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _StatBox(label: 'Volume', value: '${fmtVol(totalVolume)} kg'),
+                const SizedBox(width: 8),
+                _StatBox(label: 'XP', value: earnedXP.toString()),
+              ],
+            ),
 
-            const SizedBox(height: 24),
+            if (exerciseLogs.isNotEmpty) ...[
+              const SizedBox(height: 24),
 
-            Text('BREAKDOWN', style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 12),
+              Text(
+                'BREAKDOWN',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 12),
 
-            for (final log in session.exercises)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          log.exerciseName,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        for (int i = 0; i < log.sets.length; i++)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  width: 48,
-                                  child: Text(
-                                    'Set ${i + 1}',
-                                    style: const TextStyle(
-                                      color: Color(0xFF6B6B8A),
-                                      fontSize: 12,
+              for (final log in exerciseLogs)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            log.exerciseName,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          for (int i = 0; i < log.sets.length; i++)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 48,
+                                    child: Text(
+                                      'Set ${i + 1}',
+                                      style: const TextStyle(
+                                        color: Color(0xFF6B6B8A),
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                Text(
-                                  '${log.sets[i].weight} kg',
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                                const SizedBox(width: 16),
-                                Text(
-                                  '${log.sets[i].reps} reps',
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                              ],
+                                  Text(
+                                    '${log.sets[i].weight} kg',
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Text(
+                                    '${log.sets[i].reps} reps',
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          const Divider(height: 16, color: Color(0xFF2A2A4A)),
+                          Text(
+                            'Volume: ${log.totalVolume.toStringAsFixed(0)} kg',
+                            style: const TextStyle(
+                              color: Color(0xFF00FF9C),
+                              fontSize: 12,
                             ),
                           ),
-                        const Divider(height: 16, color: Color(0xFF2A2A4A)),
-                        Text(
-                          'Volume: ${log.totalVolume.toStringAsFixed(0)} kg',
-                          style: const TextStyle(
-                            color: Color(0xFF00FF9C),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+            ],
           ],
         ),
       ),

@@ -7,17 +7,39 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../data/curated_exercises.dart';
+import '../models/rest_models.dart';
 import '../models/workout_models.dart';
+import '../services/battle_engine.dart';
+import '../services/battle_scheduler.dart';
 import '../services/favorite_service.dart';
 import '../services/quest_service.dart';
+import '../services/rest_service.dart';
+import '../services/workout_metric_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_service.dart';
+import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
+import '../widgets/calendar_day_marker.dart';
 import '../widgets/exercise_card.dart';
-import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
+import 'Workout session/session_detail.dart';
 import 'calendar_page.dart';
+import 'battle_page.dart';
 import 'exercise_detail.dart';
+
+String fmtVol(double v) {
+  final rounded = v.round();
+  if (rounded < 1000) return rounded.toString();
+  final s = rounded.toString();
+  final buf = StringBuffer();
+  final start = s.length % 3;
+  if (start > 0) buf.write(s.substring(0, start));
+  for (int i = start; i < s.length; i += 3) {
+    if (buf.isNotEmpty) buf.write(',');
+    buf.write(s.substring(i, i + 3));
+  }
+  return buf.toString();
+}
 
 class WorkoutPage extends StatefulWidget {
   const WorkoutPage({super.key});
@@ -29,19 +51,17 @@ class WorkoutPage extends StatefulWidget {
 class WorkoutPageState extends State<WorkoutPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
-  final _historyKey = GlobalKey<_HistoryTabState>();
-  final _statsKey = GlobalKey<_StatsTabState>();
+  int _reloadToken = 0;
 
   void reload() {
-    _historyKey.currentState?._load();
-    _statsKey.currentState?._load();
+    if (!mounted) return;
+    setState(() => _reloadToken++);
   }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -57,8 +77,11 @@ class WorkoutPageState extends State<WorkoutPage>
         title: const Text('Workout'),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(text: 'HISTORY'),
+            Tab(text: 'COMBAT'),
             Tab(text: 'EXERCISES'),
             Tab(text: 'STATS'),
           ],
@@ -71,28 +94,30 @@ class WorkoutPageState extends State<WorkoutPage>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _HistoryTab(key: _historyKey),
+          _HistoryTab(reloadToken: _reloadToken),
+          _CombatHistoryTab(reloadToken: _reloadToken),
           const _ExercisesTab(),
-          _StatsTab(key: _statsKey),
+          _StatsTab(reloadToken: _reloadToken),
         ],
       ),
     );
   }
 }
 
-// ── History Tab ──────────────────────────────────────────────────────────────
+// ── Combat History Tab ────────────────────────────────────────────────────────
 
-class _HistoryTab extends StatefulWidget {
-  const _HistoryTab({super.key});
+class _CombatHistoryTab extends StatefulWidget {
+  const _CombatHistoryTab({required this.reloadToken});
+
+  final int reloadToken;
 
   @override
-  State<_HistoryTab> createState() => _HistoryTabState();
+  State<_CombatHistoryTab> createState() => _CombatHistoryTabState();
 }
 
-class _HistoryTabState extends State<_HistoryTab> {
-  int _totalSessions = 0;
-  int _thisMonth = 0;
-  int _streak = 0;
+class _CombatHistoryTabState extends State<_CombatHistoryTab> {
+  List<BattleResult> _history = [];
+  int _floor = 1;
   bool _loading = true;
 
   @override
@@ -101,31 +126,232 @@ class _HistoryTabState extends State<_HistoryTab> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(_CombatHistoryTab old) {
+    super.didUpdateWidget(old);
+    if (old.reloadToken != widget.reloadToken) _load();
+  }
+
+  Future<void> _load() async {
+    final scheduler = BattleScheduler();
+    final history = await scheduler.getHistory();
+    final floor = await scheduler.getFloor();
+    if (!mounted) return;
+    setState(() {
+      _history = history.reversed.toList();
+      _floor = floor;
+      _loading = false;
+    });
+  }
+
+  String _fmtDate(DateTime d) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[d.month - 1]} ${d.day}';
+  }
+
+  String _resultLabel(BattleResult r) {
+    if (r.playerWon) return 'VICTORY';
+    if (r.isDraw) return 'DRAW';
+    return 'DEFEATED';
+  }
+
+  Color _resultColor(BattleResult r) {
+    if (r.playerWon) return const Color(0xFF00FF9C);
+    if (r.isDraw) return const Color(0xFFFFD700);
+    return const Color(0xFFFF2D55);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Floor header
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF121225),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            children: [
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_sword.png'),
+                size: 16,
+                color: Color(0xFFFFD700),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'CURRENT FLOOR: $_floor',
+                style: const TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 9,
+                  color: Color(0xFFFFD700),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${_history.where((r) => r.playerWon).length} wins',
+                style: GoogleFonts.shareTechMono(
+                  fontSize: 12,
+                  color: const Color(0xFF00FF9C),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (_history.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 48),
+              child: Text(
+                'No battles fought yet.\nComplete a workout to enter the dungeon.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.shareTechMono(
+                  fontSize: 13,
+                  color: const Color(0xFF6B6B8A),
+                ),
+              ),
+            ),
+          )
+        else
+          for (final result in _history) ...[
+            _buildBattleEntry(result),
+            const Divider(color: Color(0xFF2A2A4A), height: 1),
+          ],
+      ],
+    );
+  }
+
+  Widget _buildBattleEntry(BattleResult result) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(context, arcadeRoute((_) => BattlePage(replay: result)));
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            const ImageIcon(
+              AssetImage('assets/icons/control/icon_sword.png'),
+              size: 14,
+              color: Color(0xFF6B6B8A),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Floor ${result.floor} — ${result.enemy.name}',
+                    style: GoogleFonts.shareTechMono(
+                      fontSize: 14,
+                      color: const Color(0xFFE8E8FF),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _resultLabel(result),
+                    style: TextStyle(
+                      fontFamily: 'PressStart2P',
+                      fontSize: 8,
+                      color: _resultColor(result),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              _fmtDate(result.timestamp),
+              style: GoogleFonts.shareTechMono(
+                fontSize: 12,
+                color: const Color(0xFF6B6B8A),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── History Tab ──────────────────────────────────────────────────────────────
+
+class _HistoryTab extends StatefulWidget {
+  const _HistoryTab({required this.reloadToken});
+
+  final int reloadToken;
+
+  @override
+  State<_HistoryTab> createState() => _HistoryTabState();
+}
+
+enum _HistoryView { list, calendar }
+
+class _HistoryTabState extends State<_HistoryTab> {
+  List<WorkoutSession> _browsable = [];
+  int _totalSessions = 0;
+  int _thisMonth = 0;
+  int _trainingDays = 0;
+  RestState _restState = RestState.defaults();
+  bool _loading = true;
+  _HistoryView _view = _HistoryView.list;
+  late DateTime _focusedMonth;
+  DateTime? _selectedDay;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _focusedMonth = DateTime(now.year, now.month);
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HistoryTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.reloadToken != widget.reloadToken) {
+      _load();
+    }
+  }
+
   Future<void> _load() async {
     final all = await WorkoutStorageService().getSessions();
+    final restState = await RestService().loadState();
     if (!mounted) return;
     final completed = all.where((s) => !s.isPartial).toList();
+    final browsable = all.where((s) => !s.isOngoing).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
     final now = DateTime.now();
     final thisMonth = completed
         .where((s) => s.date.year == now.year && s.date.month == now.month)
         .length;
     setState(() {
+      _browsable = browsable;
       _totalSessions = completed.length;
       _thisMonth = thisMonth;
-      _streak = _calcStreak(completed);
+      _trainingDays = WorkoutMetricService.trainingDaysThisWeek(completed);
+      _restState = restState;
       _loading = false;
     });
-  }
-
-  int _calcStreak(List<WorkoutSession> completed) {
-    final days = completed.map((s) => DateUtils.dateOnly(s.date)).toSet();
-    int streak = 0;
-    DateTime check = DateUtils.dateOnly(DateTime.now());
-    while (days.contains(check)) {
-      streak++;
-      check = check.subtract(const Duration(days: 1));
-    }
-    return streak;
   }
 
   @override
@@ -134,8 +360,10 @@ class _HistoryTabState extends State<_HistoryTab> {
       return const Center(child: PixelLoader());
     }
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
+    final bottomPadding = 120 + MediaQuery.of(context).padding.bottom;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(24, 24, 24, bottomPadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -151,22 +379,550 @@ class _HistoryTabState extends State<_HistoryTab> {
                   _StatRow(label: 'This Month', value: '$_thisMonth'),
                   const Divider(height: 24, color: Color(0xFF2A2A4A)),
                   _StatRow(
-                    label: 'Streak',
-                    value: '$_streak day${_streak == 1 ? '' : 's'}',
+                    label: 'Train Days',
+                    value:
+                        '$_trainingDays day${_trainingDays == 1 ? '' : 's'} this week',
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 24),
-          PixelButton(
-            label: 'Open Calendar',
-            onPressed: () => Navigator.push(
-              context,
-              arcadeRoute((_) => const CalendarPage()),
-            ).then((_) => _load()),
+          SizedBox(
+            width: double.infinity,
+            child: _HistoryViewControl(
+              selected: _view,
+              onChanged: (view) => setState(() => _view = view),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_view == _HistoryView.list)
+            _browsable.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Text(
+                      'No sessions yet',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  )
+                : Column(
+                    children: [
+                      for (final session in _browsable)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _SessionListTile(
+                            session: session,
+                            onTap: () => Navigator.push(
+                              context,
+                              arcadeRoute(
+                                (_) => SessionDetailPage(session: session),
+                              ),
+                            ).then((_) => _load()),
+                          ),
+                        ),
+                    ],
+                  )
+          else
+            _InlineHistoryCalendar(
+              sessions: _browsable,
+              restState: _restState,
+              focusedMonth: _focusedMonth,
+              selectedDay: _selectedDay,
+              onPreviousMonth: () => setState(() {
+                _focusedMonth = DateTime(
+                  _focusedMonth.year,
+                  _focusedMonth.month - 1,
+                );
+                _selectedDay = null;
+              }),
+              onNextMonth: () => setState(() {
+                _focusedMonth = DateTime(
+                  _focusedMonth.year,
+                  _focusedMonth.month + 1,
+                );
+                _selectedDay = null;
+              }),
+              onSelectDay: (day) => setState(() => _selectedDay = day),
+              onOpenSession: (session) => Navigator.push(
+                context,
+                arcadeRoute((_) => SessionDetailPage(session: session)),
+              ).then((_) => _load()),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryViewControl extends StatelessWidget {
+  const _HistoryViewControl({required this.selected, required this.onChanged});
+
+  final _HistoryView selected;
+  final ValueChanged<_HistoryView> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedIndex = selected == _HistoryView.list ? 0 : 1;
+
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF121225),
+        border: Border.all(color: const Color(0xFF2A2A4A)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final segmentWidth = constraints.maxWidth / 2;
+          return Stack(
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                left: selectedIndex * segmentWidth,
+                top: 0,
+                bottom: 0,
+                width: segmentWidth,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00FF9C),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  _HistoryViewSegment(
+                    label: 'LIST',
+                    selected: selected == _HistoryView.list,
+                    onTap: () => onChanged(_HistoryView.list),
+                  ),
+                  _HistoryViewSegment(
+                    label: 'CALENDAR',
+                    selected: selected == _HistoryView.calendar,
+                    onTap: () => onChanged(_HistoryView.calendar),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _HistoryViewSegment extends StatelessWidget {
+  const _HistoryViewSegment({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Center(
+          child: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOutCubic,
+            style: TextStyle(
+              color: selected
+                  ? const Color(0xFF0D0D1A)
+                  : const Color(0xFF6B6B8A),
+              fontFamily: 'PressStart2P',
+              fontSize: 8,
+            ),
+            child: Text(label),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineHistoryCalendar extends StatelessWidget {
+  const _InlineHistoryCalendar({
+    required this.sessions,
+    required this.restState,
+    required this.focusedMonth,
+    required this.selectedDay,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
+    required this.onSelectDay,
+    required this.onOpenSession,
+  });
+
+  final List<WorkoutSession> sessions;
+  final RestState restState;
+  final DateTime focusedMonth;
+  final DateTime? selectedDay;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback onNextMonth;
+  final ValueChanged<DateTime> onSelectDay;
+  final ValueChanged<WorkoutSession> onOpenSession;
+
+  static const _muscleColors = {
+    'Chest': Color(0xFF00FF9C),
+    'Back': Color(0xFFFFD700),
+    'Arms': Color(0xFFFF2D55),
+    'Legs': Color(0xFF00BFFF),
+  };
+
+  Map<DateTime, List<WorkoutSession>> get _sessionsByDay {
+    final map = <DateTime, List<WorkoutSession>>{};
+    for (final session in sessions) {
+      final day = DateUtils.dateOnly(session.date);
+      map.putIfAbsent(day, () => []).add(session);
+    }
+    return map;
+  }
+
+  List<DateTime?> _gridDays() {
+    final leadingBlanks = (focusedMonth.weekday - 1) % 7;
+    final daysInMonth = DateUtils.getDaysInMonth(
+      focusedMonth.year,
+      focusedMonth.month,
+    );
+    final cells = <DateTime?>[
+      for (var i = 0; i < leadingBlanks; i++) null,
+      for (var day = 1; day <= daysInMonth; day++)
+        DateTime(focusedMonth.year, focusedMonth.month, day),
+    ];
+    while (cells.length % 7 != 0) {
+      cells.add(null);
+    }
+    return cells;
+  }
+
+  String _monthLabel() {
+    const months = [
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
+    ];
+    return '${months[focusedMonth.month - 1]} ${focusedMonth.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sessionsByDay = _sessionsByDay;
+    final gridDays = _gridDays();
+    final selectedSessions = selectedDay == null
+        ? null
+        : sessionsByDay[DateUtils.dateOnly(selectedDay!)];
+    final selectedRestInfo = selectedDay == null
+        ? null
+        : RestService().dayInfoForState(
+            day: selectedDay!,
+            sessions: selectedSessions ?? const [],
+            state: restState,
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Previous month',
+                      onPressed: onPreviousMonth,
+                      icon: Transform.scale(
+                        scaleX: -1,
+                        child: const ImageIcon(
+                          AssetImage('assets/icons/control/icon_next.png'),
+                          color: Color(0xFF00FF9C),
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        _monthLabel(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'PressStart2P',
+                          fontSize: 10,
+                          color: Color(0xFF00FF9C),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Next month',
+                      onPressed: onNextMonth,
+                      icon: const ImageIcon(
+                        AssetImage('assets/icons/control/icon_next.png'),
+                        color: Color(0xFF00FF9C),
+                        size: 20,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    for (final day in const ['M', 'T', 'W', 'T', 'F', 'S', 'S'])
+                      Expanded(
+                        child: Text(
+                          day,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Color(0xFF6B6B8A),
+                            fontSize: 9,
+                            fontFamily: 'PressStart2P',
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 7,
+                    childAspectRatio: 0.9,
+                  ),
+                  itemCount: gridDays.length,
+                  itemBuilder: (context, index) {
+                    return _CalendarCell(
+                      day: gridDays[index],
+                      sessions: gridDays[index] == null
+                          ? const []
+                          : sessionsByDay[DateUtils.dateOnly(
+                                  gridDays[index]!,
+                                )] ??
+                                const [],
+                      selectedDay: selectedDay,
+                      onSelectDay: onSelectDay,
+                      restState: restState,
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                const _CalendarLegend(),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (selectedDay == null)
+          Text(
+            'Tap a day to inspect history',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else ...[
+          CalendarDayStatusCard(
+            dateLabel: fmtDayDate(selectedDay!),
+            restInfo: selectedRestInfo!,
+            hasWorkout: selectedSessions?.isNotEmpty ?? false,
+            abandonedOnly:
+                selectedSessions?.isNotEmpty == true &&
+                selectedSessions!.every((session) => session.isAbandoned),
+            workoutColor: selectedSessions?.isNotEmpty == true
+                ? _muscleColors[selectedSessions!.first.muscleGroup] ??
+                      const Color(0xFF00FF9C)
+                : null,
+          ),
+          const SizedBox(height: 8),
+          if (selectedSessions != null && selectedSessions.isNotEmpty)
+            for (final session in selectedSessions)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _SessionListTile(
+                  session: session,
+                  onTap: () => onOpenSession(session),
+                ),
+              ),
+        ],
+      ],
+    );
+  }
+}
+
+class _CalendarCell extends StatelessWidget {
+  const _CalendarCell({
+    required this.day,
+    required this.sessions,
+    required this.selectedDay,
+    required this.onSelectDay,
+    required this.restState,
+  });
+
+  final DateTime? day;
+  final List<WorkoutSession> sessions;
+  final DateTime? selectedDay;
+  final ValueChanged<DateTime> onSelectDay;
+  final RestState restState;
+
+  @override
+  Widget build(BuildContext context) {
+    final cellDay = day;
+    if (cellDay == null) return const SizedBox.shrink();
+
+    final today = DateUtils.dateOnly(DateTime.now());
+    final normalized = DateUtils.dateOnly(cellDay);
+    final isToday = normalized == today;
+    final isSelected =
+        selectedDay != null && normalized == DateUtils.dateOnly(selectedDay!);
+    final hasWorkout = sessions.isNotEmpty;
+    final abandonedOnly =
+        hasWorkout && sessions.every((session) => session.isAbandoned);
+    final isPast = normalized.isBefore(today);
+    final restInfo = RestService().dayInfoForState(
+      day: normalized,
+      sessions: sessions,
+      state: restState,
+    );
+    final markerKind = calendarMarkerKindFor(
+      restInfo: restInfo,
+      hasWorkout: hasWorkout,
+      abandonedOnly: abandonedOnly,
+      isToday: isToday,
+      isSelected: isSelected,
+    );
+    final workoutColor = hasWorkout
+        ? _InlineHistoryCalendar._muscleColors[sessions.first.muscleGroup] ??
+              const Color(0xFF00FF9C)
+        : null;
+
+    return GestureDetector(
+      onTap: () => onSelectDay(normalized),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF00FF9C).withValues(alpha: 0.18)
+              : null,
+          border: isSelected
+              ? Border.all(color: const Color(0xFF00FF9C), width: 1.5)
+              : isToday
+              ? Border.all(color: const Color(0xFF00FF9C), width: 1)
+              : null,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '${cellDay.day}',
+              style: TextStyle(
+                fontSize: 11,
+                color: isSelected
+                    ? const Color(0xFF00FF9C)
+                    : isPast || isToday
+                    ? const Color(0xFFE8E8FF)
+                    : const Color(0xFF6B6B8A),
+                fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+            if (markerKind != null) ...[
+              const SizedBox(height: 2),
+              CalendarDayMarker(
+                kind: markerKind,
+                color: calendarMarkerColor(
+                  markerKind,
+                  workoutColor: workoutColor,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CalendarLegend extends StatelessWidget {
+  const _CalendarLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: const [
+          CalendarLegendMarker(
+            kind: CalendarMarkerKind.workout,
+            label: 'Workout',
+          ),
+          SizedBox(width: 14),
+          CalendarLegendMarker(
+            kind: CalendarMarkerKind.protected,
+            label: 'Protected',
+          ),
+          SizedBox(width: 14),
+          CalendarLegendMarker(
+            kind: CalendarMarkerKind.missed,
+            label: 'Missed',
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SessionListTile extends StatelessWidget {
+  const _SessionListTile({required this.session, required this.onTap});
+
+  final WorkoutSession session;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final mins = session.actualDurationSeconds ~/ 60;
+    return GestureDetector(
+      onTap: onTap,
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                color: session.isAbandoned
+                    ? const Color(0xFFFF2D55)
+                    : const Color(0xFF00FF9C),
+              ),
+              Expanded(
+                child: ListTile(
+                  title: Text(
+                    session.isAbandoned
+                        ? '${session.muscleGroup} - ABANDONED'
+                        : session.muscleGroup,
+                  ),
+                  subtitle: Text(
+                    '${fmtDayDate(session.date)} · '
+                    '${session.isAbandoned ? 'Time XP only' : '${session.exercises.length} exercises'}',
+                    style: const TextStyle(color: Color(0xFF6B6B8A)),
+                  ),
+                  trailing: Text('$mins min'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -214,7 +970,9 @@ class _MuscleData {
 }
 
 class _StatsTab extends StatefulWidget {
-  const _StatsTab({super.key});
+  const _StatsTab({required this.reloadToken});
+
+  final int reloadToken;
 
   @override
   State<_StatsTab> createState() => _StatsTabState();
@@ -223,6 +981,7 @@ class _StatsTab extends StatefulWidget {
 class _StatsTabState extends State<_StatsTab> {
   List<WorkoutSession> _sessions = [];
   int _questXP = 0;
+  int _recoveryXP = 0;
   bool _loading = true;
   bool _showRecords = false;
 
@@ -241,32 +1000,34 @@ class _StatsTabState extends State<_StatsTab> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant _StatsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.reloadToken != widget.reloadToken) {
+      _load();
+    }
+  }
+
   Future<void> _load() async {
     final all = await WorkoutStorageService().getSessions();
     final questXP = await QuestService().claimedRewardXP();
+    final restService = RestService();
+    final currentRecoveryXP = await restService.effectiveRecoveryXP(all);
+    await restService.ensureAutomaticRecoveryForToday(
+      sessions: all,
+      baseXP: XpService.calculateTotalXP(all) + questXP + currentRecoveryXP,
+    );
+    final recoveryXP = await restService.effectiveRecoveryXP(all);
     if (!mounted) return;
     setState(() {
       _sessions = all;
       _questXP = questXP;
+      _recoveryXP = recoveryXP;
       _loading = false;
     });
   }
 
-  String _fmtVol(double v) {
-    final rounded = v.round();
-    if (rounded >= 1000) {
-      final s = rounded.toString();
-      final buf = StringBuffer();
-      final start = s.length % 3;
-      if (start > 0) buf.write(s.substring(0, start));
-      for (int i = start; i < s.length; i += 3) {
-        if (buf.isNotEmpty) buf.write(',');
-        buf.write(s.substring(i, i + 3));
-      }
-      return buf.toString();
-    }
-    return rounded.toString();
-  }
+  String _fmtVol(double v) => fmtVol(v);
 
   String _fmtDate(DateTime d) {
     const months = [
@@ -437,21 +1198,18 @@ class _StatsTabState extends State<_StatsTab> {
     }
 
     // ── Computed values ──────────────────────────────────────────────────────
-    final totalXP = XpService.calculateTotalXP(_sessions) + _questXP;
-    final level = XpService.getLevel(totalXP);
+    final totalXP =
+        XpService.calculateTotalXP(_sessions) + _questXP + _recoveryXP;
+    final xpProgress = XpService.progressForTotalXP(totalXP);
+    final level = xpProgress.level;
     final rank = XpService.getRank(level);
-    final xpBase = XpService.xpForCurrentLevel(level);
-    final xpNext = XpService.xpForNextLevel(level);
-    final streak = XpService.calculateStreak(_sessions);
+    final trainingDays = WorkoutMetricService.trainingDaysThisWeek(_sessions);
     final questCount = completed.length;
     final totalVolume = completed.fold(
       0.0,
       (sum, s) => sum + s.exercises.fold(0.0, (s2, e) => s2 + e.totalVolume),
     );
 
-    final xpFraction = xpNext > xpBase
-        ? ((totalXP - xpBase) / (xpNext - xpBase)).clamp(0.0, 1.0)
-        : 1.0;
     // Week data
     final weekData = _buildWeekData();
     final now = DateTime.now();
@@ -510,20 +1268,10 @@ class _StatsTabState extends State<_StatsTab> {
                   ),
                   const SizedBox(height: 16),
 
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: xpFraction,
-                      minHeight: 8,
-                      backgroundColor: const Color(0xFF2A2A4A),
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFF00FF9C),
-                      ),
-                    ),
-                  ),
+                  ArcadeProgressBar(value: xpProgress.fraction),
                   const SizedBox(height: 6),
                   Text(
-                    '$totalXP / $xpNext XP',
+                    xpProgress.label,
                     style: const TextStyle(
                       color: Color(0xFF6B6B8A),
                       fontSize: 10,
@@ -536,9 +1284,9 @@ class _StatsTabState extends State<_StatsTab> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _StatPip(
-                        iconPath: 'assets/icons/control/icon_star.png',
-                        label: 'STREAK',
-                        value: '$streak days',
+                        iconPath: 'assets/icons/control/icon_time.png',
+                        label: 'TRAIN DAYS',
+                        value: '$trainingDays',
                       ),
                       _StatPip(
                         iconPath: 'assets/icons/control/icon_trophy.png',
@@ -903,9 +1651,9 @@ class _MuscleBalanceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filled = maxVol > 0
-        ? (data.volume / maxVol * 10).floor().clamp(0, 10)
-        : 0;
+    final progress = maxVol > 0
+        ? (data.volume / maxVol).clamp(0.0, 1.0).toDouble()
+        : 0.0;
 
     return Row(
       children: [
@@ -918,25 +1666,10 @@ class _MuscleBalanceRow extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final blockWidth = (constraints.maxWidth - 9 * 4) / 10;
-              return Row(
-                children: [
-                  for (int i = 0; i < 10; i++) ...[
-                    Container(
-                      width: blockWidth,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: i < filled ? color : const Color(0xFF2A2A4A),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    if (i < 9) const SizedBox(width: 4),
-                  ],
-                ],
-              );
-            },
+          child: ArcadeProgressBar(
+            value: progress,
+            height: 8,
+            fillColor: color,
           ),
         ),
         const SizedBox(width: 8),
@@ -967,9 +1700,12 @@ class _ExercisesTabState extends State<_ExercisesTab>
   static const _groups = ['All', 'Chest', 'Back', 'Arms', 'Legs'];
 
   String _selectedGroup = 'All';
+  bool _favOnly = false;
+  String _query = '';
   List<Exercise> _catalog = [];
   Set<String> _favoriteIds = {};
   bool _loading = true;
+  final TextEditingController _searchController = TextEditingController();
 
   late final AnimationController _shimmerController = AnimationController(
     vsync: this,
@@ -991,6 +1727,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
   @override
   void dispose() {
     _shimmerController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -1022,7 +1759,15 @@ class _ExercisesTabState extends State<_ExercisesTab>
     final allowedIds = _selectedGroup == 'All'
         ? curatedExerciseIdsByMuscleGroup.values.expand((ids) => ids).toSet()
         : curatedExerciseIdsByMuscleGroup[_selectedGroup]?.toSet() ?? {};
-    return _catalog.where((e) => allowedIds.contains(e.id)).toList()
+    return _catalog
+        .where(
+          (e) =>
+              allowedIds.contains(e.id) &&
+              (!_favOnly || _favoriteIds.contains(e.id)) &&
+              (_query.isEmpty ||
+                  e.name.toLowerCase().contains(_query.toLowerCase())),
+        )
+        .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
   }
 
@@ -1031,15 +1776,70 @@ class _ExercisesTabState extends State<_ExercisesTab>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+          child: TextField(
+            controller: _searchController,
+            onChanged: (value) => setState(() => _query = value.trim()),
+            style: GoogleFonts.shareTechMono(
+              color: const Color(0xFFE8E8FF),
+              fontSize: 14,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Search exercises',
+              hintStyle: GoogleFonts.shareTechMono(
+                color: const Color(0xFF6B6B8A),
+                fontSize: 13,
+              ),
+              prefixIcon: const Icon(
+                Icons.search_sharp,
+                color: Color(0xFF6B6B8A),
+              ),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                      },
+                      icon: const Icon(
+                        Icons.close_sharp,
+                        color: Color(0xFF6B6B8A),
+                      ),
+                    ),
+              filled: true,
+              fillColor: const Color(0xFF1A1A2E),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(color: Color(0xFF00FF9C)),
+              ),
+            ),
+          ),
+        ),
         // Filter chips
         SizedBox(
           height: 48,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            itemCount: _groups.length,
+            itemCount: _groups.length + 1,
             separatorBuilder: (context, index) => const SizedBox(width: 8),
             itemBuilder: (context, i) {
+              if (i == _groups.length) {
+                return _FavChip(
+                  selected: _favOnly,
+                  onSelected: () => setState(() => _favOnly = !_favOnly),
+                );
+              }
               final group = _groups[i];
               final selected = group == _selectedGroup;
               return ChoiceChip(
@@ -1082,8 +1882,14 @@ class _ExercisesTabState extends State<_ExercisesTab>
               : _filtered.isEmpty
               ? Center(
                   child: Text(
-                    'No exercises found',
-                    style: Theme.of(context).textTheme.bodySmall,
+                    _favOnly ? 'NO FAVORITES YET' : 'No exercises found',
+                    style: _favOnly
+                        ? GoogleFonts.shareTechMono(
+                            color: const Color(0xFF6B6B8A),
+                            fontSize: 13,
+                            letterSpacing: 1.2,
+                          )
+                        : Theme.of(context).textTheme.bodySmall,
                   ),
                 )
               : ListView.builder(
@@ -1098,9 +1904,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
                       showArrow: true,
                       onTap: () => Navigator.push(
                         context,
-                        arcadeRoute(
-                          (_) => ExerciseDetailPage(exercise: ex),
-                        ),
+                        arcadeRoute((_) => ExerciseDetailPage(exercise: ex)),
                       ),
                       onFavoriteToggle: () => _toggleFavorite(ex.id),
                     );
@@ -1108,6 +1912,43 @@ class _ExercisesTabState extends State<_ExercisesTab>
                 ),
         ),
       ],
+    );
+  }
+}
+
+class _FavChip extends StatelessWidget {
+  const _FavChip({required this.selected, required this.onSelected});
+
+  final bool selected;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    const red = Color(0xFFFF2D55);
+    const dark = Color(0xFF0D0D1A);
+    final fg = selected ? dark : red;
+    return GestureDetector(
+      onTap: onSelected,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? red : Colors.transparent,
+          border: Border.all(color: red),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ImageIcon(
+              const AssetImage('assets/icons/control/icon_heart.png'),
+              size: 14,
+              color: fg,
+            ),
+            const SizedBox(width: 6),
+            Text('Fav', style: TextStyle(color: fg, fontSize: 11)),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -1,16 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../data/loot_registry.dart';
+import '../models/loot_item.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
 
 import '../models/profile_models.dart';
 import '../models/quest_models.dart';
+import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import '../services/profile_service.dart';
 import '../services/quest_service.dart';
+import '../services/rest_service.dart';
+import '../services/stat_engine.dart';
+import '../services/loot_service.dart';
+import '../services/workout_metric_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_service.dart';
+import '../widgets/arcade_progress_bar.dart';
+import '../widgets/arcade_route.dart';
+import '../widgets/loot_avatar_frame.dart';
+import '../widgets/rest_icon.dart';
+import '../widgets/stat_card.dart';
+import 'inventory_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, this.onProfileChanged});
@@ -35,6 +48,9 @@ class ProfilePageState extends State<ProfilePage> {
 
   final QuestService _questService = QuestService();
   final ProfileService _profileService = ProfileService();
+  final StatEngine _statEngine = StatEngine();
+  final RestService _restService = RestService();
+  final LootService _lootService = LootService();
   final TextEditingController _nameController = TextEditingController();
 
   bool _loading = true;
@@ -42,7 +58,14 @@ class ProfilePageState extends State<ProfilePage> {
   int _selectedTab = 0;
   List<WorkoutSession> _sessions = [];
   QuestSummary? _summary;
+  RestState _restState = RestState.defaults();
+  int _recoveryXP = 0;
+  Map<String, int> _combatStats = {
+    for (final stat in StatEngine.stats) stat: 0,
+  };
   ProfileData _profile = ProfileData.defaults();
+  Map<LootCategory, LootItem> _equippedLoot = {};
+  int _ownedLootCount = 0;
 
   @override
   void initState() {
@@ -60,6 +83,14 @@ class ProfilePageState extends State<ProfilePage> {
     final sessions = await WorkoutStorageService().getSessions();
     final summary = await _questService.getSummary(sessions);
     final profile = await _profileService.loadProfile();
+    final combatStats = await _statEngine.getStoredStats();
+    final restState = await _restService.refreshWeeklyShieldProgress(sessions);
+    final recoveryXP = _restService.effectiveRecoveryXPForState(
+      sessions: sessions,
+      state: restState,
+    );
+    final equippedLoot = await _lootService.getEquippedLoot();
+    final ownedLootCount = await _lootService.getOwnedCount();
     if (!mounted) return;
 
     if (!_editingName) {
@@ -69,7 +100,12 @@ class ProfilePageState extends State<ProfilePage> {
     setState(() {
       _sessions = sessions;
       _summary = summary;
+      _restState = restState;
+      _recoveryXP = recoveryXP;
+      _combatStats = combatStats;
       _profile = profile;
+      _equippedLoot = equippedLoot;
+      _ownedLootCount = ownedLootCount;
       _loading = false;
     });
   }
@@ -96,6 +132,16 @@ class ProfilePageState extends State<ProfilePage> {
 
   Future<void> _selectTitle(String title) async {
     await _questService.selectTitle(title);
+    await reload();
+    widget.onProfileChanged?.call();
+  }
+
+  LootItem? get _equippedTitle => _equippedLoot[LootCategory.titleBadge];
+
+  LootItem? get _equippedFrame => _equippedLoot[LootCategory.avatarFrame];
+
+  Future<void> _openInventory() async {
+    await Navigator.of(context).push(arcadeRoute((_) => const InventoryPage()));
     await reload();
     widget.onProfileChanged?.call();
   }
@@ -172,6 +218,158 @@ class ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  String _weekdaySummary(Set<int> weekdays) {
+    const labels = {
+      1: 'Mon',
+      2: 'Tue',
+      3: 'Wed',
+      4: 'Thu',
+      5: 'Fri',
+      6: 'Sat',
+      7: 'Sun',
+    };
+    final ordered = weekdays.toList()..sort();
+    return ordered.map((day) => labels[day]!).join(' / ');
+  }
+
+  void _showTrainingGoalsSheet() {
+    var selected = Set<int>.from(
+      _restState.pendingTrainingWeekdays ?? _restState.trainingWeekdays,
+    );
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF121225),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final valid = selected.isNotEmpty && selected.length < 7;
+            final pendingStart = _restState.pendingStartWeekKey;
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                18,
+                20,
+                20 + MediaQuery.of(context).padding.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const RestIcon(
+                        assetPath: RestAssets.recoveryShield,
+                        fallbackAssetPath:
+                            'assets/icons/control/icon_shield.png',
+                        size: 22,
+                        color: Color(0xFF00FF9C),
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'TRAINING GOALS',
+                          style: TextStyle(
+                            fontFamily: 'PressStart2P',
+                            fontSize: 11,
+                            color: Color(0xFF00FF9C),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Pick training days. The other days become planned recovery and protect your stats.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 18),
+                  _ScheduleInfoRow(
+                    label: 'ACTIVE',
+                    value: _weekdaySummary(_restState.trainingWeekdays),
+                  ),
+                  const SizedBox(height: 8),
+                  _ScheduleInfoRow(
+                    label: 'SHIELDS',
+                    value:
+                        '${_restState.shieldCharges} / ${RestService.maxShieldCharges}',
+                  ),
+                  if (pendingStart != null &&
+                      _restState.pendingTrainingWeekdays != null) ...[
+                    const SizedBox(height: 8),
+                    _ScheduleInfoRow(
+                      label: 'NEXT',
+                      value:
+                          '${_weekdaySummary(_restState.pendingTrainingWeekdays!)} on $pendingStart',
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final day in const [
+                        (1, 'MON'),
+                        (2, 'TUE'),
+                        (3, 'WED'),
+                        (4, 'THU'),
+                        (5, 'FRI'),
+                        (6, 'SAT'),
+                        (7, 'SUN'),
+                      ])
+                        _WeekdayToggle(
+                          label: day.$2,
+                          selected: selected.contains(day.$1),
+                          onTap: () {
+                            setSheetState(() {
+                              if (selected.contains(day.$1)) {
+                                selected.remove(day.$1);
+                              } else {
+                                selected.add(day.$1);
+                              }
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    valid
+                        ? 'Changes start next Monday.'
+                        : 'Choose at least one training day and one rest day.',
+                    style: TextStyle(
+                      color: valid
+                          ? const Color(0xFF6B6B8A)
+                          : const Color(0xFFFFD700),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  PixelButton(
+                    label: 'SAVE FOR NEXT WEEK',
+                    onPressed: valid
+                        ? () async {
+                            await _restService.saveTrainingWeekdays(selected);
+                            if (!context.mounted) return;
+                            Navigator.of(context).pop();
+                            await reload();
+                            widget.onProfileChanged?.call();
+                          }
+                        : null,
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading || _summary == null) {
@@ -207,9 +405,29 @@ class ProfilePageState extends State<ProfilePage> {
             onSelect: (index) => setState(() => _selectedTab = index),
           ),
           const SizedBox(height: 16),
-          if (_selectedTab == 0) _buildGuildCard(),
-          if (_selectedTab == 1) _buildLoadout(),
-          if (_selectedTab == 2) _buildSettings(),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              final offset = Tween<Offset>(
+                begin: const Offset(0.04, 0),
+                end: Offset.zero,
+              ).animate(animation);
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(position: offset, child: child),
+              );
+            },
+            child: KeyedSubtree(
+              key: ValueKey(_selectedTab),
+              child: switch (_selectedTab) {
+                0 => _buildGuildCard(),
+                1 => _buildLoadout(),
+                _ => _buildSettings(),
+              },
+            ),
+          ),
         ],
       ),
     );
@@ -218,15 +436,13 @@ class ProfilePageState extends State<ProfilePage> {
   Widget _buildGuildCard() {
     final summary = _summary!;
     final totalXP =
-        XpService.calculateTotalXP(_sessions) + summary.claimedRewardXP;
+        XpService.calculateTotalXP(_sessions) +
+        summary.claimedRewardXP +
+        _recoveryXP;
     final level = XpService.getLevel(totalXP);
     final rank = XpService.getRank(level);
-    final xpBase = XpService.xpForCurrentLevel(level);
-    final xpNext = XpService.xpForNextLevel(level);
-    final xpFraction = xpNext > xpBase
-        ? ((totalXP - xpBase) / (xpNext - xpBase)).clamp(0.0, 1.0)
-        : 1.0;
-    final streak = XpService.calculateStreak(_sessions);
+    final xpProgress = XpService.progressForTotalXP(totalXP);
+    final trainingDays = WorkoutMetricService.trainingDaysThisWeek(_sessions);
     final quests = [
       ...summary.dailyQuests,
       ...summary.weeklyQuests,
@@ -252,7 +468,11 @@ class ProfilePageState extends State<ProfilePage> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _AvatarFrame(path: _profile.avatarPath, size: 76),
+                  LootAvatarFrame(
+                    avatarPath: _profile.avatarPath,
+                    framePath: _equippedFrame?.assetPath,
+                    size: 86,
+                  ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -266,6 +486,10 @@ class ProfilePageState extends State<ProfilePage> {
                           children: [
                             _RankBadge(label: rank),
                             _StatusBadge(label: 'LV. $level'),
+                            _StatusBadge(
+                              label:
+                                  'BAG $_ownedLootCount/${lootRegistry.length}',
+                            ),
                           ],
                         ),
                       ],
@@ -274,23 +498,13 @@ class ProfilePageState extends State<ProfilePage> {
                 ],
               ),
               const SizedBox(height: 18),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: xpFraction,
-                  minHeight: 9,
-                  backgroundColor: const Color(0xFF2A2A4A),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFF00FF9C),
-                  ),
-                ),
-              ),
+              ArcadeProgressBar(value: xpProgress.fraction),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '$totalXP / $xpNext XP',
+                    xpProgress.label,
                     style: const TextStyle(
                       color: Color(0xFF6B6B8A),
                       fontSize: 11,
@@ -309,6 +523,10 @@ class ProfilePageState extends State<ProfilePage> {
           ),
         ),
         const SizedBox(height: 18),
+        StatCard(stats: _combatStats),
+        const SizedBox(height: 12),
+        PixelButton(label: 'LOOT INVENTORY', onPressed: _openInventory),
+        const SizedBox(height: 18),
         const _SectionHeader(title: 'RPG CORE'),
         const SizedBox(height: 10),
         Row(
@@ -323,9 +541,9 @@ class ProfilePageState extends State<ProfilePage> {
             const SizedBox(width: 8),
             Expanded(
               child: _StatTile(
-                iconPath: 'assets/icons/control/icon_thunder.png',
-                label: 'STREAK',
-                value: '${streak}d',
+                iconPath: 'assets/icons/control/icon_time.png',
+                label: 'TRAIN DAYS',
+                value: '$trainingDays this wk',
               ),
             ),
           ],
@@ -350,12 +568,24 @@ class ProfilePageState extends State<ProfilePage> {
             ),
           ],
         ),
+        const SizedBox(height: 8),
+        _StatTile(
+          iconPath: 'assets/icons/control/icon_trophy.png',
+          label: 'LIFETIME XP',
+          value: '$totalXP XP',
+        ),
       ],
     );
   }
 
   Widget _buildNameBlock() {
-    final title = _summary!.selectedTitle ?? 'untitled';
+    final titleItem = _equippedTitle;
+    final title = titleItem?.name ?? _summary!.selectedTitle ?? 'untitled';
+    final titleColor =
+        titleItem?.color ??
+        (_summary!.selectedTitle == null
+            ? const Color(0xFF6B6B8A)
+            : const Color(0xFFFFD700));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -374,12 +604,7 @@ class ProfilePageState extends State<ProfilePage> {
           title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.shareTechMono(
-            color: _summary!.selectedTitle == null
-                ? const Color(0xFF6B6B8A)
-                : const Color(0xFFFFD700),
-            fontSize: 13,
-          ),
+          style: GoogleFonts.shareTechMono(color: titleColor, fontSize: 13),
         ),
       ],
     );
@@ -528,13 +753,9 @@ class ProfilePageState extends State<ProfilePage> {
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_target.png',
           title: 'Training Goals',
-          subtitle: 'Strength, consistency, or muscle focus.',
-          onTap: () => _showComingSoon(
-            title: 'Training Goals',
-            description:
-                'Goal setup will help missions and quests adapt to your training.',
-            iconPath: 'assets/icons/control/icon_target.png',
-          ),
+          subtitle:
+              'Train ${_weekdaySummary(_restState.trainingWeekdays)} · ${_restState.shieldCharges}/${RestService.maxShieldCharges} shields',
+          onTap: _showTrainingGoalsSheet,
         ),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_gear.png',
@@ -626,59 +847,56 @@ class _ProfileTabs extends StatelessWidget {
         border: Border.all(color: const Color(0xFF2A2A4A)),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Row(
-        children: [
-          for (int i = 0; i < _labels.length; i++)
-            Expanded(
-              child: InkWell(
-                onTap: () => onSelect(i),
-                borderRadius: BorderRadius.circular(4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: selectedIndex == i
-                        ? const Color(0xFF00FF9C)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    _labels[i].toUpperCase(),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: 'PressStart2P',
-                      fontSize: 7,
-                      color: selectedIndex == i
-                          ? const Color(0xFF0D0D1A)
-                          : const Color(0xFF6B6B8A),
+      child: SizedBox(
+        height: 36,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final tabWidth = constraints.maxWidth / _labels.length;
+            return Stack(
+              children: [
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  left: selectedIndex * tabWidth,
+                  top: 0,
+                  bottom: 0,
+                  width: tabWidth,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00FF9C),
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ),
                 ),
-              ),
-            ),
-        ],
+                Row(
+                  children: [
+                    for (int i = 0; i < _labels.length; i++)
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => onSelect(i),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Center(
+                            child: Text(
+                              _labels[i].toUpperCase(),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: 'PressStart2P',
+                                fontSize: 7,
+                                color: selectedIndex == i
+                                    ? const Color(0xFF0D0D1A)
+                                    : const Color(0xFF6B6B8A),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
       ),
-    );
-  }
-}
-
-class _AvatarFrame extends StatelessWidget {
-  const _AvatarFrame({required this.path, required this.size});
-
-  final String path;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0D1A),
-        border: Border.all(color: const Color(0xFF3D3A68)),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Image.asset(path, filterQuality: FilterQuality.none),
     );
   }
 }
@@ -995,6 +1213,91 @@ class _LockedFeatureRow extends StatelessWidget {
         subtitle: subtitle,
         trailingLabel: 'LOCKED',
         onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _ScheduleInfoRow extends StatelessWidget {
+  const _ScheduleInfoRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        border: Border.all(color: const Color(0xFF2A2A4A)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 8,
+              color: Color(0xFFFFD700),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: GoogleFonts.shareTechMono(
+                color: const Color(0xFFE8E8FF),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeekdayToggle extends StatelessWidget {
+  const _WeekdayToggle({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        width: 52,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF00FF9C) : const Color(0xFF1A1A2E),
+          border: Border.all(
+            color: selected ? const Color(0xFF00FF9C) : const Color(0xFF2A2A4A),
+          ),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: 8,
+            color: selected ? const Color(0xFF0D0D1A) : const Color(0xFF6B6B8A),
+          ),
+        ),
       ),
     );
   }

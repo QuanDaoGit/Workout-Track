@@ -50,9 +50,7 @@ class _CrtFlashWrapperState extends State<_CrtFlashWrapper> {
         widget.child,
         if (_flash)
           const Positioned.fill(
-            child: IgnorePointer(
-              child: ColoredBox(color: Color(0xFF00FF9C)),
-            ),
+            child: IgnorePointer(child: ColoredBox(color: Color(0xFF00FF9C))),
           ),
       ],
     );

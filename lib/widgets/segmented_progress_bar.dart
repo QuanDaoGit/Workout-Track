@@ -63,26 +63,25 @@ class _SegmentedProgressBarState extends State<SegmentedProgressBar> {
     _blinkState[index] = true;
     _toggledCount[index] = 0;
     setState(() {});
-    _timers[index] = Timer.periodic(
-      Duration(milliseconds: widget.toggleMs),
-      (t) {
-        final count = (_toggledCount[index] ?? 0) + 1;
-        _toggledCount[index] = count;
-        if (count >= widget.toggles) {
-          t.cancel();
-          if (!mounted) return;
-          setState(() {
-            _blinking.remove(index);
-            _blinkState[index] = true;
-          });
-          return;
-        }
+    _timers[index] = Timer.periodic(Duration(milliseconds: widget.toggleMs), (
+      t,
+    ) {
+      final count = (_toggledCount[index] ?? 0) + 1;
+      _toggledCount[index] = count;
+      if (count >= widget.toggles) {
+        t.cancel();
         if (!mounted) return;
         setState(() {
-          _blinkState[index] = !(_blinkState[index] ?? true);
+          _blinking.remove(index);
+          _blinkState[index] = true;
         });
-      },
-    );
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _blinkState[index] = !(_blinkState[index] ?? true);
+      });
+    });
   }
 
   @override

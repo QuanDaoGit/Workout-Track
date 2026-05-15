@@ -66,7 +66,9 @@ class _ArcadeTapState extends State<ArcadeTap> {
               child: IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: widget.flashColor.withValues(alpha: widget.flashOpacity),
+                    color: widget.flashColor.withValues(
+                      alpha: widget.flashOpacity,
+                    ),
                     borderRadius: widget.borderRadius,
                   ),
                 ),

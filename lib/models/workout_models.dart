@@ -87,7 +87,7 @@ class ExerciseLog {
 }
 
 class WorkoutSession {
-  const WorkoutSession({
+  WorkoutSession({
     required this.id,
     required this.date,
     required this.muscleGroup,
@@ -95,45 +95,63 @@ class WorkoutSession {
     required this.actualDurationSeconds,
     required this.exercises,
     required this.estimatedCalories,
+    DateTime? startedAt,
     this.isPartial = false,
+    this.isAbandoned = false,
     this.selectedExerciseIds = const [],
-  });
+  }) : startedAt = startedAt ?? date;
 
   final String id;
   final DateTime date;
+  final DateTime startedAt;
   final String muscleGroup;
   final int targetDurationMinutes;
   final int actualDurationSeconds;
   final List<ExerciseLog> exercises;
   final int estimatedCalories;
   final bool isPartial;
+  final bool isAbandoned;
   final List<String> selectedExerciseIds;
+
+  bool get isOngoing => isPartial && !isAbandoned;
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'date': date.toIso8601String(),
+    'startedAt': startedAt.toIso8601String(),
     'muscleGroup': muscleGroup,
     'targetDurationMinutes': targetDurationMinutes,
     'actualDurationSeconds': actualDurationSeconds,
     'exercises': exercises.map((e) => e.toJson()).toList(),
     'estimatedCalories': estimatedCalories,
     'isPartial': isPartial,
+    'isAbandoned': isAbandoned,
     'selectedExerciseIds': selectedExerciseIds,
   };
 
-  factory WorkoutSession.fromJson(Map<String, dynamic> j) => WorkoutSession(
-    id: j['id'] as String,
-    date: DateTime.parse(j['date'] as String),
-    muscleGroup: j['muscleGroup'] as String,
-    targetDurationMinutes: j['targetDurationMinutes'] as int,
-    actualDurationSeconds: j['actualDurationSeconds'] as int,
-    exercises: [
-      for (final e in j['exercises'] as List<dynamic>)
-        ExerciseLog.fromJson(e as Map<String, dynamic>),
-    ],
-    estimatedCalories: (j['estimatedCalories'] as num?)?.toInt() ?? 0,
-    isPartial: j['isPartial'] as bool? ?? false,
-    selectedExerciseIds:
-        (j['selectedExerciseIds'] as List<dynamic>?)?.cast<String>() ?? [],
-  );
+  factory WorkoutSession.fromJson(Map<String, dynamic> j) {
+    final date = DateTime.parse(j['date'] as String);
+    final startedAtRaw = j['startedAt'] as String?;
+    final startedAt = startedAtRaw == null
+        ? date
+        : DateTime.tryParse(startedAtRaw) ?? date;
+
+    return WorkoutSession(
+      id: j['id'] as String,
+      date: date,
+      startedAt: startedAt,
+      muscleGroup: j['muscleGroup'] as String,
+      targetDurationMinutes: j['targetDurationMinutes'] as int,
+      actualDurationSeconds: j['actualDurationSeconds'] as int,
+      exercises: [
+        for (final e in j['exercises'] as List<dynamic>)
+          ExerciseLog.fromJson(e as Map<String, dynamic>),
+      ],
+      estimatedCalories: (j['estimatedCalories'] as num?)?.toInt() ?? 0,
+      isPartial: j['isPartial'] as bool? ?? false,
+      isAbandoned: j['isAbandoned'] as bool? ?? false,
+      selectedExerciseIds:
+          (j['selectedExerciseIds'] as List<dynamic>?)?.cast<String>() ?? [],
+    );
+  }
 }

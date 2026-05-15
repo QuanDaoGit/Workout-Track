@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,14 +7,21 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../data/curated_exercises.dart';
 import '../../models/workout_models.dart';
+import '../../services/calorie_service.dart';
 import '../../services/favorite_service.dart';
+import '../../services/workout_storage_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_chip.dart';
+import '../../widgets/arcade_dialog_button_column.dart';
+import '../../widgets/arcade_image_filter.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/exercise_card.dart';
+import '../../widgets/level_badge.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/pixel_loader.dart';
 import 'active_workout.dart';
+
+enum _OngoingAction { continueOld, endOldAndStartNew }
 
 class StartWorkoutPage extends StatefulWidget {
   const StartWorkoutPage({super.key});
@@ -30,8 +36,6 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   String? selectedMuscleGroup;
   int selectedHour = 1;
   int selectedMinute = 30;
-  FixedExtentScrollController? hourPickerController;
-  FixedExtentScrollController? minutePickerController;
   Future<List<Exercise>>? exerciseCatalogFuture;
 
   static const List<int> minuteOptions = [
@@ -49,27 +53,8 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     55,
   ];
 
-  FixedExtentScrollController get safeHourPickerController {
-    return hourPickerController ??= FixedExtentScrollController(
-      initialItem: selectedHour,
-    );
-  }
-
-  FixedExtentScrollController get safeMinutePickerController {
-    return minutePickerController ??= FixedExtentScrollController(
-      initialItem: minuteOptions.indexOf(selectedMinute),
-    );
-  }
-
   Future<List<Exercise>> get safeExerciseCatalogFuture {
     return exerciseCatalogFuture ??= _loadExerciseCatalog();
-  }
-
-  @override
-  void dispose() {
-    hourPickerController?.dispose();
-    minutePickerController?.dispose();
-    super.dispose();
   }
 
   int? get workoutMinutes {
@@ -134,16 +119,155 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     if (selected == null || selected.isEmpty) return;
 
     if (!mounted) return;
+    await _startSelectedWorkout(muscleGroup, selected);
+  }
+
+  Future<void> _startSelectedWorkout(
+    String muscleGroup,
+    List<Exercise> selected,
+  ) async {
+    final ongoing = await WorkoutStorageService().getOngoingSession();
+    if (!mounted) return;
+
+    if (ongoing != null) {
+      final action = await _showActiveSessionFoundDialog();
+      if (!mounted || action == null) return;
+
+      if (action == _OngoingAction.continueOld) {
+        await _continueOngoingSession(ongoing);
+        return;
+      }
+
+      await _abandonOngoingWithoutSummary(ongoing);
+    }
+
+    if (!mounted) return;
+    _pushActiveWorkout(
+      muscleGroup: muscleGroup,
+      durationMinutes: workoutMinutes!,
+      exercises: selected,
+    );
+  }
+
+  void _pushActiveWorkout({
+    required String muscleGroup,
+    required int durationMinutes,
+    required List<Exercise> exercises,
+    WorkoutSession? resumeFromSession,
+  }) {
     Navigator.push(
       context,
       arcadeRoute(
         (_) => ActiveWorkoutPage(
           muscleGroup: muscleGroup,
-          durationMinutes: workoutMinutes!,
-          exercises: selected,
+          durationMinutes: durationMinutes,
+          exercises: exercises,
+          resumeFromSession: resumeFromSession,
         ),
       ),
     );
+  }
+
+  Future<_OngoingAction?> _showActiveSessionFoundDialog() {
+    return showDialog<_OngoingAction>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ACTIVE SESSION FOUND'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Finish your current run or end it before starting new.',
+            ),
+            const SizedBox(height: 16),
+            ArcadeDialogButtonColumn(
+              children: [
+                FilledButton(
+                  onPressed: () =>
+                      Navigator.of(ctx).pop(_OngoingAction.continueOld),
+                  child: const Text('CONTINUE OLD'),
+                ),
+                FilledButton(
+                  onPressed: () =>
+                      Navigator.of(ctx).pop(_OngoingAction.endOldAndStartNew),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: kDanger,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('END OLD & START NEW'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: kBorderDark,
+                    foregroundColor: kText,
+                  ),
+                  child: const Text('CANCEL'),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: const [],
+      ),
+    );
+  }
+
+  Future<void> _continueOngoingSession(WorkoutSession session) async {
+    final catalog = await safeExerciseCatalogFuture;
+    if (!mounted) return;
+
+    final byId = {for (final exercise in catalog) exercise.id: exercise};
+    final exerciseIds = session.selectedExerciseIds.isNotEmpty
+        ? session.selectedExerciseIds
+        : session.exercises.map((log) => log.exerciseId).toList();
+    final exercises = exerciseIds
+        .map((id) => byId[id])
+        .whereType<Exercise>()
+        .toList();
+
+    if (exercises.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not resume active session.')),
+      );
+      return;
+    }
+
+    _pushActiveWorkout(
+      muscleGroup: session.muscleGroup,
+      durationMinutes: session.targetDurationMinutes,
+      exercises: exercises,
+      resumeFromSession: session,
+    );
+  }
+
+  Future<void> _abandonOngoingWithoutSummary(WorkoutSession session) async {
+    final elapsedSeconds = _liveElapsedSeconds(session);
+    await WorkoutStorageService().replaceOngoingWithAbandoned(
+      WorkoutSession(
+        id: session.id,
+        date: DateTime.now(),
+        startedAt: session.startedAt,
+        muscleGroup: session.muscleGroup,
+        targetDurationMinutes: session.targetDurationMinutes,
+        actualDurationSeconds: elapsedSeconds,
+        exercises: const [],
+        estimatedCalories: CalorieService.estimateCalories(
+          session.muscleGroup,
+          elapsedSeconds,
+        ),
+        isPartial: true,
+        isAbandoned: true,
+      ),
+    );
+  }
+
+  int _liveElapsedSeconds(WorkoutSession session) {
+    final live = DateTime.now().difference(session.startedAt).inSeconds;
+    return live > session.actualDurationSeconds
+        ? live
+        : session.actualDurationSeconds;
   }
 
   @override
@@ -195,28 +319,37 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
               Row(
                 children: [
                   Expanded(
-                    child: _TimePickerColumn(
-                      controller: safeHourPickerController,
-                      itemCount: 10,
-                      labelBuilder: (index) {
-                        final unit = index == 1 ? 'hour' : 'hours';
-                        return '$index $unit';
-                      },
-                      onSelectedItemChanged: (index) {
-                        updateSelectedHour(index % 10);
-                      },
+                    child: _TimeStepper(
+                      valueLabel:
+                          '$selectedHour ${selectedHour == 1 ? 'hour' : 'hours'}',
+                      onDecrease: selectedHour <= 0
+                          ? null
+                          : () => updateSelectedHour(selectedHour - 1),
+                      onIncrease: selectedHour >= 9
+                          ? null
+                          : () => updateSelectedHour(selectedHour + 1),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _TimePickerColumn(
-                      controller: safeMinutePickerController,
-                      itemCount: minuteOptions.length,
-                      labelBuilder: (index) => '${minuteOptions[index]} min',
-                      onSelectedItemChanged: (index) {
-                        final minuteIndex = index % minuteOptions.length;
-                        updateSelectedMinute(minuteOptions[minuteIndex]);
-                      },
+                    child: _TimeStepper(
+                      valueLabel: '$selectedMinute min',
+                      onDecrease: selectedMinute <= minuteOptions.first
+                          ? null
+                          : () {
+                              final index = minuteOptions.indexOf(
+                                selectedMinute,
+                              );
+                              updateSelectedMinute(minuteOptions[index - 1]);
+                            },
+                      onIncrease: selectedMinute >= minuteOptions.last
+                          ? null
+                          : () {
+                              final index = minuteOptions.indexOf(
+                                selectedMinute,
+                              );
+                              updateSelectedMinute(minuteOptions[index + 1]);
+                            },
                     ),
                   ),
                 ],
@@ -608,22 +741,26 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        Image.asset(
-                          exercise.imageAssetPath,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const ColoredBox(
-                                color: Color(0xFF0D0D1A),
-                                child: Center(
-                                  child: ImageIcon(
-                                    AssetImage(
-                                      'assets/icons/control/icon_sword.png',
+                        ArcadeImageFilter(
+                          borderRadius: BorderRadius.zero,
+                          child: Image.asset(
+                            exercise.imageAssetPath,
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.low,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const ColoredBox(
+                                  color: Color(0xFF0D0D1A),
+                                  child: Center(
+                                    child: ImageIcon(
+                                      AssetImage(
+                                        'assets/icons/control/icon_sword.png',
+                                      ),
+                                      color: Color(0xFF2A2A4A),
+                                      size: 40,
                                     ),
-                                    color: Color(0xFF2A2A4A),
-                                    size: 40,
                                   ),
                                 ),
-                              ),
+                          ),
                         ),
                         Container(
                           color: const Color(0xFF0D0D1A).withValues(alpha: 0.3),
@@ -633,23 +770,7 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFF2A2A4A)),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    exercise.levelLabel,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Color(0xFF6B6B8A),
-                    ),
-                  ),
-                ),
+                LevelBadge(exercise: exercise),
                 const SizedBox(height: 8),
                 Text(
                   'Muscles: ${widget.muscleGroup}',
@@ -749,66 +870,81 @@ class _SelectionBar extends StatelessWidget {
   }
 }
 
-class _TimePickerColumn extends StatelessWidget {
-  const _TimePickerColumn({
-    required this.controller,
-    required this.itemCount,
-    required this.labelBuilder,
-    required this.onSelectedItemChanged,
+class _TimeStepper extends StatelessWidget {
+  const _TimeStepper({
+    required this.valueLabel,
+    required this.onDecrease,
+    required this.onIncrease,
   });
 
-  final FixedExtentScrollController controller;
-  final int itemCount;
-  final String Function(int index) labelBuilder;
-  final ValueChanged<int> onSelectedItemChanged;
+  final String valueLabel;
+  final VoidCallback? onDecrease;
+  final VoidCallback? onIncrease;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 130,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A2E),
-          border: Border.all(color: const Color(0xFF00FF9C), width: 1),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: CupertinoTheme(
-          data: CupertinoThemeData(
-            textTheme: CupertinoTextThemeData(
-              pickerTextStyle: GoogleFonts.shareTechMono(
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: kCard,
+        border: Border.all(color: kBorder),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          _StepperArrow(
+            icon: Icons.chevron_left_sharp,
+            onPressed: onDecrease,
+            tooltip: 'Decrease',
+          ),
+          Expanded(
+            child: Text(
+              valueLabel,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.shareTechMono(
                 color: kText,
                 fontSize: 18,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
-          child: CupertinoPicker(
-            backgroundColor: const Color(0xFF1A1A2E),
-            scrollController: controller,
-            itemExtent: 40,
-            looping: true,
-            magnification: 1.08,
-            useMagnifier: true,
-            selectionOverlay: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A3E),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            onSelectedItemChanged: onSelectedItemChanged,
-            children: [
-              for (var index = 0; index < itemCount; index++)
-                Center(
-                  child: Text(
-                    labelBuilder(index),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: const Color(0xFFE8E8FF),
-                    ),
-                  ),
-                ),
-            ],
+          _StepperArrow(
+            icon: Icons.chevron_right_sharp,
+            onPressed: onIncrease,
+            tooltip: 'Increase',
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepperArrow extends StatelessWidget {
+  const _StepperArrow({
+    required this.icon,
+    required this.onPressed,
+    required this.tooltip,
+  });
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: onPressed == null ? kBorderDark : kNeon,
+          foregroundColor: onPressed == null ? kDim : kBg,
+          minimumSize: const Size(36, 36),
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         ),
+        child: Icon(icon, size: 22),
       ),
     );
   }

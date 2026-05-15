@@ -4,21 +4,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../data/loot_registry.dart';
+import '../models/enemy_data.dart';
+import '../models/loot_item.dart';
 import '../models/profile_models.dart';
+import '../models/rest_models.dart';
 import '../models/workout_models.dart';
+import '../services/battle_engine.dart';
+import '../services/battle_scheduler.dart';
+import '../services/loot_service.dart';
 import '../services/profile_service.dart';
 import '../services/quest_service.dart';
+import '../services/rest_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/arcade_dialog_button_column.dart';
+import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
+import '../widgets/loot_avatar_frame.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
 import '../widgets/pulse_color_text.dart';
-import '../widgets/segmented_progress_bar.dart';
+import '../widgets/screen_shake.dart';
+import '../widgets/strobe_flash.dart';
+import '../widgets/rest_icon.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
+import 'battle_page.dart';
+import 'loot_chest_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, this.onViewQuests, this.onViewProfile});
@@ -36,7 +51,6 @@ class HomePageState extends State<HomePage> {
   int _totalXP = 0;
   int _level = 1;
   String _rank = 'Recruit';
-  int _streak = 0;
   int _todayXP = 0;
   int _weeklyQuestCompleted = 0;
   int _weeklyQuestTotal = 5;
@@ -44,7 +58,22 @@ class HomePageState extends State<HomePage> {
   String? _suggestedMuscle;
   String? _selectedTitle;
   int? _suggestedMissionRewardXP;
+  RestDayInfo? _todayRestInfo;
   ProfileData _profile = ProfileData.defaults();
+  bool _missionCompletedToday = false;
+  int? _preWorkoutXP;
+  int? _preWorkoutLevel;
+  bool _showXPGain = false;
+  int _xpGainAmount = 0;
+  bool _showLevelUp = false;
+  int _levelUpShakeTrigger = 0;
+  int _missionFlashTrigger = 0;
+  BattleState _battleState = BattleState.none;
+  int _dungeonFloor = 1;
+  PendingBattle? _pendingBattle;
+  BattleResult? _todayBattleResult;
+  LootResult? _unclaimedLoot;
+  Map<LootCategory, LootItem> _equippedLoot = {};
 
   @override
   void initState() {
@@ -56,29 +85,64 @@ class HomePageState extends State<HomePage> {
 
   Future<void> _loadData() async {
     final all = await WorkoutStorageService().getSessions();
+    final restService = RestService();
+    var restState = await restService.refreshWeeklyShieldProgress(all);
+    final questClaimedXP = await QuestService().claimedRewardXP();
+    final currentRecoveryXP = restService.effectiveRecoveryXPForState(
+      sessions: all,
+      state: restState,
+    );
+    restState = await restService.ensureAutomaticRecoveryForToday(
+      sessions: all,
+      baseXP:
+          XpService.calculateTotalXP(all) + questClaimedXP + currentRecoveryXP,
+      state: restState,
+    );
+    final recoveryXP = restService.effectiveRecoveryXPForState(
+      sessions: all,
+      state: restState,
+    );
     final questSummary = await QuestService().getSummary(all);
     final profile = await ProfileService().loadProfile();
+    final scheduler = BattleScheduler();
+    final battleState = await scheduler.checkBattleState();
+    final dungeonFloor = await scheduler.getFloor();
+    final pendingBattle = await scheduler.getPendingBattle();
+    final todayResult = await scheduler.getTodayResult();
+    final lootService = LootService();
+    final unclaimedLoot = await lootService.getUnclaimedLoot();
+    final equippedLoot = await lootService.getEquippedLoot();
+    final missionCompleted =
+        await WorkoutStorageService.isMissionCompletedToday();
     if (!mounted) return;
 
     final completed = all.where((s) => !s.isPartial).toList();
-    final partial = all.where((s) => s.isPartial).toList()
+    final partial = all.where((s) => s.isOngoing).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     final lastCompleted = completed.isEmpty
         ? null
         : completed.reduce((a, b) => a.date.isAfter(b.date) ? a : b);
 
     final totalXP =
-        XpService.calculateTotalXP(all) + questSummary.claimedRewardXP;
+        XpService.calculateTotalXP(all) +
+        questSummary.claimedRewardXP +
+        recoveryXP;
     final level = XpService.getLevel(totalXP);
     final rank = XpService.getRank(level);
-    final streak = XpService.calculateStreak(all);
 
     final today = DateUtils.dateOnly(DateTime.now());
+    final todayRestInfo = restService.dayInfoForState(
+      day: today,
+      sessions: all,
+      state: restState,
+      now: today,
+    );
     final todayXP =
         all
-            .where((s) => !s.isPartial && DateUtils.dateOnly(s.date) == today)
+            .where((s) => !s.isOngoing && DateUtils.dateOnly(s.date) == today)
             .fold(0, (sum, s) => sum + XpService.calculateSessionXP(s)) +
-        questSummary.todayClaimedXP;
+        questSummary.todayClaimedXP +
+        todayRestInfo.recoveryXP;
 
     final now = DateTime.now();
     final cutoff = now.subtract(const Duration(days: 30));
@@ -125,7 +189,6 @@ class HomePageState extends State<HomePage> {
       _totalXP = totalXP;
       _level = level;
       _rank = rank;
-      _streak = streak;
       _todayXP = todayXP;
       _weeklyQuestCompleted = questSummary.weeklyCompleted;
       _weeklyQuestTotal = questSummary.weeklyTotal;
@@ -133,7 +196,15 @@ class HomePageState extends State<HomePage> {
       _suggestedMuscle = suggestedMuscle;
       _selectedTitle = questSummary.selectedTitle;
       _suggestedMissionRewardXP = suggestedMissionRewardXP;
+      _todayRestInfo = todayRestInfo;
       _profile = profile;
+      _missionCompletedToday = missionCompleted;
+      _battleState = battleState;
+      _dungeonFloor = dungeonFloor;
+      _pendingBattle = pendingBattle;
+      _todayBattleResult = todayResult;
+      _unclaimedLoot = unclaimedLoot;
+      _equippedLoot = equippedLoot;
       _loading = false;
     });
   }
@@ -148,30 +219,48 @@ class HomePageState extends State<HomePage> {
     };
   }
 
+  Color _themedCardColor(Color fallback) {
+    final theme = _equippedLoot[LootCategory.homeTheme];
+    if (theme == null || theme.id == 'theme_default') return fallback;
+    return Color.lerp(fallback, theme.color, 0.32) ?? fallback;
+  }
+
+  LootItem? get _equippedTitle => _equippedLoot[LootCategory.titleBadge];
+
+  LootItem? get _equippedFrame => _equippedLoot[LootCategory.avatarFrame];
+
   void _confirmDelete(WorkoutSession session) {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete session?'),
-        content: const Text('This cannot be undone.'),
-        actions: [
-          PixelButton(
-            label: 'Cancel',
-            fullWidth: false,
-            color: kBorderDark,
-            onPressed: () => Navigator.of(ctx).pop(),
-          ),
-          PixelButton(
-            label: 'Delete',
-            fullWidth: false,
-            color: kDanger,
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await WorkoutStorageService().deleteSession(session.id);
-              _loadData();
-            },
-          ),
-        ],
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('This cannot be undone.'),
+            const SizedBox(height: kSpace4),
+            ArcadeDialogButtonColumn(
+              children: [
+                PixelButton(
+                  label: 'Cancel',
+                  color: kBorderDark,
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+                PixelButton(
+                  label: 'Delete',
+                  color: kDanger,
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    await WorkoutStorageService().deleteSession(session.id);
+                    _loadData();
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: const [],
       ),
     );
   }
@@ -192,6 +281,8 @@ class HomePageState extends State<HomePage> {
         .toList();
     if (exercises.isEmpty) return;
     if (!mounted) return;
+    _preWorkoutXP = _totalXP;
+    _preWorkoutLevel = _level;
     Navigator.push(
       context,
       arcadeRoute(
@@ -202,14 +293,114 @@ class HomePageState extends State<HomePage> {
           resumeFromSession: session,
         ),
       ),
-    ).then((_) => _loadData());
+    ).then((_) => _onReturnFromWorkout());
   }
 
-  void _startWorkout() {
+  void _startWorkout({bool trainAnyway = false}) {
+    final restInfo = _todayRestInfo;
+    if (!trainAnyway &&
+        restInfo != null &&
+        restInfo.isPlannedRestDay &&
+        !restInfo.hasCompletedWorkout) {
+      _showTrainOnRestDialog();
+      return;
+    }
+
+    _preWorkoutXP = _totalXP;
+    _preWorkoutLevel = _level;
     Navigator.push(
       context,
       arcadeRoute((_) => const StartWorkoutPage()),
-    ).then((_) => _loadData());
+    ).then((_) => _onReturnFromWorkout());
+  }
+
+  Future<void> _onReturnFromWorkout() async {
+    final oldXP = _preWorkoutXP;
+    final oldLevel = _preWorkoutLevel;
+    _preWorkoutXP = null;
+    _preWorkoutLevel = null;
+
+    await _loadData();
+
+    if (oldXP == null || oldLevel == null) return;
+    final xpDelta = _totalXP - oldXP;
+    if (xpDelta <= 0) return;
+
+    // Step 1: XP gain display (ArcadeProgressBar handles fill animation)
+    setState(() {
+      _showXPGain = true;
+      _xpGainAmount = xpDelta;
+    });
+
+    // Step 2: Level up (after 600ms, if level changed)
+    if (_level > oldLevel) {
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (!mounted) return;
+        setState(() {
+          _showLevelUp = true;
+          _levelUpShakeTrigger++;
+        });
+      });
+    }
+
+    // Step 3: Mission card flash (after 1000ms, if completed today)
+    if (_missionCompletedToday) {
+      Future.delayed(const Duration(milliseconds: 1000), () {
+        if (!mounted) return;
+        setState(() => _missionFlashTrigger++);
+      });
+    }
+
+    // Settle XP gain text after 2 seconds
+    Future.delayed(const Duration(milliseconds: 2000), () {
+      if (!mounted) return;
+      setState(() => _showXPGain = false);
+    });
+
+    // Hide level up text after 2.6 seconds
+    if (_level > oldLevel) {
+      Future.delayed(const Duration(milliseconds: 2600), () {
+        if (!mounted) return;
+        setState(() => _showLevelUp = false);
+      });
+    }
+  }
+
+  void _showTrainOnRestDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('TRAIN ANYWAY?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Today is planned recovery. Training is allowed, but the workout will replace rest XP for today.',
+            ),
+            const SizedBox(height: kSpace4),
+            ArcadeDialogButtonColumn(
+              children: [
+                PixelButton(
+                  label: 'KEEP RESTING',
+                  color: kBorderDark,
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+                PixelButton(
+                  label: 'TRAIN ANYWAY',
+                  color: kNeon,
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _startWorkout(trainAnyway: true);
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: const [],
+      ),
+    );
   }
 
   String _fmtDuration(int secs) {
@@ -219,7 +410,7 @@ class HomePageState extends State<HomePage> {
 
   String _sessionProgressLabel(WorkoutSession session) {
     final exerciseCount = session.exercises.length;
-    final minutes = session.actualDurationSeconds ~/ 60;
+    final minutes = _liveElapsedSeconds(session) ~/ 60;
     if (exerciseCount == 0 && minutes == 0) return 'Ready to continue';
 
     final exerciseLabel = exerciseCount == 1
@@ -231,14 +422,22 @@ class HomePageState extends State<HomePage> {
   String? _missionRewardLabel(WorkoutSession? session) {
     if (session != null) {
       final emptySession =
-          session.exercises.isEmpty && session.actualDurationSeconds == 0;
-      final xp = emptySession ? 0 : XpService.calculateSessionXP(session);
+          session.exercises.isEmpty && _liveElapsedSeconds(session) == 0;
+      final xp = emptySession ? 0 : XpService.calculateLiveSessionXP(session);
       return '+$xp XP';
     }
 
     final xp = _suggestedMissionRewardXP;
     if (xp == null) return null;
     return '+$xp XP';
+  }
+
+  int _liveElapsedSeconds(WorkoutSession session) {
+    if (!session.isOngoing) return session.actualDurationSeconds;
+    final live = DateTime.now().difference(session.startedAt).inSeconds;
+    return live > session.actualDurationSeconds
+        ? live
+        : session.actualDurationSeconds;
   }
 
   String _lastWorkoutLabel() {
@@ -257,36 +456,28 @@ class HomePageState extends State<HomePage> {
   // ── Character bar ──────────────────────────────────────────────────────────
 
   Widget _buildCharacterBar() {
-    final xpBase = XpService.xpForCurrentLevel(_level);
-    final xpNext = XpService.xpForNextLevel(_level);
-    final xpFraction = xpNext > xpBase
-        ? ((_totalXP - xpBase) / (xpNext - xpBase)).clamp(0.0, 1.0)
-        : 1.0;
+    final xpProgress = XpService.progressForTotalXP(_totalXP);
     final rankColor = _rankColor();
-    final titleLabel = _selectedTitle ?? 'untitled';
+    final titleItem = _equippedTitle;
+    final titleLabel = titleItem?.name ?? _selectedTitle ?? 'untitled';
+    final titleColor =
+        titleItem?.color ??
+        (_selectedTitle == null ? const Color(0xFF6B6B8A) : kAmber);
 
     final card = Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF121225),
+        color: _themedCardColor(const Color(0xFF121225)),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
         children: [
-          Container(
-            width: 54,
-            height: 54,
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A2E),
-              border: Border.all(color: rankColor, width: 1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Image.asset(
-              _profile.avatarPath,
-              filterQuality: FilterQuality.none,
-            ),
+          LootAvatarFrame(
+            avatarPath: _profile.avatarPath,
+            framePath: _equippedFrame?.assetPath,
+            size: 64,
+            borderColor: rankColor,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -310,9 +501,7 @@ class HomePageState extends State<HomePage> {
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.shareTechMono(
                     fontSize: 11,
-                    color: _selectedTitle == null
-                        ? const Color(0xFF6B6B8A)
-                        : const Color(0xFFFFD700),
+                    color: titleColor,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -340,16 +529,17 @@ class HomePageState extends State<HomePage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                SegmentedProgressBar(
-                  totalCells: 10,
-                  litCells: (xpFraction * 10).floor().clamp(0, 10),
-                  height: 8,
+                ArcadeProgressBar(
+                  value: xpProgress.fraction,
+                  height: 10,
+                  flashOnIncrease: true,
+                  increaseSignal: _totalXP,
                 ),
                 const SizedBox(height: 5),
                 Row(
                   children: [
                     Text(
-                      '$_totalXP / $xpNext XP',
+                      xpProgress.label,
                       style: GoogleFonts.shareTechMono(
                         color: const Color(0xFF6B6B8A),
                         fontSize: 10,
@@ -367,11 +557,24 @@ class HomePageState extends State<HomePage> {
                     ],
                   ],
                 ),
+                if (_showXPGain) ...[
+                  const SizedBox(height: 4),
+                  PulseColorText(
+                    '+$_xpGainAmount XP',
+                    style: const TextStyle(
+                      fontFamily: 'PressStart2P',
+                      fontSize: 8,
+                    ),
+                    colorA: kAmber,
+                    colorB: Colors.white,
+                    periodMs: 500,
+                  ),
+                ],
               ],
             ),
           ),
           const SizedBox(width: 10),
-          _buildLevelStreakBadge(),
+          _buildLevelBadge(),
         ],
       ),
     );
@@ -388,8 +591,8 @@ class HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildLevelStreakBadge() {
-    return Container(
+  Widget _buildLevelBadge() {
+    final badge = Container(
       height: 22,
       padding: const EdgeInsets.symmetric(horizontal: 7),
       decoration: BoxDecoration(
@@ -410,29 +613,37 @@ class HomePageState extends State<HomePage> {
               height: 1,
             ),
           ),
-          Container(
-            width: 1,
-            height: 10,
-            margin: const EdgeInsets.symmetric(horizontal: 6),
-            color: const Color(0xFF4A4778),
+        ],
+      ),
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ScreenShake(
+          trigger: _levelUpShakeTrigger,
+          magnitude: 2,
+          frames: 4,
+          child: StrobeFlash(
+            trigger: _levelUpShakeTrigger,
+            color: kAmber,
+            opacity: 0.3,
+            borderRadius: BorderRadius.circular(4),
+            child: badge,
           ),
-          const ImageIcon(
-            AssetImage('assets/icons/control/icon_star.png'),
-            size: 12,
-            color: Color(0xFFFFD700),
-          ),
-          const SizedBox(width: 3),
-          Text(
-            '$_streak',
-            style: const TextStyle(
+        ),
+        if (_showLevelUp) ...[
+          const SizedBox(height: 4),
+          const Text(
+            'LEVEL UP!',
+            style: TextStyle(
               fontFamily: 'PressStart2P',
-              fontSize: 8,
-              color: Color(0xFFFFD700),
-              height: 1,
+              fontSize: 10,
+              color: kAmber,
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 
@@ -446,7 +657,7 @@ class HomePageState extends State<HomePage> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF121225),
+          color: _themedCardColor(const Color(0xFF121225)),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Column(
@@ -511,6 +722,17 @@ class HomePageState extends State<HomePage> {
 
   Widget _buildMainMissionPanel() {
     final session = _ongoingSessions.isNotEmpty ? _ongoingSessions.first : null;
+    if (session == null && _missionCompletedToday) {
+      return _buildCompletedMissionPanel();
+    }
+    final restInfo = _todayRestInfo;
+    if (session == null &&
+        restInfo != null &&
+        restInfo.isPlannedRestDay &&
+        !restInfo.hasCompletedWorkout) {
+      return _buildRecoveryMissionPanel(restInfo);
+    }
+
     final muscle = session?.muscleGroup ?? _suggestedMuscle;
     final title = session != null
         ? '${session.muscleGroup} in progress'
@@ -528,7 +750,7 @@ class HomePageState extends State<HomePage> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF17172C),
+        color: _themedCardColor(const Color(0xFF17172C)),
         border: Border.all(color: const Color(0xFF00FF9C), width: 1.2),
         borderRadius: BorderRadius.circular(4),
       ),
@@ -623,6 +845,178 @@ class HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildCompletedMissionPanel() {
+    final muscle = _suggestedMuscle;
+    final title = muscle != null ? 'Train $muscle' : 'Today\'s mission';
+    final detail = muscle != null ? 'Suggested: $muscle' : '';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _themedCardColor(const Color(0xFF17172C)),
+        border: Border.all(color: kMutedText, width: 1.2),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_play.png'),
+                size: 14,
+                color: Color(0xFF00FF9C),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'MAIN MISSION',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 10,
+                  color: Color(0xFF00FF9C),
+                ),
+              ),
+              const Spacer(),
+              const _MissionClearedChip(),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: GoogleFonts.shareTechMono(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: kMutedText,
+              height: 1.05,
+            ),
+          ),
+          if (detail.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              detail,
+              style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 13),
+            ),
+          ],
+          const SizedBox(height: 14),
+          const Text(
+            '\u2713 MISSION COMPLETE',
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 10,
+              color: Color(0xFF00FF9C),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Rest up. Tomorrow brings\na new challenge.',
+            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecoveryMissionPanel(RestDayInfo restInfo) {
+    final rewardLabel = '+${restInfo.recoveryXP} XP';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _themedCardColor(const Color(0xFF17172C)),
+        border: Border.all(color: kCyan, width: 1.2),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_play.png'),
+                size: 14,
+                color: kCyan,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'RECOVERY DAY',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 10,
+                  color: kCyan,
+                ),
+              ),
+              const Spacer(),
+              _MissionRewardChip(label: rewardLabel),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Expanded(child: RestScene(height: 68)),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Recovery day',
+                      style: GoogleFonts.shareTechMono(
+                        fontSize: 23,
+                        fontWeight: FontWeight.w700,
+                        color: kText,
+                        height: 1.05,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Stats protected. Recovery runs all day.',
+                      style: GoogleFonts.shareTechMono(
+                        color: kMutedText,
+                        fontSize: 12,
+                        height: 1.15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const RestIcon(
+                assetPath: RestAssets.recoveryShield,
+                fallbackAssetPath: 'assets/icons/control/icon_shield.png',
+                size: 15,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${restInfo.shieldCharges} / ${RestService.maxShieldCharges} shields ready',
+                style: GoogleFonts.shareTechMono(color: kAmber, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: kBorderDark,
+                foregroundColor: kCyan,
+              ),
+              onPressed: () => _startWorkout(trainAnyway: false),
+              child: const Text('TRAIN ANYWAY'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSecondaryOngoingSessions() {
     final sessions = _ongoingSessions.skip(1).toList();
     if (sessions.isEmpty) return const SizedBox.shrink();
@@ -658,7 +1052,7 @@ class HomePageState extends State<HomePage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: const Color(0xFF121225),
+            color: _themedCardColor(const Color(0xFF121225)),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -705,6 +1099,288 @@ class HomePageState extends State<HomePage> {
     );
   }
 
+  // ── Dungeon card ─────────────────────────────────────────────────────────
+
+  void _startBattle() {
+    Navigator.push(
+      context,
+      arcadeRoute((_) => const BattlePage()),
+    ).then((_) => _loadData());
+  }
+
+  void _replayBattle(BattleResult result) {
+    Navigator.push(context, arcadeRoute((_) => BattlePage(replay: result)));
+  }
+
+  void _openLootChest() {
+    Navigator.push(
+      context,
+      arcadeRoute((_) => LootChestPage(initialLoot: _unclaimedLoot)),
+    ).then((_) => _loadData());
+  }
+
+  Widget _buildEnemyStats(EnemyData enemy) {
+    return RichText(
+      text: TextSpan(
+        style: GoogleFonts.shareTechMono(fontSize: 12),
+        children: [
+          const TextSpan(
+            text: 'STR ',
+            style: TextStyle(color: kMutedText),
+          ),
+          TextSpan(
+            text: '${enemy.baseSTR}',
+            style: const TextStyle(color: kText),
+          ),
+          const TextSpan(
+            text: ' \u00B7 ',
+            style: TextStyle(color: kMutedText),
+          ),
+          const TextSpan(
+            text: 'DEF ',
+            style: TextStyle(color: kMutedText),
+          ),
+          TextSpan(
+            text: '${enemy.baseDEF}',
+            style: const TextStyle(color: kText),
+          ),
+          const TextSpan(
+            text: ' \u00B7 ',
+            style: TextStyle(color: kMutedText),
+          ),
+          const TextSpan(
+            text: 'VIT ',
+            style: TextStyle(color: kMutedText),
+          ),
+          TextSpan(
+            text: '${enemy.baseVIT}',
+            style: const TextStyle(color: kText),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBossRewardPreview() {
+    if (_dungeonFloor % 10 != 0) return const SizedBox.shrink();
+    final reward = bossLootForFloor(_dungeonFloor);
+    return Padding(
+      padding: const EdgeInsets.only(top: kSpace2),
+      child: RichText(
+        text: TextSpan(
+          style: GoogleFonts.shareTechMono(fontSize: 12),
+          children: [
+            const TextSpan(
+              text: 'REWARD: ',
+              style: TextStyle(color: kMutedText),
+            ),
+            TextSpan(
+              text: '★ ${reward.name}',
+              style: TextStyle(
+                color: reward.rarity.color,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            TextSpan(
+              text: ' (${reward.rarity.label})',
+              style: TextStyle(color: reward.rarity.color),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDungeonCard() {
+    final borderColor = switch (_battleState) {
+      BattleState.none => kMutedText,
+      BattleState.pending => kAmber,
+      BattleState.ready => kDanger,
+      BattleState.resolved =>
+        _todayBattleResult?.playerWon == true ? kNeon : kDanger,
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _themedCardColor(kCard),
+        border: Border.all(color: borderColor, width: 1),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: switch (_battleState) {
+        BattleState.none => _buildDungeonIdle(),
+        BattleState.pending => _buildDungeonPending(),
+        BattleState.ready => _buildDungeonReady(),
+        BattleState.resolved => _buildDungeonResolved(),
+      },
+    );
+  }
+
+  Widget _buildDungeonHeader() {
+    final color = _battleState == BattleState.none ? kMutedText : kAmber;
+    return Row(
+      children: [
+        ImageIcon(
+          const AssetImage('assets/icons/control/icon_sword.png'),
+          size: 14,
+          color: color,
+        ),
+        const SizedBox(width: kSpace2),
+        Text(
+          'DUNGEON — FLOOR $_dungeonFloor',
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: 8,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // State A — No pending battle
+  Widget _buildDungeonIdle() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildDungeonHeader(),
+        const SizedBox(height: kSpace2),
+        Text(
+          'Complete a workout to summon tonight\'s enemy.',
+          style: GoogleFonts.shareTechMono(fontSize: 12, color: kMutedText),
+        ),
+        _buildBossRewardPreview(),
+      ],
+    );
+  }
+
+  // State B — Battle pending but not ready
+  Widget _buildDungeonPending() {
+    final enemy = _pendingBattle?.enemy;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildDungeonHeader(),
+        const SizedBox(height: kSpace2),
+        const Text(
+          'TONIGHT\'S ENEMY',
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: 8,
+            color: kDanger,
+          ),
+        ),
+        const SizedBox(height: kSpace1),
+        if (enemy != null) ...[
+          Text(
+            '${enemy.name}  Lv.$_dungeonFloor',
+            style: GoogleFonts.shareTechMono(fontSize: 13, color: kText),
+          ),
+          const SizedBox(height: kSpace1),
+          _buildEnemyStats(enemy),
+          _buildBossRewardPreview(),
+        ],
+        const SizedBox(height: kSpace2),
+        RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: 'Battle ready at ',
+                style: GoogleFonts.shareTechMono(
+                  fontSize: 12,
+                  color: kMutedText,
+                ),
+              ),
+              TextSpan(
+                text: 'midnight',
+                style: GoogleFonts.shareTechMono(fontSize: 12, color: kAmber),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // State C — Battle ready
+  Widget _buildDungeonReady() {
+    final enemy = _pendingBattle?.enemy;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildDungeonHeader(),
+        const SizedBox(height: kSpace2),
+        const PulseColorText(
+          'BATTLE READY',
+          style: TextStyle(fontFamily: 'PressStart2P', fontSize: 8),
+          colorA: kDanger,
+          colorB: kAmber,
+          periodMs: 500,
+        ),
+        const SizedBox(height: kSpace1),
+        if (enemy != null) ...[
+          Text(
+            '${enemy.name}  Lv.$_dungeonFloor',
+            style: GoogleFonts.shareTechMono(fontSize: 13, color: kText),
+          ),
+          const SizedBox(height: kSpace1),
+          _buildEnemyStats(enemy),
+          _buildBossRewardPreview(),
+        ],
+        const SizedBox(height: kSpace3),
+        PixelButton(label: '⚔ FIGHT', color: kDanger, onPressed: _startBattle),
+      ],
+    );
+  }
+
+  // State D — Battle resolved (post-result, same day)
+  Widget _buildDungeonResolved() {
+    final result = _todayBattleResult;
+    final won = result?.playerWon == true;
+    final draw = result?.isDraw == true;
+    final resultText = won
+        ? 'VICTORY — FLOOR CLEARED'
+        : draw
+        ? 'STALEMATE'
+        : 'DEFEATED';
+    final resultColor = won
+        ? kNeon
+        : draw
+        ? kAmber
+        : kDanger;
+    final hasUnclaimedLoot = won && _unclaimedLoot != null;
+
+    return ArcadeTap(
+      onTap: hasUnclaimedLoot
+          ? _openLootChest
+          : result != null
+          ? () => _replayBattle(result)
+          : null,
+      borderRadius: BorderRadius.circular(4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildDungeonHeader(),
+          const SizedBox(height: kSpace2),
+          Text(
+            resultText,
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 8,
+              color: resultColor,
+            ),
+          ),
+          const SizedBox(height: kSpace1),
+          Text(
+            hasUnclaimedLoot ? 'Tap to claim spoils' : 'Tap to view battle log',
+            style: GoogleFonts.shareTechMono(fontSize: 11, color: kMutedText),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   Widget _buildLastWorkoutStat() {
@@ -712,7 +1388,9 @@ class HomePageState extends State<HomePage> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF121225).withValues(alpha: 0.72),
+        color: _themedCardColor(
+          const Color(0xFF121225),
+        ).withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -761,15 +1439,43 @@ class HomePageState extends State<HomePage> {
             const SizedBox(height: 16),
             _buildCharacterBar(),
             const SizedBox(height: 18),
-            _buildMainMissionPanel(),
+            StrobeFlash(
+              trigger: _missionFlashTrigger,
+              borderRadius: BorderRadius.circular(4),
+              toggles: 2,
+              toggleMs: 16,
+              child: _buildMainMissionPanel(),
+            ),
             _buildSecondaryOngoingSessions(),
             const SizedBox(height: 16),
             _buildLastWorkoutStat(),
             const SizedBox(height: 14),
             _buildWeeklyQuestsCard(),
+            const SizedBox(height: 14),
+            _buildDungeonCard(),
             const SizedBox(height: 24),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MissionClearedChip extends StatelessWidget {
+  const _MissionClearedChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: kNeon.withValues(alpha: 0.15),
+        border: Border.all(color: kNeon),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        '\u2713 CLEARED',
+        style: TextStyle(fontFamily: 'PressStart2P', fontSize: 8, color: kNeon),
       ),
     );
   }
@@ -789,9 +1495,13 @@ class _MissionRewardChip extends StatelessWidget {
         border: Border.all(color: kAmber),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: PulseColorText(
+      child: Text(
         label,
-        style: const TextStyle(fontFamily: 'PressStart2P', fontSize: 8),
+        style: const TextStyle(
+          fontFamily: 'PressStart2P',
+          fontSize: 8,
+          color: kAmber,
+        ),
       ),
     );
   }
@@ -821,10 +1531,7 @@ class _PressableCardState extends State<_PressableCard> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: _pressing ? kNeon : kBorder,
-            width: 1,
-          ),
+          border: Border.all(color: _pressing ? kNeon : kBorder, width: 1),
         ),
         child: widget.child,
       ),

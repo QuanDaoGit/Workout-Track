@@ -1,16 +1,38 @@
 import 'package:flutter/material.dart';
 
+import '../models/rest_models.dart';
 import '../models/workout_models.dart';
+import '../services/rest_service.dart';
 import '../services/workout_storage_service.dart';
 import '../widgets/arcade_route.dart';
+import '../widgets/calendar_day_marker.dart';
 import '../widgets/pixel_loader.dart';
 import 'Workout session/session_detail.dart';
 
-const _muscleIcon = {
-  'Chest': 'assets/icons/control/icon_sword.png',
-  'Back': 'assets/icons/control/icon_shield.png',
-  'Arms': 'assets/icons/control/icon_hand.png',
-  'Legs': 'assets/icons/control/icon_boots.png',
+String fmtDayDate(DateTime d) {
+  const weekdays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  const months = [
+    'JAN',
+    'FEB',
+    'MAR',
+    'APR',
+    'MAY',
+    'JUN',
+    'JUL',
+    'AUG',
+    'SEP',
+    'OCT',
+    'NOV',
+    'DEC',
+  ];
+  return '${weekdays[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
+}
+
+const _muscleColors = {
+  'Chest': Color(0xFF00FF9C),
+  'Back': Color(0xFFFFD700),
+  'Arms': Color(0xFFFF2D55),
+  'Legs': Color(0xFF00BFFF),
 };
 
 class CalendarPage extends StatefulWidget {
@@ -24,6 +46,7 @@ class _CalendarPageState extends State<CalendarPage> {
   late DateTime _focusedMonth;
   DateTime? _selectedDay;
   Map<DateTime, List<WorkoutSession>> _sessionsByDay = {};
+  RestState _restState = RestState.defaults();
   bool _loading = true;
 
   @override
@@ -36,8 +59,9 @@ class _CalendarPageState extends State<CalendarPage> {
 
   Future<void> _loadSessions() async {
     final all = await WorkoutStorageService().getSessions();
+    final restState = await RestService().loadState();
     if (!mounted) return;
-    final completed = all.where((s) => !s.isPartial).toList();
+    final completed = all.where((s) => !s.isOngoing).toList();
     final map = <DateTime, List<WorkoutSession>>{};
     for (final s in completed) {
       final day = DateUtils.dateOnly(s.date);
@@ -45,6 +69,7 @@ class _CalendarPageState extends State<CalendarPage> {
     }
     setState(() {
       _sessionsByDay = map;
+      _restState = restState;
       _loading = false;
     });
   }
@@ -77,24 +102,7 @@ class _CalendarPageState extends State<CalendarPage> {
     return '${months[d.month - 1]} ${d.year}';
   }
 
-  String _fmtDayDate(DateTime d) {
-    const weekdays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-    const months = [
-      'JAN',
-      'FEB',
-      'MAR',
-      'APR',
-      'MAY',
-      'JUN',
-      'JUL',
-      'AUG',
-      'SEP',
-      'OCT',
-      'NOV',
-      'DEC',
-    ];
-    return '${weekdays[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
-  }
+  String _fmtDayDate(DateTime d) => fmtDayDate(d);
 
   List<DateTime?> _buildGridDays() {
     // Week starts Monday (weekday 1). Find first Monday ≤ first of month.
@@ -127,28 +135,38 @@ class _CalendarPageState extends State<CalendarPage> {
     final isSelected = _selectedDay != null && day == _selectedDay;
     final sessions = _sessionsByDay[day];
     final hasWorkout = sessions != null && sessions.isNotEmpty;
+    final abandonedOnly =
+        hasWorkout && sessions.every((session) => session.isAbandoned);
     final isPast = day.isBefore(today);
+    final restInfo = RestService().dayInfoForState(
+      day: day,
+      sessions: sessions ?? const [],
+      state: _restState,
+    );
+    final markerKind = calendarMarkerKindFor(
+      restInfo: restInfo,
+      hasWorkout: hasWorkout,
+      abandonedOnly: abandonedOnly,
+      isToday: isToday,
+      isSelected: isSelected,
+    );
+    final workoutColor = hasWorkout
+        ? _muscleColors[sessions.first.muscleGroup] ?? const Color(0xFF00FF9C)
+        : null;
 
     // Determine icon
-    String? iconPath;
-    if (hasWorkout) {
-      iconPath = _muscleIcon[sessions.first.muscleGroup];
-    } else if (isToday) {
-      iconPath = 'assets/icons/control/icon_visibility_off.png';
-    }
-
     BoxDecoration decoration = BoxDecoration(
       color: isSelected ? const Color(0xFF00FF9C).withValues(alpha: 0.2) : null,
-      border: isToday
+      border: isSelected
           ? Border.all(color: const Color(0xFF00FF9C), width: 1.5)
+          : isToday
+          ? Border.all(color: const Color(0xFF00FF9C), width: 1)
           : null,
       borderRadius: BorderRadius.circular(4),
     );
 
-    final canTap = hasWorkout;
-
     return GestureDetector(
-      onTap: canTap ? () => setState(() => _selectedDay = day) : null,
+      onTap: () => setState(() => _selectedDay = day),
       child: Container(
         decoration: decoration,
         child: Column(
@@ -166,14 +184,14 @@ class _CalendarPageState extends State<CalendarPage> {
                 fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
               ),
             ),
-            if (iconPath != null) ...[
+            if (markerKind != null) ...[
               const SizedBox(height: 2),
-              ImageIcon(
-                AssetImage(iconPath),
-                size: hasWorkout ? 16 : 12,
-                color: hasWorkout
-                    ? const Color(0xFF00FF9C)
-                    : const Color(0xFF6B6B8A),
+              CalendarDayMarker(
+                kind: markerKind,
+                color: calendarMarkerColor(
+                  markerKind,
+                  workoutColor: workoutColor,
+                ),
               ),
             ],
           ],
@@ -280,49 +298,20 @@ class _CalendarPageState extends State<CalendarPage> {
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
-                          children: [
-                            ..._muscleIcon.entries.map(
-                              (e) => Padding(
-                                padding: const EdgeInsets.only(right: 16),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ImageIcon(
-                                      AssetImage(e.value),
-                                      size: 14,
-                                      color: const Color(0xFF00FF9C),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      e.key,
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        color: Color(0xFF6B6B8A),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                          children: const [
+                            CalendarLegendMarker(
+                              kind: CalendarMarkerKind.workout,
+                              label: 'Workout',
                             ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                ImageIcon(
-                                  AssetImage(
-                                    'assets/icons/control/icon_visibility_off.png',
-                                  ),
-                                  size: 14,
-                                  color: Color(0xFF6B6B8A),
-                                ),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Rest',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Color(0xFF6B6B8A),
-                                  ),
-                                ),
-                              ],
+                            SizedBox(width: 14),
+                            CalendarLegendMarker(
+                              kind: CalendarMarkerKind.protected,
+                              label: 'Protected',
+                            ),
+                            SizedBox(width: 14),
+                            CalendarLegendMarker(
+                              kind: CalendarMarkerKind.missed,
+                              label: 'Missed',
                             ),
                           ],
                         ),
@@ -337,59 +326,77 @@ class _CalendarPageState extends State<CalendarPage> {
                   // ── Session list ─────────────────────────────────────
                   if (selectedSessions == null)
                     Text(
-                      'Tap a workout day to see sessions',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    )
-                  else if (selectedSessions.isEmpty)
-                    Text(
-                      'No workouts on this day',
+                      'Tap a day to inspect history',
                       style: Theme.of(context).textTheme.bodySmall,
                     )
                   else ...[
-                    Text(
-                      _fmtDayDate(_selectedDay!),
-                      style: Theme.of(context).textTheme.headlineSmall,
+                    CalendarDayStatusCard(
+                      dateLabel: _fmtDayDate(_selectedDay!),
+                      restInfo: RestService().dayInfoForState(
+                        day: _selectedDay!,
+                        sessions: selectedSessions,
+                        state: _restState,
+                      ),
+                      hasWorkout: selectedSessions.isNotEmpty,
+                      abandonedOnly:
+                          selectedSessions.isNotEmpty &&
+                          selectedSessions.every(
+                            (session) => session.isAbandoned,
+                          ),
+                      workoutColor: selectedSessions.isNotEmpty
+                          ? _muscleColors[selectedSessions.first.muscleGroup] ??
+                                const Color(0xFF00FF9C)
+                          : null,
                     ),
                     const SizedBox(height: 8),
-                    for (final session in selectedSessions)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            arcadeRoute(
-                              (_) => SessionDetailPage(session: session),
+                    if (selectedSessions.isNotEmpty)
+                      for (final session in selectedSessions)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: GestureDetector(
+                            onTap: () => Navigator.push(
+                              context,
+                              arcadeRoute(
+                                (_) => SessionDetailPage(session: session),
+                              ),
                             ),
-                          ),
-                          child: Card(
-                            clipBehavior: Clip.antiAlias,
-                            child: IntrinsicHeight(
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 4,
-                                    color: const Color(0xFF00FF9C),
-                                  ),
-                                  Expanded(
-                                    child: ListTile(
-                                      title: Text(session.muscleGroup),
-                                      subtitle: Text(
-                                        '${session.exercises.length} exercises',
-                                        style: const TextStyle(
-                                          color: Color(0xFF6B6B8A),
+                            child: Card(
+                              clipBehavior: Clip.antiAlias,
+                              child: IntrinsicHeight(
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 4,
+                                      color: session.isAbandoned
+                                          ? const Color(0xFFFF2D55)
+                                          : const Color(0xFF00FF9C),
+                                    ),
+                                    Expanded(
+                                      child: ListTile(
+                                        title: Text(
+                                          session.isAbandoned
+                                              ? '${session.muscleGroup} - ABANDONED'
+                                              : session.muscleGroup,
+                                        ),
+                                        subtitle: Text(
+                                          session.isAbandoned
+                                              ? 'Time XP only'
+                                              : '${session.exercises.length} exercises',
+                                          style: const TextStyle(
+                                            color: Color(0xFF6B6B8A),
+                                          ),
+                                        ),
+                                        trailing: Text(
+                                          '${session.actualDurationSeconds ~/ 60} min',
                                         ),
                                       ),
-                                      trailing: Text(
-                                        '${session.actualDurationSeconds ~/ 60} min',
-                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
                   ],
                 ],
               ),
