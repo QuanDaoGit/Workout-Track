@@ -92,3 +92,20 @@ Flutter app. Pages in `lib/pages/`, services in `lib/services/`, models in `lib/
 
 ## Execution Mode
 Skip planning confirmation. Execute immediately without asking for approval to proceed from plan to implementation.
+
+---
+
+## Phase 7 Design Decisions
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| 1 | Custom exercises stored in SharedPreferences, not SQLite | Consistency with all other app persistence; data volume is small (dozens of exercises max). |
+| 2 | ExerciseCatalogService centralizes all exercise loading | Eliminated 6 duplicate rootBundle.loadString calls; single cache invalidation point for custom exercises. |
+| 3 | Body metrics OFF by default, opt-in via settings toggle | PRD body-neutral mandate: user must consciously choose to enable weight tracking. |
+| 4 | 7-day cadence enforced at service layer, not UI-only | Prevents clock manipulation exploits; service uses max(storedTimestamp, now) guard. |
+| 5 | No red/green colors on weight arrows or deltas | Body-neutral design: muted-only directional indicators prevent implicit "good/bad" framing. |
+| 6 | Direction-aligned bonus is silent when not earned | Reward page never mentions alignment/misalignment; absence of bonus is simply absence, not failure. |
+| 7 | XP Boost Potions consumed on workout save, not on grant | Prevents potion waste if user logs weight but doesn't work out within 24h; incentivizes timely training. |
+| 8 | Potion multiplier capped at 5.0x | Prevents runaway XP inflation from stacking many potions; keeps leveling meaningful. |
+| 9 | BodyGoal stored as snapshot in each WeightEntry | Allows historical analysis even after goal changes; direction alignment checks use current goal, not historical. |
+| 10 | Custom exercises use explicit primaryMuscle field, not runtime lookup | StatEngine can map custom exercises to combat stats without needing the raw JSON primaryMuscles array. |

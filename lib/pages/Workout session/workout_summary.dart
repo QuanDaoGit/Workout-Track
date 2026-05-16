@@ -4,8 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/workout_models.dart';
 import '../../services/battle_scheduler.dart';
 import '../../services/calorie_service.dart';
+import '../../services/program_service.dart';
 import '../../services/stat_engine.dart';
 import '../../services/workout_storage_service.dart';
+import '../../services/xp_boost_service.dart';
 import '../../services/xp_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/pulse_color_text.dart';
@@ -24,6 +26,8 @@ class WorkoutSummaryPage extends StatefulWidget {
     this.isAbandoned = false,
     this.startedAt,
     this.resumeFromSession,
+    this.isProgramWorkout = false,
+    this.advanceProgramRestDayOnCompletion = false,
   });
 
   final String muscleGroup;
@@ -34,6 +38,8 @@ class WorkoutSummaryPage extends StatefulWidget {
   final bool isAbandoned;
   final DateTime? startedAt;
   final WorkoutSession? resumeFromSession;
+  final bool isProgramWorkout;
+  final bool advanceProgramRestDayOnCompletion;
 
   @override
   State<WorkoutSummaryPage> createState() => _WorkoutSummaryPageState();
@@ -43,6 +49,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   bool _saving = false;
   bool _saved = false;
   int _shakeTrigger = 0;
+  int _potionBonusXP = 0;
   Map<String, int> _statDelta = {};
   Map<String, int> _combatStats = {};
 
@@ -98,6 +105,11 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     setState(() => _saving = true);
     if (widget.isAbandoned) {
       await WorkoutStorageService().replaceOngoingWithAbandoned(_savedSession);
+      if (widget.resumeFromSession != null) {
+        await ProgramService().clearOngoingProgramSession(
+          widget.resumeFromSession!.id,
+        );
+      }
     } else {
       if (widget.resumeFromSession != null) {
         await WorkoutStorageService().deleteSession(
@@ -105,10 +117,19 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         );
       }
       await WorkoutStorageService().saveSession(_savedSession);
+      _potionBonusXP = await XpBoostService().consumeForSession(_earnedXP);
       await BattleScheduler().scheduleBattle();
       final engine = StatEngine();
       _statDelta = await engine.getLastSessionDelta();
       _combatStats = await engine.getStoredStats();
+      if (widget.isProgramWorkout || widget.advanceProgramRestDayOnCompletion) {
+        await ProgramService().advanceDay();
+        if (widget.resumeFromSession != null) {
+          await ProgramService().clearOngoingProgramSession(
+            widget.resumeFromSession!.id,
+          );
+        }
+      }
     }
     if (mounted) {
       setState(() {
@@ -193,6 +214,28 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                   ),
                   textAlign: TextAlign.center,
                 ),
+                if (_potionBonusXP > 0) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const ImageIcon(
+                        AssetImage('assets/icons/control/icon_potion.png'),
+                        color: kAmber,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '+$_potionBonusXP BONUS XP',
+                        style: GoogleFonts.shareTechMono(
+                          color: kAmber,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 32),
                 if (statBoxes.isNotEmpty)
                   Row(

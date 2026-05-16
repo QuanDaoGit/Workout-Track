@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/workout_models.dart';
+import 'exercise_catalog_service.dart';
 import 'rest_service.dart';
 
 class StatEngine {
@@ -175,14 +176,21 @@ class StatEngine {
 
   Future<Map<String, String>> _loadCatalog() async {
     if (_catalogOverride != null) return _catalogOverride;
+    // Built-in exercises: use raw JSON to get primaryMuscles field
     final raw = await rootBundle.loadString('assets/exercises.json');
     final decoded = jsonDecode(raw) as List<dynamic>;
-    return {
+    final result = <String, String>{
       for (final item in decoded)
         (item as Map<String, dynamic>)['id'] as String: _firstPrimaryMuscle(
           item['primaryMuscles'] as List<dynamic>?,
         ),
     };
+    // Custom exercises: use stored primaryMuscle field
+    final custom = await ExerciseCatalogService().getCustomExercises();
+    for (final e in custom) {
+      result[e.id] = e.primaryMuscle ?? '';
+    }
+    return result;
   }
 
   String _firstPrimaryMuscle(List<dynamic>? muscles) {

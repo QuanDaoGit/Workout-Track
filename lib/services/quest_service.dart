@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/quest_models.dart';
 import '../models/workout_models.dart';
 import 'rest_service.dart';
+import 'xp_boost_service.dart';
 import 'xp_service.dart';
 
 class QuestService {
@@ -27,12 +28,14 @@ class QuestService {
       sessions,
       now: currentTime,
     );
+    final potionBonusXP = await XpBoostService().getTotalBonusXP();
     await restService.ensureAutomaticRecoveryForToday(
       sessions: sessions,
       baseXP:
           XpService.calculateTotalXP(sessions) +
           state.claimedXP +
-          currentRecoveryXP,
+          currentRecoveryXP +
+          potionBonusXP,
       now: currentTime,
     );
     final recoveryXP = await restService.effectiveRecoveryXP(
@@ -40,7 +43,7 @@ class QuestService {
       now: currentTime,
     );
     final baseXP =
-        XpService.calculateTotalXP(sessions) + state.claimedXP + recoveryXP;
+        XpService.calculateTotalXP(sessions) + state.claimedXP + recoveryXP + potionBonusXP;
 
     final daily = _buildDailyQuests(state, stats, baseXP, currentTime);
     final weekly = _buildWeeklyQuests(state, stats, baseXP, currentTime);

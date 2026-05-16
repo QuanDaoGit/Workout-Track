@@ -1,22 +1,24 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../data/loot_registry.dart';
+import '../data/programs_library.dart';
 import '../models/enemy_data.dart';
 import '../models/loot_item.dart';
+import '../models/program_models.dart';
 import '../models/profile_models.dart';
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import '../services/battle_engine.dart';
 import '../services/battle_scheduler.dart';
+import '../services/exercise_catalog_service.dart';
 import '../services/loot_service.dart';
 import '../services/profile_service.dart';
+import '../services/program_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
 import '../services/workout_storage_service.dart';
+import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_dialog_button_column.dart';
@@ -74,6 +76,9 @@ class HomePageState extends State<HomePage> {
   BattleResult? _todayBattleResult;
   LootResult? _unclaimedLoot;
   Map<LootCategory, LootItem> _equippedLoot = {};
+  ProgramProgress? _programProgress;
+  ProgramDay? _programDay;
+  ProgramDaySnapshot? _programCompletedToday;
 
   @override
   void initState() {
@@ -86,8 +91,27 @@ class HomePageState extends State<HomePage> {
   Future<void> _loadData() async {
     final all = await WorkoutStorageService().getSessions();
     final restService = RestService();
+    final programService = ProgramService();
+    final programProgress = await programService.getActiveProgress();
+    final programDay = await programService.getTodayDay();
+    final today = DateUtils.dateOnly(DateTime.now());
     var restState = await restService.refreshWeeklyShieldProgress(all);
+    if (programDay != null) {
+      if (programDay.isWorkout) {
+        restState = await restService.addProgramTrainingDate(
+          today,
+          state: restState,
+        );
+      } else {
+        restState = await restService.addProgramPlannedRestDate(
+          today,
+          state: restState,
+        );
+        await programService.creditRestDayForToday(now: today);
+      }
+    }
     final questClaimedXP = await QuestService().claimedRewardXP();
+    final potionBonusXP = await XpBoostService().getTotalBonusXP();
     final currentRecoveryXP = restService.effectiveRecoveryXPForState(
       sessions: all,
       state: restState,
@@ -95,7 +119,7 @@ class HomePageState extends State<HomePage> {
     restState = await restService.ensureAutomaticRecoveryForToday(
       sessions: all,
       baseXP:
-          XpService.calculateTotalXP(all) + questClaimedXP + currentRecoveryXP,
+          XpService.calculateTotalXP(all) + questClaimedXP + currentRecoveryXP + potionBonusXP,
       state: restState,
     );
     final recoveryXP = restService.effectiveRecoveryXPForState(
@@ -112,6 +136,8 @@ class HomePageState extends State<HomePage> {
     final lootService = LootService();
     final unclaimedLoot = await lootService.getUnclaimedLoot();
     final equippedLoot = await lootService.getEquippedLoot();
+    final programCompletedToday = await programService
+        .completedSnapshotForToday(now: today);
     final missionCompleted =
         await WorkoutStorageService.isMissionCompletedToday();
     if (!mounted) return;
@@ -126,11 +152,11 @@ class HomePageState extends State<HomePage> {
     final totalXP =
         XpService.calculateTotalXP(all) +
         questSummary.claimedRewardXP +
-        recoveryXP;
+        recoveryXP +
+        potionBonusXP;
     final level = XpService.getLevel(totalXP);
     final rank = XpService.getRank(level);
 
-    final today = DateUtils.dateOnly(DateTime.now());
     final todayRestInfo = restService.dayInfoForState(
       day: today,
       sessions: all,
@@ -205,6 +231,9 @@ class HomePageState extends State<HomePage> {
       _todayBattleResult = todayResult;
       _unclaimedLoot = unclaimedLoot;
       _equippedLoot = equippedLoot;
+      _programProgress = programProgress;
+      _programDay = programDay;
+      _programCompletedToday = programCompletedToday;
       _loading = false;
     });
   }
@@ -266,11 +295,7 @@ class HomePageState extends State<HomePage> {
   }
 
   Future<void> _continueWorkout(WorkoutSession session) async {
-    final jsonStr = await rootBundle.loadString('assets/exercises.json');
-    final data = jsonDecode(jsonStr) as List<dynamic>;
-    final catalog = [
-      for (final e in data) Exercise.fromJson(e as Map<String, dynamic>),
-    ];
+    final catalog = await ExerciseCatalogService().getFullCatalog();
     final byId = {for (final e in catalog) e.id: e};
     final exerciseIds = session.selectedExerciseIds.isNotEmpty
         ? session.selectedExerciseIds
@@ -283,6 +308,13 @@ class HomePageState extends State<HomePage> {
     if (!mounted) return;
     _preWorkoutXP = _totalXP;
     _preWorkoutLevel = _level;
+    final programService = ProgramService();
+    final isProgramWorkout = await programService.isOngoingProgramSession(
+      session.id,
+    );
+    final isProgramRestWorkout = await programService
+        .isOngoingProgramRestSession(session.id);
+    if (!mounted) return;
     Navigator.push(
       context,
       arcadeRoute(
@@ -291,18 +323,25 @@ class HomePageState extends State<HomePage> {
           durationMinutes: session.targetDurationMinutes,
           exercises: exercises,
           resumeFromSession: session,
+          isProgramWorkout: isProgramWorkout,
+          advanceProgramRestDayOnCompletion: isProgramRestWorkout,
         ),
       ),
     ).then((_) => _onReturnFromWorkout());
   }
 
-  void _startWorkout({bool trainAnyway = false}) {
+  void _startWorkout({
+    bool trainAnyway = false,
+    bool advanceProgramRestDayOnCompletion = false,
+  }) {
     final restInfo = _todayRestInfo;
     if (!trainAnyway &&
         restInfo != null &&
         restInfo.isPlannedRestDay &&
         !restInfo.hasCompletedWorkout) {
-      _showTrainOnRestDialog();
+      _showTrainOnRestDialog(
+        advanceProgramRestDayOnCompletion: advanceProgramRestDayOnCompletion,
+      );
       return;
     }
 
@@ -310,7 +349,28 @@ class HomePageState extends State<HomePage> {
     _preWorkoutLevel = _level;
     Navigator.push(
       context,
-      arcadeRoute((_) => const StartWorkoutPage()),
+      arcadeRoute(
+        (_) => StartWorkoutPage(
+          advanceProgramRestDayOnCompletion: advanceProgramRestDayOnCompletion,
+        ),
+      ),
+    ).then((_) => _onReturnFromWorkout());
+  }
+
+  void _startProgramWorkout(ProgramDay day) {
+    _preWorkoutXP = _totalXP;
+    _preWorkoutLevel = _level;
+    Navigator.push(
+      context,
+      arcadeRoute(
+        (_) => StartWorkoutPage(
+          initialMuscleGroup: programDayPrimaryMuscleGroup(day),
+          programDayLabel: day.label,
+          programFocusSummary: programDayFocusSummary(day),
+          programCuratedExerciseIds: day.suggestedExerciseIds,
+          isProgramWorkout: true,
+        ),
+      ),
     ).then((_) => _onReturnFromWorkout());
   }
 
@@ -366,7 +426,9 @@ class HomePageState extends State<HomePage> {
     }
   }
 
-  void _showTrainOnRestDialog() {
+  void _showTrainOnRestDialog({
+    bool advanceProgramRestDayOnCompletion = false,
+  }) {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -391,7 +453,11 @@ class HomePageState extends State<HomePage> {
                   color: kNeon,
                   onPressed: () {
                     Navigator.of(ctx).pop();
-                    _startWorkout(trainAnyway: true);
+                    _startWorkout(
+                      trainAnyway: true,
+                      advanceProgramRestDayOnCompletion:
+                          advanceProgramRestDayOnCompletion,
+                    );
                   },
                 ),
               ],
@@ -722,6 +788,38 @@ class HomePageState extends State<HomePage> {
 
   Widget _buildMainMissionPanel() {
     final session = _ongoingSessions.isNotEmpty ? _ongoingSessions.first : null;
+    if (session == null && _programProgress != null && _programDay != null) {
+      final completedSnapshot = _programCompletedToday;
+      if (completedSnapshot != null &&
+          completedSnapshot.programId == _programProgress!.programId) {
+        final program = programById(completedSnapshot.programId);
+        final completedDay = program?.weekSchedule[completedSnapshot.dayIndex];
+        if (completedDay != null) {
+          return _buildProgramCompletedMissionPanel(
+            day: completedDay,
+            week: completedSnapshot.week,
+            dayNumber: completedSnapshot.dayIndex + 1,
+          );
+        }
+      }
+
+      if (!_programDay!.isWorkout) {
+        final restInfo = _todayRestInfo;
+        if (restInfo != null) {
+          return _buildProgramRecoveryMissionPanel(
+            day: _programDay!,
+            progress: _programProgress!,
+            restInfo: restInfo,
+          );
+        }
+      }
+
+      return _buildProgramMissionPanel(
+        day: _programDay!,
+        progress: _programProgress!,
+      );
+    }
+
     if (session == null && _missionCompletedToday) {
       return _buildCompletedMissionPanel();
     }
@@ -841,6 +939,251 @@ class HomePageState extends State<HomePage> {
       child: GestureDetector(
         onLongPress: () => _confirmDelete(session),
         child: panel,
+      ),
+    );
+  }
+
+  Widget _buildProgramMissionPanel({
+    required ProgramDay day,
+    required ProgramProgress progress,
+  }) {
+    final rewardLabel = _missionRewardLabel(null);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _themedCardColor(const Color(0xFF17172C)),
+        border: Border.all(color: kNeon, width: 1.2),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_play.png'),
+                size: 14,
+                color: kNeon,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'PROGRAM DAY',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 10,
+                  color: kNeon,
+                ),
+              ),
+              if (rewardLabel != null) ...[
+                const Spacer(),
+                _MissionRewardChip(label: rewardLabel),
+              ],
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}',
+            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            day.label,
+            style: const TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 16,
+              color: kNeon,
+              height: 1.25,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            programDayFocusSummary(day),
+            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          PixelButton(
+            label: 'START WORKOUT',
+            color: kNeon,
+            onPressed: () => _startProgramWorkout(day),
+          ),
+          const SizedBox(height: 10),
+          Center(
+            child: TextButton(
+              onPressed: () => _startWorkout(trainAnyway: true),
+              child: const Text(
+                'skip to manual',
+                style: TextStyle(color: kMutedText),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgramCompletedMissionPanel({
+    required ProgramDay day,
+    required int week,
+    required int dayNumber,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _themedCardColor(const Color(0xFF17172C)),
+        border: Border.all(color: kMutedText, width: 1.2),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_play.png'),
+                size: 14,
+                color: kNeon,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'PROGRAM DAY',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 10,
+                  color: kNeon,
+                ),
+              ),
+              const Spacer(),
+              const _MissionClearedChip(),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'WEEK $week - DAY $dayNumber',
+            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            day.label,
+            style: const TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 16,
+              color: kMutedText,
+              height: 1.25,
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '\u2713 CLEARED',
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 10,
+              color: kNeon,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Next program day unlocks after today.',
+            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgramRecoveryMissionPanel({
+    required ProgramDay day,
+    required ProgramProgress progress,
+    required RestDayInfo restInfo,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _themedCardColor(const Color(0xFF17172C)),
+        border: Border.all(color: kCyan, width: 1.2),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_play.png'),
+                size: 14,
+                color: kCyan,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'PROGRAM REST',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 10,
+                  color: kCyan,
+                ),
+              ),
+              const Spacer(),
+              _MissionRewardChip(label: '+${restInfo.recoveryXP} XP'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}',
+            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            day.label,
+            style: GoogleFonts.shareTechMono(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: kText,
+              height: 1.05,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Stats protected. Recovery runs all day.',
+            style: GoogleFonts.shareTechMono(
+              color: kMutedText,
+              fontSize: 12,
+              height: 1.15,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const RestIcon(
+                assetPath: RestAssets.recoveryShield,
+                fallbackAssetPath: 'assets/icons/control/icon_shield.png',
+                size: 15,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${restInfo.shieldCharges} / ${RestService.maxShieldCharges} shields ready',
+                style: GoogleFonts.shareTechMono(color: kAmber, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: kBorderDark,
+                foregroundColor: kCyan,
+              ),
+              onPressed: () => _startWorkout(
+                trainAnyway: false,
+                advanceProgramRestDayOnCompletion: true,
+              ),
+              child: const Text('TRAIN ANYWAY'),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -18,7 +18,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  LootService service() => LootService(nowProvider: () => fixedNow);
+  LootService service({bool unlockAllLoot = false}) =>
+      LootService(nowProvider: () => fixedNow, unlockAllLoot: unlockAllLoot);
 
   BattleResult battleResult({int floor = 1, bool won = true}) {
     return BattleResult(
@@ -52,6 +53,16 @@ void main() {
       containsAll(['title_recruit', 'theme_default', 'effect_default']),
     );
     expect(inventory.length, 3);
+  });
+
+  test('test build can unlock every loot item by default', () async {
+    final inventory = await LootService(
+      nowProvider: () => fixedNow,
+    ).getInventory();
+    final ids = inventory.map((item) => item.id).toSet();
+
+    expect(ids, lootRegistry.map((item) => item.id).toSet());
+    expect(inventory.length, lootRegistry.length);
   });
 
   test('normal drop is deterministic for floor and day', () {

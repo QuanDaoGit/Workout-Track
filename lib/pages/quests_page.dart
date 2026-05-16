@@ -7,6 +7,7 @@ import '../models/workout_models.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
 import '../services/workout_storage_service.dart';
+import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
 import '../widgets/arcade_progress_bar.dart';
 
@@ -25,6 +26,7 @@ class QuestsPageState extends State<QuestsPage> {
   List<WorkoutSession> _sessions = [];
   QuestSummary? _summary;
   int _recoveryXP = 0;
+  int _potionBonusXP = 0;
 
   @override
   void initState() {
@@ -36,11 +38,13 @@ class QuestsPageState extends State<QuestsPage> {
     final sessions = await WorkoutStorageService().getSessions();
     final summary = await _questService.getSummary(sessions);
     final recoveryXP = await RestService().effectiveRecoveryXP(sessions);
+    final potionBonusXP = await XpBoostService().getTotalBonusXP();
     if (!mounted) return;
     setState(() {
       _sessions = sessions;
       _summary = summary;
       _recoveryXP = recoveryXP;
+      _potionBonusXP = potionBonusXP;
       _loading = false;
     });
   }
@@ -71,7 +75,8 @@ class QuestsPageState extends State<QuestsPage> {
     final totalXP =
         XpService.calculateTotalXP(_sessions) +
         summary.claimedRewardXP +
-        _recoveryXP;
+        _recoveryXP +
+        _potionBonusXP;
     final xpProgress = XpService.progressForTotalXP(totalXP);
     final level = xpProgress.level;
     final rank = XpService.getRank(level);

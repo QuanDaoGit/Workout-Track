@@ -22,7 +22,6 @@ class ArcadeChip extends StatefulWidget {
   final VoidCallback onTap;
   final Color selectedColor;
   final Color unselectedTextColor;
-
   @override
   State<ArcadeChip> createState() => _ArcadeChipState();
 }

@@ -15,6 +15,7 @@ class ExerciseCard extends StatelessWidget {
     this.showInfoIcon = false,
     this.isSelected = false,
     this.isFavorite = false,
+    this.isCustom = false,
     this.onFavoriteToggle,
     this.onCheckboxToggle,
     this.onInfoPressed,
@@ -28,6 +29,7 @@ class ExerciseCard extends StatelessWidget {
   final bool showInfoIcon;
   final bool isSelected;
   final bool isFavorite;
+  final bool isCustom;
   final VoidCallback? onFavoriteToggle;
   final VoidCallback? onCheckboxToggle;
   final VoidCallback? onInfoPressed;
@@ -66,27 +68,41 @@ class ExerciseCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    ArcadeImageFilter(
-                      borderRadius: BorderRadius.zero,
-                      child: Image.asset(
-                        exercise.imageAssetPath,
-                        fit: BoxFit.cover,
-                        filterQuality: FilterQuality.low,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const ColoredBox(
-                              color: Color(0xFF0D0D1A),
-                              child: Center(
-                                child: ImageIcon(
-                                  AssetImage(
-                                    'assets/icons/control/icon_sword.png',
+                    if (isCustom || exercise.imageAssetPath.isEmpty)
+                      const ColoredBox(
+                        color: Color(0xFF0D0D1A),
+                        child: Center(
+                          child: ImageIcon(
+                            AssetImage(
+                              'assets/icons/control/icon_hammer.png',
+                            ),
+                            color: Color(0xFF00FF9C),
+                            size: 24,
+                          ),
+                        ),
+                      )
+                    else
+                      ArcadeImageFilter(
+                        borderRadius: BorderRadius.zero,
+                        child: Image.asset(
+                          exercise.imageAssetPath,
+                          fit: BoxFit.cover,
+                          filterQuality: FilterQuality.low,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const ColoredBox(
+                                color: Color(0xFF0D0D1A),
+                                child: Center(
+                                  child: ImageIcon(
+                                    AssetImage(
+                                      'assets/icons/control/icon_sword.png',
+                                    ),
+                                    color: Color(0xFF2A2A4A),
+                                    size: 24,
                                   ),
-                                  color: Color(0xFF2A2A4A),
-                                  size: 24,
                                 ),
                               ),
-                            ),
+                        ),
                       ),
-                    ),
                     Container(
                       color: const Color(0xFF0D0D1A).withValues(alpha: 0.4),
                     ),
@@ -108,7 +124,34 @@ class ExerciseCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  LevelBadge(exercise: exercise),
+                  Row(
+                    children: [
+                      LevelBadge(exercise: exercise),
+                      if (isCustom) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: const Color(0xFF00BFFF),
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'CUSTOM',
+                            style: TextStyle(
+                              fontFamily: 'PressStart2P',
+                              fontSize: 7,
+                              color: Color(0xFF00BFFF),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),

@@ -1,10 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../models/workout_models.dart';
+import '../services/exercise_catalog_service.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_progress_bar.dart';
@@ -83,11 +82,7 @@ class _RootPageState extends State<RootPage> {
   }
 
   Future<void> _resumeOngoingSession(WorkoutSession session) async {
-    final jsonStr = await rootBundle.loadString('assets/exercises.json');
-    final data = jsonDecode(jsonStr) as List<dynamic>;
-    final catalog = [
-      for (final e in data) Exercise.fromJson(e as Map<String, dynamic>),
-    ];
+    final catalog = await ExerciseCatalogService().getFullCatalog();
     final byId = {for (final e in catalog) e.id: e};
     final exerciseIds = session.selectedExerciseIds.isNotEmpty
         ? session.selectedExerciseIds

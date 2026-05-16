@@ -2,28 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../data/loot_registry.dart';
+import '../data/programs_library.dart';
+import '../models/body_goal_models.dart';
+import '../models/body_metrics_models.dart';
 import '../models/loot_item.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
 
 import '../models/profile_models.dart';
+import '../models/program_models.dart';
 import '../models/quest_models.dart';
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
+import '../services/body_goal_service.dart';
+import '../services/body_metrics_service.dart';
 import '../services/profile_service.dart';
+import '../services/program_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
 import '../services/stat_engine.dart';
 import '../services/loot_service.dart';
 import '../services/workout_metric_service.dart';
 import '../services/workout_storage_service.dart';
+import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/loot_avatar_frame.dart';
 import '../widgets/rest_icon.dart';
 import '../widgets/stat_card.dart';
+import 'body_metrics_chart_page.dart';
+import 'body_metrics_onboarding_page.dart';
+import 'goal_selection_page.dart';
 import 'inventory_page.dart';
+import 'log_weight_page.dart';
+import 'programs_library_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, this.onProfileChanged});
@@ -51,6 +64,7 @@ class ProfilePageState extends State<ProfilePage> {
   final StatEngine _statEngine = StatEngine();
   final RestService _restService = RestService();
   final LootService _lootService = LootService();
+  final ProgramService _programService = ProgramService();
   final TextEditingController _nameController = TextEditingController();
 
   bool _loading = true;
@@ -60,12 +74,20 @@ class ProfilePageState extends State<ProfilePage> {
   QuestSummary? _summary;
   RestState _restState = RestState.defaults();
   int _recoveryXP = 0;
+  int _potionBonusXP = 0;
+  bool _bodyMetricsEnabled = false;
+  BodyGoalState? _bodyGoalState;
+  WeightEntry? _lastWeightEntry;
+  bool _canLogWeight = false;
+  int _daysUntilNextLog = 0;
+  String? _activeBoostLabel;
   Map<String, int> _combatStats = {
     for (final stat in StatEngine.stats) stat: 0,
   };
   ProfileData _profile = ProfileData.defaults();
   Map<LootCategory, LootItem> _equippedLoot = {};
   int _ownedLootCount = 0;
+  ProgramProgress? _programProgress;
 
   @override
   void initState() {
@@ -91,6 +113,22 @@ class ProfilePageState extends State<ProfilePage> {
     );
     final equippedLoot = await _lootService.getEquippedLoot();
     final ownedLootCount = await _lootService.getOwnedCount();
+    final programProgress = await _programService.getActiveProgress();
+    final potionBonusXP = await XpBoostService().getTotalBonusXP();
+    final metricsService = BodyMetricsService();
+    final bodyMetricsEnabled = await metricsService.isEnabled();
+    BodyGoalState? bodyGoalState;
+    WeightEntry? lastWeightEntry;
+    bool canLogWeight = false;
+    int daysUntilNextLog = 0;
+    String? activeBoostLabel;
+    if (bodyMetricsEnabled) {
+      bodyGoalState = await BodyGoalService().getGoalState();
+      lastWeightEntry = await metricsService.getLastEntry();
+      canLogWeight = await metricsService.canLogWeight();
+      daysUntilNextLog = await metricsService.daysUntilNextLog();
+      activeBoostLabel = await XpBoostService().getActiveBoostLabel();
+    }
     if (!mounted) return;
 
     if (!_editingName) {
@@ -106,6 +144,14 @@ class ProfilePageState extends State<ProfilePage> {
       _profile = profile;
       _equippedLoot = equippedLoot;
       _ownedLootCount = ownedLootCount;
+      _programProgress = programProgress;
+      _potionBonusXP = potionBonusXP;
+      _bodyMetricsEnabled = bodyMetricsEnabled;
+      _bodyGoalState = bodyGoalState;
+      _lastWeightEntry = lastWeightEntry;
+      _canLogWeight = canLogWeight;
+      _daysUntilNextLog = daysUntilNextLog;
+      _activeBoostLabel = activeBoostLabel;
       _loading = false;
     });
   }
@@ -144,6 +190,56 @@ class ProfilePageState extends State<ProfilePage> {
     await Navigator.of(context).push(arcadeRoute((_) => const InventoryPage()));
     await reload();
     widget.onProfileChanged?.call();
+  }
+
+  Future<void> _openPrograms() async {
+    await Navigator.of(
+      context,
+    ).push(arcadeRoute((_) => const ProgramsLibraryPage()));
+    await reload();
+    widget.onProfileChanged?.call();
+  }
+
+  Future<void> _toggleBodyMetrics(bool value) async {
+    if (value) {
+      final onboarded = await BodyMetricsService().isOnboardingComplete();
+      if (!onboarded) {
+        if (!mounted) return;
+        final result = await Navigator.push<bool>(
+          context,
+          arcadeRoute((_) => const BodyMetricsOnboardingPage()),
+        );
+        if (result != true) return;
+      }
+      await BodyMetricsService().setEnabled(true);
+    } else {
+      await BodyMetricsService().setEnabled(false);
+    }
+    await reload();
+  }
+
+  Future<void> _openLogWeight() async {
+    await Navigator.push(
+      context,
+      arcadeRoute((_) => const LogWeightPage()),
+    );
+    await reload();
+  }
+
+  Future<void> _openBodyMetricsChart() async {
+    await Navigator.push(
+      context,
+      arcadeRoute((_) => const BodyMetricsChartPage()),
+    );
+    await reload();
+  }
+
+  Future<void> _changeGoal() async {
+    final result = await Navigator.push<GoalSelectionResult>(
+      context,
+      arcadeRoute((_) => const GoalSelectionPage()),
+    );
+    if (result != null) await reload();
   }
 
   void _toggleEditMode() {
@@ -438,7 +534,8 @@ class ProfilePageState extends State<ProfilePage> {
     final totalXP =
         XpService.calculateTotalXP(_sessions) +
         summary.claimedRewardXP +
-        _recoveryXP;
+        _recoveryXP +
+        _potionBonusXP;
     final level = XpService.getLevel(totalXP);
     final rank = XpService.getRank(level);
     final xpProgress = XpService.progressForTotalXP(totalXP);
@@ -525,6 +622,12 @@ class ProfilePageState extends State<ProfilePage> {
         const SizedBox(height: 18),
         StatCard(stats: _combatStats),
         const SizedBox(height: 12),
+        _buildProgramsSection(),
+        if (_bodyMetricsEnabled) ...[
+          const SizedBox(height: 12),
+          _buildBodyMetricsSection(),
+        ],
+        const SizedBox(height: 12),
         PixelButton(label: 'LOOT INVENTORY', onPressed: _openInventory),
         const SizedBox(height: 18),
         const _SectionHeader(title: 'RPG CORE'),
@@ -573,6 +676,170 @@ class ProfilePageState extends State<ProfilePage> {
           iconPath: 'assets/icons/control/icon_trophy.png',
           label: 'LIFETIME XP',
           value: '$totalXP XP',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProgramsSection() {
+    final progress = _programProgress;
+    final program = progress == null ? null : programById(progress.programId);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeader(title: 'PROGRAMS'),
+        const SizedBox(height: 10),
+        if (progress == null || program == null)
+          _InfoPanel(
+            iconPath: 'assets/icons/control/icon_scroll.png',
+            title: 'No active program',
+            subtitle: 'Pick a weekly plan and follow one day at a time.',
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF121225),
+              border: Border.all(color: const Color(0xFF2A2A4A)),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              children: [
+                const ImageIcon(
+                  AssetImage('assets/icons/control/icon_scroll.png'),
+                  size: 20,
+                  color: Color(0xFF00FF9C),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        program.name,
+                        style: const TextStyle(
+                          fontFamily: 'PressStart2P',
+                          fontSize: 9,
+                          color: Color(0xFFE8E8FF),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}/7',
+                        style: GoogleFonts.shareTechMono(
+                          color: const Color(0xFF6B6B8A),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _MiniTextBadge(label: '${progress.completedSessions} DONE'),
+              ],
+            ),
+          ),
+        const SizedBox(height: 10),
+        PixelButton(
+          label: progress == null ? 'BROWSE PROGRAMS' : 'MANAGE',
+          onPressed: _openPrograms,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBodyMetricsSection() {
+    final goal = _bodyGoalState;
+    final lastEntry = _lastWeightEntry;
+
+    String lastLoggedLabel = 'No entries yet';
+    if (lastEntry != null) {
+      final daysAgo = DateTime.now().difference(lastEntry.loggedAt).inDays;
+      final timeLabel = daysAgo == 0
+          ? 'today'
+          : daysAgo == 1
+              ? 'yesterday'
+              : '$daysAgo days ago';
+      lastLoggedLabel = '$timeLabel · ${lastEntry.weightKg.toStringAsFixed(1)} kg';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeader(title: 'BODY METRICS'),
+        const SizedBox(height: 10),
+        if (goal != null)
+          GestureDetector(
+            onTap: _changeGoal,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF121225),
+                border: Border.all(color: const Color(0xFF00BFFF)),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '${goal.goalLabel} \u2192 ${goal.futureClassName}',
+                style: const TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 8,
+                  color: Color(0xFF00BFFF),
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(height: 10),
+        Text(
+          lastLoggedLabel,
+          style: GoogleFonts.shareTechMono(
+            color: const Color(0xFF6B6B8A),
+            fontSize: 11,
+          ),
+        ),
+        if (goal?.targetWeight != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'heading toward ${goal!.targetWeight!.toStringAsFixed(1)} kg',
+            style: GoogleFonts.shareTechMono(
+              color: const Color(0xFF6B6B8A),
+              fontSize: 11,
+            ),
+          ),
+        ],
+        if (_activeBoostLabel != null) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_potion.png'),
+                color: Color(0xFFFFD700),
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _activeBoostLabel!,
+                style: GoogleFonts.shareTechMono(
+                  color: const Color(0xFFFFD700),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 12),
+        PixelButton(
+          label: _canLogWeight
+              ? 'LOG WEIGHT'
+              : 'NEXT LOG IN $_daysUntilNextLog DAYS',
+          onPressed: _canLogWeight ? _openLogWeight : null,
+        ),
+        const SizedBox(height: 8),
+        PixelButton(
+          label: 'VIEW TREND',
+          onPressed: _openBodyMetricsChart,
         ),
       ],
     );
@@ -739,16 +1006,12 @@ class ProfilePageState extends State<ProfilePage> {
       children: [
         const _SectionHeader(title: 'PLAYER SETUP'),
         const SizedBox(height: 10),
-        _SettingsRow(
+        _SettingsToggleRow(
           iconPath: 'assets/icons/control/icon_stat.png',
-          title: 'Personal Stats',
-          subtitle: 'Height, weight, age, and body context.',
-          onTap: () => _showComingSoon(
-            title: 'Personal Stats',
-            description:
-                'This will hold optional body stats once goals and privacy are designed.',
-            iconPath: 'assets/icons/control/icon_stat.png',
-          ),
+          title: 'Body Metrics',
+          subtitle: _bodyMetricsEnabled ? 'Weekly weight log active.' : 'Opt-in weekly weight tracking.',
+          value: _bodyMetricsEnabled,
+          onChanged: _toggleBodyMetrics,
         ),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_target.png',
@@ -1372,6 +1635,77 @@ class _SettingsRow extends StatelessWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsToggleRow extends StatelessWidget {
+  const _SettingsToggleRow({
+    required this.iconPath,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String iconPath;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF121225),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Row(
+          children: [
+            ImageIcon(
+              AssetImage(iconPath),
+              size: 20,
+              color: const Color(0xFF00FF9C),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Color(0xFFE8E8FF),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: Color(0xFF6B6B8A),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeThumbColor: const Color(0xFF00FF9C),
+              activeTrackColor: const Color(0xFF00FF9C).withValues(alpha: 0.3),
+              inactiveThumbColor: const Color(0xFF6B6B8A),
+              inactiveTrackColor: const Color(0xFF2A2A4A),
+            ),
+          ],
         ),
       ),
     );

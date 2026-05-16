@@ -101,6 +101,39 @@ class RestService {
     return updatedState;
   }
 
+  Future<RestState> addProgramPlannedRestDate(
+    DateTime day, {
+    DateTime? now,
+    RestState? state,
+  }) async {
+    final targetDay = _dateOnly(day);
+    final loadedState = state ?? await loadState(now: now ?? targetDay);
+    final key = dateKey(targetDay);
+    if (loadedState.programRestDateKeys.contains(key)) return loadedState;
+
+    final keys = Set<String>.from(loadedState.programRestDateKeys)..add(key);
+    final updated = loadedState.copyWith(programRestDateKeys: keys);
+    await _saveState(updated);
+    return updated;
+  }
+
+  Future<RestState> addProgramTrainingDate(
+    DateTime day, {
+    DateTime? now,
+    RestState? state,
+  }) async {
+    final targetDay = _dateOnly(day);
+    final loadedState = state ?? await loadState(now: now ?? targetDay);
+    final key = dateKey(targetDay);
+    if (loadedState.programTrainingDateKeys.contains(key)) return loadedState;
+
+    final keys = Set<String>.from(loadedState.programTrainingDateKeys)
+      ..add(key);
+    final updated = loadedState.copyWith(programTrainingDateKeys: keys);
+    await _saveState(updated);
+    return updated;
+  }
+
   Future<int> effectiveRecoveryXP(
     List<WorkoutSession> sessions, {
     DateTime? now,
@@ -171,10 +204,15 @@ class RestService {
     final currentDay = _dateOnly(now ?? _nowProvider());
     final targetDay = _dateOnly(day);
     final key = dateKey(targetDay);
-    final trainingDay = trainingWeekdaysForDate(
-      targetDay,
-      state,
-    ).contains(targetDay.weekday);
+    final programRestDay = state.programRestDateKeys.contains(key);
+    final programTrainingDay = state.programTrainingDateKeys.contains(key);
+    final trainingDay =
+        programTrainingDay ||
+        (!programRestDay &&
+            trainingWeekdaysForDate(
+              targetDay,
+              state,
+            ).contains(targetDay.weekday));
     final completed = _hasCompletedWorkoutOn(targetDay, sessions);
     final abandonedOnly =
         !completed &&
@@ -340,10 +378,10 @@ class RestService {
 
     while (day.isBefore(currentDay)) {
       final key = dateKey(day);
-      final trainingDay = trainingWeekdaysForDate(
-        day,
-        state,
-      ).contains(day.weekday);
+      final trainingDay =
+          state.programTrainingDateKeys.contains(key) ||
+          (!state.programRestDateKeys.contains(key) &&
+              trainingWeekdaysForDate(day, state).contains(day.weekday));
       final protected = state.protectedMissDateKeys.contains(key);
       if (trainingDay &&
           !_hasCompletedWorkoutOn(day, sessions) &&
@@ -441,6 +479,12 @@ class RestService {
     final trainingDays = trainingWeekdaysForDate(weekStart, state);
     for (final weekday in trainingDays) {
       final day = weekStart.add(Duration(days: weekday - 1));
+      if (state.programRestDateKeys.contains(dateKey(day))) continue;
+      if (!_hasCompletedWorkoutOn(day, sessions)) return false;
+    }
+    for (final key in state.programTrainingDateKeys) {
+      final day = parseDateKey(key);
+      if (weekKey(day) != weekKey(weekStart)) continue;
       if (!_hasCompletedWorkoutOn(day, sessions)) return false;
     }
     return true;

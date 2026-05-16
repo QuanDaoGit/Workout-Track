@@ -239,6 +239,34 @@ class _ShopItemVisual extends StatelessWidget {
         item.assetPath,
         fit: BoxFit.contain,
         filterQuality: FilterQuality.none,
+        errorBuilder: (context, error, stackTrace) =>
+            _ShopImageFallback(item: item),
+      ),
+    );
+  }
+}
+
+class _ShopImageFallback extends StatelessWidget {
+  final LootItem item;
+
+  const _ShopImageFallback({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: item.color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: item.color),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        item.name.substring(0, 1).toUpperCase(),
+        style: TextStyle(
+          fontFamily: 'PressStart2P',
+          fontSize: 14,
+          color: item.color,
+        ),
       ),
     );
   }

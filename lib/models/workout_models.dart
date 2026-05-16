@@ -5,6 +5,12 @@ class Exercise {
     required this.level,
     required this.images,
     this.instructions = const [],
+    this.isCustom = false,
+    this.createdAt,
+    this.userNote,
+    this.muscleGroup,
+    this.exerciseType,
+    this.primaryMuscle,
   });
 
   final String id;
@@ -12,6 +18,12 @@ class Exercise {
   final String level;
   final List<String> images;
   final List<String> instructions;
+  final bool isCustom;
+  final DateTime? createdAt;
+  final String? userNote;
+  final String? muscleGroup;
+  final String? exerciseType;
+  final String? primaryMuscle;
 
   String get imageAssetPath {
     if (images.isEmpty) return '';
@@ -30,6 +42,47 @@ class Exercise {
     _ => 3,
   };
 
+  Exercise copyWith({
+    String? id,
+    String? name,
+    String? level,
+    List<String>? images,
+    List<String>? instructions,
+    bool? isCustom,
+    DateTime? createdAt,
+    String? userNote,
+    String? muscleGroup,
+    String? exerciseType,
+    String? primaryMuscle,
+  }) =>
+      Exercise(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        level: level ?? this.level,
+        images: images ?? this.images,
+        instructions: instructions ?? this.instructions,
+        isCustom: isCustom ?? this.isCustom,
+        createdAt: createdAt ?? this.createdAt,
+        userNote: userNote ?? this.userNote,
+        muscleGroup: muscleGroup ?? this.muscleGroup,
+        exerciseType: exerciseType ?? this.exerciseType,
+        primaryMuscle: primaryMuscle ?? this.primaryMuscle,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'level': level,
+    'images': images,
+    'instructions': instructions,
+    if (isCustom) 'isCustom': true,
+    if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+    if (userNote != null) 'userNote': userNote,
+    if (muscleGroup != null) 'muscleGroup': muscleGroup,
+    if (exerciseType != null) 'exerciseType': exerciseType,
+    if (primaryMuscle != null) 'primaryMuscle': primaryMuscle,
+  };
+
   factory Exercise.fromJson(Map<String, dynamic> json) => Exercise(
     id: json['id'] as String? ?? '',
     name: json['name'] as String? ?? 'Unnamed exercise',
@@ -42,6 +95,14 @@ class Exercise {
       for (final s in json['instructions'] as List<dynamic>? ?? const [])
         s as String,
     ],
+    isCustom: json['isCustom'] as bool? ?? false,
+    createdAt: json['createdAt'] != null
+        ? DateTime.tryParse(json['createdAt'] as String)
+        : null,
+    userNote: json['userNote'] as String?,
+    muscleGroup: json['muscleGroup'] as String?,
+    exerciseType: json['exerciseType'] as String?,
+    primaryMuscle: json['primaryMuscle'] as String?,
   );
 }
 

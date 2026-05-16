@@ -8,15 +8,21 @@ import '../models/loot_item.dart';
 import 'battle_engine.dart';
 
 class LootService {
+  static const bool unlockAllLootForTestBuild = true;
+
   static const String _inventoryKey = 'loot_inventory';
   static const String _scrapKey = 'loot_scrap_balance';
   static const String _equippedKey = 'equipped_loot';
   static const String _unclaimedKey = 'unclaimed_loot';
 
   final DateTime Function() _now;
+  final bool _unlockAllLoot;
 
-  LootService({DateTime Function()? nowProvider})
-    : _now = nowProvider ?? DateTime.now;
+  LootService({
+    DateTime Function()? nowProvider,
+    bool unlockAllLoot = unlockAllLootForTestBuild,
+  }) : _now = nowProvider ?? DateTime.now,
+       _unlockAllLoot = unlockAllLoot;
 
   LootItem rollNormalDrop(int floor) {
     final random = Random(floor * 777 + _dayOfYear(_now()));
@@ -268,7 +274,11 @@ class LootService {
   Future<Set<String>> _ownedIds(SharedPreferences prefs) async {
     final ids = prefs.getStringList(_inventoryKey)?.toSet() ?? <String>{};
     ids.addAll(defaultLootIds);
-    if (prefs.getStringList(_inventoryKey) == null) {
+    if (_unlockAllLoot) {
+      ids.addAll(lootRegistry.map((item) => item.id));
+    }
+    final savedIds = prefs.getStringList(_inventoryKey);
+    if (savedIds == null || (_unlockAllLoot && ids.length != savedIds.length)) {
       await _saveOwnedIds(prefs, ids);
     }
     return ids;

@@ -1,6 +1,9 @@
 import '../models/loot_item.dart';
 
-const String lootPlaceholderPath = 'assets/loot/placeholders';
+const String unlockChestPath = 'assets/unlocks/chests';
+const String unlockEffectPath = 'assets/unlocks/effects';
+const String unlockFramePath = 'assets/unlocks/frames';
+const String unlockThemePath = 'assets/unlocks/themes';
 
 const List<LootItem> lootRegistry = [
   LootItem(
@@ -9,7 +12,7 @@ const List<LootItem> lootRegistry = [
     description: 'Simple dark iron pixel border.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.common,
-    assetPath: '$lootPlaceholderPath/frame_iron.png',
+    assetPath: '$unlockFramePath/frame_iron.png',
     colorValue: 0xFF6B6B8A,
   ),
   LootItem(
@@ -18,7 +21,7 @@ const List<LootItem> lootRegistry = [
     description: 'Grey cobblestone border.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.common,
-    assetPath: '$lootPlaceholderPath/frame_stone.png',
+    assetPath: '$unlockFramePath/frame_stone.png',
     colorValue: 0xFF9A9AAA,
   ),
   LootItem(
@@ -27,7 +30,7 @@ const List<LootItem> lootRegistry = [
     description: 'Warm bronze metallic border.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.uncommon,
-    assetPath: '$lootPlaceholderPath/frame_bronze.png',
+    assetPath: '$unlockFramePath/frame_bronze.png',
     colorValue: 0xFFB77A3A,
   ),
   LootItem(
@@ -36,7 +39,7 @@ const List<LootItem> lootRegistry = [
     description: 'Polished silver pixel border.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.uncommon,
-    assetPath: '$lootPlaceholderPath/frame_silver.png',
+    assetPath: '$unlockFramePath/frame_silver.png',
     colorValue: 0xFFC8D0E0,
   ),
   LootItem(
@@ -45,7 +48,7 @@ const List<LootItem> lootRegistry = [
     description: 'Ornate gold border with corner studs.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.rare,
-    assetPath: '$lootPlaceholderPath/frame_gold.png',
+    assetPath: '$unlockFramePath/frame_gold.png',
     colorValue: 0xFFFFD700,
     bossFloor: 10,
     bossExclusive: true,
@@ -56,7 +59,7 @@ const List<LootItem> lootRegistry = [
     description: 'Glowing green pixel border.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.rare,
-    assetPath: '$lootPlaceholderPath/frame_neon.png',
+    assetPath: '$unlockFramePath/frame_neon.png',
     colorValue: 0xFF00FF9C,
   ),
   LootItem(
@@ -65,7 +68,7 @@ const List<LootItem> lootRegistry = [
     description: 'Flame border with red-orange pixels.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.epic,
-    assetPath: '$lootPlaceholderPath/frame_inferno.png',
+    assetPath: '$unlockFramePath/frame_inferno.png',
     colorValue: 0xFFFF6B1A,
     bossFloor: 40,
     bossExclusive: true,
@@ -76,7 +79,7 @@ const List<LootItem> lootRegistry = [
     description: 'Dark purple border with pixel particles.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.epic,
-    assetPath: '$lootPlaceholderPath/frame_void.png',
+    assetPath: '$unlockFramePath/frame_void.png',
     colorValue: 0xFF9B59B6,
   ),
   LootItem(
@@ -188,7 +191,7 @@ const List<LootItem> lootRegistry = [
     description: 'Current dark dungeon cards.',
     category: LootCategory.homeTheme,
     rarity: LootRarity.common,
-    assetPath: '$lootPlaceholderPath/theme_default.png',
+    assetPath: '$unlockThemePath/theme_default.png',
     colorValue: 0xFF1A1A2E,
     isDefault: true,
   ),
@@ -198,7 +201,7 @@ const List<LootItem> lootRegistry = [
     description: 'Dark grey stone card tint.',
     category: LootCategory.homeTheme,
     rarity: LootRarity.uncommon,
-    assetPath: '$lootPlaceholderPath/theme_stone.png',
+    assetPath: '$unlockThemePath/theme_stone.png',
     colorValue: 0xFF2A2A3E,
   ),
   LootItem(
@@ -207,7 +210,7 @@ const List<LootItem> lootRegistry = [
     description: 'Deep green card tint.',
     category: LootCategory.homeTheme,
     rarity: LootRarity.rare,
-    assetPath: '$lootPlaceholderPath/theme_forest.png',
+    assetPath: '$unlockThemePath/theme_forest.png',
     colorValue: 0xFF123A2A,
   ),
   LootItem(
@@ -216,7 +219,7 @@ const List<LootItem> lootRegistry = [
     description: 'Dark ember card tint.',
     category: LootCategory.homeTheme,
     rarity: LootRarity.epic,
-    assetPath: '$lootPlaceholderPath/theme_inferno.png',
+    assetPath: '$unlockThemePath/theme_inferno.png',
     colorValue: 0xFF3A1717,
   ),
   LootItem(
@@ -225,7 +228,7 @@ const List<LootItem> lootRegistry = [
     description: 'Default green hit flash.',
     category: LootCategory.battleEffect,
     rarity: LootRarity.common,
-    assetPath: '$lootPlaceholderPath/effect_default.png',
+    assetPath: '$unlockEffectPath/effect_default.png',
     colorValue: 0xFF00FF9C,
     isDefault: true,
   ),
@@ -235,7 +238,7 @@ const List<LootItem> lootRegistry = [
     description: 'Cyan hit flash.',
     category: LootCategory.battleEffect,
     rarity: LootRarity.uncommon,
-    assetPath: '$lootPlaceholderPath/effect_frost.png',
+    assetPath: '$unlockEffectPath/effect_frost.png',
     colorValue: 0xFF00BFFF,
   ),
   LootItem(
@@ -244,7 +247,7 @@ const List<LootItem> lootRegistry = [
     description: 'Gold hit flash.',
     category: LootCategory.battleEffect,
     rarity: LootRarity.rare,
-    assetPath: '$lootPlaceholderPath/effect_solar.png',
+    assetPath: '$unlockEffectPath/effect_solar.png',
     colorValue: 0xFFFFD700,
   ),
   LootItem(
@@ -253,13 +256,13 @@ const List<LootItem> lootRegistry = [
     description: 'Purple hit flash.',
     category: LootCategory.battleEffect,
     rarity: LootRarity.epic,
-    assetPath: '$lootPlaceholderPath/effect_void.png',
+    assetPath: '$unlockEffectPath/effect_void.png',
     colorValue: 0xFF9B59B6,
   ),
 ];
 
-const String commonChestAsset = '$lootPlaceholderPath/chest_common.png';
-const String bossChestAsset = '$lootPlaceholderPath/chest_boss.png';
+const String commonChestAsset = '$unlockChestPath/chest_common.png';
+const String bossChestAsset = '$unlockChestPath/chest_boss.png';
 
 LootItem? lootItemById(String id) {
   for (final item in lootRegistry) {

@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/workout_models.dart';
+import '../services/custom_exercise_service.dart';
 import '../services/favorite_service.dart';
+import '../theme/tokens.dart';
 import '../widgets/arcade_image_filter.dart';
+import '../widgets/arcade_route.dart';
 import '../widgets/level_badge.dart';
+import '../widgets/pixel_button.dart';
+import 'create_exercise_page.dart';
 
 class ExerciseDetailPage extends StatefulWidget {
   const ExerciseDetailPage({super.key, required this.exercise});
@@ -36,6 +41,58 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
     );
     if (!mounted) return;
     setState(() => _isFavorite = isNowFavorite);
+  }
+
+  Future<void> _confirmDelete(BuildContext context, Exercise exercise) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        title: const Text(
+          'DELETE THIS EXERCISE?',
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: 10,
+            color: kDanger,
+          ),
+        ),
+        content: Text(
+          'PAST SESSIONS REMAIN.',
+          style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'CANCEL',
+              style: GoogleFonts.shareTechMono(color: kMutedText),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: kDanger,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            child: const Text(
+              'CONFIRM',
+              style: TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 9,
+                color: Color(0xFF0D0D1A),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await CustomExerciseService().deleteCustomExercise(exercise.id);
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
   }
 
   @override
@@ -76,7 +133,18 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (exercise.imageAssetPath.isNotEmpty)
+                  if (exercise.isCustom)
+                    const ColoredBox(
+                      color: Color(0xFF1A1A2E),
+                      child: Center(
+                        child: ImageIcon(
+                          AssetImage('assets/icons/control/icon_hammer.png'),
+                          color: Color(0xFF00FF9C),
+                          size: 64,
+                        ),
+                      ),
+                    )
+                  else if (exercise.imageAssetPath.isNotEmpty)
                     ArcadeImageFilter(
                       borderRadius: BorderRadius.zero,
                       child: Image.asset(
@@ -106,6 +174,74 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 24),
+
+                if (exercise.isCustom) ...[
+                  // Custom exercise info
+                  if (exercise.muscleGroup != null) ...[
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: kCyan),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'CUSTOM',
+                            style: const TextStyle(
+                              fontFamily: 'PressStart2P',
+                              fontSize: 7,
+                              color: kCyan,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          exercise.muscleGroup!.toUpperCase(),
+                          style: GoogleFonts.shareTechMono(
+                            color: kMutedText,
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (exercise.exerciseType != null) ...[
+                          Text(
+                            ' / ',
+                            style: GoogleFonts.shareTechMono(
+                              color: kMutedText,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            exercise.exerciseType!.toUpperCase(),
+                            style: GoogleFonts.shareTechMono(
+                              color: kMutedText,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (exercise.userNote != null &&
+                      exercise.userNote!.isNotEmpty) ...[
+                    Text(
+                      'NOTE',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      exercise.userNote!,
+                      style: GoogleFonts.shareTechMono(
+                        textStyle: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ],
 
                 if (exercise.instructions.isNotEmpty) ...[
                   Text(
@@ -155,13 +291,51 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                         ],
                       ),
                     ),
-                ] else
+                ] else if (!exercise.isCustom)
                   Text(
                     'No instructions available.',
                     style: GoogleFonts.shareTechMono(
                       textStyle: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
+
+                // Edit/Delete for custom exercises
+                if (exercise.isCustom) ...[
+                  const SizedBox(height: 24),
+                  PixelButton(
+                    label: 'EDIT',
+                    onPressed: () async {
+                      final edited = await Navigator.push<bool>(
+                        context,
+                        arcadeRoute(
+                          (_) => CreateExercisePage(exercise: exercise),
+                        ),
+                      );
+                      if (edited == true && mounted) {
+                        Navigator.of(context).pop(true);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: () => _confirmDelete(context, exercise),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kDanger,
+                      minimumSize: const Size(double.infinity, 44),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    child: const Text(
+                      'DELETE',
+                      style: TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 10,
+                        color: Color(0xFF0D0D1A),
+                      ),
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 32),
               ]),

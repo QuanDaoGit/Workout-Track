@@ -327,6 +327,8 @@ class _LootGridTile extends StatelessWidget {
                       item.assetPath,
                       fit: BoxFit.contain,
                       filterQuality: FilterQuality.none,
+                      errorBuilder: (context, error, stackTrace) =>
+                          _LootImageFallback(item: item),
                     ),
                   ),
                   if (!owned)
@@ -358,6 +360,32 @@ class _LootGridTile extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LootImageFallback extends StatelessWidget {
+  final LootItem item;
+
+  const _LootImageFallback({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: item.color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: item.color),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        item.name.substring(0, 1).toUpperCase(),
+        style: TextStyle(
+          fontFamily: 'PressStart2P',
+          fontSize: 14,
+          color: item.color,
         ),
       ),
     );

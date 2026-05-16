@@ -65,6 +65,8 @@ class RestState {
     this.autoRecoveryStartKey,
     this.appliedDecayUnits = 0,
     this.scheduleByWeekKey = const {},
+    this.programRestDateKeys = const {},
+    this.programTrainingDateKeys = const {},
   });
 
   static const defaultTrainingWeekdays = {1, 3, 5};
@@ -81,6 +83,8 @@ class RestState {
   final String? autoRecoveryStartKey;
   final int appliedDecayUnits;
   final Map<String, Set<int>> scheduleByWeekKey;
+  final Set<String> programRestDateKeys;
+  final Set<String> programTrainingDateKeys;
 
   RestState copyWith({
     Set<int>? trainingWeekdays,
@@ -95,6 +99,8 @@ class RestState {
     String? autoRecoveryStartKey,
     int? appliedDecayUnits,
     Map<String, Set<int>>? scheduleByWeekKey,
+    Set<String>? programRestDateKeys,
+    Set<String>? programTrainingDateKeys,
     bool clearPending = false,
     bool clearDecayChain = false,
   }) {
@@ -119,6 +125,9 @@ class RestState {
       autoRecoveryStartKey: autoRecoveryStartKey ?? this.autoRecoveryStartKey,
       appliedDecayUnits: appliedDecayUnits ?? this.appliedDecayUnits,
       scheduleByWeekKey: scheduleByWeekKey ?? this.scheduleByWeekKey,
+      programRestDateKeys: programRestDateKeys ?? this.programRestDateKeys,
+      programTrainingDateKeys:
+          programTrainingDateKeys ?? this.programTrainingDateKeys,
     );
   }
 
@@ -141,6 +150,8 @@ class RestState {
     'scheduleByWeekKey': scheduleByWeekKey.map(
       (key, weekdays) => MapEntry(key, _sortedWeekdays(weekdays)),
     ),
+    'programRestDateKeys': programRestDateKeys.toList()..sort(),
+    'programTrainingDateKeys': programTrainingDateKeys.toList()..sort(),
   };
 
   factory RestState.fromJson(Map<String, dynamic> json) {
@@ -175,6 +186,16 @@ class RestState {
                 .entries)
           entry.key: _decodeWeekdays(entry.value),
       },
+      programRestDateKeys:
+          (json['programRestDateKeys'] as List<dynamic>?)
+              ?.cast<String>()
+              .toSet() ??
+          <String>{},
+      programTrainingDateKeys:
+          (json['programTrainingDateKeys'] as List<dynamic>?)
+              ?.cast<String>()
+              .toSet() ??
+          <String>{},
     );
   }
 

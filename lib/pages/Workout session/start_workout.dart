@@ -1,14 +1,13 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../data/curated_exercises.dart';
 import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
+import '../../services/exercise_catalog_service.dart';
 import '../../services/favorite_service.dart';
+import '../../services/program_service.dart';
 import '../../services/workout_storage_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_chip.dart';
@@ -24,7 +23,22 @@ import 'active_workout.dart';
 enum _OngoingAction { continueOld, endOldAndStartNew }
 
 class StartWorkoutPage extends StatefulWidget {
-  const StartWorkoutPage({super.key});
+  const StartWorkoutPage({
+    super.key,
+    this.initialMuscleGroup,
+    this.programDayLabel,
+    this.programFocusSummary,
+    this.programCuratedExerciseIds,
+    this.isProgramWorkout = false,
+    this.advanceProgramRestDayOnCompletion = false,
+  });
+
+  final String? initialMuscleGroup;
+  final String? programDayLabel;
+  final String? programFocusSummary;
+  final List<String>? programCuratedExerciseIds;
+  final bool isProgramWorkout;
+  final bool advanceProgramRestDayOnCompletion;
 
   @override
   State<StartWorkoutPage> createState() => _StartWorkoutPageState();
@@ -37,6 +51,8 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   int selectedHour = 1;
   int selectedMinute = 30;
   Future<List<Exercise>>? exerciseCatalogFuture;
+
+  bool get _programMode => widget.isProgramWorkout;
 
   static const List<int> minuteOptions = [
     0,
@@ -55,6 +71,12 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
 
   Future<List<Exercise>> get safeExerciseCatalogFuture {
     return exerciseCatalogFuture ??= _loadExerciseCatalog();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    selectedMuscleGroup = widget.initialMuscleGroup;
   }
 
   int? get workoutMinutes {
@@ -106,10 +128,12 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       builder: (context) {
         return SafeArea(
           child: _ExercisePickerSheet(
-            muscleGroup: muscleGroup,
+            muscleGroup: widget.programDayLabel ?? muscleGroup,
             exerciseCatalogFuture: safeExerciseCatalogFuture,
             curatedExerciseIds:
-                curatedExerciseIdsByMuscleGroup[muscleGroup] ?? const [],
+                widget.programCuratedExerciseIds ??
+                curatedExerciseIdsByMuscleGroup[muscleGroup] ??
+                const [],
             recommendedCount: exerciseCount,
           ),
         );
@@ -146,6 +170,9 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       muscleGroup: muscleGroup,
       durationMinutes: workoutMinutes!,
       exercises: selected,
+      isProgramWorkout: widget.isProgramWorkout,
+      advanceProgramRestDayOnCompletion:
+          widget.advanceProgramRestDayOnCompletion,
     );
   }
 
@@ -154,6 +181,8 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     required int durationMinutes,
     required List<Exercise> exercises,
     WorkoutSession? resumeFromSession,
+    bool isProgramWorkout = false,
+    bool advanceProgramRestDayOnCompletion = false,
   }) {
     Navigator.push(
       context,
@@ -163,6 +192,8 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
           durationMinutes: durationMinutes,
           exercises: exercises,
           resumeFromSession: resumeFromSession,
+          isProgramWorkout: isProgramWorkout,
+          advanceProgramRestDayOnCompletion: advanceProgramRestDayOnCompletion,
         ),
       ),
     );
@@ -239,6 +270,11 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       durationMinutes: session.targetDurationMinutes,
       exercises: exercises,
       resumeFromSession: session,
+      isProgramWorkout: await ProgramService().isOngoingProgramSession(
+        session.id,
+      ),
+      advanceProgramRestDayOnCompletion: await ProgramService()
+          .isOngoingProgramRestSession(session.id),
     );
   }
 
@@ -261,6 +297,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
         isAbandoned: true,
       ),
     );
+    await ProgramService().clearOngoingProgramSession(session.id);
   }
 
   int _liveElapsedSeconds(WorkoutSession session) {
@@ -285,24 +322,31 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
           children: [
             const _StepHeader(label: '1. CHOOSE TARGET'),
             const SizedBox(height: 8),
-            const Text(
-              'Pick the muscle group for this run.',
-              style: TextStyle(color: Color(0xFF6B6B8A)),
-            ),
-            const SizedBox(height: 20),
-
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final muscleGroup in muscleGroups)
-                  ArcadeChip(
-                    label: muscleGroup,
-                    selected: selectedMuscleGroup == muscleGroup,
-                    onTap: () => selectMuscleGroup(muscleGroup),
-                  ),
-              ],
-            ),
+            if (_programMode)
+              _ProgramTargetSummary(
+                label: widget.programDayLabel ?? selectedMuscleGroup ?? 'RUN',
+                summary:
+                    widget.programFocusSummary ?? 'Program workout selected.',
+              )
+            else ...[
+              const Text(
+                'Pick the muscle group for this run.',
+                style: TextStyle(color: Color(0xFF6B6B8A)),
+              ),
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final muscleGroup in muscleGroups)
+                    ArcadeChip(
+                      label: muscleGroup,
+                      selected: selectedMuscleGroup == muscleGroup,
+                      onTap: () => selectMuscleGroup(muscleGroup),
+                    ),
+                ],
+              ),
+            ],
 
             if (selectedMuscleGroup != null) ...[
               const SizedBox(height: 28),
@@ -397,14 +441,61 @@ class _StepHeader extends StatelessWidget {
   }
 }
 
-Future<List<Exercise>> _loadExerciseCatalog() async {
-  final jsonText = await rootBundle.loadString('assets/exercises.json');
-  final rawExercises = jsonDecode(jsonText) as List<dynamic>;
+class _ProgramTargetSummary extends StatelessWidget {
+  const _ProgramTargetSummary({required this.label, required this.summary});
 
-  return [
-    for (final rawExercise in rawExercises)
-      Exercise.fromJson(rawExercise as Map<String, dynamic>),
-  ];
+  final String label;
+  final String summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kCard,
+        border: Border.all(color: kBorder),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          const ImageIcon(
+            AssetImage('assets/icons/control/icon_scroll.png'),
+            color: kAmber,
+            size: 18,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 10,
+                    color: kNeon,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  summary,
+                  style: GoogleFonts.shareTechMono(
+                    color: kMutedText,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<List<Exercise>> _loadExerciseCatalog() async {
+  return ExerciseCatalogService().getFullCatalog();
 }
 
 class _ExercisePickerSheet extends StatefulWidget {
@@ -631,6 +722,7 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
                         showCheckbox: true,
                         isFavorite: favoriteExerciseIds.contains(exercise.id),
                         isSelected: selectedExerciseIds.contains(exercise.id),
+                        isCustom: exercise.isCustom,
                         onTap: () => toggleSelectedExercise(exercise.id),
                         onInfoPressed: () => _showExercisePreview(exercise),
                         onCheckboxToggle: () =>
@@ -663,7 +755,23 @@ class _ExercisePickerSheetState extends State<_ExercisePickerSheet> {
       for (final exercise in exercises) exercise.id: exercise,
     };
 
+    // Map from custom exercise muscleGroup to start_workout muscle groups
+    const muscleGroupToFilter = {
+      'chest': 'Chest',
+      'back': 'Back',
+      'arms': 'Arms',
+      'legs': 'Legs',
+    };
+
+    // Custom exercises matching this muscle group go first
+    final customForGroup = exercises.where((e) {
+      if (!e.isCustom) return false;
+      final mapped = muscleGroupToFilter[e.muscleGroup];
+      return mapped == widget.muscleGroup;
+    }).toList();
+
     return [
+      ...customForGroup,
       for (final id in curatedIds)
         if (exerciseById[id] != null) exerciseById[id]!,
     ];

@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
+import '../../services/program_service.dart';
 import '../../services/workout_storage_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_dialog_button_column.dart';
@@ -26,12 +27,16 @@ class ActiveWorkoutPage extends StatefulWidget {
     required this.durationMinutes,
     required this.exercises,
     this.resumeFromSession,
+    this.isProgramWorkout = false,
+    this.advanceProgramRestDayOnCompletion = false,
   });
 
   final String muscleGroup;
   final int durationMinutes;
   final List<Exercise> exercises;
   final WorkoutSession? resumeFromSession;
+  final bool isProgramWorkout;
+  final bool advanceProgramRestDayOnCompletion;
 
   @override
   State<ActiveWorkoutPage> createState() => _ActiveWorkoutPageState();
@@ -201,6 +206,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           isPartial: false,
           startedAt: _sessionStartTime,
           resumeFromSession: widget.resumeFromSession,
+          isProgramWorkout: widget.isProgramWorkout,
+          advanceProgramRestDayOnCompletion:
+              widget.advanceProgramRestDayOnCompletion,
         ),
       ),
     );
@@ -212,11 +220,12 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _updateElapsed();
     _timer?.cancel();
     final logs = _buildExerciseLogs();
+    final sessionId =
+        widget.resumeFromSession?.id ??
+        DateTime.now().millisecondsSinceEpoch.toString();
     await WorkoutStorageService().replaceOngoingSession(
       WorkoutSession(
-        id:
-            widget.resumeFromSession?.id ??
-            DateTime.now().millisecondsSinceEpoch.toString(),
+        id: sessionId,
         date: DateTime.now(),
         startedAt: _sessionStartTime,
         muscleGroup: widget.muscleGroup,
@@ -231,6 +240,12 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
       ),
     );
+    if (widget.isProgramWorkout || widget.advanceProgramRestDayOnCompletion) {
+      await ProgramService().markOngoingProgramSession(
+        sessionId,
+        restDayWorkout: widget.advanceProgramRestDayOnCompletion,
+      );
+    }
     if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
@@ -251,6 +266,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           isAbandoned: true,
           startedAt: _sessionStartTime,
           resumeFromSession: widget.resumeFromSession,
+          isProgramWorkout: widget.isProgramWorkout,
+          advanceProgramRestDayOnCompletion:
+              widget.advanceProgramRestDayOnCompletion,
         ),
       ),
     );

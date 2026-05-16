@@ -153,6 +153,8 @@ class _LootChestPageState extends State<LootChestPage> {
                         height: 96,
                         fit: BoxFit.contain,
                         filterQuality: FilterQuality.none,
+                        errorBuilder: (context, error, stackTrace) =>
+                            _ChestFallback(color: loot.item.rarity.color),
                       ),
                       const SizedBox(height: 18),
                       PulseColorText(
@@ -349,6 +351,30 @@ class _LootItemPreview extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ChestFallback extends StatelessWidget {
+  final Color color;
+
+  const _ChestFallback({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 96,
+      height: 96,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        'CHEST',
+        style: TextStyle(fontFamily: 'PressStart2P', fontSize: 8, color: color),
       ),
     );
   }

@@ -1,9 +1,7 @@
-import 'dart:convert';
 import 'dart:math';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../data/curated_exercises.dart';
@@ -11,11 +9,13 @@ import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import '../services/battle_engine.dart';
 import '../services/battle_scheduler.dart';
+import '../services/exercise_catalog_service.dart';
 import '../services/favorite_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
 import '../services/workout_metric_service.dart';
 import '../services/workout_storage_service.dart';
+import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
@@ -25,6 +25,7 @@ import '../widgets/pixel_loader.dart';
 import 'Workout session/session_detail.dart';
 import 'calendar_page.dart';
 import 'battle_page.dart';
+import 'create_exercise_page.dart';
 import 'exercise_detail.dart';
 
 String fmtVol(double v) {
@@ -982,6 +983,7 @@ class _StatsTabState extends State<_StatsTab> {
   List<WorkoutSession> _sessions = [];
   int _questXP = 0;
   int _recoveryXP = 0;
+  int _potionBonusXP = 0;
   bool _loading = true;
   bool _showRecords = false;
 
@@ -1013,9 +1015,10 @@ class _StatsTabState extends State<_StatsTab> {
     final questXP = await QuestService().claimedRewardXP();
     final restService = RestService();
     final currentRecoveryXP = await restService.effectiveRecoveryXP(all);
+    final potionBonusXP = await XpBoostService().getTotalBonusXP();
     await restService.ensureAutomaticRecoveryForToday(
       sessions: all,
-      baseXP: XpService.calculateTotalXP(all) + questXP + currentRecoveryXP,
+      baseXP: XpService.calculateTotalXP(all) + questXP + currentRecoveryXP + potionBonusXP,
     );
     final recoveryXP = await restService.effectiveRecoveryXP(all);
     if (!mounted) return;
@@ -1023,6 +1026,7 @@ class _StatsTabState extends State<_StatsTab> {
       _sessions = all;
       _questXP = questXP;
       _recoveryXP = recoveryXP;
+      _potionBonusXP = potionBonusXP;
       _loading = false;
     });
   }
@@ -1199,7 +1203,7 @@ class _StatsTabState extends State<_StatsTab> {
 
     // ── Computed values ──────────────────────────────────────────────────────
     final totalXP =
-        XpService.calculateTotalXP(_sessions) + _questXP + _recoveryXP;
+        XpService.calculateTotalXP(_sessions) + _questXP + _recoveryXP + _potionBonusXP;
     final xpProgress = XpService.progressForTotalXP(totalXP);
     final level = xpProgress.level;
     final rank = XpService.getRank(level);
@@ -1732,11 +1736,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
   }
 
   Future<void> _load() async {
-    final jsonStr = await rootBundle.loadString('assets/exercises.json');
-    final data = jsonDecode(jsonStr) as List<dynamic>;
-    final catalog = [
-      for (final e in data) Exercise.fromJson(e as Map<String, dynamic>),
-    ];
+    final catalog = await ExerciseCatalogService().getFullCatalog();
     final favs = await FavoriteService().getFavoriteExerciseIds();
     if (!mounted) return;
     setState(() {
@@ -1759,16 +1759,35 @@ class _ExercisesTabState extends State<_ExercisesTab>
     final allowedIds = _selectedGroup == 'All'
         ? curatedExerciseIdsByMuscleGroup.values.expand((ids) => ids).toSet()
         : curatedExerciseIdsByMuscleGroup[_selectedGroup]?.toSet() ?? {};
+
+    // Map custom exercise muscle groups to existing filter groups
+    const muscleGroupToFilter = {
+      'chest': 'Chest',
+      'back': 'Back',
+      'arms': 'Arms',
+      'legs': 'Legs',
+    };
+
     return _catalog
-        .where(
-          (e) =>
-              allowedIds.contains(e.id) &&
-              (!_favOnly || _favoriteIds.contains(e.id)) &&
-              (_query.isEmpty ||
-                  e.name.toLowerCase().contains(_query.toLowerCase())),
-        )
+        .where((e) {
+          final matchesQuery = _query.isEmpty ||
+              e.name.toLowerCase().contains(_query.toLowerCase());
+          final matchesFav = !_favOnly || _favoriteIds.contains(e.id);
+          if (!matchesQuery || !matchesFav) return false;
+
+          if (e.isCustom) {
+            if (_selectedGroup == 'All') return true;
+            final mapped = muscleGroupToFilter[e.muscleGroup];
+            return mapped == _selectedGroup;
+          }
+          return allowedIds.contains(e.id);
+        })
         .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+      ..sort((a, b) {
+        // Custom exercises first, then alphabetical
+        if (a.isCustom != b.isCustom) return a.isCustom ? -1 : 1;
+        return a.name.compareTo(b.name);
+      });
   }
 
   @override
@@ -1857,6 +1876,31 @@ class _ExercisesTabState extends State<_ExercisesTab>
           ),
         ),
 
+        // Create button
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: SizedBox(
+            height: 36,
+            child: FilledButton.icon(
+              onPressed: () async {
+                final created = await Navigator.push<bool>(
+                  context,
+                  arcadeRoute((_) => const CreateExercisePage()),
+                );
+                if (created == true) _load();
+              },
+              icon: const Icon(Icons.add_sharp, size: 16),
+              label: const Text(
+                '+ CREATE',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 9,
+                ),
+              ),
+            ),
+          ),
+        ),
+
         // Exercise list
         Expanded(
           child: _loading
@@ -1900,6 +1944,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
                     return ExerciseCard(
                       exercise: ex,
                       isFavorite: _favoriteIds.contains(ex.id),
+                      isCustom: ex.isCustom,
                       showFavorite: true,
                       showArrow: true,
                       onTap: () => Navigator.push(

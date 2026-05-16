@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
+import '../../models/overload_models.dart';
 import '../../models/workout_models.dart';
-import '../../services/workout_storage_service.dart';
+import '../../services/progressive_overload_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/segmented_progress_bar.dart';
@@ -48,6 +50,13 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   bool _restActive = false;
   Timer? _restTimer;
 
+  ProgressiveOverloadService? _overloadService;
+  final Map<int, OverloadDelta?> _deltas = {};
+  final Set<int> _prSets = {};
+  final Map<int, int> _prFlashTriggers = {};
+  double _sessionBest1RM = 0.0;
+  final Set<int> _interactedRows = {};
+
   @override
   void initState() {
     super.initState();
@@ -64,22 +73,17 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       _rows.add(_SetRow());
       _rowKeys.add(GlobalKey());
     }
-    _loadPreviousSets();
+    _loadOverloadService();
   }
 
-  Future<void> _loadPreviousSets() async {
-    final sessions = await WorkoutStorageService().getSessions();
-    sessions.sort((a, b) => b.date.compareTo(a.date));
-    for (final session in sessions) {
-      for (final log in session.exercises) {
-        if (log.exerciseId == widget.exercise.id && log.sets.isNotEmpty) {
-          if (mounted) {
-            setState(() => _previousSets = log.sets);
-          }
-          return;
-        }
-      }
-    }
+  Future<void> _loadOverloadService() async {
+    final service = ProgressiveOverloadService();
+    await service.load();
+    if (!mounted) return;
+    setState(() {
+      _overloadService = service;
+      _previousSets = service.getLastSessionSets(widget.exercise.id);
+    });
   }
 
   @override
@@ -148,13 +152,36 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     final row = _rows[index];
     final w = double.tryParse(row.weight.text);
     final r = int.tryParse(row.reps.text);
-    if (w == null || w <= 0 || r == null || r <= 0) {
+    if (w == null || w < 0 || r == null || r <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Fill in weight and reps before logging')),
       );
       return;
     }
-    setState(() => _lockedSets.add(index));
+
+    OverloadDelta? delta;
+    bool isPR = false;
+    final svc = _overloadService;
+    if (svc != null) {
+      delta = svc.getDelta(widget.exercise.id, index, w, r);
+      final isBodyweight = w == 0;
+      if (svc.checkPR(widget.exercise.id, w, r, isBodyweight)) {
+        final rm = ProgressiveOverloadService.epley1RM(w, r, isBodyweight);
+        if (rm > _sessionBest1RM) {
+          isPR = true;
+          _sessionBest1RM = rm;
+        }
+      }
+    }
+
+    setState(() {
+      _lockedSets.add(index);
+      _deltas[index] = delta;
+      if (isPR) {
+        _prSets.add(index);
+        _prFlashTriggers[index] = (_prFlashTriggers[index] ?? 0) + 1;
+      }
+    });
     _startRest();
   }
 
@@ -203,11 +230,78 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     );
   }
 
+  String _fmtWeight(double w) {
+    return w == w.roundToDouble() ? w.toInt().toString() : w.toString();
+  }
+
+  String _suggestionText(OverloadSuggestion s) {
+    if (s.weight == null && s.reps != null) return '\u2191 +1 rep';
+    if (s.weight != null && s.reps != null) {
+      return '\u2191 ${_fmtWeight(s.weight!)} kg \u00b7 ${s.reps} reps';
+    }
+    return '';
+  }
+
+  Widget _buildDeltaWidget(OverloadDelta d) {
+    if (d.weightDiff == 0 && d.repsDiff == 0) return const SizedBox.shrink();
+    final spans = <InlineSpan>[];
+    if (d.weightDiff != 0) {
+      final sign = d.weightDiff > 0 ? '+' : '';
+      final color = d.weightDiff > 0 ? kNeon : kDanger;
+      spans.add(TextSpan(
+        text: '$sign${_fmtWeight(d.weightDiff)} kg',
+        style: GoogleFonts.shareTechMono(fontSize: 11, color: color),
+      ));
+    }
+    if (d.weightDiff != 0 && d.repsDiff != 0) {
+      spans.add(TextSpan(
+        text: ' \u00b7 ',
+        style: GoogleFonts.shareTechMono(fontSize: 11, color: kMutedText),
+      ));
+    }
+    if (d.repsDiff != 0) {
+      final sign = d.repsDiff > 0 ? '+' : '';
+      final color = d.repsDiff > 0 ? kNeon : kDanger;
+      spans.add(TextSpan(
+        text: '$sign${d.repsDiff} rep${d.repsDiff.abs() == 1 ? '' : 's'}',
+        style: GoogleFonts.shareTechMono(fontSize: 11, color: color),
+      ));
+    }
+    return RichText(text: TextSpan(children: spans));
+  }
+
+  Widget _buildPRBadge(int index) {
+    final trigger = _prFlashTriggers[index] ?? 0;
+    return StrobeFlash(
+      trigger: trigger,
+      color: kAmber,
+      toggles: 3,
+      toggleMs: 80,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: kAmber.withValues(alpha: 0.15),
+          border: Border.all(color: kAmber),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: const Text(
+          'PR',
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: 9,
+            color: kAmber,
+          ),
+        ),
+      ),
+    );
+  }
+
   void _finish() {
     for (final row in _rows) {
       final w = double.tryParse(row.weight.text);
       final r = int.tryParse(row.reps.text);
-      if (w == null || w <= 0 || r == null || r <= 0) {
+      if (w == null || w < 0 || r == null || r <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Fill in all sets before finishing')),
         );
@@ -345,6 +439,22 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     final isLocked = _lockedSets.contains(index);
     final flashTrigger = _rowFlashTriggers[index] ?? 0;
 
+    final svc = _overloadService;
+    final isBodyweight = prevSet != null && prevSet.weight == 0;
+    final suggestion = svc?.getSuggestion(
+      widget.exercise.id,
+      index,
+      isBodyweight,
+    );
+    final showSuggestion = suggestion != null &&
+        !isLocked &&
+        !_interactedRows.contains(index) &&
+        row.weight.text.isEmpty &&
+        row.reps.text.isEmpty;
+
+    final delta = _deltas[index];
+    final hasPR = _prSets.contains(index);
+
     return Padding(
       key: _rowKeys[index],
       padding: const EdgeInsets.only(bottom: kSpace2),
@@ -358,58 +468,93 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
               horizontal: kSpace2,
               vertical: 6,
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: 32,
-                  child: Text(
-                    '${index + 1}',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: row.weight,
-                    decoration: _fieldDeco(weightHint),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      child: Text(
+                        '${index + 1}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
                     ),
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    enabled: !isLocked,
-                    onTap: () => _scrollToRow(index),
-                  ),
-                ),
-                const SizedBox(width: kSpace2),
-                Expanded(
-                  child: TextField(
-                    controller: row.reps,
-                    decoration: _fieldDeco(repsHint),
-                    keyboardType: TextInputType.number,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    enabled: !isLocked,
-                    onTap: () => _scrollToRow(index),
-                  ),
-                ),
-                const SizedBox(width: kSpace2),
-                SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: isLocked
-                      ? const Icon(
-                          Icons.check_circle_sharp,
-                          color: kNeon,
-                          size: 20,
-                        )
-                      : IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(
-                            Icons.save_sharp,
-                            color: Color(0xFFAAA8C0),
-                            size: 22,
-                          ),
-                          onPressed: () => _logSet(index),
+                    Expanded(
+                      child: TextField(
+                        controller: row.weight,
+                        decoration: _fieldDeco(weightHint),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
                         ),
+                        style: Theme.of(context).textTheme.bodyMedium,
+                        enabled: !isLocked,
+                        onTap: () {
+                          _interactedRows.add(index);
+                          _scrollToRow(index);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: kSpace2),
+                    Expanded(
+                      child: TextField(
+                        controller: row.reps,
+                        decoration: _fieldDeco(repsHint),
+                        keyboardType: TextInputType.number,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                        enabled: !isLocked,
+                        onTap: () {
+                          _interactedRows.add(index);
+                          _scrollToRow(index);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: kSpace2),
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: isLocked
+                          ? const Icon(
+                              Icons.check_circle_sharp,
+                              color: kNeon,
+                              size: 20,
+                            )
+                          : IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(
+                                Icons.save_sharp,
+                                color: Color(0xFFAAA8C0),
+                                size: 22,
+                              ),
+                              onPressed: () => _logSet(index),
+                            ),
+                    ),
+                  ],
                 ),
+                if (showSuggestion)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 32, top: 4),
+                    child: Text(
+                      _suggestionText(suggestion),
+                      style: GoogleFonts.shareTechMono(
+                        fontSize: 11,
+                        color: kMutedText,
+                      ),
+                    ),
+                  ),
+                if (isLocked && (delta != null || hasPR))
+                  Padding(
+                    padding: const EdgeInsets.only(left: 32, top: 4),
+                    child: Row(
+                      children: [
+                        if (hasPR) ...[
+                          _buildPRBadge(index),
+                          const SizedBox(width: kSpace2),
+                        ],
+                        if (delta != null) _buildDeltaWidget(delta),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),

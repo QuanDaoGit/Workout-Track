@@ -37,6 +37,8 @@ class LootAvatarFrame extends StatelessWidget {
                   avatarPath,
                   fit: BoxFit.contain,
                   filterQuality: FilterQuality.none,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.person_sharp, color: Color(0xFF6B6B8A)),
                 ),
               ),
             ),
@@ -46,6 +48,8 @@ class LootAvatarFrame extends StatelessWidget {
               framePath!,
               fit: BoxFit.fill,
               filterQuality: FilterQuality.none,
+              errorBuilder: (context, error, stackTrace) =>
+                  const SizedBox.shrink(),
             ),
         ],
       ),
