@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/enemies.dart';
 import '../models/enemy_data.dart';
 import 'battle_engine.dart';
+import 'class_battle_modifier.dart';
+import 'class_service.dart';
 import 'loot_service.dart';
 import 'stat_engine.dart';
 
@@ -122,13 +124,32 @@ class BattleScheduler {
     );
     final stats = await StatEngine().getStoredStats();
 
+    // Load class context for battle modifiers.
+    final classService = ClassService();
+    final classState = await classService.getState();
+    ClassBattleContext? classContext;
+    if (classState != null) {
+      final carryover = await classService.getCarryover();
+      classContext = ClassBattleContext(
+        characterClass: classState.currentClass,
+        unlockedAbilities: classState.unlockedAbilityIds,
+        carryover: carryover,
+      );
+    }
+
     final result = BattleEngine().resolve(
       BattleInput(
         playerStats: stats,
         enemy: pending.enemy,
         floor: pending.floor,
+        classContext: classContext,
       ),
     );
+
+    // Persist updated carryover after battle.
+    if (result.updatedCarryover != null) {
+      await classService.updateCarryover(result.updatedCarryover!);
+    }
 
     // Update floor on win.
     if (result.playerWon) {

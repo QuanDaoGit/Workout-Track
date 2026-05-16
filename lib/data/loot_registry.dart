@@ -259,6 +259,37 @@ const List<LootItem> lootRegistry = [
     assetPath: '$unlockEffectPath/effect_void.png',
     colorValue: 0xFF9B59B6,
   ),
+  // Class epic frames — unlocked via ultimate ability
+  LootItem(
+    id: 'frame_epic_assassin',
+    name: 'Assassin Frame',
+    description: 'Cyan edge frame for masters of the blade.',
+    category: LootCategory.avatarFrame,
+    rarity: LootRarity.epic,
+    assetPath: 'assets/classes/frames/frame_epic_assassin.png',
+    colorValue: 0xFF4DE5FF,
+    bossExclusive: true,
+  ),
+  LootItem(
+    id: 'frame_epic_bruiser',
+    name: 'Bruiser Frame',
+    description: 'Gold-forged frame for warriors of raw power.',
+    category: LootCategory.avatarFrame,
+    rarity: LootRarity.epic,
+    assetPath: 'assets/classes/frames/frame_epic_bruiser.png',
+    colorValue: 0xFFFFD700,
+    bossExclusive: true,
+  ),
+  LootItem(
+    id: 'frame_epic_tank',
+    name: 'Tank Frame',
+    description: 'Crimson fortified frame for the unbreakable.',
+    category: LootCategory.avatarFrame,
+    rarity: LootRarity.epic,
+    assetPath: 'assets/classes/frames/frame_epic_tank.png',
+    colorValue: 0xFFFF2D55,
+    bossExclusive: true,
+  ),
 ];
 
 const String commonChestAsset = '$unlockChestPath/chest_common.png';

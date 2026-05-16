@@ -11,6 +11,7 @@ import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import '../services/battle_engine.dart';
 import '../services/battle_scheduler.dart';
+import '../services/class_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/loot_service.dart';
 import '../services/profile_service.dart';
@@ -36,6 +37,7 @@ import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
 import 'battle_page.dart';
 import 'loot_chest_page.dart';
+import 'ultimate_unlock_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, this.onViewQuests, this.onViewProfile});
@@ -236,6 +238,12 @@ class HomePageState extends State<HomePage> {
       _programCompletedToday = programCompletedToday;
       _loading = false;
     });
+
+    // Check for pending ultimate reveal.
+    final ultimatePending = await ClassService().hasPendingUltimateReveal();
+    if (ultimatePending && mounted) {
+      Navigator.push(context, arcadeRoute((_) => const UltimateUnlockPage()));
+    }
   }
 
   Color _rankColor() {

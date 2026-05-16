@@ -109,3 +109,18 @@ Skip planning confirmation. Execute immediately without asking for approval to p
 | 8 | Potion multiplier capped at 5.0x | Prevents runaway XP inflation from stacking many potions; keeps leveling meaningful. |
 | 9 | BodyGoal stored as snapshot in each WeightEntry | Allows historical analysis even after goal changes; direction alignment checks use current goal, not historical. |
 | 10 | Custom exercises use explicit primaryMuscle field, not runtime lookup | StatEngine can map custom exercises to combat stats without needing the raw JSON primaryMuscles array. |
+
+## Phase 8 Design Decisions
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| 1 | ClassBattleModifier is pure/stateless — receives ClassBattleContext value object | Keeps BattleEngine deterministic; same inputs always produce same outputs regardless of async state. |
+| 2 | BattleInput.classContext is nullable (optional) | Backwards compatibility: old battle results and flows without class selection still work. |
+| 3 | ClassBattleCarryover persisted separately from ClassState | Carryover changes every battle; ClassState changes only on class selection/ultimate unlock — different write cadences. |
+| 4 | Migration auto-assigns class from body goal silently (no reveal page) | Existing users shouldn't be blocked from using the app by a forced cinematic; they can change class later. |
+| 5 | Ultimate requires 2x volume snapshot (min 1000kg) to prevent instant unlock | Snapshot=0 at selection time (new user) would otherwise unlock ultimate immediately with any training. |
+| 6 | ClassSprite uses errorBuilder fallback to colored placeholder | Assets not yet available; placeholder is functional and theme-consistent without blocking development. |
+| 7 | Epic frames marked bossExclusive to exclude from normal drop pool and scrap shop | Class frames are earned through training progression, not random loot; preserves achievement value. |
+| 8 | Type AGREE dialog for class switching (destructive action) | Locks abilities and resets ultimate progress — irreversible enough to warrant explicit user confirmation. |
+| 9 | Pending ultimate reveal flag fires on next app open, not immediately | Workout save context is wrong moment for a long cinematic; home page load is the natural celebration point. |
+| 10 | Shadow Strike extra turn loops within same round (not new round) | Preserves round count semantics and maxRounds=20 cap; extra attacks happen within the player attack phase. |

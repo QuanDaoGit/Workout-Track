@@ -413,6 +413,7 @@ class _BattleDisplayState extends State<BattleDisplay> {
       BattleEventType.enemyDodge => kMutedText,
       BattleEventType.playerHpChange => kMutedText,
       BattleEventType.enemyHpChange => kMutedText,
+      BattleEventType.abilityTrigger => kAmber,
     };
   }
 

@@ -293,6 +293,15 @@ class LootService {
     await prefs.setInt(_scrapKey, value);
   }
 
+  /// Grant a specific item directly (used by class ultimate unlock).
+  Future<void> grantItem(String itemId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final owned = await _ownedIds(prefs);
+    if (owned.contains(itemId)) return;
+    owned.add(itemId);
+    await _saveOwnedIds(prefs, owned);
+  }
+
   int _dayOfYear(DateTime date) {
     final start = DateTime(date.year);
     return date.difference(start).inDays + 1;
