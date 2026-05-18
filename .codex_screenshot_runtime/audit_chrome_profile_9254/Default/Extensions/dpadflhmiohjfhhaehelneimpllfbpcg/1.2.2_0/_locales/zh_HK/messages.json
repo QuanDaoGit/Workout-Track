@@ -1,0 +1,150 @@
+{
+	"logout": {
+		"message": "登出",
+		"description": "登出"
+	},
+	"extensionName": {
+		"description": "TeraBox下載助手",
+		"message": "TeraBox下載助手"
+	},
+	"extensionDescription": {
+		"description": "支援截圖、上傳及其他TeraBox功能",
+		"message": "支援截圖、上傳及其他TeraBox功能"
+	},
+	"login": {
+		"message": "登入",
+		"description": "登入"
+	},
+	"remoteUpload": {
+		"description": "遠程視頻上傳",
+		"message": "遠程視頻上傳"
+	},
+	"screenshotUpload": {
+		"message": "截圖上傳",
+		"description": "截圖上傳"
+	},
+	"openHome": {
+		"message": "打開TeraBox",
+		"description": "打開TeraBox"
+	},
+	"freeformScreenshotUpload": {
+		"message": "自由截圖上傳",
+		"description": "自由截圖上傳"
+	},
+	"addTask": {
+		"message": "新增任務",
+		"description": "新增任務"
+	},
+	"taskHistory": {
+		"message": "任務歷史",
+		"description": "任務歷史"
+	},
+	"websiteUnsupported": {
+		"message": "不支援此網站",
+		"description": "不支援此網站"
+	},
+	"cancel": {
+		"message": "取消",
+		"description": "取消"
+	},
+	"retry": {
+		"message": "重試",
+		"description": "重試"
+	},
+	"delete": {
+		"description": "刪除",
+		"message": "刪除"
+	},
+	"uploading": {
+		"message": "正在上傳...",
+		"description": "正在上傳..."
+	},
+	"download": {
+		"message": "下載",
+		"description": "下載"
+	},
+	"success": {
+		"message": "成功",
+		"description": "成功"
+	},
+	"fail": {
+		"message": "失敗",
+		"description": "失敗"
+	},
+	"saving": {
+		"description": "儲存中",
+		"message": "儲存中"
+	},
+	"saveto": {
+		"description": "儲存至TeraBox",
+		"message": "儲存至TeraBox"
+	},
+	"downloadDetected": {
+		"message": "已檢測到文件下載",
+		"description": "已檢測到文件下載"
+	},
+	"noReminder": {
+		"message": "30天內不再提醒我",
+		"description": "30天內不再提醒我"
+	},
+	"fileDownloaded": {
+		"description": "文件正在下载",
+		"message": "文件正在下载"
+	},
+	"confirmLogout": {
+		"message": "確定退出登錄嗎？",
+		"description": "確定退出登錄嗎？"
+	},
+	"confirm": {
+		"message": "確認",
+		"description": "確認"
+	},
+	"notice": {
+		"message": "通知",
+		"description": "通知"
+	},
+	"noRecord": {
+		"description": "暫無記錄",
+		"message": "暫無記錄"
+	},
+	"autoOpen": {
+		"description": "儲存成功後，TeraBox首頁將自動開啟。",
+		"message": "儲存成功後，TeraBox首頁將自動開啟。"
+	},
+	"extInstalled": {
+		"description": "擴充功能安裝成功",
+		"message": "擴充功能安裝成功"
+	},
+	"refreshToEnable": {
+		"message": "請重新整理頁面以啟用擴充功能",
+		"description": "請重新整理頁面以啟用擴充功能"
+	},
+	"actionFailed": {
+		"description": "操作失敗",
+		"message": "操作失敗"
+	},
+	"refreshAndRetry": {
+		"description": "請重新整理頁面後重試",
+		"message": "請重新整理頁面後重試"
+	},
+	"uploadSuccess": {
+		"description": "上載成功",
+		"message": "上載成功"
+	},
+	"uploadFail": {
+		"description": "上載失敗。",
+		"message": "上載失敗。"
+	},
+	"screenshotLost": {
+		"message": "截圖遺失，請重試",
+		"description": "截圖遺失，請重試"
+	},
+	"unloggedIn": {
+		"description": "尚未登入 TeraBox，請登入後再試一次",
+		"message": "尚未登入 TeraBox，請登入後再試一次"
+	},
+	"reloadExtension": {
+		"description": "重新載入擴充功能",
+		"message": "重新載入擴充功能"
+	}
+}

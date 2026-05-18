@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "Thao tác thất bại",
+      "message": "Thao tác thất bại"
+   },
+   "addTask": {
+      "description": "Thêm tác vụ",
+      "message": "Thêm tác vụ"
+   },
+   "autoOpen": {
+      "description": "Trang chủ TeraBox sẽ tự động mở sau khi lưu thành công.",
+      "message": "Trang chủ TeraBox sẽ tự động mở sau khi lưu thành công."
+   },
+   "cancel": {
+      "description": "Hủy bỏ",
+      "message": "Hủy bỏ"
+   },
+   "confirm": {
+      "description": "Xác nhận",
+      "message": "Xác nhận"
+   },
+   "confirmLogout": {
+      "description": "Xác nhận đăng xuất?",
+      "message": "Xác nhận đăng xuất?"
+   },
+   "delete": {
+      "description": "Xóa",
+      "message": "Xóa"
+   },
+   "download": {
+      "description": "Tải xuống",
+      "message": "Tải xuống"
+   },
+   "downloadDetected": {
+      "description": "Phát hiện tải xuống tệp",
+      "message": "Phát hiện tải xuống tệp"
+   },
+   "extInstalled": {
+      "description": "Tiện ích mở rộng đã được cài đặt thành công",
+      "message": "Tiện ích mở rộng đã được cài đặt thành công"
+   },
+   "extensionDescription": {
+      "description": "Hỗ trợ chụp màn hình, tải lên và các tính năng khác của TeraBox",
+      "message": "Hỗ trợ chụp màn hình, tải lên và các tính năng khác của TeraBox"
+   },
+   "extensionName": {
+      "description": "Trợ lý tải xuống TeraBox",
+      "message": "Trợ lý tải xuống TeraBox"
+   },
+   "fail": {
+      "description": "Thất bại",
+      "message": "Thất bại"
+   },
+   "fileDownloaded": {
+      "description": "Tệp đang được tải xuống",
+      "message": "Tệp đang được tải xuống"
+   },
+   "freeformScreenshotUpload": {
+      "description": "Tải ảnh chụp màn hình tự do",
+      "message": "Tải ảnh chụp màn hình tự do"
+   },
+   "login": {
+      "description": "Đăng nhập",
+      "message": "Đăng nhập"
+   },
+   "logout": {
+      "description": "Đăng xuất",
+      "message": "Đăng xuất"
+   },
+   "noRecord": {
+      "description": "Tạm thời không có ghi chép",
+      "message": "Tạm thời không có ghi chép"
+   },
+   "noReminder": {
+      "description": "Không nhắc lại trong 30 ngày",
+      "message": "Không nhắc lại trong 30 ngày"
+   },
+   "notice": {
+      "description": "Thông báo",
+      "message": "Thông báo"
+   },
+   "openHome": {
+      "description": "Mở TeraBox",
+      "message": "Mở TeraBox"
+   },
+   "refreshAndRetry": {
+      "description": "Vui lòng làm mới trang rồi thử lại",
+      "message": "Vui lòng làm mới trang rồi thử lại"
+   },
+   "refreshToEnable": {
+      "description": "Vui lòng làm mới trang để kích hoạt tiện ích mở rộng",
+      "message": "Vui lòng làm mới trang để kích hoạt tiện ích mở rộng"
+   },
+   "reloadExtension": {
+      "description": "Tải lại tiện ích mở rộng",
+      "message": "Tải lại tiện ích mở rộng"
+   },
+   "remoteUpload": {
+      "description": "Tải video từ xa",
+      "message": "Tải video từ xa"
+   },
+   "retry": {
+      "description": "Thử lại",
+      "message": "Thử lại"
+   },
+   "saveto": {
+      "description": "Lưu vào TeraBox",
+      "message": "Lưu vào TeraBox"
+   },
+   "saving": {
+      "description": "Đang lưu",
+      "message": "Đang lưu"
+   },
+   "screenshotLost": {
+      "description": "Thiếu ảnh chụp màn hình, vui lòng thử lại",
+      "message": "Thiếu ảnh chụp màn hình, vui lòng thử lại"
+   },
+   "screenshotUpload": {
+      "description": "Tải ảnh chụp màn hình",
+      "message": "Tải ảnh chụp màn hình"
+   },
+   "success": {
+      "description": "Thành công",
+      "message": "Thành công"
+   },
+   "taskHistory": {
+      "description": "Lịch sử tác vụ",
+      "message": "Lịch sử tác vụ"
+   },
+   "unloggedIn": {
+      "description": "Chưa đăng nhập TeraBox. Vui lòng đăng nhập và thử lại",
+      "message": "Chưa đăng nhập TeraBox. Vui lòng đăng nhập và thử lại"
+   },
+   "uploadFail": {
+      "description": "Tải lên không thành công.",
+      "message": "Tải lên không thành công."
+   },
+   "uploadSuccess": {
+      "description": "Tải lên thành công",
+      "message": "Tải lên thành công"
+   },
+   "uploading": {
+      "description": "Đang tải lên...",
+      "message": "Đang tải lên..."
+   },
+   "websiteUnsupported": {
+      "description": "Trang web không được hỗ trợ",
+      "message": "Trang web không được hỗ trợ"
+   }
+}

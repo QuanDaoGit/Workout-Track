@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "การดำเนินการล้มเหลว",
+      "message": "การดำเนินการล้มเหลว"
+   },
+   "addTask": {
+      "description": "เพิ่มงาน",
+      "message": "เพิ่มงาน"
+   },
+   "autoOpen": {
+      "description": "เมื่อบันทึกสำเร็จ หน้าหลัก TeraBox จะเปิดขึ้นโดยอัตโนมัติ",
+      "message": "เมื่อบันทึกสำเร็จ หน้าหลัก TeraBox จะเปิดขึ้นโดยอัตโนมัติ"
+   },
+   "cancel": {
+      "description": "ยกเลิก",
+      "message": "ยกเลิก"
+   },
+   "confirm": {
+      "description": "ยืนยัน",
+      "message": "ยืนยัน"
+   },
+   "confirmLogout": {
+      "description": "ยืนยันการออกจากระบบ?",
+      "message": "ยืนยันการออกจากระบบ?"
+   },
+   "delete": {
+      "description": "ลบ",
+      "message": "ลบ"
+   },
+   "download": {
+      "description": "ดาวน์โหลด",
+      "message": "ดาวน์โหลด"
+   },
+   "downloadDetected": {
+      "description": "ตรวจพบการดาวน์โหลดไฟล์",
+      "message": "ตรวจพบการดาวน์โหลดไฟล์"
+   },
+   "extInstalled": {
+      "description": "ติดตั้งส่วนขยายเรียบร้อยแล้ว",
+      "message": "ติดตั้งส่วนขยายเรียบร้อยแล้ว"
+   },
+   "extensionDescription": {
+      "description": "รองรับการจับภาพหน้าจอ, การอัปโหลด และฟังก์ชันอื่นๆ ของ TeraBox",
+      "message": "รองรับการจับภาพหน้าจอ, การอัปโหลด และฟังก์ชันอื่นๆ ของ TeraBox"
+   },
+   "extensionName": {
+      "description": "ผู้ช่วยดาวน์โหลด TeraBox",
+      "message": "ผู้ช่วยดาวน์โหลด TeraBox"
+   },
+   "fail": {
+      "description": "ไม่สำเร็จ",
+      "message": "ไม่สำเร็จ"
+   },
+   "fileDownloaded": {
+      "description": "กำลังดาวน์โหลดไฟล์",
+      "message": "กำลังดาวน์โหลดไฟล์"
+   },
+   "freeformScreenshotUpload": {
+      "description": "อัปโหลดภาพหน้าจอแบบเสรี",
+      "message": "อัปโหลดภาพหน้าจอแบบเสรี"
+   },
+   "login": {
+      "description": "เข้าสู่ระบบ",
+      "message": "เข้าสู่ระบบ"
+   },
+   "logout": {
+      "description": "ออกจากระบบ",
+      "message": "ออกจากระบบ"
+   },
+   "noRecord": {
+      "description": "ไม่มีประวัติในขณะนี้",
+      "message": "ไม่มีประวัติในขณะนี้"
+   },
+   "noReminder": {
+      "description": "ไม่แจ้งเตือนอีกเป็นเวลา 30 วัน",
+      "message": "ไม่แจ้งเตือนอีกเป็นเวลา 30 วัน"
+   },
+   "notice": {
+      "description": "การแจ้งเตือน",
+      "message": "การแจ้งเตือน"
+   },
+   "openHome": {
+      "description": "เปิด TeraBox",
+      "message": "เปิด TeraBox"
+   },
+   "refreshAndRetry": {
+      "description": "กรุณารีเฟรชหน้าแล้วลองอีกครั้ง",
+      "message": "กรุณารีเฟรชหน้าแล้วลองอีกครั้ง"
+   },
+   "refreshToEnable": {
+      "description": "กรุณารีเฟรชหน้าเพื่อเปิดใช้งานส่วนขยาย",
+      "message": "กรุณารีเฟรชหน้าเพื่อเปิดใช้งานส่วนขยาย"
+   },
+   "reloadExtension": {
+      "description": "โหลดส่วนขยายอีกครั้ง",
+      "message": "โหลดส่วนขยายอีกครั้ง"
+   },
+   "remoteUpload": {
+      "description": "อัปโหลดวิดีโอระยะไกล",
+      "message": "อัปโหลดวิดีโอระยะไกล"
+   },
+   "retry": {
+      "description": "ลองใหม่อีกครั้ง",
+      "message": "ลองใหม่อีกครั้ง"
+   },
+   "saveto": {
+      "description": "บันทึกไปยัง TeraBox",
+      "message": "บันทึกไปยัง TeraBox"
+   },
+   "saving": {
+      "description": "กำลังบันทึก",
+      "message": "กำลังบันทึก"
+   },
+   "screenshotLost": {
+      "description": "ภาพหน้าจอหายไป กรุณาลองอีกครั้ง",
+      "message": "ภาพหน้าจอหายไป กรุณาลองอีกครั้ง"
+   },
+   "screenshotUpload": {
+      "description": "อัปโหลดภาพหน้าจอ",
+      "message": "อัปโหลดภาพหน้าจอ"
+   },
+   "success": {
+      "description": "สำเร็จ",
+      "message": "สำเร็จ"
+   },
+   "taskHistory": {
+      "description": "ประวัติการทำงาน",
+      "message": "ประวัติการทำงาน"
+   },
+   "unloggedIn": {
+      "description": "ยังไม่ได้เข้าสู่ระบบ TeraBox กรุณาเข้าสู่ระบบแล้วลองอีกครั้ง",
+      "message": "ยังไม่ได้เข้าสู่ระบบ TeraBox กรุณาเข้าสู่ระบบแล้วลองอีกครั้ง"
+   },
+   "uploadFail": {
+      "description": "อัปโหลดไม่สำเร็จ",
+      "message": "อัปโหลดไม่สำเร็จ"
+   },
+   "uploadSuccess": {
+      "description": "อัปโหลดสำเร็จ",
+      "message": "อัปโหลดสำเร็จ"
+   },
+   "uploading": {
+      "description": "กำลังอัปโหลด...",
+      "message": "กำลังอัปโหลด..."
+   },
+   "websiteUnsupported": {
+      "description": "เว็บไซต์ที่ไม่รองรับ",
+      "message": "เว็บไซต์ที่ไม่รองรับ"
+   }
+}

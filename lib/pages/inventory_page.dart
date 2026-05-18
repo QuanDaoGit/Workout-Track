@@ -5,9 +5,7 @@ import '../data/loot_registry.dart';
 import '../models/loot_item.dart';
 import '../services/loot_service.dart';
 import '../theme/tokens.dart';
-import '../widgets/arcade_route.dart';
 import '../widgets/pixel_button.dart';
-import 'scrap_shop_page.dart';
 
 class InventoryPage extends StatefulWidget {
   const InventoryPage({super.key});
@@ -20,7 +18,6 @@ class _InventoryPageState extends State<InventoryPage> {
   final LootService _lootService = LootService();
   Set<String> _ownedIds = {};
   Map<LootCategory, LootItem> _equipped = {};
-  int _scrap = 0;
   bool _loading = true;
 
   @override
@@ -32,12 +29,10 @@ class _InventoryPageState extends State<InventoryPage> {
   Future<void> _load() async {
     final inventory = await _lootService.getInventory();
     final equipped = await _lootService.getEquippedLoot();
-    final scrap = await _lootService.getScrapBalance();
     if (!mounted) return;
     setState(() {
       _ownedIds = inventory.map((item) => item.id).toSet();
       _equipped = equipped;
-      _scrap = scrap;
       _loading = false;
     });
   }
@@ -94,9 +89,8 @@ class _InventoryPageState extends State<InventoryPage> {
   }
 
   void _showLocked(LootItem item) {
-    final hint = item.bossExclusive && item.bossFloor != null
-        ? 'DEFEAT BOSS FLOOR ${item.bossFloor}'
-        : 'Locked loot. Find it in battle rewards or the scrap shop.';
+    final hint =
+        item.unlockRule?.displayHint ?? 'Locked. Keep training to earn it.';
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: kCard,
@@ -128,11 +122,6 @@ class _InventoryPageState extends State<InventoryPage> {
     );
   }
 
-  Future<void> _openShop() async {
-    await Navigator.of(context).push(arcadeRoute((_) => const ScrapShopPage()));
-    await _load();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -149,21 +138,6 @@ class _InventoryPageState extends State<InventoryPage> {
             color: kNeon,
           ),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: kSpace4),
-            child: Center(
-              child: Text(
-                'SCRAP: $_scrap ◆',
-                style: GoogleFonts.shareTechMono(
-                  fontSize: 13,
-                  color: kCyan,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kNeon))
@@ -175,13 +149,6 @@ class _InventoryPageState extends State<InventoryPage> {
                   _buildVisualSection(LootCategory.avatarFrame),
                   _buildTitleSection(),
                   _buildVisualSection(LootCategory.homeTheme),
-                  _buildVisualSection(LootCategory.battleEffect),
-                  const SizedBox(height: kSpace4),
-                  PixelButton(
-                    label: 'SCRAP SHOP',
-                    color: kCyan,
-                    onPressed: _openShop,
-                  ),
                 ],
               ),
             ),
@@ -407,9 +374,7 @@ class _TitleLootRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hint = item.bossExclusive && item.bossFloor != null
-        ? 'DEFEAT BOSS FLOOR ${item.bossFloor}'
-        : item.rarity.label;
+    final hint = item.unlockRule?.displayHint ?? item.rarity.label;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: InkWell(

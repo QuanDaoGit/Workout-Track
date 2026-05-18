@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "कार्रवाई विफल ",
+      "message": "कार्रवाई विफल "
+   },
+   "addTask": {
+      "description": "कार्य जोड़ें",
+      "message": "कार्य जोड़ें"
+   },
+   "autoOpen": {
+      "description": "सफलतापूर्वक सहेजने के बाद TeraBox होमपेज स्वचालित रूप से खुलेगा।",
+      "message": "सफलतापूर्वक सहेजने के बाद TeraBox होमपेज स्वचालित रूप से खुलेगा।"
+   },
+   "cancel": {
+      "description": "रद्द करें",
+      "message": "रद्द करें"
+   },
+   "confirm": {
+      "description": "पुष्टि करें",
+      "message": "पुष्टि करें"
+   },
+   "confirmLogout": {
+      "description": "क्या आप लॉगआउट की पुष्टि करते हैं?",
+      "message": "क्या आप लॉगआउट की पुष्टि करते हैं?"
+   },
+   "delete": {
+      "description": "हटाएं",
+      "message": "हटाएं"
+   },
+   "download": {
+      "description": "डाउनलोड",
+      "message": "डाउनलोड"
+   },
+   "downloadDetected": {
+      "description": "फ़ाइल डाउनलोड का पता चला",
+      "message": "फ़ाइल डाउनलोड का पता चला"
+   },
+   "extInstalled": {
+      "description": "एक्सटेंशन सफलतापूर्वक इंस्टॉल हो गया",
+      "message": "एक्सटेंशन सफलतापूर्वक इंस्टॉल हो गया"
+   },
+   "extensionDescription": {
+      "description": "स्क्रीनशॉट, अपलोड और अन्य TeraBox सुविधाओं का समर्थन करता है",
+      "message": "स्क्रीनशॉट, अपलोड और अन्य TeraBox सुविधाओं का समर्थन करता है"
+   },
+   "extensionName": {
+      "description": "TeraBox डाउनलोड सहायक",
+      "message": "TeraBox डाउनलोड सहायक"
+   },
+   "fail": {
+      "description": "विफल हो गया",
+      "message": "विफल हो गया"
+   },
+   "fileDownloaded": {
+      "description": "फ़ाइल डाउनलोड हो रही है",
+      "message": "फ़ाइल डाउनलोड हो रही है"
+   },
+   "freeformScreenshotUpload": {
+      "description": "स्वतंत्र स्क्रीनशॉट अपलोड करें",
+      "message": "स्वतंत्र स्क्रीनशॉट अपलोड करें"
+   },
+   "login": {
+      "description": "लॉगिन",
+      "message": "लॉगिन"
+   },
+   "logout": {
+      "description": "लॉगआउट",
+      "message": "लॉगआउट"
+   },
+   "noRecord": {
+      "description": "कोई रिकॉर्ड नहीं है",
+      "message": "कोई रिकॉर्ड नहीं है"
+   },
+   "noReminder": {
+      "description": "30 दिनों तक फिर से याद न दिलाएं",
+      "message": "30 दिनों तक फिर से याद न दिलाएं"
+   },
+   "notice": {
+      "description": "सूचना",
+      "message": "सूचना"
+   },
+   "openHome": {
+      "description": "TeraBox खोलें",
+      "message": "TeraBox खोलें"
+   },
+   "refreshAndRetry": {
+      "description": "कृपया पेज को रिफ्रेश करके दोबारा प्रयास करें",
+      "message": "कृपया पेज को रिफ्रेश करके दोबारा प्रयास करें"
+   },
+   "refreshToEnable": {
+      "description": "एक्सटेंशन को सक्रिय करने के लिए कृपया पेज रिफ्रेश करें",
+      "message": "एक्सटेंशन को सक्रिय करने के लिए कृपया पेज रिफ्रेश करें"
+   },
+   "reloadExtension": {
+      "description": "एक्सटेंशन को फिर से लोड करें",
+      "message": "एक्सटेंशन को फिर से लोड करें"
+   },
+   "remoteUpload": {
+      "description": "रिमोट वीडियो अपलोड",
+      "message": "रिमोट वीडियो अपलोड"
+   },
+   "retry": {
+      "description": "पुनः प्रयास करें",
+      "message": "पुनः प्रयास करें"
+   },
+   "saveto": {
+      "description": "TeraBox में सहेजें",
+      "message": "TeraBox में सहेजें"
+   },
+   "saving": {
+      "description": "सहेजा जा रहा है",
+      "message": "सहेजा जा रहा है"
+   },
+   "screenshotLost": {
+      "description": "स्क्रीनशॉट गायब है, कृपया दोबारा प्रयास करें",
+      "message": "स्क्रीनशॉट गायब है, कृपया दोबारा प्रयास करें"
+   },
+   "screenshotUpload": {
+      "description": "स्क्रीनशॉट अपलोड करें",
+      "message": "स्क्रीनशॉट अपलोड करें"
+   },
+   "success": {
+      "description": "सफलता",
+      "message": "सफलता"
+   },
+   "taskHistory": {
+      "description": "कार्य इतिहास",
+      "message": "कार्य इतिहास"
+   },
+   "unloggedIn": {
+      "description": "TeraBox में लॉग इन नहीं है। कृपया लॉग इन करें और दोबारा प्रयास करें",
+      "message": "TeraBox में लॉग इन नहीं है। कृपया लॉग इन करें और दोबारा प्रयास करें"
+   },
+   "uploadFail": {
+      "description": "अपलोड विफल।",
+      "message": "अपलोड विफल।"
+   },
+   "uploadSuccess": {
+      "description": "अपलोड किए गए",
+      "message": "अपलोड किए गए"
+   },
+   "uploading": {
+      "description": "अपलोड हो रहा...",
+      "message": "अपलोड हो रहा..."
+   },
+   "websiteUnsupported": {
+      "description": "असमर्थित वेबसाइट",
+      "message": "असमर्थित वेबसाइट"
+   }
+}

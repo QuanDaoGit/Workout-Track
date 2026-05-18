@@ -14,7 +14,6 @@ import '../models/program_models.dart';
 import '../models/quest_models.dart';
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
-import '../data/class_definitions.dart';
 import '../models/character_class.dart';
 import '../models/class_state.dart';
 import '../services/body_goal_service.dart';
@@ -35,7 +34,6 @@ import '../widgets/arcade_route.dart';
 import '../widgets/loot_avatar_frame.dart';
 import '../widgets/rest_icon.dart';
 import '../widgets/class_sprite.dart';
-import '../widgets/segmented_progress_bar.dart';
 import '../widgets/stat_card.dart';
 import 'body_metrics_chart_page.dart';
 import 'body_metrics_onboarding_page.dart';
@@ -96,7 +94,6 @@ class ProfilePageState extends State<ProfilePage> {
   int _ownedLootCount = 0;
   ProgramProgress? _programProgress;
   ClassState? _classState;
-  double _ultimateProgress = 0.0;
 
   @override
   void initState() {
@@ -126,7 +123,6 @@ class ProfilePageState extends State<ProfilePage> {
     final potionBonusXP = await XpBoostService().getTotalBonusXP();
     final classService = ClassService();
     final classState = await classService.getState();
-    final ultimateProgress = await classService.getUltimateProgress();
     final metricsService = BodyMetricsService();
     final bodyMetricsEnabled = await metricsService.isEnabled();
     BodyGoalState? bodyGoalState;
@@ -159,7 +155,6 @@ class ProfilePageState extends State<ProfilePage> {
       _programProgress = programProgress;
       _potionBonusXP = potionBonusXP;
       _classState = classState;
-      _ultimateProgress = ultimateProgress;
       _bodyMetricsEnabled = bodyMetricsEnabled;
       _bodyGoalState = bodyGoalState;
       _lastWeightEntry = lastWeightEntry;
@@ -233,10 +228,7 @@ class ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _openLogWeight() async {
-    await Navigator.push(
-      context,
-      arcadeRoute((_) => const LogWeightPage()),
-    );
+    await Navigator.push(context, arcadeRoute((_) => const LogWeightPage()));
     await reload();
   }
 
@@ -700,8 +692,6 @@ class ProfilePageState extends State<ProfilePage> {
   Widget _buildClassSection() {
     final cls = _classState?.currentClass ?? CharacterClass.bruiser;
     final color = cls.themeColor;
-    final abilities = abilitiesForClass(cls);
-    final unlockedIds = _classState?.unlockedAbilityIds ?? {};
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -744,61 +734,6 @@ class ProfilePageState extends State<ProfilePage> {
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          for (final ability in abilities) ...[
-            Row(
-              children: [
-                Icon(
-                  unlockedIds.contains(ability.id)
-                      ? Icons.lock_open_sharp
-                      : Icons.lock_sharp,
-                  size: 14,
-                  color: unlockedIds.contains(ability.id)
-                      ? color
-                      : const Color(0xFF6B6B8A),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    unlockedIds.contains(ability.id) ? ability.name : '???',
-                    style: GoogleFonts.shareTechMono(
-                      fontSize: 12,
-                      color: unlockedIds.contains(ability.id)
-                          ? color
-                          : const Color(0xFF6B6B8A),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-          ],
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                'ULTIMATE',
-                style: GoogleFonts.shareTechMono(
-                  fontSize: 10,
-                  color: const Color(0xFF6B6B8A),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: SegmentedProgressBar(
-                  totalCells: 10,
-                  litCells: (_ultimateProgress * 10).ceil().clamp(0, 10),
-                  litColor: color,
-                  litBorderColor: color.withValues(alpha: 0.7),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${(_ultimateProgress * 100).round()}%',
-                style: GoogleFonts.shareTechMono(fontSize: 11, color: color),
               ),
             ],
           ),
@@ -907,9 +842,10 @@ class ProfilePageState extends State<ProfilePage> {
       final timeLabel = daysAgo == 0
           ? 'today'
           : daysAgo == 1
-              ? 'yesterday'
-              : '$daysAgo days ago';
-      lastLoggedLabel = '$timeLabel · ${lastEntry.weightKg.toStringAsFixed(1)} kg';
+          ? 'yesterday'
+          : '$daysAgo days ago';
+      lastLoggedLabel =
+          '$timeLabel · ${lastEntry.weightKg.toStringAsFixed(1)} kg';
     }
 
     return Column(
@@ -984,10 +920,7 @@ class ProfilePageState extends State<ProfilePage> {
           onPressed: _canLogWeight ? _openLogWeight : null,
         ),
         const SizedBox(height: 8),
-        PixelButton(
-          label: 'VIEW TREND',
-          onPressed: _openBodyMetricsChart,
-        ),
+        PixelButton(label: 'VIEW TREND', onPressed: _openBodyMetricsChart),
       ],
     );
   }
@@ -1156,7 +1089,9 @@ class ProfilePageState extends State<ProfilePage> {
         _SettingsToggleRow(
           iconPath: 'assets/icons/control/icon_stat.png',
           title: 'Body Metrics',
-          subtitle: _bodyMetricsEnabled ? 'Weekly weight log active.' : 'Opt-in weekly weight tracking.',
+          subtitle: _bodyMetricsEnabled
+              ? 'Weekly weight log active.'
+              : 'Opt-in weekly weight tracking.',
           value: _bodyMetricsEnabled,
           onChanged: _toggleBodyMetrics,
         ),

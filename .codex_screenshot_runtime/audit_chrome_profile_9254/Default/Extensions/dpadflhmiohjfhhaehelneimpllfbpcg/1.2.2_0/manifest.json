@@ -1,0 +1,79 @@
+{
+   "action": {
+      "default_icon": {
+         "128": "icon128.plasmo.b89b7dfa.png",
+         "16": "icon16.plasmo.00ac8b83.png",
+         "32": "icon32.plasmo.9ad0c5b6.png",
+         "48": "icon48.plasmo.cae3a6b3.png",
+         "64": "icon64.plasmo.e4b604fc.png"
+      },
+      "default_popup": "popup.html"
+   },
+   "author": "terabox-fe",
+   "background": {
+      "service_worker": "background.d0591844.js",
+      "type": "module"
+   },
+   "commands": {
+      "free_screenshot": {
+         "description": "__MSG_freeformScreenshotUpload__",
+         "suggested_key": {
+            "default": "Ctrl+Shift+9",
+            "mac": "Command+Shift+9"
+         }
+      },
+      "open_home": {
+         "description": "__MSG_openHome__",
+         "suggested_key": {
+            "default": "Ctrl+Shift+8",
+            "mac": "Command+Shift+8"
+         }
+      },
+      "reload_extension": {
+         "description": "__MSG_reloadExtension__",
+         "suggested_key": {
+            "default": "Ctrl+Shift+K",
+            "mac": "Command+Shift+K"
+         }
+      },
+      "screenshot": {
+         "description": "__MSG_screenshotUpload__",
+         "suggested_key": {
+            "default": "Ctrl+Shift+0",
+            "mac": "Command+Shift+0"
+         }
+      }
+   },
+   "content_scripts": [ {
+      "css": [ "contents.f0bd5d74.css" ],
+      "js": [ "contents.4683de87.js" ],
+      "matches": [ "\u003Call_urls>" ]
+   }, {
+      "css": [ "contents.f0bd5d74.css" ],
+      "js": [ "contents.c10c11b1.js" ],
+      "matches": [ "\u003Call_urls>" ]
+   } ],
+   "default_locale": "en",
+   "description": "__MSG_extensionDescription__",
+   "host_permissions": [ "https://*/*", "\u003Call_urls>" ],
+   "icons": {
+      "128": "icon128.plasmo.b89b7dfa.png",
+      "16": "icon16.plasmo.00ac8b83.png",
+      "32": "icon32.plasmo.9ad0c5b6.png",
+      "48": "icon48.plasmo.cae3a6b3.png",
+      "64": "icon64.plasmo.e4b604fc.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApV7EhyKG3Xsh0TngxDFgLG/l+3fbOoPmyMA1efRl6MdTGeBY98rShAD9oChH2lfWm5lDT+0uOOypOL1/pzy9ucFs3MCSocrlLFPlc3KFuk5Fucnzf6PPipWDalzC+gk0F0J1EUmEnm4cy7n1RpqJmog4WbT+GHr47WlF6MURw4Iz8g9w0W2aBYgDSUgudKyxp8uelXPJyzgi69nLQ9p1MN3s6mNqZJAZ+H/7dR90MbtXul6EK/4fJ+VER74nDWVLR5ZhZ1I9/5YsffD2Qnc54Opeo09YOQZwViFOr9qf3G8uESHYLtoW9bUwBNK3WB+msyrQX2oSU8GU01cUY6Id7wIDAQAB",
+   "manifest_version": 3,
+   "name": "__MSG_extensionName__",
+   "permissions": [ "background", "downloads", "cookies", "activeTab", "tabs", "contextMenus", "storage", "notifications" ],
+   "update_url": "https://clients2.google.com/service/update2/crx",
+   "version": "1.2.2",
+   "web_accessible_resources": [ {
+      "matches": [ "\u003Call_urls>" ],
+      "resources": [ "logo.4abccce0.png", "close.bb3e0e9d.png", "detect.c0809788.png", "file_download.789eec0e.png" ]
+   }, {
+      "matches": [ "\u003Call_urls>" ],
+      "resources": [ "logo.4abccce0.png", "close.bb3e0e9d.png", "detect.c0809788.png", "file_download.789eec0e.png" ]
+   } ]
+}

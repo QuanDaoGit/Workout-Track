@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/workout_models.dart';
 import 'exercise_catalog_service.dart';
 import 'rest_service.dart';
+import 'workout_metric_service.dart';
 
 class StatEngine {
   StatEngine({DateTime Function()? nowProvider, Map<String, String>? catalog})
@@ -249,25 +250,12 @@ class StatEngine {
     List<WorkoutSession> sessions,
     Map<String, String> catalog,
   ) {
-    final now = _nowProvider();
-    final today = _dateOnly(now);
-    final monday = today.subtract(Duration(days: today.weekday - 1));
-    final nextMonday = monday.add(const Duration(days: 7));
-    final touched = <String>{};
-
-    for (final session in sessions) {
-      final day = _dateOnly(session.date);
-      if (day.isBefore(monday) || !day.isBefore(nextMonday)) continue;
-      touched.addAll(_touchedStatsForSession(session, catalog));
-    }
-
-    return switch (min(touched.length, 4)) {
-      0 => 0,
-      1 => 5,
-      2 => 10,
-      3 => 25,
-      _ => 40,
-    };
+    // LCK = current consecutive-day training streak, capped at 100.
+    // The consistent lifter is the lucky one. Fed by training history only.
+    return min(
+      WorkoutMetricService.currentStreak(sessions, now: _nowProvider()),
+      100,
+    );
   }
 
   String? _statForLog(

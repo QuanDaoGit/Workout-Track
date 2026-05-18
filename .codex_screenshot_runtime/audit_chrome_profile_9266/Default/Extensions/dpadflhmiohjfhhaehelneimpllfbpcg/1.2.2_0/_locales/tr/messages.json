@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "İşlem başarısız oldu",
+      "message": "İşlem başarısız oldu"
+   },
+   "addTask": {
+      "description": "Görev Ekle",
+      "message": "Görev Ekle"
+   },
+   "autoOpen": {
+      "description": "Başarıyla kaydedildikten sonra TeraBox anasayfası otomatik olarak açılacaktır.",
+      "message": "Başarıyla kaydedildikten sonra TeraBox anasayfası otomatik olarak açılacaktır."
+   },
+   "cancel": {
+      "description": "İptal",
+      "message": "İptal"
+   },
+   "confirm": {
+      "description": "Onayla",
+      "message": "Onayla"
+   },
+   "confirmLogout": {
+      "description": "Çıkış yapmak istediğinize emin misiniz?",
+      "message": "Çıkış yapmak istediğinize emin misiniz?"
+   },
+   "delete": {
+      "description": "Sil",
+      "message": "Sil"
+   },
+   "download": {
+      "description": "İndir",
+      "message": "İndir"
+   },
+   "downloadDetected": {
+      "description": "Dosya İndirmesi Tespit Edildi",
+      "message": "Dosya İndirmesi Tespit Edildi"
+   },
+   "extInstalled": {
+      "description": "Uzantı başarıyla yüklendi",
+      "message": "Uzantı başarıyla yüklendi"
+   },
+   "extensionDescription": {
+      "description": "Ekran görüntüsü, yüklemeler ve diğer TeraBox özelliklerini destekler",
+      "message": "Ekran görüntüsü, yüklemeler ve diğer TeraBox özelliklerini destekler"
+   },
+   "extensionName": {
+      "description": "TeraBox İndirme Yardımcısı",
+      "message": "TeraBox İndirme Yardımcısı"
+   },
+   "fail": {
+      "description": "Başarısız oldu",
+      "message": "Başarısız oldu"
+   },
+   "fileDownloaded": {
+      "description": "Dosya İndiriliyor",
+      "message": "Dosya İndiriliyor"
+   },
+   "freeformScreenshotUpload": {
+      "description": "Serbest Ekran Görüntüsü Yükle",
+      "message": "Serbest Ekran Görüntüsü Yükle"
+   },
+   "login": {
+      "description": "Giriş Yap",
+      "message": "Giriş Yap"
+   },
+   "logout": {
+      "description": "Çıkış Yap",
+      "message": "Çıkış Yap"
+   },
+   "noRecord": {
+      "description": "Geçici olarak kayıt yok",
+      "message": "Geçici olarak kayıt yok"
+   },
+   "noReminder": {
+      "description": "30 Gün Boyunca Bir Daha Hatırlatma",
+      "message": "30 Gün Boyunca Bir Daha Hatırlatma"
+   },
+   "notice": {
+      "description": "Duyuru",
+      "message": "Duyuru"
+   },
+   "openHome": {
+      "description": "TeraBox'u açın",
+      "message": "TeraBox'u açın"
+   },
+   "refreshAndRetry": {
+      "description": "Lütfen sayfayı yenileyip tekrar deneyin",
+      "message": "Lütfen sayfayı yenileyip tekrar deneyin"
+   },
+   "refreshToEnable": {
+      "description": "Uzantıyı etkinleştirmek için lütfen sayfayı yenileyin",
+      "message": "Uzantıyı etkinleştirmek için lütfen sayfayı yenileyin"
+   },
+   "reloadExtension": {
+      "description": "Uzantıyı yeniden yükle",
+      "message": "Uzantıyı yeniden yükle"
+   },
+   "remoteUpload": {
+      "description": "Uzak Video Yükleme",
+      "message": "Uzak Video Yükleme"
+   },
+   "retry": {
+      "description": "Tekrar dene",
+      "message": "Tekrar dene"
+   },
+   "saveto": {
+      "description": "TeraBox'a Kaydet",
+      "message": "TeraBox'a Kaydet"
+   },
+   "saving": {
+      "description": "Kaydediliyor",
+      "message": "Kaydediliyor"
+   },
+   "screenshotLost": {
+      "description": "Ekran görüntüsü kayıp, lütfen tekrar deneyin",
+      "message": "Ekran görüntüsü kayıp, lütfen tekrar deneyin"
+   },
+   "screenshotUpload": {
+      "description": "Ekran Görüntüsü Yükle",
+      "message": "Ekran Görüntüsü Yükle"
+   },
+   "success": {
+      "description": "Başarı",
+      "message": "Başarı"
+   },
+   "taskHistory": {
+      "description": "Görev Geçmişi",
+      "message": "Görev Geçmişi"
+   },
+   "unloggedIn": {
+      "description": "TeraBox’a giriş yapılmadı. Lütfen giriş yapıp tekrar deneyin",
+      "message": "TeraBox’a giriş yapılmadı. Lütfen giriş yapıp tekrar deneyin"
+   },
+   "uploadFail": {
+      "description": "Yükleme başarısız oldu.",
+      "message": "Yükleme başarısız oldu."
+   },
+   "uploadSuccess": {
+      "description": "Yükleme başarılı",
+      "message": "Yükleme başarılı"
+   },
+   "uploading": {
+      "description": "Yükleniyor...",
+      "message": "Yükleniyor..."
+   },
+   "websiteUnsupported": {
+      "description": "Desteklenmeyen Web Sitesi",
+      "message": "Desteklenmeyen Web Sitesi"
+   }
+}

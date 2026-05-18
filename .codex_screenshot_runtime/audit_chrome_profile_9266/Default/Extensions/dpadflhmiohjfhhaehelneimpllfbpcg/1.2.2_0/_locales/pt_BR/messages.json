@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "Operação falhou",
+      "message": "Operação falhou"
+   },
+   "addTask": {
+      "description": "Adicionar tarefa",
+      "message": "Adicionar tarefa"
+   },
+   "autoOpen": {
+      "description": "A página inicial do TeraBox será aberta automaticamente após salvar com sucesso.",
+      "message": "A página inicial do TeraBox será aberta automaticamente após salvar com sucesso."
+   },
+   "cancel": {
+      "description": "Cancelar",
+      "message": "Cancelar"
+   },
+   "confirm": {
+      "description": "Confirmar",
+      "message": "Confirmar"
+   },
+   "confirmLogout": {
+      "description": "Confirmar logout?",
+      "message": "Confirmar logout?"
+   },
+   "delete": {
+      "description": "Excluir",
+      "message": "Excluir"
+   },
+   "download": {
+      "description": "Baixar",
+      "message": "Baixar"
+   },
+   "downloadDetected": {
+      "description": "Download de arquivo detectado",
+      "message": "Download de arquivo detectado"
+   },
+   "extInstalled": {
+      "description": "Extensão instalada com sucesso",
+      "message": "Extensão instalada com sucesso"
+   },
+   "extensionDescription": {
+      "description": "Suporta capturas de tela, uploads e outros recursos do TeraBox",
+      "message": "Suporta capturas de tela, uploads e outros recursos do TeraBox"
+   },
+   "extensionName": {
+      "description": "Assistente de Download do TeraBox",
+      "message": "Assistente de Download do TeraBox"
+   },
+   "fail": {
+      "description": "Falhou",
+      "message": "Falhou"
+   },
+   "fileDownloaded": {
+      "description": "O arquivo está sendo baixado",
+      "message": "O arquivo está sendo baixado"
+   },
+   "freeformScreenshotUpload": {
+      "description": "Upload de captura personalizada",
+      "message": "Upload de captura personalizada"
+   },
+   "login": {
+      "description": "Entrar",
+      "message": "Entrar"
+   },
+   "logout": {
+      "description": "Sair",
+      "message": "Sair"
+   },
+   "noRecord": {
+      "description": "Sem registros no momento",
+      "message": "Sem registros no momento"
+   },
+   "noReminder": {
+      "description": "Não lembrar novamente por 30 dias",
+      "message": "Não lembrar novamente por 30 dias"
+   },
+   "notice": {
+      "description": "Aviso",
+      "message": "Aviso"
+   },
+   "openHome": {
+      "description": "Abrir TeraBox",
+      "message": "Abrir TeraBox"
+   },
+   "refreshAndRetry": {
+      "description": "Atualize a página e tente novamente",
+      "message": "Atualize a página e tente novamente"
+   },
+   "refreshToEnable": {
+      "description": "Atualize a página para ativar a extensão",
+      "message": "Atualize a página para ativar a extensão"
+   },
+   "reloadExtension": {
+      "description": "Recarregar extensão",
+      "message": "Recarregar extensão"
+   },
+   "remoteUpload": {
+      "description": "Upload remoto de vídeo",
+      "message": "Upload remoto de vídeo"
+   },
+   "retry": {
+      "description": "Tente novamente",
+      "message": "Tente novamente"
+   },
+   "saveto": {
+      "description": "Salvar no TeraBox",
+      "message": "Salvar no TeraBox"
+   },
+   "saving": {
+      "description": "Salvando",
+      "message": "Salvando"
+   },
+   "screenshotLost": {
+      "description": "Captura de tela ausente, tente novamente",
+      "message": "Captura de tela ausente, tente novamente"
+   },
+   "screenshotUpload": {
+      "description": "Upload de captura de tela",
+      "message": "Upload de captura de tela"
+   },
+   "success": {
+      "description": "Sucesso",
+      "message": "Sucesso"
+   },
+   "taskHistory": {
+      "description": "Histórico de tarefas",
+      "message": "Histórico de tarefas"
+   },
+   "unloggedIn": {
+      "description": "Você não está conectado ao TeraBox. Faça login e tente novamente",
+      "message": "Você não está conectado ao TeraBox. Faça login e tente novamente"
+   },
+   "uploadFail": {
+      "description": "Falha no upload.",
+      "message": "Falha no upload."
+   },
+   "uploadSuccess": {
+      "description": "Carregado com sucesso",
+      "message": "Carregado com sucesso"
+   },
+   "uploading": {
+      "description": "Fazendo upload...",
+      "message": "Fazendo upload..."
+   },
+   "websiteUnsupported": {
+      "description": "Site não suportado",
+      "message": "Site não suportado"
+   }
+}

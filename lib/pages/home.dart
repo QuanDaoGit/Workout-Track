@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../data/loot_registry.dart';
 import '../data/programs_library.dart';
 import '../models/loot_item.dart';
 import '../models/program_models.dart';
 import '../models/profile_models.dart';
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
-import '../services/idle_battle_service.dart';
-import '../services/class_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/loot_service.dart';
 import '../services/profile_service.dart';
@@ -33,8 +30,6 @@ import '../widgets/strobe_flash.dart';
 import '../widgets/rest_icon.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
-import 'live_dungeon_page.dart';
-import 'ultimate_unlock_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, this.onViewQuests, this.onViewProfile});
@@ -69,8 +64,6 @@ class HomePageState extends State<HomePage> {
   bool _showLevelUp = false;
   int _levelUpShakeTrigger = 0;
   int _missionFlashTrigger = 0;
-  int _dungeonFloor = 1;
-  bool _isRestDay = false;
   Map<LootCategory, LootItem> _equippedLoot = {};
   ProgramProgress? _programProgress;
   ProgramDay? _programDay;
@@ -115,7 +108,10 @@ class HomePageState extends State<HomePage> {
     restState = await restService.ensureAutomaticRecoveryForToday(
       sessions: all,
       baseXP:
-          XpService.calculateTotalXP(all) + questClaimedXP + currentRecoveryXP + potionBonusXP,
+          XpService.calculateTotalXP(all) +
+          questClaimedXP +
+          currentRecoveryXP +
+          potionBonusXP,
       state: restState,
     );
     final recoveryXP = restService.effectiveRecoveryXPForState(
@@ -124,8 +120,6 @@ class HomePageState extends State<HomePage> {
     );
     final questSummary = await QuestService().getSummary(all);
     final profile = await ProfileService().loadProfile();
-    final idleService = IdleBattleService();
-    final dungeonFloor = await idleService.getCurrentFloor();
     final equippedLoot = await LootService().getEquippedLoot();
     final programCompletedToday = await programService
         .completedSnapshotForToday(now: today);
@@ -216,20 +210,12 @@ class HomePageState extends State<HomePage> {
       _todayRestInfo = todayRestInfo;
       _profile = profile;
       _missionCompletedToday = missionCompleted;
-      _dungeonFloor = dungeonFloor;
-      _isRestDay = todayRestInfo.isPlannedRestDay;
       _equippedLoot = equippedLoot;
       _programProgress = programProgress;
       _programDay = programDay;
       _programCompletedToday = programCompletedToday;
       _loading = false;
     });
-
-    // Check for pending ultimate reveal.
-    final ultimatePending = await ClassService().hasPendingUltimateReveal();
-    if (ultimatePending && mounted) {
-      Navigator.push(context, arcadeRoute((_) => const UltimateUnlockPage()));
-    }
   }
 
   Color _rankColor() {
@@ -1452,102 +1438,6 @@ class HomePageState extends State<HomePage> {
     );
   }
 
-  // ── Dungeon card ─────────────────────────────────────────────────────────
-
-  void _openDungeon() {
-    Navigator.push(
-      context,
-      arcadeRoute((_) => const LiveDungeonPage()),
-    ).then((_) => _loadData());
-  }
-
-  Widget _buildBossRewardPreview() {
-    if (_dungeonFloor % 10 != 0) return const SizedBox.shrink();
-    final reward = bossLootForFloor(_dungeonFloor);
-    return Padding(
-      padding: const EdgeInsets.only(top: kSpace2),
-      child: RichText(
-        text: TextSpan(
-          style: GoogleFonts.shareTechMono(fontSize: 12),
-          children: [
-            const TextSpan(
-              text: 'REWARD: ',
-              style: TextStyle(color: kMutedText),
-            ),
-            TextSpan(
-              text: '★ ${reward.name}',
-              style: TextStyle(
-                color: reward.rarity.color,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            TextSpan(
-              text: ' (${reward.rarity.label})',
-              style: TextStyle(color: reward.rarity.color),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDungeonCard() {
-    return ArcadeTap(
-      onTap: _openDungeon,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: _themedCardColor(kCard),
-          border: Border.all(color: _isRestDay ? kMutedText : kNeon, width: 1),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                ImageIcon(
-                  const AssetImage('assets/icons/control/icon_sword.png'),
-                  size: 14,
-                  color: _isRestDay ? kMutedText : kAmber,
-                ),
-                const SizedBox(width: kSpace2),
-                Text(
-                  'DUNGEON — FLOOR $_dungeonFloor',
-                  style: TextStyle(
-                    fontFamily: 'PressStart2P',
-                    fontSize: 8,
-                    color: _isRestDay ? kMutedText : kAmber,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: kSpace2),
-            if (_isRestDay)
-              Text(
-                'RESTING',
-                style: GoogleFonts.shareTechMono(
-                  fontSize: 12,
-                  color: kMutedText,
-                ),
-              )
-            else
-              const PulseColorText(
-                'FIGHTING',
-                style: TextStyle(fontFamily: 'PressStart2P', fontSize: 8),
-                colorA: kNeon,
-                colorB: kNeonDark,
-                periodMs: 500,
-              ),
-            _buildBossRewardPreview(),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ── Build ──────────────────────────────────────────────────────────────────
 
   Widget _buildLastWorkoutStat() {
@@ -1618,8 +1508,6 @@ class HomePageState extends State<HomePage> {
             _buildLastWorkoutStat(),
             const SizedBox(height: 14),
             _buildWeeklyQuestsCard(),
-            const SizedBox(height: 14),
-            _buildDungeonCard(),
             const SizedBox(height: 24),
           ],
         ),

@@ -1,7 +1,6 @@
 import '../models/loot_item.dart';
+import '../models/loot_unlock_rule.dart';
 
-const String unlockChestPath = 'assets/unlocks/chests';
-const String unlockEffectPath = 'assets/unlocks/effects';
 const String unlockFramePath = 'assets/unlocks/frames';
 const String unlockThemePath = 'assets/unlocks/themes';
 
@@ -14,6 +13,7 @@ const List<LootItem> lootRegistry = [
     rarity: LootRarity.common,
     assetPath: '$unlockFramePath/frame_iron.png',
     colorValue: 0xFF6B6B8A,
+    isDefault: true,
   ),
   LootItem(
     id: 'frame_stone',
@@ -45,13 +45,12 @@ const List<LootItem> lootRegistry = [
   LootItem(
     id: 'frame_gold',
     name: 'Gold Frame',
-    description: 'Ornate gold border with corner studs.',
+    description: 'Ornate gold border. 500 lifetime reps.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.rare,
     assetPath: '$unlockFramePath/frame_gold.png',
     colorValue: 0xFFFFD700,
-    bossFloor: 10,
-    bossExclusive: true,
+    unlockRule: LootUnlockRule(kind: UnlockKind.lifetimeReps, threshold: 500),
   ),
   LootItem(
     id: 'frame_neon',
@@ -65,13 +64,15 @@ const List<LootItem> lootRegistry = [
   LootItem(
     id: 'frame_inferno',
     name: 'Inferno Frame',
-    description: 'Flame border with red-orange pixels.',
+    description: 'Flame border. 25,000 kg lifetime volume.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.epic,
     assetPath: '$unlockFramePath/frame_inferno.png',
     colorValue: 0xFFFF6B1A,
-    bossFloor: 40,
-    bossExclusive: true,
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.lifetimeVolume,
+      threshold: 25000,
+    ),
   ),
   LootItem(
     id: 'frame_void',
@@ -94,26 +95,36 @@ const List<LootItem> lootRegistry = [
   LootItem(
     id: 'title_iron_will',
     name: 'Iron Will',
-    description: 'Completed 5 dungeon floors.',
+    description: 'Completed 25 workout sessions.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.common,
     assetPath: '',
+    unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 25),
   ),
   LootItem(
     id: 'title_shadow_slayer',
     name: 'Shadow Slayer',
-    description: 'Defeated 10 Shadow Rats.',
+    description: 'Completed 10 chest sessions.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.common,
     assetPath: '',
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.muscleSessions,
+      threshold: 10,
+      muscleGroup: 'Chest',
+    ),
   ),
   LootItem(
     id: 'title_grinder',
     name: 'The Grinder',
-    description: 'Reached floor 15.',
+    description: '10,000 kg lifetime volume.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.uncommon,
     assetPath: '',
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.lifetimeVolume,
+      threshold: 10000,
+    ),
   ),
   LootItem(
     id: 'title_iron_warden',
@@ -122,34 +133,46 @@ const List<LootItem> lootRegistry = [
     category: LootCategory.titleBadge,
     rarity: LootRarity.uncommon,
     assetPath: '',
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.statThreshold,
+      threshold: 400,
+      statKey: 'STR',
+    ),
   ),
   LootItem(
     id: 'title_dungeon_crawler',
-    name: 'Dungeon Crawler',
-    description: 'Reached floor 25.',
+    name: 'Gym Veteran',
+    description: 'Completed 50 workout sessions.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.uncommon,
     assetPath: '',
+    unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 50),
   ),
   LootItem(
     id: 'title_golem_breaker',
     name: 'Golem Breaker',
-    description: 'Defeated Boss Iron Golem.',
+    description: '5,000 kg chest volume.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.rare,
     assetPath: '',
-    bossFloor: 20,
-    bossExclusive: true,
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.muscleVolume,
+      threshold: 5000,
+      muscleGroup: 'Chest',
+    ),
   ),
   LootItem(
     id: 'title_wraith_hunter',
     name: 'Wraith Hunter',
-    description: 'Defeated Boss Wraith Knight.',
+    description: '10,000 kg back volume.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.rare,
     assetPath: '',
-    bossFloor: 30,
-    bossExclusive: true,
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.muscleVolume,
+      threshold: 10000,
+      muscleGroup: 'Back',
+    ),
   ),
   LootItem(
     id: 'title_legend',
@@ -158,6 +181,10 @@ const List<LootItem> lootRegistry = [
     category: LootCategory.titleBadge,
     rarity: LootRarity.rare,
     assetPath: '',
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.anyStatThreshold,
+      threshold: 700,
+    ),
   ),
   LootItem(
     id: 'title_s_rank',
@@ -166,16 +193,22 @@ const List<LootItem> lootRegistry = [
     category: LootCategory.titleBadge,
     rarity: LootRarity.epic,
     assetPath: '',
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.anyStatThreshold,
+      threshold: 800,
+    ),
   ),
   LootItem(
     id: 'title_floor_master',
     name: 'Floor Master',
-    description: 'Reached floor 50.',
+    description: '100,000 kg lifetime volume.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.epic,
     assetPath: '',
-    bossFloor: 50,
-    bossExclusive: true,
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.lifetimeVolume,
+      threshold: 100000,
+    ),
   ),
   LootItem(
     id: 'title_ironbit',
@@ -184,11 +217,12 @@ const List<LootItem> lootRegistry = [
     category: LootCategory.titleBadge,
     rarity: LootRarity.epic,
     assetPath: '',
+    unlockRule: LootUnlockRule(kind: UnlockKind.allStatsAbove, threshold: 600),
   ),
   LootItem(
     id: 'theme_default',
-    name: 'Default Dungeon',
-    description: 'Current dark dungeon cards.',
+    name: 'Default Arcade',
+    description: 'Current dark arcade cards.',
     category: LootCategory.homeTheme,
     rarity: LootRarity.common,
     assetPath: '$unlockThemePath/theme_default.png',
@@ -222,78 +256,7 @@ const List<LootItem> lootRegistry = [
     assetPath: '$unlockThemePath/theme_inferno.png',
     colorValue: 0xFF3A1717,
   ),
-  LootItem(
-    id: 'effect_default',
-    name: 'Neon Strike',
-    description: 'Default green hit flash.',
-    category: LootCategory.battleEffect,
-    rarity: LootRarity.common,
-    assetPath: '$unlockEffectPath/effect_default.png',
-    colorValue: 0xFF00FF9C,
-    isDefault: true,
-  ),
-  LootItem(
-    id: 'effect_frost',
-    name: 'Frost Strike',
-    description: 'Cyan hit flash.',
-    category: LootCategory.battleEffect,
-    rarity: LootRarity.uncommon,
-    assetPath: '$unlockEffectPath/effect_frost.png',
-    colorValue: 0xFF00BFFF,
-  ),
-  LootItem(
-    id: 'effect_solar',
-    name: 'Solar Strike',
-    description: 'Gold hit flash.',
-    category: LootCategory.battleEffect,
-    rarity: LootRarity.rare,
-    assetPath: '$unlockEffectPath/effect_solar.png',
-    colorValue: 0xFFFFD700,
-  ),
-  LootItem(
-    id: 'effect_void',
-    name: 'Void Strike',
-    description: 'Purple hit flash.',
-    category: LootCategory.battleEffect,
-    rarity: LootRarity.epic,
-    assetPath: '$unlockEffectPath/effect_void.png',
-    colorValue: 0xFF9B59B6,
-  ),
-  // Class epic frames — unlocked via ultimate ability
-  LootItem(
-    id: 'frame_epic_assassin',
-    name: 'Assassin Frame',
-    description: 'Cyan edge frame for masters of the blade.',
-    category: LootCategory.avatarFrame,
-    rarity: LootRarity.epic,
-    assetPath: 'assets/classes/frames/frame_epic_assassin.png',
-    colorValue: 0xFF4DE5FF,
-    bossExclusive: true,
-  ),
-  LootItem(
-    id: 'frame_epic_bruiser',
-    name: 'Bruiser Frame',
-    description: 'Gold-forged frame for warriors of raw power.',
-    category: LootCategory.avatarFrame,
-    rarity: LootRarity.epic,
-    assetPath: 'assets/classes/frames/frame_epic_bruiser.png',
-    colorValue: 0xFFFFD700,
-    bossExclusive: true,
-  ),
-  LootItem(
-    id: 'frame_epic_tank',
-    name: 'Tank Frame',
-    description: 'Crimson fortified frame for the unbreakable.',
-    category: LootCategory.avatarFrame,
-    rarity: LootRarity.epic,
-    assetPath: 'assets/classes/frames/frame_epic_tank.png',
-    colorValue: 0xFFFF2D55,
-    bossExclusive: true,
-  ),
 ];
-
-const String commonChestAsset = '$unlockChestPath/chest_common.png';
-const String bossChestAsset = '$unlockChestPath/chest_boss.png';
 
 LootItem? lootItemById(String id) {
   for (final item in lootRegistry) {
@@ -309,23 +272,4 @@ List<String> get defaultLootIds {
       .where((item) => item.isDefault)
       .map((item) => item.id)
       .toList();
-}
-
-List<LootItem> get normalLootPool {
-  return lootRegistry
-      .where((item) => !item.isDefault && !item.bossExclusive)
-      .toList(growable: false);
-}
-
-LootItem bossLootForFloor(int floor) {
-  final exact = lootRegistry.where((item) => item.bossFloor == floor).toList();
-  if (exact.isNotEmpty) {
-    return exact.first;
-  }
-
-  final bossDrops = lootRegistry
-      .where((item) => item.bossExclusive)
-      .toList(growable: false);
-  final bossIndex = ((floor ~/ 10) - 1) % bossDrops.length;
-  return bossDrops[bossIndex];
 }

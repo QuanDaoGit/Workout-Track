@@ -105,23 +105,63 @@ void main() {
     expect(stats, {'STR': 0, 'DEF': 0, 'VIT': 0, 'AGI': 0, 'LCK': 0});
   });
 
-  test('calculates LCK from weekly touched combat groups', () async {
+  test('LCK reflects current training streak capped at 100', () async {
     final now = DateTime(2026, 5, 14, 10);
     final engine = StatEngine(nowProvider: () => now, catalog: catalog);
-    final logsByCount = [
-      <ExerciseLog>[],
-      [_log('bench')],
-      [_log('bench'), _log('row')],
-      [_log('bench'), _log('row'), _log('squat')],
-      [_log('bench'), _log('row'), _log('squat'), _log('crunch')],
-    ];
-    final expected = [0, 5, 10, 25, 40];
 
-    for (var i = 0; i < logsByCount.length; i++) {
-      SharedPreferences.setMockInitialValues({});
-      await _seedSessions([_session(date: now, logs: logsByCount[i])]);
-      expect(await engine.calculateLuck(), expected[i]);
-    }
+    // 0 sessions → no streak → LCK 0.
+    SharedPreferences.setMockInitialValues({});
+    await _seedSessions([]);
+    expect(await engine.calculateLuck(), 0);
+
+    // Session today only → streak 1.
+    SharedPreferences.setMockInitialValues({});
+    await _seedSessions([
+      _session(date: now, logs: [_log('bench')]),
+    ]);
+    expect(await engine.calculateLuck(), 1);
+
+    // Three consecutive days ending today → streak 3.
+    SharedPreferences.setMockInitialValues({});
+    await _seedSessions([
+      _session(
+        date: now.subtract(const Duration(days: 2)),
+        id: 'd-2',
+        logs: [_log('bench')],
+      ),
+      _session(
+        date: now.subtract(const Duration(days: 1)),
+        id: 'd-1',
+        logs: [_log('bench')],
+      ),
+      _session(date: now, id: 'd0', logs: [_log('bench')]),
+    ]);
+    expect(await engine.calculateLuck(), 3);
+
+    // Gap on yesterday breaks the streak — only today counts.
+    SharedPreferences.setMockInitialValues({});
+    await _seedSessions([
+      _session(
+        date: now.subtract(const Duration(days: 2)),
+        id: 'd-2',
+        logs: [_log('bench')],
+      ),
+      _session(date: now, id: 'd0', logs: [_log('bench')]),
+    ]);
+    expect(await engine.calculateLuck(), 1);
+
+    // Longer streaks should map directly to LCK until the 100 cap.
+    SharedPreferences.setMockInitialValues({});
+    await _seedSessions(_streakSessions(now: now, days: 50));
+    expect(await engine.calculateLuck(), 50);
+
+    SharedPreferences.setMockInitialValues({});
+    await _seedSessions(_streakSessions(now: now, days: 100));
+    expect(await engine.calculateLuck(), 100);
+
+    SharedPreferences.setMockInitialValues({});
+    await _seedSessions(_streakSessions(now: now, days: 200));
+    expect(await engine.calculateLuck(), 100);
   });
 
   test('planned rest days do not advance decay', () async {
@@ -294,8 +334,11 @@ void main() {
       jsonDecode(prefs.getString(StatEngine.combatStatsKey)!),
       containsPair('STR', stats['STR']),
     );
-    expect(delta.keys, ['STR']);
+    // Two consecutive-day sessions: STR grew with the new volume, LCK grew
+    // with the streak (1 → 2). Both deltas should be present.
+    expect(delta.keys, containsAll(['STR', 'LCK']));
     expect(delta['STR'], stats['STR']! - _statFromVolume(250));
+    expect(delta['LCK'], 1);
   });
 
   test('returns rank letters and colors', () {
@@ -348,6 +391,20 @@ ExerciseLog _log(String id, {double weight = 50, int reps = 5, int sets = 1}) {
     exerciseName: id,
     sets: [for (var i = 0; i < sets; i++) SetEntry(weight: weight, reps: reps)],
   );
+}
+
+List<WorkoutSession> _streakSessions({
+  required DateTime now,
+  required int days,
+}) {
+  return [
+    for (var i = days - 1; i >= 0; i--)
+      _session(
+        date: DateTime(now.year, now.month, now.day - i, now.hour),
+        id: 'streak-$i',
+        logs: [_log('bench')],
+      ),
+  ];
 }
 
 int _statFromVolume(double volume) {

@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "فشلت العملية",
+      "message": "فشلت العملية"
+   },
+   "addTask": {
+      "description": "إضافة مهمة",
+      "message": "إضافة مهمة"
+   },
+   "autoOpen": {
+      "description": "سيتم فتح صفحة TeraBox الرئيسية تلقائيًا بعد الحفظ بنجاح.",
+      "message": "سيتم فتح صفحة TeraBox الرئيسية تلقائيًا بعد الحفظ بنجاح."
+   },
+   "cancel": {
+      "description": "إلغاء",
+      "message": "إلغاء"
+   },
+   "confirm": {
+      "description": "تأكيد",
+      "message": "تأكيد"
+   },
+   "confirmLogout": {
+      "description": "هل تريد تأكيد تسجيل الخروج؟",
+      "message": "هل تريد تأكيد تسجيل الخروج؟"
+   },
+   "delete": {
+      "description": "حذف",
+      "message": "حذف"
+   },
+   "download": {
+      "description": "تنزيل",
+      "message": "تنزيل"
+   },
+   "downloadDetected": {
+      "description": "تم الكشف عن تنزيل ملف",
+      "message": "تم الكشف عن تنزيل ملف"
+   },
+   "extInstalled": {
+      "description": "تم تثبيت الإضافة بنجاح",
+      "message": "تم تثبيت الإضافة بنجاح"
+   },
+   "extensionDescription": {
+      "description": "يدعم لقطات الشاشة والتحميل والميزات الأخرى لـ TeraBox",
+      "message": "يدعم لقطات الشاشة والتحميل والميزات الأخرى لـ TeraBox"
+   },
+   "extensionName": {
+      "description": "مساعد التنزيل TeraBox",
+      "message": "مساعد التنزيل TeraBox"
+   },
+   "fail": {
+      "description": "فشل",
+      "message": "فشل"
+   },
+   "fileDownloaded": {
+      "description": "يتم تنزيل الملف",
+      "message": "يتم تنزيل الملف"
+   },
+   "freeformScreenshotUpload": {
+      "description": "تحميل لقطة شاشة مخصصة",
+      "message": "تحميل لقطة شاشة مخصصة"
+   },
+   "login": {
+      "description": "تسجيل الدخول",
+      "message": "تسجيل الدخول"
+   },
+   "logout": {
+      "description": "تسجيل الخروج",
+      "message": "تسجيل الخروج"
+   },
+   "noRecord": {
+      "description": "لا توجد سجلات مؤقتة",
+      "message": "لا توجد سجلات مؤقتة"
+   },
+   "noReminder": {
+      "description": "لا تذكرني مرة أخرى لمدة 30 يومًا",
+      "message": "لا تذكرني مرة أخرى لمدة 30 يومًا"
+   },
+   "notice": {
+      "description": "إشعار",
+      "message": "إشعار"
+   },
+   "openHome": {
+      "description": "فتح TeraBox",
+      "message": "فتح TeraBox"
+   },
+   "refreshAndRetry": {
+      "description": "يرجى تحديث الصفحة ثم المحاولة مرة أخرى",
+      "message": "يرجى تحديث الصفحة ثم المحاولة مرة أخرى"
+   },
+   "refreshToEnable": {
+      "description": "يرجى تحديث الصفحة لتفعيل الإضافة",
+      "message": "يرجى تحديث الصفحة لتفعيل الإضافة"
+   },
+   "reloadExtension": {
+      "description": "إعادة تحميل الإضافة",
+      "message": "إعادة تحميل الإضافة"
+   },
+   "remoteUpload": {
+      "description": "تحميل الفيديو عن بُعد",
+      "message": "تحميل الفيديو عن بُعد"
+   },
+   "retry": {
+      "description": "إعادة المحاولة",
+      "message": "إعادة المحاولة"
+   },
+   "saveto": {
+      "description": "حفظ في TeraBox",
+      "message": "حفظ في TeraBox"
+   },
+   "saving": {
+      "description": "جارٍ الحفظ",
+      "message": "جارٍ الحفظ"
+   },
+   "screenshotLost": {
+      "description": "لقطة الشاشة مفقودة، يرجى المحاولة مرة أخرى",
+      "message": "لقطة الشاشة مفقودة، يرجى المحاولة مرة أخرى"
+   },
+   "screenshotUpload": {
+      "description": "تحميل لقطة شاشة",
+      "message": "تحميل لقطة شاشة"
+   },
+   "success": {
+      "description": "النجاح",
+      "message": "النجاح"
+   },
+   "taskHistory": {
+      "description": "سجل المهام",
+      "message": "سجل المهام"
+   },
+   "unloggedIn": {
+      "description": "لم تقم بتسجيل الدخول إلى TeraBox. الرجاء تسجيل الدخول والمحاولة مرة أخرى",
+      "message": "لم تقم بتسجيل الدخول إلى TeraBox. الرجاء تسجيل الدخول والمحاولة مرة أخرى"
+   },
+   "uploadFail": {
+      "description": "فشل التحميل.",
+      "message": "فشل التحميل."
+   },
+   "uploadSuccess": {
+      "description": "تم التحميل بنجاح",
+      "message": "تم التحميل بنجاح"
+   },
+   "uploading": {
+      "description": "جار التحميل...",
+      "message": "جار التحميل..."
+   },
+   "websiteUnsupported": {
+      "description": "الموقع غير مدعوم",
+      "message": "الموقع غير مدعوم"
+   }
+}

@@ -7,8 +7,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../data/curated_exercises.dart';
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
-import '../services/battle_engine.dart';
-import '../services/idle_battle_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/favorite_service.dart';
 import '../services/quest_service.dart';
@@ -24,7 +22,6 @@ import '../widgets/exercise_card.dart';
 import '../widgets/pixel_loader.dart';
 import 'Workout session/session_detail.dart';
 import 'calendar_page.dart';
-import 'battle_page.dart';
 import 'create_exercise_page.dart';
 import 'exercise_detail.dart';
 
@@ -62,7 +59,7 @@ class WorkoutPageState extends State<WorkoutPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -82,7 +79,6 @@ class WorkoutPageState extends State<WorkoutPage>
           tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(text: 'HISTORY'),
-            Tab(text: 'COMBAT'),
             Tab(text: 'EXERCISES'),
             Tab(text: 'STATS'),
           ],
@@ -96,199 +92,9 @@ class WorkoutPageState extends State<WorkoutPage>
         controller: _tabController,
         children: [
           _HistoryTab(reloadToken: _reloadToken),
-          _CombatHistoryTab(reloadToken: _reloadToken),
           const _ExercisesTab(),
           _StatsTab(reloadToken: _reloadToken),
         ],
-      ),
-    );
-  }
-}
-
-// ── Combat History Tab ────────────────────────────────────────────────────────
-
-class _CombatHistoryTab extends StatefulWidget {
-  const _CombatHistoryTab({required this.reloadToken});
-
-  final int reloadToken;
-
-  @override
-  State<_CombatHistoryTab> createState() => _CombatHistoryTabState();
-}
-
-class _CombatHistoryTabState extends State<_CombatHistoryTab> {
-  List<BattleResult> _history = [];
-  int _floor = 1;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void didUpdateWidget(_CombatHistoryTab old) {
-    super.didUpdateWidget(old);
-    if (old.reloadToken != widget.reloadToken) _load();
-  }
-
-  Future<void> _load() async {
-    final service = IdleBattleService();
-    final history = await service.getHistory();
-    final floor = await service.getCurrentFloor();
-    if (!mounted) return;
-    setState(() {
-      _history = history.reversed.toList();
-      _floor = floor;
-      _loading = false;
-    });
-  }
-
-  String _fmtDate(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.day}';
-  }
-
-  String _resultLabel(BattleResult r) {
-    if (r.playerWon) return 'VICTORY';
-    if (r.isDraw) return 'DRAW';
-    return 'DEFEATED';
-  }
-
-  Color _resultColor(BattleResult r) {
-    if (r.playerWon) return const Color(0xFF00FF9C);
-    if (r.isDraw) return const Color(0xFFFFD700);
-    return const Color(0xFFFF2D55);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // Floor header
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF121225),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(
-            children: [
-              const ImageIcon(
-                AssetImage('assets/icons/control/icon_sword.png'),
-                size: 16,
-                color: Color(0xFFFFD700),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'CURRENT FLOOR: $_floor',
-                style: const TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 9,
-                  color: Color(0xFFFFD700),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '${_history.where((r) => r.playerWon).length} wins',
-                style: GoogleFonts.shareTechMono(
-                  fontSize: 12,
-                  color: const Color(0xFF00FF9C),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        if (_history.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 48),
-              child: Text(
-                'No battles fought yet.\nComplete a workout to enter the dungeon.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.shareTechMono(
-                  fontSize: 13,
-                  color: const Color(0xFF6B6B8A),
-                ),
-              ),
-            ),
-          )
-        else
-          for (final result in _history) ...[
-            _buildBattleEntry(result),
-            const Divider(color: Color(0xFF2A2A4A), height: 1),
-          ],
-      ],
-    );
-  }
-
-  Widget _buildBattleEntry(BattleResult result) {
-    return InkWell(
-      onTap: () {
-        Navigator.push(context, arcadeRoute((_) => BattlePage(replay: result)));
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            const ImageIcon(
-              AssetImage('assets/icons/control/icon_sword.png'),
-              size: 14,
-              color: Color(0xFF6B6B8A),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Floor ${result.floor} — ${result.enemy.name}',
-                    style: GoogleFonts.shareTechMono(
-                      fontSize: 14,
-                      color: const Color(0xFFE8E8FF),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _resultLabel(result),
-                    style: TextStyle(
-                      fontFamily: 'PressStart2P',
-                      fontSize: 8,
-                      color: _resultColor(result),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              _fmtDate(result.timestamp),
-              style: GoogleFonts.shareTechMono(
-                fontSize: 12,
-                color: const Color(0xFF6B6B8A),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1018,7 +824,11 @@ class _StatsTabState extends State<_StatsTab> {
     final potionBonusXP = await XpBoostService().getTotalBonusXP();
     await restService.ensureAutomaticRecoveryForToday(
       sessions: all,
-      baseXP: XpService.calculateTotalXP(all) + questXP + currentRecoveryXP + potionBonusXP,
+      baseXP:
+          XpService.calculateTotalXP(all) +
+          questXP +
+          currentRecoveryXP +
+          potionBonusXP,
     );
     final recoveryXP = await restService.effectiveRecoveryXP(all);
     if (!mounted) return;
@@ -1203,7 +1013,10 @@ class _StatsTabState extends State<_StatsTab> {
 
     // ── Computed values ──────────────────────────────────────────────────────
     final totalXP =
-        XpService.calculateTotalXP(_sessions) + _questXP + _recoveryXP + _potionBonusXP;
+        XpService.calculateTotalXP(_sessions) +
+        _questXP +
+        _recoveryXP +
+        _potionBonusXP;
     final xpProgress = XpService.progressForTotalXP(totalXP);
     final level = xpProgress.level;
     final rank = XpService.getRank(level);
@@ -1768,26 +1581,23 @@ class _ExercisesTabState extends State<_ExercisesTab>
       'legs': 'Legs',
     };
 
-    return _catalog
-        .where((e) {
-          final matchesQuery = _query.isEmpty ||
-              e.name.toLowerCase().contains(_query.toLowerCase());
-          final matchesFav = !_favOnly || _favoriteIds.contains(e.id);
-          if (!matchesQuery || !matchesFav) return false;
+    return _catalog.where((e) {
+      final matchesQuery =
+          _query.isEmpty || e.name.toLowerCase().contains(_query.toLowerCase());
+      final matchesFav = !_favOnly || _favoriteIds.contains(e.id);
+      if (!matchesQuery || !matchesFav) return false;
 
-          if (e.isCustom) {
-            if (_selectedGroup == 'All') return true;
-            final mapped = muscleGroupToFilter[e.muscleGroup];
-            return mapped == _selectedGroup;
-          }
-          return allowedIds.contains(e.id);
-        })
-        .toList()
-      ..sort((a, b) {
-        // Custom exercises first, then alphabetical
-        if (a.isCustom != b.isCustom) return a.isCustom ? -1 : 1;
-        return a.name.compareTo(b.name);
-      });
+      if (e.isCustom) {
+        if (_selectedGroup == 'All') return true;
+        final mapped = muscleGroupToFilter[e.muscleGroup];
+        return mapped == _selectedGroup;
+      }
+      return allowedIds.contains(e.id);
+    }).toList()..sort((a, b) {
+      // Custom exercises first, then alphabetical
+      if (a.isCustom != b.isCustom) return a.isCustom ? -1 : 1;
+      return a.name.compareTo(b.name);
+    });
   }
 
   @override
@@ -1892,10 +1702,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
               icon: const Icon(Icons.add_sharp, size: 16),
               label: const Text(
                 '+ CREATE',
-                style: TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 9,
-                ),
+                style: TextStyle(fontFamily: 'PressStart2P', fontSize: 9),
               ),
             ),
           ),

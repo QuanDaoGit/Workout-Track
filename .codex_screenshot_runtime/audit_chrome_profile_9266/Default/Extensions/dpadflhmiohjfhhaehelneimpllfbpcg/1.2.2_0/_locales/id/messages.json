@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "Operasi gagal",
+      "message": "Operasi gagal"
+   },
+   "addTask": {
+      "description": "Tambahkan Tugas",
+      "message": "Tambahkan Tugas"
+   },
+   "autoOpen": {
+      "description": "Beranda TeraBox akan terbuka secara otomatis setelah penyimpanan berhasil.",
+      "message": "Beranda TeraBox akan terbuka secara otomatis setelah penyimpanan berhasil."
+   },
+   "cancel": {
+      "description": "Batalkan",
+      "message": "Batalkan"
+   },
+   "confirm": {
+      "description": "Konfirmasi",
+      "message": "Konfirmasi"
+   },
+   "confirmLogout": {
+      "description": "Konfirmasi untuk keluar?",
+      "message": "Konfirmasi untuk keluar?"
+   },
+   "delete": {
+      "description": "Hapus",
+      "message": "Hapus"
+   },
+   "download": {
+      "description": "Unduh",
+      "message": "Unduh"
+   },
+   "downloadDetected": {
+      "description": "Unduhan file terdeteksi",
+      "message": "Unduhan file terdeteksi"
+   },
+   "extInstalled": {
+      "description": "Ekstensi berhasil dipasang",
+      "message": "Ekstensi berhasil dipasang"
+   },
+   "extensionDescription": {
+      "description": "Mendukung tangkapan layar, unggahan, dan fitur TeraBox lainnya",
+      "message": "Mendukung tangkapan layar, unggahan, dan fitur TeraBox lainnya"
+   },
+   "extensionName": {
+      "description": "Asisten Unduhan TeraBox",
+      "message": "Asisten Unduhan TeraBox"
+   },
+   "fail": {
+      "description": "Gagal",
+      "message": "Gagal"
+   },
+   "fileDownloaded": {
+      "description": "File sedang diunduh",
+      "message": "File sedang diunduh"
+   },
+   "freeformScreenshotUpload": {
+      "description": "Unggah Tangkapan Layar Bebas",
+      "message": "Unggah Tangkapan Layar Bebas"
+   },
+   "login": {
+      "description": "Masuk",
+      "message": "Masuk"
+   },
+   "logout": {
+      "description": "Keluar",
+      "message": "Keluar"
+   },
+   "noRecord": {
+      "description": "Tidak ada riwayat saat ini",
+      "message": "Tidak ada riwayat saat ini"
+   },
+   "noReminder": {
+      "description": "Jangan ingatkan lagi selama 30 hari",
+      "message": "Jangan ingatkan lagi selama 30 hari"
+   },
+   "notice": {
+      "description": "Pemberitahuan",
+      "message": "Pemberitahuan"
+   },
+   "openHome": {
+      "description": "Buka TeraBox",
+      "message": "Buka TeraBox"
+   },
+   "refreshAndRetry": {
+      "description": "Silakan segarkan halaman lalu coba lagi",
+      "message": "Silakan segarkan halaman lalu coba lagi"
+   },
+   "refreshToEnable": {
+      "description": "Silakan segarkan halaman untuk mengaktifkan ekstensi",
+      "message": "Silakan segarkan halaman untuk mengaktifkan ekstensi"
+   },
+   "reloadExtension": {
+      "description": "Muat ulang ekstensi",
+      "message": "Muat ulang ekstensi"
+   },
+   "remoteUpload": {
+      "description": "Unggah Video Jarak Jauh",
+      "message": "Unggah Video Jarak Jauh"
+   },
+   "retry": {
+      "description": "Mencoba kembali",
+      "message": "Mencoba kembali"
+   },
+   "saveto": {
+      "description": "Simpan ke TeraBox",
+      "message": "Simpan ke TeraBox"
+   },
+   "saving": {
+      "description": "Menyimpan",
+      "message": "Menyimpan"
+   },
+   "screenshotLost": {
+      "description": "Tangkapan layar hilang, silakan coba lagi",
+      "message": "Tangkapan layar hilang, silakan coba lagi"
+   },
+   "screenshotUpload": {
+      "description": "Unggah Tangkapan Layar",
+      "message": "Unggah Tangkapan Layar"
+   },
+   "success": {
+      "description": "Berhasil",
+      "message": "Berhasil"
+   },
+   "taskHistory": {
+      "description": "Riwayat Tugas",
+      "message": "Riwayat Tugas"
+   },
+   "unloggedIn": {
+      "description": "Belum masuk ke TeraBox. Silakan login dan coba lagi",
+      "message": "Belum masuk ke TeraBox. Silakan login dan coba lagi"
+   },
+   "uploadFail": {
+      "description": "Unggahan gagal.",
+      "message": "Unggahan gagal."
+   },
+   "uploadSuccess": {
+      "description": "Berhasil unggah",
+      "message": "Berhasil unggah"
+   },
+   "uploading": {
+      "description": "Mengunggah...",
+      "message": "Mengunggah..."
+   },
+   "websiteUnsupported": {
+      "description": "Situs Tidak Didukung",
+      "message": "Situs Tidak Didukung"
+   }
+}

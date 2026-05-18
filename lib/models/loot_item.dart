@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'loot_unlock_rule.dart';
+
 enum LootRarity { common, uncommon, rare, epic }
 
-enum LootCategory { avatarFrame, titleBadge, homeTheme, battleEffect }
+enum LootCategory { avatarFrame, titleBadge, homeTheme }
 
 extension LootRarityInfo on LootRarity {
   String get label {
@@ -30,32 +32,6 @@ extension LootRarityInfo on LootRarity {
         return const Color(0xFF00FF9C);
     }
   }
-
-  int get scrapValue {
-    switch (this) {
-      case LootRarity.common:
-        return 5;
-      case LootRarity.uncommon:
-        return 15;
-      case LootRarity.rare:
-        return 40;
-      case LootRarity.epic:
-        return 100;
-    }
-  }
-
-  int get shopPrice {
-    switch (this) {
-      case LootRarity.common:
-        return 20;
-      case LootRarity.uncommon:
-        return 50;
-      case LootRarity.rare:
-        return 120;
-      case LootRarity.epic:
-        return 300;
-    }
-  }
 }
 
 extension LootCategoryInfo on LootCategory {
@@ -67,8 +43,6 @@ extension LootCategoryInfo on LootCategory {
         return 'TITLES';
       case LootCategory.homeTheme:
         return 'THEMES';
-      case LootCategory.battleEffect:
-        return 'EFFECTS';
     }
   }
 
@@ -80,8 +54,6 @@ extension LootCategoryInfo on LootCategory {
         return 'title';
       case LootCategory.homeTheme:
         return 'theme';
-      case LootCategory.battleEffect:
-        return 'effect';
     }
   }
 }
@@ -103,9 +75,8 @@ class LootItem {
   final LootRarity rarity;
   final String assetPath;
   final int? colorValue;
-  final int? bossFloor;
-  final bool bossExclusive;
   final bool isDefault;
+  final LootUnlockRule? unlockRule;
 
   const LootItem({
     required this.id,
@@ -115,39 +86,9 @@ class LootItem {
     required this.rarity,
     required this.assetPath,
     this.colorValue,
-    this.bossFloor,
-    this.bossExclusive = false,
     this.isDefault = false,
+    this.unlockRule,
   });
 
   Color get color => colorValue == null ? rarity.color : Color(colorValue!);
-}
-
-class LootResult {
-  final LootItem item;
-  final bool isDuplicate;
-  final int scrapAwarded;
-  final int? floor;
-  final bool isBoss;
-  final DateTime timestamp;
-
-  const LootResult({
-    required this.item,
-    required this.isDuplicate,
-    required this.scrapAwarded,
-    this.floor,
-    this.isBoss = false,
-    required this.timestamp,
-  });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'itemId': item.id,
-      'isDuplicate': isDuplicate,
-      'scrapAwarded': scrapAwarded,
-      'floor': floor,
-      'isBoss': isBoss,
-      'timestamp': timestamp.toIso8601String(),
-    };
-  }
 }

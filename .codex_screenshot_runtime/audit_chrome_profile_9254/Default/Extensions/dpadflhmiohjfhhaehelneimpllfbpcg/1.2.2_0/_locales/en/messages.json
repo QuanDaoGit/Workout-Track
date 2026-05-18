@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "Operation failed",
+      "message": "Operation failed"
+   },
+   "addTask": {
+      "description": "Add Task",
+      "message": "Add Task"
+   },
+   "autoOpen": {
+      "description": "The TeraBox homepage will automatically open after a successful save.",
+      "message": "The TeraBox homepage will automatically open after a successful save."
+   },
+   "cancel": {
+      "description": "Cancel",
+      "message": "Cancel"
+   },
+   "confirm": {
+      "description": "Confirm",
+      "message": "Confirm"
+   },
+   "confirmLogout": {
+      "description": "Confirm to logout?",
+      "message": "Confirm to logout?"
+   },
+   "delete": {
+      "description": "Delete",
+      "message": "Delete"
+   },
+   "download": {
+      "description": "Download",
+      "message": "Download"
+   },
+   "downloadDetected": {
+      "description": "File download detected",
+      "message": "File download detected"
+   },
+   "extInstalled": {
+      "description": "Extension installed successfully",
+      "message": "Extension installed successfully"
+   },
+   "extensionDescription": {
+      "description": "Supports screenshots, uploads, and other TeraBox features",
+      "message": "Supports screenshots, uploads, and other TeraBox features"
+   },
+   "extensionName": {
+      "description": "TeraBox Download Assistant",
+      "message": "TeraBox Download Assistant"
+   },
+   "fail": {
+      "description": "Failed",
+      "message": "Failed"
+   },
+   "fileDownloaded": {
+      "description": "The file is being downloaded",
+      "message": "The file is being downloaded"
+   },
+   "freeformScreenshotUpload": {
+      "description": "Freeform Screenshot Upload",
+      "message": "Freeform Screenshot Upload"
+   },
+   "login": {
+      "description": "Login",
+      "message": "Login"
+   },
+   "logout": {
+      "description": "Logout",
+      "message": "Logout"
+   },
+   "noRecord": {
+      "description": "No history",
+      "message": "No history"
+   },
+   "noReminder": {
+      "description": "Don't remind me again for 30 days",
+      "message": "Don't remind me again for 30 days"
+   },
+   "notice": {
+      "description": "Notice",
+      "message": "Notice"
+   },
+   "openHome": {
+      "description": "Open TeraBox",
+      "message": "Open TeraBox"
+   },
+   "refreshAndRetry": {
+      "description": "Please refresh the page and try again",
+      "message": "Please refresh the page and try again"
+   },
+   "refreshToEnable": {
+      "description": "Please refresh the page to activate the extension",
+      "message": "Please refresh the page to activate the extension"
+   },
+   "reloadExtension": {
+      "description": "Reload extension",
+      "message": "Reload extension"
+   },
+   "remoteUpload": {
+      "description": "Remote Video Upload",
+      "message": "Remote Video Upload"
+   },
+   "retry": {
+      "description": "Retry",
+      "message": "Retry"
+   },
+   "saveto": {
+      "description": "Save to TeraBox",
+      "message": "Save to TeraBox"
+   },
+   "saving": {
+      "description": "Saving",
+      "message": "Saving"
+   },
+   "screenshotLost": {
+      "description": "Screenshot missing, please try again",
+      "message": "Screenshot missing, please try again"
+   },
+   "screenshotUpload": {
+      "description": "Screenshot Upload",
+      "message": "Screenshot Upload"
+   },
+   "success": {
+      "description": "succeeded",
+      "message": "succeeded"
+   },
+   "taskHistory": {
+      "description": "Task History",
+      "message": "Task History"
+   },
+   "unloggedIn": {
+      "description": "Not logged into TeraBox. Please log in and try again",
+      "message": "Not logged into TeraBox. Please log in and try again"
+   },
+   "uploadFail": {
+      "description": "Upload failed.",
+      "message": "Upload failed."
+   },
+   "uploadSuccess": {
+      "description": "Uploaded",
+      "message": "Uploaded"
+   },
+   "uploading": {
+      "description": "Uploading...",
+      "message": "Uploading..."
+   },
+   "websiteUnsupported": {
+      "description": "Unsupported Website",
+      "message": "Unsupported Website"
+   }
+}

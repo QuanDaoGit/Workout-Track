@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
-import '../../services/class_service.dart';
+import '../../services/loot_service.dart';
 import '../../services/program_service.dart';
 import '../../services/stat_engine.dart';
 import '../../services/workout_storage_service.dart';
@@ -121,7 +121,11 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       final engine = StatEngine();
       _statDelta = await engine.getLastSessionDelta();
       _combatStats = await engine.getStoredStats();
-      await ClassService().checkAndUnlockUltimate();
+      final allSessions = await WorkoutStorageService().getSessions();
+      await LootService().evaluateUnlocks(
+        stats: _combatStats,
+        sessions: allSessions,
+      );
       if (widget.isProgramWorkout || widget.advanceProgramRestDayOnCompletion) {
         await ProgramService().advanceDay();
         if (widget.resumeFromSession != null) {

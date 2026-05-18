@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "操作失败",
+      "message": "操作失败"
+   },
+   "addTask": {
+      "description": "新增任务",
+      "message": "新增任务"
+   },
+   "autoOpen": {
+      "description": "保存成功后，将自动打开TeraBox首页。",
+      "message": "保存成功后，将自动打开TeraBox首页。"
+   },
+   "cancel": {
+      "description": "取消",
+      "message": "取消"
+   },
+   "confirm": {
+      "description": "确认",
+      "message": "确认"
+   },
+   "confirmLogout": {
+      "description": "确定退出登录吗？",
+      "message": "确定退出登录吗？"
+   },
+   "delete": {
+      "description": "删除",
+      "message": "删除"
+   },
+   "download": {
+      "description": "下载",
+      "message": "下载"
+   },
+   "downloadDetected": {
+      "description": "已检测到文件下载",
+      "message": "已检测到文件下载"
+   },
+   "extInstalled": {
+      "description": "扩展程序安装成功",
+      "message": "扩展程序安装成功"
+   },
+   "extensionDescription": {
+      "description": "支持截图、上传及其他 TeraBox 功能",
+      "message": "支持截图、上传及其他 TeraBox 功能"
+   },
+   "extensionName": {
+      "description": "TeraBox下载助手",
+      "message": "TeraBox下载助手"
+   },
+   "fail": {
+      "description": "失败",
+      "message": "失败"
+   },
+   "fileDownloaded": {
+      "description": "文件正在下载",
+      "message": "文件正在下载"
+   },
+   "freeformScreenshotUpload": {
+      "description": "自由截图上传",
+      "message": "自由截图上传"
+   },
+   "login": {
+      "description": "登录",
+      "message": "登录"
+   },
+   "logout": {
+      "description": "退出",
+      "message": "退出"
+   },
+   "noRecord": {
+      "description": "暂无记录",
+      "message": "暂无记录"
+   },
+   "noReminder": {
+      "description": "30天内不再提醒我",
+      "message": "30天内不再提醒我"
+   },
+   "notice": {
+      "description": "提示",
+      "message": "提示"
+   },
+   "openHome": {
+      "description": "打开TeraBox",
+      "message": "打开TeraBox"
+   },
+   "refreshAndRetry": {
+      "description": "请刷新页面后重试",
+      "message": "请刷新页面后重试"
+   },
+   "refreshToEnable": {
+      "description": "请刷新页面以启用扩展程序",
+      "message": "请刷新页面以启用扩展程序"
+   },
+   "reloadExtension": {
+      "description": "重新加载扩展程序",
+      "message": "重新加载扩展程序"
+   },
+   "remoteUpload": {
+      "description": "远程视频上传",
+      "message": "远程视频上传"
+   },
+   "retry": {
+      "description": "重试",
+      "message": "重试"
+   },
+   "saveto": {
+      "description": "保存至 TeraBox",
+      "message": "保存至 TeraBox"
+   },
+   "saving": {
+      "description": "保存中",
+      "message": "保存中"
+   },
+   "screenshotLost": {
+      "description": "截图丢失，请重试",
+      "message": "截图丢失，请重试"
+   },
+   "screenshotUpload": {
+      "description": "截图上传",
+      "message": "截图上传"
+   },
+   "success": {
+      "description": "成功",
+      "message": "成功"
+   },
+   "taskHistory": {
+      "description": "任务历史",
+      "message": "任务历史"
+   },
+   "unloggedIn": {
+      "description": "未登录TeraBox，请登录后重试",
+      "message": "未登录TeraBox，请登录后重试"
+   },
+   "uploadFail": {
+      "description": "上传失败",
+      "message": "上传失败"
+   },
+   "uploadSuccess": {
+      "description": "上传成功",
+      "message": "上传成功"
+   },
+   "uploading": {
+      "description": "上传中",
+      "message": "上传中"
+   },
+   "websiteUnsupported": {
+      "description": "不支持当前网站",
+      "message": "不支持当前网站"
+   }
+}

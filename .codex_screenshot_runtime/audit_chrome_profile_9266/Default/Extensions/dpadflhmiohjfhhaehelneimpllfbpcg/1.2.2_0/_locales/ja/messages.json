@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "操作失敗",
+      "message": "操作失敗"
+   },
+   "addTask": {
+      "description": "タスクを追加",
+      "message": "タスクを追加"
+   },
+   "autoOpen": {
+      "description": "保存が成功すると、TeraBoxのホームページが自動的に開きます。",
+      "message": "保存が成功すると、TeraBoxのホームページが自動的に開きます。"
+   },
+   "cancel": {
+      "description": "キャンセル",
+      "message": "キャンセル"
+   },
+   "confirm": {
+      "description": "確認",
+      "message": "確認"
+   },
+   "confirmLogout": {
+      "description": "ログアウトを確認しますか？",
+      "message": "ログアウトを確認しますか？"
+   },
+   "delete": {
+      "description": "削除",
+      "message": "削除"
+   },
+   "download": {
+      "description": "ダウンロード",
+      "message": "ダウンロード"
+   },
+   "downloadDetected": {
+      "description": "ファイルダウンロードが検出されました",
+      "message": "ファイルダウンロードが検出されました"
+   },
+   "extInstalled": {
+      "description": "拡張機能のインストールに成功しました",
+      "message": "拡張機能のインストールに成功しました"
+   },
+   "extensionDescription": {
+      "description": "スクリーンショット、アップロード、その他のTeraBox機能をサポートします",
+      "message": "スクリーンショット、アップロード、その他のTeraBox機能をサポートします"
+   },
+   "extensionName": {
+      "description": "TeraBox ダウンロードアシスタント",
+      "message": "TeraBox ダウンロードアシスタント"
+   },
+   "fail": {
+      "description": "失敗した",
+      "message": "失敗した"
+   },
+   "fileDownloaded": {
+      "description": "ファイルがダウンロード中です",
+      "message": "ファイルがダウンロード中です"
+   },
+   "freeformScreenshotUpload": {
+      "description": "自由形状スクリーンショットアップロード",
+      "message": "自由形状スクリーンショットアップロード"
+   },
+   "login": {
+      "description": "ログイン",
+      "message": "ログイン"
+   },
+   "logout": {
+      "description": "ログアウト",
+      "message": "ログアウト"
+   },
+   "noRecord": {
+      "description": "記録がありません",
+      "message": "記録がありません"
+   },
+   "noReminder": {
+      "description": "30日間再度通知しない",
+      "message": "30日間再度通知しない"
+   },
+   "notice": {
+      "description": "通知",
+      "message": "通知"
+   },
+   "openHome": {
+      "description": "TeraBoxを開く",
+      "message": "TeraBoxを開く"
+   },
+   "refreshAndRetry": {
+      "description": "ページを更新してから再試行してください",
+      "message": "ページを更新してから再試行してください"
+   },
+   "refreshToEnable": {
+      "description": "拡張機能を有効にするにはページを更新してください",
+      "message": "拡張機能を有効にするにはページを更新してください"
+   },
+   "reloadExtension": {
+      "description": "拡張機能を再読み込み",
+      "message": "拡張機能を再読み込み"
+   },
+   "remoteUpload": {
+      "description": "リモートビデオアップロード",
+      "message": "リモートビデオアップロード"
+   },
+   "retry": {
+      "description": "もう一度",
+      "message": "もう一度"
+   },
+   "saveto": {
+      "description": "TeraBoxに保存",
+      "message": "TeraBoxに保存"
+   },
+   "saving": {
+      "description": "保存中",
+      "message": "保存中"
+   },
+   "screenshotLost": {
+      "description": "スクリーンショットが見つかりません。もう一度お試しください",
+      "message": "スクリーンショットが見つかりません。もう一度お試しください"
+   },
+   "screenshotUpload": {
+      "description": "スクリーンショットアップロード",
+      "message": "スクリーンショットアップロード"
+   },
+   "success": {
+      "description": "成功",
+      "message": "成功"
+   },
+   "taskHistory": {
+      "description": "タスク履歴",
+      "message": "タスク履歴"
+   },
+   "unloggedIn": {
+      "description": "TeraBoxにログインしていません。ログインしてから再試行してください",
+      "message": "TeraBoxにログインしていません。ログインしてから再試行してください"
+   },
+   "uploadFail": {
+      "description": "アップロードに失敗しました。",
+      "message": "アップロードに失敗しました。"
+   },
+   "uploadSuccess": {
+      "description": "アップロード成功",
+      "message": "アップロード成功"
+   },
+   "uploading": {
+      "description": "アップロード中…",
+      "message": "アップロード中…"
+   },
+   "websiteUnsupported": {
+      "description": "サポートされていないウェブサイト",
+      "message": "サポートされていないウェブサイト"
+   }
+}

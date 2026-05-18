@@ -1,0 +1,1 @@
+"Workout Tracker is a strength-training app with an RPG visualization layer. Real workout data is the only input to character growth. Every feature must translate training into RPG language, or be cut."

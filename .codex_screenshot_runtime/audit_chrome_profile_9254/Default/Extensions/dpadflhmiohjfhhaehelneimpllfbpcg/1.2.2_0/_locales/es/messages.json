@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "Fracaso de operación",
+      "message": "Fracaso de operación"
+   },
+   "addTask": {
+      "description": "Agregar tarea",
+      "message": "Agregar tarea"
+   },
+   "autoOpen": {
+      "description": "La página principal de TeraBox se abrirá automáticamente después de guardar con éxito.",
+      "message": "La página principal de TeraBox se abrirá automáticamente después de guardar con éxito."
+   },
+   "cancel": {
+      "description": "Cancelar",
+      "message": "Cancelar"
+   },
+   "confirm": {
+      "description": "Confirmar",
+      "message": "Confirmar"
+   },
+   "confirmLogout": {
+      "description": "¿Confirmar cierre de sesión?",
+      "message": "¿Confirmar cierre de sesión?"
+   },
+   "delete": {
+      "description": "Eliminar",
+      "message": "Eliminar"
+   },
+   "download": {
+      "description": "Descargar",
+      "message": "Descargar"
+   },
+   "downloadDetected": {
+      "description": "Se detectó la descarga de un archivo",
+      "message": "Se detectó la descarga de un archivo"
+   },
+   "extInstalled": {
+      "description": "Extensión instalada correctamente",
+      "message": "Extensión instalada correctamente"
+   },
+   "extensionDescription": {
+      "description": "Admite capturas de pantalla, cargas y otras funciones de TeraBox",
+      "message": "Admite capturas de pantalla, cargas y otras funciones de TeraBox"
+   },
+   "extensionName": {
+      "description": "Asistente de Descargas de TeraBox",
+      "message": "Asistente de Descargas de TeraBox"
+   },
+   "fail": {
+      "description": "Fallido",
+      "message": "Fallido"
+   },
+   "fileDownloaded": {
+      "description": "El archivo se está descargando",
+      "message": "El archivo se está descargando"
+   },
+   "freeformScreenshotUpload": {
+      "description": "Subir captura de pantalla personalizada",
+      "message": "Subir captura de pantalla personalizada"
+   },
+   "login": {
+      "description": "Iniciar sesión",
+      "message": "Iniciar sesión"
+   },
+   "logout": {
+      "description": "Cerrar sesión",
+      "message": "Cerrar sesión"
+   },
+   "noRecord": {
+      "description": "Sin registros",
+      "message": "Sin registros"
+   },
+   "noReminder": {
+      "description": "No recordarme durante 30 días",
+      "message": "No recordarme durante 30 días"
+   },
+   "notice": {
+      "description": "Aviso",
+      "message": "Aviso"
+   },
+   "openHome": {
+      "description": "Abrir TeraBox",
+      "message": "Abrir TeraBox"
+   },
+   "refreshAndRetry": {
+      "description": "Por favor, actualiza la página e inténtalo de nuevo",
+      "message": "Por favor, actualiza la página e inténtalo de nuevo"
+   },
+   "refreshToEnable": {
+      "description": "Por favor, actualiza la página para activar la extensión",
+      "message": "Por favor, actualiza la página para activar la extensión"
+   },
+   "reloadExtension": {
+      "description": "Recargar extensión",
+      "message": "Recargar extensión"
+   },
+   "remoteUpload": {
+      "description": "Carga remota de video",
+      "message": "Carga remota de video"
+   },
+   "retry": {
+      "description": "Reinténtelo",
+      "message": "Reinténtelo"
+   },
+   "saveto": {
+      "description": "Guardar en TeraBox",
+      "message": "Guardar en TeraBox"
+   },
+   "saving": {
+      "description": "Guardando",
+      "message": "Guardando"
+   },
+   "screenshotLost": {
+      "description": "Captura de pantalla faltante, inténtalo de nuevo",
+      "message": "Captura de pantalla faltante, inténtalo de nuevo"
+   },
+   "screenshotUpload": {
+      "description": "Subir captura de pantalla",
+      "message": "Subir captura de pantalla"
+   },
+   "success": {
+      "description": "Completado",
+      "message": "Completado"
+   },
+   "taskHistory": {
+      "description": "Historial de tareas",
+      "message": "Historial de tareas"
+   },
+   "unloggedIn": {
+      "description": "No has iniciado sesión en TeraBox. Inicia sesión y vuelve a intentarlo",
+      "message": "No has iniciado sesión en TeraBox. Inicia sesión y vuelve a intentarlo"
+   },
+   "uploadFail": {
+      "description": "La carga falló.",
+      "message": "La carga falló."
+   },
+   "uploadSuccess": {
+      "description": "Éxito de carga",
+      "message": "Éxito de carga"
+   },
+   "uploading": {
+      "description": "Cargando...",
+      "message": "Cargando..."
+   },
+   "websiteUnsupported": {
+      "description": "Sitio no compatible",
+      "message": "Sitio no compatible"
+   }
+}

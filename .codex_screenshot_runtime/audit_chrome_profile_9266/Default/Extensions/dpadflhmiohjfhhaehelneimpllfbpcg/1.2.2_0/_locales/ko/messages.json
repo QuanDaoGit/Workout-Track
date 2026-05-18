@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "조작 실패",
+      "message": "조작 실패"
+   },
+   "addTask": {
+      "description": "작업 추가",
+      "message": "작업 추가"
+   },
+   "autoOpen": {
+      "description": "저장이 완료되면 TeraBox 홈페이지가 자동으로 열립니다.",
+      "message": "저장이 완료되면 TeraBox 홈페이지가 자동으로 열립니다."
+   },
+   "cancel": {
+      "description": "취소",
+      "message": "취소"
+   },
+   "confirm": {
+      "description": "확인",
+      "message": "확인"
+   },
+   "confirmLogout": {
+      "description": "로그아웃을 확인하시겠습니까?",
+      "message": "로그아웃을 확인하시겠습니까?"
+   },
+   "delete": {
+      "description": "삭제",
+      "message": "삭제"
+   },
+   "download": {
+      "description": "다운로드",
+      "message": "다운로드"
+   },
+   "downloadDetected": {
+      "description": "파일 다운로드가 감지되었습니다",
+      "message": "파일 다운로드가 감지되었습니다"
+   },
+   "extInstalled": {
+      "description": "확장 프로그램이 성공적으로 설치되었습니다",
+      "message": "확장 프로그램이 성공적으로 설치되었습니다"
+   },
+   "extensionDescription": {
+      "description": "스크린샷, 업로드 및 기타 TeraBox 기능을 지원합니다",
+      "message": "스크린샷, 업로드 및 기타 TeraBox 기능을 지원합니다"
+   },
+   "extensionName": {
+      "description": "TeraBox 다운로드 어시스턴트",
+      "message": "TeraBox 다운로드 어시스턴트"
+   },
+   "fail": {
+      "description": "실패했습니다.",
+      "message": "실패했습니다."
+   },
+   "fileDownloaded": {
+      "description": "파일이 다운로드 중입니다",
+      "message": "파일이 다운로드 중입니다"
+   },
+   "freeformScreenshotUpload": {
+      "description": "자유형 스크린샷 업로드",
+      "message": "자유형 스크린샷 업로드"
+   },
+   "login": {
+      "description": "로그인",
+      "message": "로그인"
+   },
+   "logout": {
+      "description": "로그아웃",
+      "message": "로그아웃"
+   },
+   "noRecord": {
+      "description": "기록이 없습니다.",
+      "message": "기록이 없습니다."
+   },
+   "noReminder": {
+      "description": "30일 동안 다시 알리지 않기",
+      "message": "30일 동안 다시 알리지 않기"
+   },
+   "notice": {
+      "description": "알림",
+      "message": "알림"
+   },
+   "openHome": {
+      "description": "TeraBox 열기",
+      "message": "TeraBox 열기"
+   },
+   "refreshAndRetry": {
+      "description": "페이지를 새로 고친 후 다시 시도해 주세요",
+      "message": "페이지를 새로 고친 후 다시 시도해 주세요"
+   },
+   "refreshToEnable": {
+      "description": "확장 프로그램을 활성화하려면 페이지를 새로 고치세요",
+      "message": "확장 프로그램을 활성화하려면 페이지를 새로 고치세요"
+   },
+   "reloadExtension": {
+      "description": "확장 프로그램 다시 로드",
+      "message": "확장 프로그램 다시 로드"
+   },
+   "remoteUpload": {
+      "description": "원격 비디오 업로드",
+      "message": "원격 비디오 업로드"
+   },
+   "retry": {
+      "description": "다시시도",
+      "message": "다시시도"
+   },
+   "saveto": {
+      "description": "TeraBox에 저장",
+      "message": "TeraBox에 저장"
+   },
+   "saving": {
+      "description": "저장 중",
+      "message": "저장 중"
+   },
+   "screenshotLost": {
+      "description": "스크린샷이 누락되었습니다. 다시 시도해 주세요",
+      "message": "스크린샷이 누락되었습니다. 다시 시도해 주세요"
+   },
+   "screenshotUpload": {
+      "description": "스크린샷 업로드",
+      "message": "스크린샷 업로드"
+   },
+   "success": {
+      "description": "성공",
+      "message": "성공"
+   },
+   "taskHistory": {
+      "description": "작업 기록",
+      "message": "작업 기록"
+   },
+   "unloggedIn": {
+      "description": "TeraBox에 로그인되지 않았습니다. 로그인 후 다시 시도해 주세요",
+      "message": "TeraBox에 로그인되지 않았습니다. 로그인 후 다시 시도해 주세요"
+   },
+   "uploadFail": {
+      "description": "업로드 실패.",
+      "message": "업로드 실패."
+   },
+   "uploadSuccess": {
+      "description": "업로드 되었습니다",
+      "message": "업로드 되었습니다"
+   },
+   "uploading": {
+      "description": "업로드 중...",
+      "message": "업로드 중..."
+   },
+   "websiteUnsupported": {
+      "description": "지원되지 않는 웹사이트",
+      "message": "지원되지 않는 웹사이트"
+   }
+}

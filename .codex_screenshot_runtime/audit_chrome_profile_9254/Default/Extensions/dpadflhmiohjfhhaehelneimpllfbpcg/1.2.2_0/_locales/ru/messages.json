@@ -1,0 +1,150 @@
+{
+   "actionFailed": {
+      "description": "Операция не удалась",
+      "message": "Операция не удалась"
+   },
+   "addTask": {
+      "description": "Добавить задачу",
+      "message": "Добавить задачу"
+   },
+   "autoOpen": {
+      "description": "После успешного сохранения страница TeraBox откроется автоматически.",
+      "message": "После успешного сохранения страница TeraBox откроется автоматически."
+   },
+   "cancel": {
+      "description": "Отменить",
+      "message": "Отменить"
+   },
+   "confirm": {
+      "description": "Подтвердить",
+      "message": "Подтвердить"
+   },
+   "confirmLogout": {
+      "description": "Подтвердите выход?",
+      "message": "Подтвердите выход?"
+   },
+   "delete": {
+      "description": "Удалить",
+      "message": "Удалить"
+   },
+   "download": {
+      "description": "Скачать",
+      "message": "Скачать"
+   },
+   "downloadDetected": {
+      "description": "Обнаружена загрузка файла",
+      "message": "Обнаружена загрузка файла"
+   },
+   "extInstalled": {
+      "description": "Расширение успешно установлено",
+      "message": "Расширение успешно установлено"
+   },
+   "extensionDescription": {
+      "description": "Поддержка скриншотов, загрузок и других функций TeraBox",
+      "message": "Поддержка скриншотов, загрузок и других функций TeraBox"
+   },
+   "extensionName": {
+      "description": "Помощник по загрузке TeraBox",
+      "message": "Помощник по загрузке TeraBox"
+   },
+   "fail": {
+      "description": "Не удалось",
+      "message": "Не удалось"
+   },
+   "fileDownloaded": {
+      "description": "Файл загружается",
+      "message": "Файл загружается"
+   },
+   "freeformScreenshotUpload": {
+      "description": "Загрузка произвольного скриншота",
+      "message": "Загрузка произвольного скриншота"
+   },
+   "login": {
+      "description": "Войти",
+      "message": "Войти"
+   },
+   "logout": {
+      "description": "Выйти",
+      "message": "Выйти"
+   },
+   "noRecord": {
+      "description": "Записей пока нет",
+      "message": "Записей пока нет"
+   },
+   "noReminder": {
+      "description": "Не напоминать снова в течение 30 дней",
+      "message": "Не напоминать снова в течение 30 дней"
+   },
+   "notice": {
+      "description": "Уведомление",
+      "message": "Уведомление"
+   },
+   "openHome": {
+      "description": "Открыть TeraBox",
+      "message": "Открыть TeraBox"
+   },
+   "refreshAndRetry": {
+      "description": "Пожалуйста, обновите страницу и повторите попытку",
+      "message": "Пожалуйста, обновите страницу и повторите попытку"
+   },
+   "refreshToEnable": {
+      "description": "Пожалуйста, обновите страницу, чтобы активировать расширение",
+      "message": "Пожалуйста, обновите страницу, чтобы активировать расширение"
+   },
+   "reloadExtension": {
+      "description": "Перезагрузить расширение",
+      "message": "Перезагрузить расширение"
+   },
+   "remoteUpload": {
+      "description": "Удаленная загрузка видео",
+      "message": "Удаленная загрузка видео"
+   },
+   "retry": {
+      "description": "Повторите попытку",
+      "message": "Повторите попытку"
+   },
+   "saveto": {
+      "description": "Сохранить в TeraBox",
+      "message": "Сохранить в TeraBox"
+   },
+   "saving": {
+      "description": "Сохранение",
+      "message": "Сохранение"
+   },
+   "screenshotLost": {
+      "description": "Скриншот отсутствует, пожалуйста, попробуйте снова",
+      "message": "Скриншот отсутствует, пожалуйста, попробуйте снова"
+   },
+   "screenshotUpload": {
+      "description": "Загрузка скриншота",
+      "message": "Загрузка скриншота"
+   },
+   "success": {
+      "description": "Выполнено",
+      "message": "Выполнено"
+   },
+   "taskHistory": {
+      "description": "История задач",
+      "message": "История задач"
+   },
+   "unloggedIn": {
+      "description": "Вы не вошли в TeraBox. Пожалуйста, войдите в систему и повторите попытку",
+      "message": "Вы не вошли в TeraBox. Пожалуйста, войдите в систему и повторите попытку"
+   },
+   "uploadFail": {
+      "description": "Сбой загрузки.",
+      "message": "Сбой загрузки."
+   },
+   "uploadSuccess": {
+      "description": "Успешно загружено",
+      "message": "Успешно загружено"
+   },
+   "uploading": {
+      "description": "Загрузка...",
+      "message": "Загрузка..."
+   },
+   "websiteUnsupported": {
+      "description": "Неподдерживаемый сайт",
+      "message": "Неподдерживаемый сайт"
+   }
+}
