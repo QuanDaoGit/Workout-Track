@@ -375,7 +375,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                       child: ListTile(
                                         title: Text(
                                           session.isAbandoned
-                                              ? '${session.muscleGroup} - ABANDONED'
+                                              ? '${session.muscleGroup} - ENDED EARLY'
                                               : session.muscleGroup,
                                         ),
                                         subtitle: Text(

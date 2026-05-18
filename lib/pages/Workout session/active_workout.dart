@@ -280,7 +280,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A2E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-        title: const Text('ABANDON SESSION?'),
+        title: const Text('END EARLY?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -308,7 +308,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                     backgroundColor: const Color(0xFFFF2D55),
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text('ABANDON'),
+                  child: const Text('END EARLY'),
                 ),
               ],
             ),

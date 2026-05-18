@@ -50,14 +50,14 @@ String calendarStatusTitle(
   required bool abandonedOnly,
 }) {
   if (hasWorkout) {
-    return abandonedOnly ? 'Abandoned session' : 'Workout completed';
+    return abandonedOnly ? 'Ended early' : 'Workout completed';
   }
 
   return switch (info.kind) {
     RestDayKind.plannedRest => 'Planned recovery',
     RestDayKind.protectedMiss => 'Protected missed day',
     RestDayKind.unplannedMiss => 'Missed training day',
-    RestDayKind.abandonedOnly => 'Abandoned session',
+    RestDayKind.abandonedOnly => 'Ended early',
     RestDayKind.trainingDay => 'Scheduled training day',
     RestDayKind.workoutComplete => 'Workout completed',
   };

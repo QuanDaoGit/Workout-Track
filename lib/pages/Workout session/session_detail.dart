@@ -63,7 +63,7 @@ class SessionDetailPage extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: Text(
-                    'ABANDONED - ${XpService.calculateSessionXP(session)} XP earned from time. No mission progress.',
+                    'ENDED EARLY - ${XpService.calculateSessionXP(session)} XP earned from time. No mission progress.',
                     style: const TextStyle(color: Color(0xFFFFD700)),
                     textAlign: TextAlign.center,
                   ),
