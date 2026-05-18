@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../models/workout_models.dart';
 import '../services/exercise_catalog_service.dart';
+import '../services/idle_battle_service.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import 'Workout session/active_workout.dart';
+import 'battle_summary_page.dart';
 import 'home.dart';
 import 'profile_page.dart';
 import 'quests_page.dart';
@@ -21,11 +23,12 @@ class RootPage extends StatefulWidget {
   State<RootPage> createState() => _RootPageState();
 }
 
-class _RootPageState extends State<RootPage> {
+class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   int _currentIndex = 0;
   Timer? _dockTimer;
   WorkoutSession? _ongoingSession;
   bool _loadingOngoing = false;
+  bool _handlingAppOpen = false;
 
   final _homeKey = GlobalKey<HomePageState>();
   final _workoutKey = GlobalKey<WorkoutPageState>();
@@ -35,17 +38,53 @@ class _RootPageState extends State<RootPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadOngoingSession();
     _dockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_ongoingSession != null && mounted) setState(() {});
       _loadOngoingSession();
     });
+    _handleAppOpen();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _dockTimer?.cancel();
+    IdleBattleService().stopLiveLoop();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _handleAppOpen();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      IdleBattleService().stopLiveLoop();
+      IdleBattleService().recordTimestamp();
+    }
+  }
+
+  Future<void> _handleAppOpen() async {
+    if (_handlingAppOpen) return;
+    _handlingAppOpen = true;
+
+    final service = IdleBattleService();
+    await service.migrate();
+    final result = await service.simulateOfflineProgress();
+    service.startLiveLoop();
+
+    if (result.hasBattles || result.wasEntirelyRest) {
+      if (mounted) {
+        Navigator.push(
+          context,
+          arcadeRoute((_) => BattleSummaryPage(result: result)),
+        ).then((_) => _homeKey.currentState?.reload());
+      }
+    }
+
+    _handlingAppOpen = false;
   }
 
   void _selectTab(int index) {

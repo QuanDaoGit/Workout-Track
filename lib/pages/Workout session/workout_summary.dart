@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/workout_models.dart';
-import '../../services/battle_scheduler.dart';
 import '../../services/calorie_service.dart';
 import '../../services/class_service.dart';
 import '../../services/program_service.dart';
@@ -119,7 +118,6 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       }
       await WorkoutStorageService().saveSession(_savedSession);
       _potionBonusXP = await XpBoostService().consumeForSession(_earnedXP);
-      await BattleScheduler().scheduleBattle();
       final engine = StatEngine();
       _statDelta = await engine.getLastSessionDelta();
       _combatStats = await engine.getStoredStats();
@@ -162,7 +160,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     ];
 
     final titleText = widget.isAbandoned
-        ? 'SESSION ABANDONED'
+        ? 'SESSION ENDED EARLY'
         : 'SESSION COMPLETE';
     final titleColor = widget.isAbandoned ? kAmber : kNeon;
 

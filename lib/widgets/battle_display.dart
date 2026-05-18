@@ -3,17 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../models/loot_item.dart';
 import '../services/battle_engine.dart';
-import '../services/loot_service.dart';
 import '../theme/tokens.dart';
+import 'battle_sprite_scene.dart';
 import 'pixel_button.dart';
 import 'screen_shake.dart';
 import 'segmented_progress_bar.dart';
 import 'strobe_flash.dart';
 
 /// Full-screen battle playback page. Receives a [BattleResult] and plays it
-/// back as a text log with arcade effects. Tap anywhere to skip to the end.
+/// back with animated sprites. Tap anywhere to skip to the end.
 class BattleDisplay extends StatefulWidget {
   const BattleDisplay({
     super.key,
@@ -35,8 +34,6 @@ class BattleDisplay extends StatefulWidget {
 }
 
 class _BattleDisplayState extends State<BattleDisplay> {
-  final List<_LogLine> _visibleLines = [];
-  final ScrollController _scrollController = ScrollController();
   int _playerHp = 0;
   int _enemyHp = 0;
   bool _finished = false;
@@ -44,7 +41,10 @@ class _BattleDisplayState extends State<BattleDisplay> {
   Timer? _playbackTimer;
   int _shakeTrigger = 0;
   int _strobeTrigger = 0;
-  Color _playerAttackColor = kNeon;
+
+  // Sprite scene event delivery
+  BattleEvent? _lastEvent;
+  int _eventTrigger = 0;
 
   // Playback cursor
   int _roundIndex = 0;
@@ -60,21 +60,11 @@ class _BattleDisplayState extends State<BattleDisplay> {
     } else {
       _scheduleNextEvent();
     }
-    _loadBattleEffect();
-  }
-
-  Future<void> _loadBattleEffect() async {
-    final effect = await LootService().getEquippedItem(
-      LootCategory.battleEffect,
-    );
-    if (!mounted || effect?.colorValue == null) return;
-    setState(() => _playerAttackColor = Color(effect!.colorValue!));
   }
 
   @override
   void dispose() {
     _playbackTimer?.cancel();
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -111,8 +101,6 @@ class _BattleDisplayState extends State<BattleDisplay> {
 
   void _applyEvent(BattleEvent event) {
     setState(() {
-      _visibleLines.add(_LogLine(event: event));
-
       switch (event.type) {
         case BattleEventType.enemyHpChange:
           _enemyHp = event.value;
@@ -125,40 +113,25 @@ class _BattleDisplayState extends State<BattleDisplay> {
         default:
           break;
       }
+
+      // Notify sprite scene of the event.
+      _lastEvent = event;
+      _eventTrigger++;
     });
-    _scrollToBottom();
   }
 
   void _skipToEnd() {
     _playbackTimer?.cancel();
     setState(() {
       _skipped = true;
-      _visibleLines.clear();
-      for (final round in widget.result.rounds) {
-        for (final event in round.events) {
-          _visibleLines.add(_LogLine(event: event, instant: true));
-        }
-      }
       _playerHp = widget.result.playerHpRemaining;
       _enemyHp = widget.result.enemyHpRemaining;
       _finished = true;
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
   void _finish() {
     setState(() => _finished = true);
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-      );
-    });
   }
 
   // ── HP bar cells ────────────────────────────────────────────────────────────
@@ -196,7 +169,18 @@ class _BattleDisplayState extends State<BattleDisplay> {
                   const SizedBox(height: kSpace4),
                   const Divider(color: kBorder, height: 1),
                   const SizedBox(height: kSpace3),
-                  Expanded(child: _buildLog()),
+                  Expanded(
+                    child: BattleSpriteScene(
+                      result: widget.result,
+                      lastEvent: _lastEvent,
+                      eventTrigger: _eventTrigger,
+                      playerHp: _playerHp,
+                      playerHpMax: result.playerHpMax,
+                      enemyHp: _enemyHp,
+                      enemyHpMax: result.enemyHpMax,
+                      finished: _finished,
+                    ),
+                  ),
                   const SizedBox(height: kSpace3),
                   const Divider(color: kBorder, height: 1),
                   const SizedBox(height: kSpace3),
@@ -338,85 +322,6 @@ class _BattleDisplayState extends State<BattleDisplay> {
     );
   }
 
-  Widget _buildLog() {
-    return ListView.builder(
-      controller: _scrollController,
-      itemCount: _visibleLines.length,
-      itemBuilder: (context, index) {
-        final line = _visibleLines[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
-          child: _buildLogLine(line),
-        );
-      },
-    );
-  }
-
-  Widget _buildLogLine(_LogLine line) {
-    final event = line.event;
-    final color = _colorForEvent(event.type);
-    final text = '▶ ${event.message}';
-
-    // Skip typewriter for HP change lines and instant replay.
-    if (line.instant ||
-        event.type == BattleEventType.enemyHpChange ||
-        event.type == BattleEventType.playerHpChange) {
-      return Text(
-        text,
-        style: GoogleFonts.shareTechMono(fontSize: 14, color: color),
-      );
-    }
-
-    // Wrap crit lines in strobe.
-    if (event.type == BattleEventType.playerCrit) {
-      return StrobeFlash(
-        trigger: line,
-        fireOnMount: true,
-        color: kAmber,
-        opacity: 0.2,
-        child: Text(
-          text,
-          style: GoogleFonts.shareTechMono(
-            fontSize: 14,
-            color: color,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-    }
-
-    if (event.type == BattleEventType.playerAttack) {
-      return StrobeFlash(
-        trigger: line,
-        fireOnMount: true,
-        color: _playerAttackColor,
-        opacity: 0.12,
-        child: Text(
-          text,
-          style: GoogleFonts.shareTechMono(fontSize: 14, color: color),
-        ),
-      );
-    }
-
-    return Text(
-      text,
-      style: GoogleFonts.shareTechMono(fontSize: 14, color: color),
-    );
-  }
-
-  Color _colorForEvent(BattleEventType type) {
-    return switch (type) {
-      BattleEventType.playerAttack => _playerAttackColor,
-      BattleEventType.playerCrit => kAmber,
-      BattleEventType.playerDodge => kCyan,
-      BattleEventType.enemyAttack => kDanger,
-      BattleEventType.enemyDodge => kMutedText,
-      BattleEventType.playerHpChange => kMutedText,
-      BattleEventType.enemyHpChange => kMutedText,
-      BattleEventType.abilityTrigger => kAmber,
-    };
-  }
-
   Widget _buildResultButton() {
     final result = widget.result;
     if (widget.instantReplay) {
@@ -448,11 +353,4 @@ class _BattleDisplayState extends State<BattleDisplay> {
       onPressed: widget.onComplete,
     );
   }
-}
-
-class _LogLine {
-  _LogLine({required this.event, this.instant = false});
-
-  final BattleEvent event;
-  final bool instant;
 }

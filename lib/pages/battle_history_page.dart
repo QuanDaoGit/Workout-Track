@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/battle_engine.dart';
-import '../services/battle_scheduler.dart';
+import '../services/idle_battle_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
@@ -26,7 +26,7 @@ class _BattleHistoryPageState extends State<BattleHistoryPage> {
   }
 
   Future<void> _load() async {
-    final history = await BattleScheduler().getHistory();
+    final history = await IdleBattleService().getHistory();
     if (!mounted) return;
     setState(() => _history = history.reversed.toList());
   }

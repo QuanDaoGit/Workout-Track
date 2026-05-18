@@ -36,6 +36,7 @@ class PendingBattle {
   );
 }
 
+@Deprecated('Replaced by IdleBattleService in Phase 9')
 class BattleScheduler {
   static const _pendingKey = 'pending_battle';
   static const _historyKey = 'battle_history';

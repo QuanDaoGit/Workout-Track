@@ -8,7 +8,7 @@ import '../data/curated_exercises.dart';
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import '../services/battle_engine.dart';
-import '../services/battle_scheduler.dart';
+import '../services/idle_battle_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/favorite_service.dart';
 import '../services/quest_service.dart';
@@ -134,9 +134,9 @@ class _CombatHistoryTabState extends State<_CombatHistoryTab> {
   }
 
   Future<void> _load() async {
-    final scheduler = BattleScheduler();
-    final history = await scheduler.getHistory();
-    final floor = await scheduler.getFloor();
+    final service = IdleBattleService();
+    final history = await service.getHistory();
+    final floor = await service.getCurrentFloor();
     if (!mounted) return;
     setState(() {
       _history = history.reversed.toList();
@@ -910,7 +910,7 @@ class _SessionListTile extends StatelessWidget {
                 child: ListTile(
                   title: Text(
                     session.isAbandoned
-                        ? '${session.muscleGroup} - ABANDONED'
+                        ? '${session.muscleGroup} - ENDED EARLY'
                         : session.muscleGroup,
                   ),
                   subtitle: Text(

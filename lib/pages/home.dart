@@ -3,14 +3,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../data/loot_registry.dart';
 import '../data/programs_library.dart';
-import '../models/enemy_data.dart';
 import '../models/loot_item.dart';
 import '../models/program_models.dart';
 import '../models/profile_models.dart';
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
-import '../services/battle_engine.dart';
-import '../services/battle_scheduler.dart';
+import '../services/idle_battle_service.dart';
 import '../services/class_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/loot_service.dart';
@@ -35,8 +33,7 @@ import '../widgets/strobe_flash.dart';
 import '../widgets/rest_icon.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
-import 'battle_page.dart';
-import 'loot_chest_page.dart';
+import 'live_dungeon_page.dart';
 import 'ultimate_unlock_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -72,11 +69,8 @@ class HomePageState extends State<HomePage> {
   bool _showLevelUp = false;
   int _levelUpShakeTrigger = 0;
   int _missionFlashTrigger = 0;
-  BattleState _battleState = BattleState.none;
   int _dungeonFloor = 1;
-  PendingBattle? _pendingBattle;
-  BattleResult? _todayBattleResult;
-  LootResult? _unclaimedLoot;
+  bool _isRestDay = false;
   Map<LootCategory, LootItem> _equippedLoot = {};
   ProgramProgress? _programProgress;
   ProgramDay? _programDay;
@@ -130,14 +124,9 @@ class HomePageState extends State<HomePage> {
     );
     final questSummary = await QuestService().getSummary(all);
     final profile = await ProfileService().loadProfile();
-    final scheduler = BattleScheduler();
-    final battleState = await scheduler.checkBattleState();
-    final dungeonFloor = await scheduler.getFloor();
-    final pendingBattle = await scheduler.getPendingBattle();
-    final todayResult = await scheduler.getTodayResult();
-    final lootService = LootService();
-    final unclaimedLoot = await lootService.getUnclaimedLoot();
-    final equippedLoot = await lootService.getEquippedLoot();
+    final idleService = IdleBattleService();
+    final dungeonFloor = await idleService.getCurrentFloor();
+    final equippedLoot = await LootService().getEquippedLoot();
     final programCompletedToday = await programService
         .completedSnapshotForToday(now: today);
     final missionCompleted =
@@ -227,11 +216,8 @@ class HomePageState extends State<HomePage> {
       _todayRestInfo = todayRestInfo;
       _profile = profile;
       _missionCompletedToday = missionCompleted;
-      _battleState = battleState;
       _dungeonFloor = dungeonFloor;
-      _pendingBattle = pendingBattle;
-      _todayBattleResult = todayResult;
-      _unclaimedLoot = unclaimedLoot;
+      _isRestDay = todayRestInfo.isPlannedRestDay;
       _equippedLoot = equippedLoot;
       _programProgress = programProgress;
       _programDay = programDay;
@@ -453,12 +439,12 @@ class HomePageState extends State<HomePage> {
               children: [
                 PixelButton(
                   label: 'KEEP RESTING',
-                  color: kBorderDark,
+                  color: kCyan,
                   onPressed: () => Navigator.of(ctx).pop(),
                 ),
                 PixelButton(
                   label: 'TRAIN ANYWAY',
-                  color: kNeon,
+                  color: kBorderDark,
                   onPressed: () {
                     Navigator.of(ctx).pop();
                     _startWorkout(
@@ -1177,18 +1163,26 @@ class HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: kBorderDark,
-                foregroundColor: kCyan,
-              ),
+          PixelButton(
+            label: 'KEEP RESTING',
+            color: kCyan,
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Recovery day in progress.')),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton(
               onPressed: () => _startWorkout(
                 trainAnyway: false,
                 advanceProgramRestDayOnCompletion: true,
               ),
-              child: const Text('TRAIN ANYWAY'),
+              child: Text(
+                'Train anyway',
+                style: GoogleFonts.shareTechMono(color: kMutedText),
+              ),
             ),
           ),
         ],
@@ -1352,15 +1346,23 @@ class HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: kBorderDark,
-                foregroundColor: kCyan,
-              ),
+          PixelButton(
+            label: 'KEEP RESTING',
+            color: kCyan,
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Recovery day in progress.')),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton(
               onPressed: () => _startWorkout(trainAnyway: false),
-              child: const Text('TRAIN ANYWAY'),
+              child: Text(
+                'Train anyway',
+                style: GoogleFonts.shareTechMono(color: kMutedText),
+              ),
             ),
           ),
         ],
@@ -1452,64 +1454,11 @@ class HomePageState extends State<HomePage> {
 
   // ── Dungeon card ─────────────────────────────────────────────────────────
 
-  void _startBattle() {
+  void _openDungeon() {
     Navigator.push(
       context,
-      arcadeRoute((_) => const BattlePage()),
+      arcadeRoute((_) => const LiveDungeonPage()),
     ).then((_) => _loadData());
-  }
-
-  void _replayBattle(BattleResult result) {
-    Navigator.push(context, arcadeRoute((_) => BattlePage(replay: result)));
-  }
-
-  void _openLootChest() {
-    Navigator.push(
-      context,
-      arcadeRoute((_) => LootChestPage(initialLoot: _unclaimedLoot)),
-    ).then((_) => _loadData());
-  }
-
-  Widget _buildEnemyStats(EnemyData enemy) {
-    return RichText(
-      text: TextSpan(
-        style: GoogleFonts.shareTechMono(fontSize: 12),
-        children: [
-          const TextSpan(
-            text: 'STR ',
-            style: TextStyle(color: kMutedText),
-          ),
-          TextSpan(
-            text: '${enemy.baseSTR}',
-            style: const TextStyle(color: kText),
-          ),
-          const TextSpan(
-            text: ' \u00B7 ',
-            style: TextStyle(color: kMutedText),
-          ),
-          const TextSpan(
-            text: 'DEF ',
-            style: TextStyle(color: kMutedText),
-          ),
-          TextSpan(
-            text: '${enemy.baseDEF}',
-            style: const TextStyle(color: kText),
-          ),
-          const TextSpan(
-            text: ' \u00B7 ',
-            style: TextStyle(color: kMutedText),
-          ),
-          const TextSpan(
-            text: 'VIT ',
-            style: TextStyle(color: kMutedText),
-          ),
-          TextSpan(
-            text: '${enemy.baseVIT}',
-            style: const TextStyle(color: kText),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildBossRewardPreview() {
@@ -1543,191 +1492,58 @@ class HomePageState extends State<HomePage> {
   }
 
   Widget _buildDungeonCard() {
-    final borderColor = switch (_battleState) {
-      BattleState.none => kMutedText,
-      BattleState.pending => kAmber,
-      BattleState.ready => kDanger,
-      BattleState.resolved =>
-        _todayBattleResult?.playerWon == true ? kNeon : kDanger,
-    };
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _themedCardColor(kCard),
-        border: Border.all(color: borderColor, width: 1),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: switch (_battleState) {
-        BattleState.none => _buildDungeonIdle(),
-        BattleState.pending => _buildDungeonPending(),
-        BattleState.ready => _buildDungeonReady(),
-        BattleState.resolved => _buildDungeonResolved(),
-      },
-    );
-  }
-
-  Widget _buildDungeonHeader() {
-    final color = _battleState == BattleState.none ? kMutedText : kAmber;
-    return Row(
-      children: [
-        ImageIcon(
-          const AssetImage('assets/icons/control/icon_sword.png'),
-          size: 14,
-          color: color,
+    return ArcadeTap(
+      onTap: _openDungeon,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _themedCardColor(kCard),
+          border: Border.all(color: _isRestDay ? kMutedText : kNeon, width: 1),
+          borderRadius: BorderRadius.circular(4),
         ),
-        const SizedBox(width: kSpace2),
-        Text(
-          'DUNGEON — FLOOR $_dungeonFloor',
-          style: TextStyle(
-            fontFamily: 'PressStart2P',
-            fontSize: 8,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // State A — No pending battle
-  Widget _buildDungeonIdle() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildDungeonHeader(),
-        const SizedBox(height: kSpace2),
-        Text(
-          'Complete a workout to summon tonight\'s enemy.',
-          style: GoogleFonts.shareTechMono(fontSize: 12, color: kMutedText),
-        ),
-        _buildBossRewardPreview(),
-      ],
-    );
-  }
-
-  // State B — Battle pending but not ready
-  Widget _buildDungeonPending() {
-    final enemy = _pendingBattle?.enemy;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildDungeonHeader(),
-        const SizedBox(height: kSpace2),
-        const Text(
-          'TONIGHT\'S ENEMY',
-          style: TextStyle(
-            fontFamily: 'PressStart2P',
-            fontSize: 8,
-            color: kDanger,
-          ),
-        ),
-        const SizedBox(height: kSpace1),
-        if (enemy != null) ...[
-          Text(
-            '${enemy.name}  Lv.$_dungeonFloor',
-            style: GoogleFonts.shareTechMono(fontSize: 13, color: kText),
-          ),
-          const SizedBox(height: kSpace1),
-          _buildEnemyStats(enemy),
-          _buildBossRewardPreview(),
-        ],
-        const SizedBox(height: kSpace2),
-        RichText(
-          text: TextSpan(
-            children: [
-              TextSpan(
-                text: 'Battle ready at ',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ImageIcon(
+                  const AssetImage('assets/icons/control/icon_sword.png'),
+                  size: 14,
+                  color: _isRestDay ? kMutedText : kAmber,
+                ),
+                const SizedBox(width: kSpace2),
+                Text(
+                  'DUNGEON — FLOOR $_dungeonFloor',
+                  style: TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 8,
+                    color: _isRestDay ? kMutedText : kAmber,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: kSpace2),
+            if (_isRestDay)
+              Text(
+                'RESTING',
                 style: GoogleFonts.shareTechMono(
                   fontSize: 12,
                   color: kMutedText,
                 ),
+              )
+            else
+              const PulseColorText(
+                'FIGHTING',
+                style: TextStyle(fontFamily: 'PressStart2P', fontSize: 8),
+                colorA: kNeon,
+                colorB: kNeonDark,
+                periodMs: 500,
               ),
-              TextSpan(
-                text: 'midnight',
-                style: GoogleFonts.shareTechMono(fontSize: 12, color: kAmber),
-              ),
-            ],
-          ),
+            _buildBossRewardPreview(),
+          ],
         ),
-      ],
-    );
-  }
-
-  // State C — Battle ready
-  Widget _buildDungeonReady() {
-    final enemy = _pendingBattle?.enemy;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildDungeonHeader(),
-        const SizedBox(height: kSpace2),
-        const PulseColorText(
-          'BATTLE READY',
-          style: TextStyle(fontFamily: 'PressStart2P', fontSize: 8),
-          colorA: kDanger,
-          colorB: kAmber,
-          periodMs: 500,
-        ),
-        const SizedBox(height: kSpace1),
-        if (enemy != null) ...[
-          Text(
-            '${enemy.name}  Lv.$_dungeonFloor',
-            style: GoogleFonts.shareTechMono(fontSize: 13, color: kText),
-          ),
-          const SizedBox(height: kSpace1),
-          _buildEnemyStats(enemy),
-          _buildBossRewardPreview(),
-        ],
-        const SizedBox(height: kSpace3),
-        PixelButton(label: '⚔ FIGHT', color: kDanger, onPressed: _startBattle),
-      ],
-    );
-  }
-
-  // State D — Battle resolved (post-result, same day)
-  Widget _buildDungeonResolved() {
-    final result = _todayBattleResult;
-    final won = result?.playerWon == true;
-    final draw = result?.isDraw == true;
-    final resultText = won
-        ? 'VICTORY — FLOOR CLEARED'
-        : draw
-        ? 'STALEMATE'
-        : 'DEFEATED';
-    final resultColor = won
-        ? kNeon
-        : draw
-        ? kAmber
-        : kDanger;
-    final hasUnclaimedLoot = won && _unclaimedLoot != null;
-
-    return ArcadeTap(
-      onTap: hasUnclaimedLoot
-          ? _openLootChest
-          : result != null
-          ? () => _replayBattle(result)
-          : null,
-      borderRadius: BorderRadius.circular(4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildDungeonHeader(),
-          const SizedBox(height: kSpace2),
-          Text(
-            resultText,
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 8,
-              color: resultColor,
-            ),
-          ),
-          const SizedBox(height: kSpace1),
-          Text(
-            hasUnclaimedLoot ? 'Tap to claim spoils' : 'Tap to view battle log',
-            style: GoogleFonts.shareTechMono(fontSize: 11, color: kMutedText),
-          ),
-        ],
       ),
     );
   }
