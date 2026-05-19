@@ -1,28 +1,11 @@
 import '../models/character_class.dart';
 
-/// Muscle groups relevant to each class for volume tracking.
-/// These map directly to StatEngine's _statForPrimaryMuscle groupings.
+/// Canonical muscle-group buckets each class focuses on. Used by
+/// `ClassService.getCurrentVolume` to attribute training to a class.
 Set<String> musclesForClass(CharacterClass cls) => switch (cls) {
-  CharacterClass.assassin => const {'shoulders', 'abdominals'},
-  CharacterClass.bruiser => const {
-    'chest',
-    'triceps',
-    'forearms',
-    'lats',
-    'middle back',
-    'lower back',
-    'biceps',
-    'traps',
-    'neck',
-  },
-  CharacterClass.tank => const {
-    'quadriceps',
-    'hamstrings',
-    'glutes',
-    'calves',
-    'adductors',
-    'abductors',
-  },
+  CharacterClass.assassin => const {'Shoulders', 'Core'},
+  CharacterClass.bruiser => const {'Chest', 'Back', 'Arms'},
+  CharacterClass.tank => const {'Legs'},
 };
 
 /// Human-readable focus muscle label for display.

@@ -10,7 +10,7 @@ class TypeAgreeDialog extends StatefulWidget {
   const TypeAgreeDialog({
     super.key,
     this.title = 'CONFIRM CLASS CHANGE',
-    this.message = 'Switching class will lock your current abilities and reset ultimate progress.',
+    this.message = 'Switching class will reset your current class path.',
   });
 
   final String title;
@@ -61,27 +61,18 @@ class _TypeAgreeDialogState extends State<TypeAgreeDialog> {
         children: [
           Text(
             widget.message,
-            style: GoogleFonts.shareTechMono(
-              fontSize: 13,
-              color: kText,
-            ),
+            style: GoogleFonts.shareTechMono(fontSize: 13, color: kText),
           ),
           const SizedBox(height: kSpace4),
           Text(
             'Type AGREE to confirm:',
-            style: GoogleFonts.shareTechMono(
-              fontSize: 12,
-              color: kMutedText,
-            ),
+            style: GoogleFonts.shareTechMono(fontSize: 12, color: kMutedText),
           ),
           const SizedBox(height: kSpace2),
           TextField(
             controller: _controller,
             autofocus: true,
-            style: GoogleFonts.shareTechMono(
-              fontSize: 14,
-              color: kText,
-            ),
+            style: GoogleFonts.shareTechMono(fontSize: 14, color: kText),
             decoration: InputDecoration(
               hintText: 'AGREE',
               hintStyle: GoogleFonts.shareTechMono(
@@ -111,10 +102,7 @@ class _TypeAgreeDialogState extends State<TypeAgreeDialog> {
           onPressed: () => Navigator.pop(context, false),
           child: Text(
             'CANCEL',
-            style: GoogleFonts.shareTechMono(
-              fontSize: 12,
-              color: kMutedText,
-            ),
+            style: GoogleFonts.shareTechMono(fontSize: 12, color: kMutedText),
           ),
         ),
         PixelButton(

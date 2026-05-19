@@ -110,10 +110,7 @@ void main() {
       final laterService = BodyMetricsService(
         nowProvider: () => now.add(const Duration(days: 3)),
       );
-      expect(
-        () => laterService.logWeight(74.0),
-        throwsA(isA<StateError>()),
-      );
+      expect(() => laterService.logWeight(74.0), throwsA(isA<StateError>()));
     });
   });
 

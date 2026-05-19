@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/muscle_groups.dart';
 import '../models/quest_models.dart';
 import '../models/workout_models.dart';
 import 'rest_service.dart';
@@ -43,7 +44,10 @@ class QuestService {
       now: currentTime,
     );
     final baseXP =
-        XpService.calculateTotalXP(sessions) + state.claimedXP + recoveryXP + potionBonusXP;
+        XpService.calculateTotalXP(sessions) +
+        state.claimedXP +
+        recoveryXP +
+        potionBonusXP;
 
     final daily = _buildDailyQuests(state, stats, baseXP, currentTime);
     final weekly = _buildWeeklyQuests(state, stats, baseXP, currentTime);
@@ -621,11 +625,13 @@ class _QuestStats {
 
     return _QuestStats(
       todayCompletedSessions: todaySessions.length,
-      todayMuscles: todaySessions.map((session) => session.muscleGroup).toSet(),
+      todayMuscles: todaySessions
+          .expand((session) => session.targetMuscleGroups)
+          .toSet(),
       weekCompletedSessions: weekSessions.length,
       weekSetCount: weekSetCount,
       weekMuscleGroups: weekSessions
-          .map((session) => session.muscleGroup)
+          .expand((session) => session.targetMuscleGroups)
           .toSet()
           .length,
       weekDurationSeconds: weekSessions.fold(
@@ -635,7 +641,7 @@ class _QuestStats {
       lifetimeCompletedSessions: completed.length,
       lifetimeSetCount: lifetimeSetCount,
       lifetimeMuscleGroups: completed
-          .map((session) => session.muscleGroup)
+          .expand((session) => session.targetMuscleGroups)
           .toSet()
           .length,
       lifetimeDurationSeconds: lifetimeDurationSeconds,
@@ -653,19 +659,27 @@ class _QuestStats {
   ) {
     if (completed.isEmpty) return null;
     final cutoff = now.subtract(const Duration(days: 30));
-    const muscles = ['Chest', 'Back', 'Arms', 'Legs'];
+    const muscles = canonicalMuscleGroups;
     final volumes = {for (final muscle in muscles) muscle: 0.0};
     final lastDate = <String, DateTime>{};
 
     for (final session in completed) {
+      final targets = session.targetMuscleGroups;
       if (session.date.isAfter(cutoff)) {
-        volumes[session.muscleGroup] =
-            (volumes[session.muscleGroup] ?? 0) +
-            session.exercises.fold(0.0, (sum, log) => sum + log.totalVolume);
+        final volume = session.exercises.fold(
+          0.0,
+          (sum, log) => sum + log.totalVolume,
+        );
+        final share = targets.isEmpty ? 0.0 : volume / targets.length;
+        for (final target in targets) {
+          volumes[target] = (volumes[target] ?? 0) + share;
+        }
       }
-      final previous = lastDate[session.muscleGroup];
-      if (previous == null || session.date.isAfter(previous)) {
-        lastDate[session.muscleGroup] = session.date;
+      for (final target in targets) {
+        final previous = lastDate[target];
+        if (previous == null || session.date.isAfter(previous)) {
+          lastDate[target] = session.date;
+        }
       }
     }
 

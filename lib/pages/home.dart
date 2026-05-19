@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../data/muscle_groups.dart';
 import '../data/programs_library.dart';
 import '../models/loot_item.dart';
 import '../models/program_models.dart';
@@ -157,21 +158,26 @@ class HomePageState extends State<HomePage> {
 
     final now = DateTime.now();
     final cutoff = now.subtract(const Duration(days: 30));
-    const muscles = ['Chest', 'Back', 'Arms', 'Legs'];
+    const muscles = canonicalMuscleGroups;
     String? suggestedMuscle;
 
     if (completed.isNotEmpty) {
       final vols = {for (final m in muscles) m: 0.0};
       final lastDate = <String, DateTime>{};
       for (final s in completed) {
+        final targets = s.targetMuscleGroups;
         if (s.date.isAfter(cutoff)) {
-          vols[s.muscleGroup] =
-              (vols[s.muscleGroup] ?? 0) +
-              s.exercises.fold(0.0, (sum, e) => sum + e.totalVolume);
+          final volume = s.exercises.fold(0.0, (sum, e) => sum + e.totalVolume);
+          final share = targets.isEmpty ? 0.0 : volume / targets.length;
+          for (final target in targets) {
+            vols[target] = (vols[target] ?? 0) + share;
+          }
         }
-        if (!lastDate.containsKey(s.muscleGroup) ||
-            s.date.isAfter(lastDate[s.muscleGroup]!)) {
-          lastDate[s.muscleGroup] = s.date;
+        for (final target in targets) {
+          if (!lastDate.containsKey(target) ||
+              s.date.isAfter(lastDate[target]!)) {
+            lastDate[target] = s.date;
+          }
         }
       }
       suggestedMuscle = muscles.reduce((a, b) {
@@ -300,6 +306,7 @@ class HomePageState extends State<HomePage> {
       arcadeRoute(
         (_) => ActiveWorkoutPage(
           muscleGroup: session.muscleGroup,
+          targetMuscleGroups: session.targetMuscleGroups,
           durationMinutes: session.targetDurationMinutes,
           exercises: exercises,
           resumeFromSession: session,
@@ -345,6 +352,7 @@ class HomePageState extends State<HomePage> {
       arcadeRoute(
         (_) => StartWorkoutPage(
           initialMuscleGroup: programDayPrimaryMuscleGroup(day),
+          initialMuscleGroups: programDayTargetMuscleGroups(day),
           programDayLabel: day.label,
           programFocusSummary: programDayFocusSummary(day),
           programCuratedExerciseIds: day.suggestedExerciseIds,
@@ -456,17 +464,38 @@ class HomePageState extends State<HomePage> {
 
   String _sessionProgressLabel(WorkoutSession session) {
     final exerciseCount = session.exercises.length;
-    final minutes = _liveElapsedSeconds(session) ~/ 60;
+    final elapsedSeconds = _liveElapsedSeconds(session);
+    final minutes = elapsedSeconds ~/ 60;
     if (exerciseCount == 0 && minutes == 0) return 'Ready to continue';
 
     final exerciseLabel = exerciseCount == 1
         ? '1 exercise'
         : '$exerciseCount exercises';
-    return '$exerciseLabel · ${_fmtDuration(session.actualDurationSeconds)}';
+    final prefix = session.isPausedForResume ? 'Saved' : exerciseLabel;
+    return '$prefix · ${_fmtDuration(elapsedSeconds)}';
+  }
+
+  int _sessionCompletedExerciseCount(WorkoutSession session) {
+    return session.exercises.where((log) => log.sets.isNotEmpty).length;
+  }
+
+  int _sessionTotalExerciseCount(WorkoutSession session) {
+    final total = session.selectedExerciseIds.isNotEmpty
+        ? session.selectedExerciseIds.length
+        : session.exercises.length;
+    return total <= 0 ? 1 : total;
+  }
+
+  double _sessionExerciseProgress(WorkoutSession session) {
+    final total = _sessionTotalExerciseCount(session);
+    return (_sessionCompletedExerciseCount(session) / total)
+        .clamp(0.0, 1.0)
+        .toDouble();
   }
 
   String? _missionRewardLabel(WorkoutSession? session) {
     if (session != null) {
+      if (session.isPausedForResume) return 'SAVED';
       final emptySession =
           session.exercises.isEmpty && _liveElapsedSeconds(session) == 0;
       final xp = emptySession ? 0 : XpService.calculateLiveSessionXP(session);
@@ -479,11 +508,7 @@ class HomePageState extends State<HomePage> {
   }
 
   int _liveElapsedSeconds(WorkoutSession session) {
-    if (!session.isOngoing) return session.actualDurationSeconds;
-    final live = DateTime.now().difference(session.startedAt).inSeconds;
-    return live > session.actualDurationSeconds
-        ? live
-        : session.actualDurationSeconds;
+    return session.elapsedSecondsForDisplay(DateTime.now());
   }
 
   String _lastWorkoutLabel() {
@@ -811,9 +836,11 @@ class HomePageState extends State<HomePage> {
       return _buildRecoveryMissionPanel(restInfo);
     }
 
-    final muscle = session?.muscleGroup ?? _suggestedMuscle;
+    final muscle = session?.targetMuscleLabel ?? _suggestedMuscle;
     final title = session != null
-        ? '${session.muscleGroup} in progress'
+        ? session.isPausedForResume
+              ? '${session.targetMuscleLabel} saved'
+              : '${session.targetMuscleLabel} in progress'
         : muscle != null
         ? 'Train $muscle'
         : 'Choose your first workout';
@@ -881,6 +908,29 @@ class HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 14),
+          if (session != null && session.isPausedForResume) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: ArcadeProgressBar(
+                    value: _sessionExerciseProgress(session),
+                    height: 6,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '${_sessionCompletedExerciseCount(session)}/'
+                  '${_sessionTotalExerciseCount(session)} CLEARED',
+                  style: const TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 8,
+                    color: kMutedText,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
           Row(
             children: [
               const ImageIcon(
@@ -891,7 +941,9 @@ class HomePageState extends State<HomePage> {
               const SizedBox(width: 8),
               Text(
                 session != null
-                    ? 'Pick up where you left off'
+                    ? session.isPausedForResume
+                          ? 'Saved until midnight'
+                          : 'Pick up where you left off'
                     : 'Balance your build',
                 style: GoogleFonts.shareTechMono(
                   color: const Color(0xFFFFD700),
@@ -914,7 +966,9 @@ class HomePageState extends State<HomePage> {
 
     if (session == null) return panel;
     return Semantics(
-      label: '${session.muscleGroup} ongoing workout',
+      label: session.isPausedForResume
+          ? '${session.targetMuscleLabel} saved workout'
+          : '${session.targetMuscleLabel} ongoing workout',
       hint: 'Long press to delete this session.',
       child: GestureDetector(
         onLongPress: () => _confirmDelete(session),
@@ -1332,16 +1386,6 @@ class HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 16),
-          PixelButton(
-            label: 'KEEP RESTING',
-            color: kCyan,
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Recovery day in progress.')),
-              );
-            },
-          ),
-          const SizedBox(height: 8),
           Center(
             child: TextButton(
               onPressed: () => _startWorkout(trainAnyway: false),
@@ -1359,17 +1403,18 @@ class HomePageState extends State<HomePage> {
   Widget _buildSecondaryOngoingSessions() {
     final sessions = _ongoingSessions.skip(1).toList();
     if (sessions.isEmpty) return const SizedBox.shrink();
+    final allPaused = sessions.every((session) => session.isPausedForResume);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 16),
-        const Text(
-          'ONGOING',
+        Text(
+          allPaused ? 'SAVED' : 'ONGOING',
           style: TextStyle(
             fontFamily: 'PressStart2P',
             fontSize: 8,
-            color: Color(0xFFFFD700),
+            color: allPaused ? kCyan : const Color(0xFFFFD700),
           ),
         ),
         const SizedBox(height: 8),
@@ -1384,7 +1429,9 @@ class HomePageState extends State<HomePage> {
 
   Widget _buildSecondaryOngoingRow(WorkoutSession session) {
     return Semantics(
-      label: '${session.muscleGroup} ongoing workout',
+      label: session.isPausedForResume
+          ? '${session.targetMuscleLabel} saved workout'
+          : '${session.targetMuscleLabel} ongoing workout',
       hint: 'Long press to delete this session.',
       child: _PressableCard(
         onLongPress: () => _confirmDelete(session),
@@ -1407,7 +1454,7 @@ class HomePageState extends State<HomePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      session.muscleGroup,
+                      session.targetMuscleLabel,
                       style: const TextStyle(
                         fontFamily: 'ShareTechMono',
                         fontSize: 15,

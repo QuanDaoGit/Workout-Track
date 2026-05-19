@@ -47,11 +47,7 @@ class ClassSprite extends StatelessWidget {
                 color: placeholderTint,
               ),
             )
-          : Icon(
-              Icons.shield_sharp,
-              size: size * 0.5,
-              color: placeholderTint,
-            ),
+          : Icon(Icons.shield_sharp, size: size * 0.5, color: placeholderTint),
     );
   }
 }

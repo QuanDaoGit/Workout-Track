@@ -17,8 +17,18 @@ void main() {
         final key = utf8.decode(message!.buffer.asUint8List());
         if (key == 'assets/exercises.json') {
           final json = jsonEncode([
-            {'id': 'bench_press', 'name': 'Bench Press', 'level': 'intermediate', 'images': []},
-            {'id': 'squat', 'name': 'Squat', 'level': 'intermediate', 'images': []},
+            {
+              'id': 'bench_press',
+              'name': 'Bench Press',
+              'level': 'intermediate',
+              'images': [],
+            },
+            {
+              'id': 'squat',
+              'name': 'Squat',
+              'level': 'intermediate',
+              'images': [],
+            },
           ]);
           return Uint8List.fromList(utf8.encode(json)).buffer.asByteData();
         }
@@ -39,7 +49,7 @@ void main() {
       final service = CustomExerciseService();
       await service.saveCustomExercise(
         name: 'My Press',
-        muscleGroup: 'chest',
+        muscleGroup: 'Chest',
         exerciseType: 'weighted',
         userNote: 'A test exercise',
       );
@@ -48,7 +58,7 @@ void main() {
       expect(exercises.length, 1);
       expect(exercises.first.name, 'My Press');
       expect(exercises.first.isCustom, true);
-      expect(exercises.first.muscleGroup, 'chest');
+      expect(exercises.first.muscleGroup, 'Chest');
       expect(exercises.first.exerciseType, 'weighted');
       expect(exercises.first.primaryMuscle, 'chest');
       expect(exercises.first.userNote, 'A test exercise');
@@ -57,17 +67,20 @@ void main() {
   });
 
   group('isNameDuplicate', () {
-    test('rejects duplicate name against custom exercises (case-insensitive)', () async {
-      final service = CustomExerciseService();
-      await service.saveCustomExercise(
-        name: 'My Exercise',
-        muscleGroup: 'chest',
-        exerciseType: 'weighted',
-      );
+    test(
+      'rejects duplicate name against custom exercises (case-insensitive)',
+      () async {
+        final service = CustomExerciseService();
+        await service.saveCustomExercise(
+          name: 'My Exercise',
+          muscleGroup: 'Chest',
+          exerciseType: 'weighted',
+        );
 
-      expect(await service.isNameDuplicate('my exercise'), true);
-      expect(await service.isNameDuplicate('MY EXERCISE'), true);
-    });
+        expect(await service.isNameDuplicate('my exercise'), true);
+        expect(await service.isNameDuplicate('MY EXERCISE'), true);
+      },
+    );
 
     test('rejects duplicate name against built-in exercises', () async {
       final service = CustomExerciseService();
@@ -84,7 +97,7 @@ void main() {
       final service = CustomExerciseService();
       await service.saveCustomExercise(
         name: 'My Exercise',
-        muscleGroup: 'chest',
+        muscleGroup: 'Chest',
         exerciseType: 'weighted',
       );
 
@@ -92,7 +105,10 @@ void main() {
       final id = exercises.first.id;
 
       // Same name should be allowed when editing the same exercise
-      expect(await service.isNameDuplicate('My Exercise', excludeId: id), false);
+      expect(
+        await service.isNameDuplicate('My Exercise', excludeId: id),
+        false,
+      );
     });
   });
 
@@ -101,17 +117,21 @@ void main() {
       final service = CustomExerciseService();
       await service.saveCustomExercise(
         name: 'Old Name',
-        muscleGroup: 'chest',
+        muscleGroup: 'Chest',
         exerciseType: 'weighted',
       );
 
       final exercises = await service.getCustomExercises();
       final id = exercises.first.id;
 
-      await service.updateCustomExercise(id, name: 'New Name', muscleGroup: 'back');
+      await service.updateCustomExercise(
+        id,
+        name: 'New Name',
+        muscleGroup: 'Back',
+      );
       final updated = await service.getCustomExercises();
       expect(updated.first.name, 'New Name');
-      expect(updated.first.muscleGroup, 'back');
+      expect(updated.first.muscleGroup, 'Back');
       expect(updated.first.primaryMuscle, 'lats');
     });
   });
@@ -121,7 +141,7 @@ void main() {
       final service = CustomExerciseService();
       await service.saveCustomExercise(
         name: 'To Delete',
-        muscleGroup: 'legs',
+        muscleGroup: 'Legs',
         exerciseType: 'bodyweight',
       );
 
@@ -139,7 +159,7 @@ void main() {
       final service = CustomExerciseService();
       await service.saveCustomExercise(
         name: 'Round Trip',
-        muscleGroup: 'shoulders',
+        muscleGroup: 'Shoulders',
         exerciseType: 'weighted',
         userNote: 'Test note',
       );
@@ -147,7 +167,7 @@ void main() {
       // Reload from SharedPreferences (simulates app restart)
       final loaded = await service.getCustomExercises();
       expect(loaded.first.name, 'Round Trip');
-      expect(loaded.first.muscleGroup, 'shoulders');
+      expect(loaded.first.muscleGroup, 'Shoulders');
       expect(loaded.first.exerciseType, 'weighted');
       expect(loaded.first.userNote, 'Test note');
       expect(loaded.first.primaryMuscle, 'shoulders');

@@ -26,8 +26,7 @@ class ExerciseCatalogService {
     final jsonStr = await rootBundle.loadString('assets/exercises.json');
     final data = jsonDecode(jsonStr) as List<dynamic>;
     _builtInCache = [
-      for (final e in data)
-        Exercise.fromJson(e as Map<String, dynamic>),
+      for (final e in data) Exercise.fromJson(e as Map<String, dynamic>),
     ];
     return _builtInCache!;
   }

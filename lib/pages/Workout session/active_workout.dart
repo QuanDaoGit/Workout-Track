@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../data/muscle_groups.dart';
 import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
 import '../../services/program_service.dart';
+import '../../services/rest_timer_service.dart';
 import '../../services/workout_storage_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_dialog_button_column.dart';
@@ -14,6 +16,7 @@ import '../../widgets/arcade_route.dart';
 import '../../widgets/arcade_tap.dart';
 import '../../widgets/blinking_colon.dart';
 import '../../widgets/pixel_button.dart';
+import '../../widgets/rest_timer_bar.dart';
 import '../../widgets/strobe_flash.dart';
 import 'exercise_session.dart';
 import 'workout_summary.dart';
@@ -24,16 +27,20 @@ class ActiveWorkoutPage extends StatefulWidget {
   const ActiveWorkoutPage({
     super.key,
     required this.muscleGroup,
+    this.targetMuscleGroups = const [],
     required this.durationMinutes,
     required this.exercises,
+    this.restSeconds = 90,
     this.resumeFromSession,
     this.isProgramWorkout = false,
     this.advanceProgramRestDayOnCompletion = false,
   });
 
   final String muscleGroup;
+  final List<String> targetMuscleGroups;
   final int durationMinutes;
   final List<Exercise> exercises;
+  final int restSeconds;
   final WorkoutSession? resumeFromSession;
   final bool isProgramWorkout;
   final bool advanceProgramRestDayOnCompletion;
@@ -52,6 +59,18 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   final Map<String, GlobalKey> _exerciseKeys = {};
   final Map<String, int> _flashTriggers = {};
   bool _leaving = false;
+  bool _restPromptOpen = false;
+
+  List<String> get _targetMuscleGroups {
+    final normalized = normalizeTargetMuscleGroups(widget.targetMuscleGroups);
+    if (normalized.isNotEmpty) return normalized;
+    return normalizeTargetMuscleGroups([widget.muscleGroup]);
+  }
+
+  String get _targetLabel => targetMuscleGroupsLabel(
+    _targetMuscleGroups,
+    fallback: widget.muscleGroup,
+  );
 
   @override
   void initState() {
@@ -59,7 +78,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     WidgetsBinding.instance.addObserver(this);
 
     if (widget.resumeFromSession != null) {
-      _sessionStartTime = widget.resumeFromSession!.startedAt;
+      _sessionStartTime = widget.resumeFromSession!.resumeStartTime(
+        DateTime.now(),
+      );
       for (final log in widget.resumeFromSession!.exercises) {
         if (log.sets.isNotEmpty) {
           _loggedSets[log.exerciseId] = log.sets;
@@ -161,6 +182,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         (_) => ExerciseSessionPage(
           exercise: exercise,
           initialSets: _loggedSets[exercise.id] ?? const [],
+          restSeconds: widget.restSeconds,
         ),
       ),
     );
@@ -174,6 +196,61 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     } else {
       setState(() => _status[exercise.id] = previousStatus);
     }
+  }
+
+  Future<void> _openExerciseWithRestGuard(Exercise exercise) async {
+    final snap = RestTimerService.instance.current.value;
+    if (snap == null || !snap.isActive) {
+      if (snap != null && !snap.isActive) {
+        RestTimerService.instance.cancel();
+      }
+      await _openExercise(exercise);
+      return;
+    }
+
+    if (_restPromptOpen) return;
+    _restPromptOpen = true;
+    final skipRest = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: const BorderSide(color: kBorder),
+        ),
+        title: const Text('SKIP REST?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Do you want to skip rest and start this exercise now?'),
+            const SizedBox(height: 16),
+            ArcadeDialogButtonColumn(
+              children: [
+                FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('CONTINUE REST'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF2A2A3E),
+                    foregroundColor: kMutedText,
+                  ),
+                  child: const Text('SKIP REST'),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: const [],
+      ),
+    );
+    _restPromptOpen = false;
+
+    if (!mounted || skipRest != true) return;
+    RestTimerService.instance.cancel();
+    await _openExercise(exercise);
   }
 
   List<ExerciseLog> _buildExerciseLogs() => [
@@ -200,6 +277,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       arcadeRoute(
         (_) => WorkoutSummaryPage(
           muscleGroup: widget.muscleGroup,
+          targetMuscleGroups: _targetMuscleGroups,
           durationMinutes: widget.durationMinutes,
           elapsedSeconds: _elapsedSeconds,
           exerciseLogs: _buildExerciseLogs(),
@@ -229,14 +307,63 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         date: DateTime.now(),
         startedAt: _sessionStartTime,
         muscleGroup: widget.muscleGroup,
+        targetMuscleGroups: _targetMuscleGroups,
         targetDurationMinutes: widget.durationMinutes,
         actualDurationSeconds: _elapsedSeconds,
         exercises: logs,
-        estimatedCalories: CalorieService.estimateCalories(
-          widget.muscleGroup,
+        estimatedCalories: CalorieService.estimateCaloriesForGroups(
+          _targetMuscleGroups,
           _elapsedSeconds,
         ),
         isPartial: true,
+        selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
+      ),
+    );
+    if (widget.isProgramWorkout || widget.advanceProgramRestDayOnCompletion) {
+      await ProgramService().markOngoingProgramSession(
+        sessionId,
+        restDayWorkout: widget.advanceProgramRestDayOnCompletion,
+      );
+    }
+    if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
+  DateTime _nextLocalMidnight(DateTime from) {
+    return DateTime(
+      from.year,
+      from.month,
+      from.day,
+    ).add(const Duration(days: 1));
+  }
+
+  Future<void> _pauseAndQuit() async {
+    if (_leaving) return;
+    _leaving = true;
+    _updateElapsed();
+    _timer?.cancel();
+    RestTimerService.instance.cancel();
+    final logs = _buildExerciseLogs();
+    final now = DateTime.now();
+    final sessionId =
+        widget.resumeFromSession?.id ?? now.millisecondsSinceEpoch.toString();
+    await WorkoutStorageService().replaceOngoingSession(
+      WorkoutSession(
+        id: sessionId,
+        date: now,
+        startedAt: _sessionStartTime,
+        pausedAt: now,
+        autoDiscardAt: _nextLocalMidnight(now),
+        muscleGroup: widget.muscleGroup,
+        targetMuscleGroups: _targetMuscleGroups,
+        targetDurationMinutes: widget.durationMinutes,
+        actualDurationSeconds: _elapsedSeconds,
+        exercises: logs,
+        estimatedCalories: CalorieService.estimateCaloriesForGroups(
+          _targetMuscleGroups,
+          _elapsedSeconds,
+        ),
+        isPartial: true,
+        isPausedForResume: true,
         selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
       ),
     );
@@ -259,6 +386,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       arcadeRoute(
         (_) => WorkoutSummaryPage(
           muscleGroup: widget.muscleGroup,
+          targetMuscleGroups: _targetMuscleGroups,
           durationMinutes: widget.durationMinutes,
           elapsedSeconds: _elapsedSeconds,
           exerciseLogs: const [],
@@ -330,12 +458,14 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Save progress and return home.'),
+            const Text(
+              'Saved until midnight. If not resumed, it ends early with time-only XP.',
+            ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () {
                 Navigator.of(ctx).pop();
-                _savePartialAndQuit();
+                _pauseAndQuit();
               },
               child: const Text('SAVE & EXIT'),
             ),
@@ -463,6 +593,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const RestTimerBar(),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -470,7 +601,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        widget.muscleGroup,
+                        _targetLabel,
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const SizedBox(height: 12),
@@ -533,7 +664,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: ArcadeTap(
-                        onTap: () => _openExercise(exercise),
+                        onTap: () => _openExerciseWithRestGuard(exercise),
                         borderRadius: BorderRadius.circular(4),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(

@@ -15,7 +15,7 @@ class BodyMetricsService {
   final DateTime Function() _now;
 
   BodyMetricsService({DateTime Function()? nowProvider})
-      : _now = nowProvider ?? DateTime.now;
+    : _now = nowProvider ?? DateTime.now;
 
   Future<bool> isEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -43,8 +43,7 @@ class BodyMetricsService {
     if (raw == null || raw.isEmpty) return [];
     final list = jsonDecode(raw) as List<dynamic>;
     final entries = [
-      for (final e in list)
-        WeightEntry.fromJson(e as Map<String, dynamic>),
+      for (final e in list) WeightEntry.fromJson(e as Map<String, dynamic>),
     ];
     entries.sort((a, b) => a.loggedAt.compareTo(b.loggedAt));
     return entries;

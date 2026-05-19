@@ -73,9 +73,7 @@ class ExerciseCard extends StatelessWidget {
                         color: Color(0xFF0D0D1A),
                         child: Center(
                           child: ImageIcon(
-                            AssetImage(
-                              'assets/icons/control/icon_hammer.png',
-                            ),
+                            AssetImage('assets/icons/control/icon_hammer.png'),
                             color: Color(0xFF00FF9C),
                             size: 24,
                           ),
@@ -135,9 +133,7 @@ class ExerciseCard extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            border: Border.all(
-                              color: const Color(0xFF00BFFF),
-                            ),
+                            border: Border.all(color: const Color(0xFF00BFFF)),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(

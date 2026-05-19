@@ -42,10 +42,7 @@ class LogWeightRewardPage extends StatelessWidget {
               const SizedBox(height: 16),
               Text(
                 'weight: ${weightKg.toStringAsFixed(1)} kg',
-                style: GoogleFonts.shareTechMono(
-                  color: kText,
-                  fontSize: 14,
-                ),
+                style: GoogleFonts.shareTechMono(color: kText, fontSize: 14),
               ),
               const SizedBox(height: 40),
               // Base potion

@@ -1,3 +1,5 @@
+import '../data/muscle_groups.dart';
+
 class Exercise {
   const Exercise({
     required this.id,
@@ -11,6 +13,8 @@ class Exercise {
     this.muscleGroup,
     this.exerciseType,
     this.primaryMuscle,
+    this.mechanic,
+    this.equipment,
   });
 
   final String id;
@@ -24,6 +28,8 @@ class Exercise {
   final String? muscleGroup;
   final String? exerciseType;
   final String? primaryMuscle;
+  final String? mechanic;
+  final String? equipment;
 
   String get imageAssetPath {
     if (images.isEmpty) return '';
@@ -54,20 +60,23 @@ class Exercise {
     String? muscleGroup,
     String? exerciseType,
     String? primaryMuscle,
-  }) =>
-      Exercise(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        level: level ?? this.level,
-        images: images ?? this.images,
-        instructions: instructions ?? this.instructions,
-        isCustom: isCustom ?? this.isCustom,
-        createdAt: createdAt ?? this.createdAt,
-        userNote: userNote ?? this.userNote,
-        muscleGroup: muscleGroup ?? this.muscleGroup,
-        exerciseType: exerciseType ?? this.exerciseType,
-        primaryMuscle: primaryMuscle ?? this.primaryMuscle,
-      );
+    String? mechanic,
+    String? equipment,
+  }) => Exercise(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    level: level ?? this.level,
+    images: images ?? this.images,
+    instructions: instructions ?? this.instructions,
+    isCustom: isCustom ?? this.isCustom,
+    createdAt: createdAt ?? this.createdAt,
+    userNote: userNote ?? this.userNote,
+    muscleGroup: muscleGroup ?? this.muscleGroup,
+    exerciseType: exerciseType ?? this.exerciseType,
+    primaryMuscle: primaryMuscle ?? this.primaryMuscle,
+    mechanic: mechanic ?? this.mechanic,
+    equipment: equipment ?? this.equipment,
+  );
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -81,6 +90,8 @@ class Exercise {
     if (muscleGroup != null) 'muscleGroup': muscleGroup,
     if (exerciseType != null) 'exerciseType': exerciseType,
     if (primaryMuscle != null) 'primaryMuscle': primaryMuscle,
+    if (mechanic != null) 'mechanic': mechanic,
+    if (equipment != null) 'equipment': equipment,
   };
 
   factory Exercise.fromJson(Map<String, dynamic> json) => Exercise(
@@ -100,10 +111,26 @@ class Exercise {
         ? DateTime.tryParse(json['createdAt'] as String)
         : null,
     userNote: json['userNote'] as String?,
-    muscleGroup: json['muscleGroup'] as String?,
+    muscleGroup: _normalizeOrNull(json['muscleGroup'] as String?),
     exerciseType: json['exerciseType'] as String?,
-    primaryMuscle: json['primaryMuscle'] as String?,
+    primaryMuscle:
+        json['primaryMuscle'] as String? ??
+        _firstString(json['primaryMuscles']),
+    mechanic: json['mechanic'] as String?,
+    equipment: json['equipment'] as String?,
   );
+
+  static String? _normalizeOrNull(String? raw) {
+    if (raw == null) return null;
+    return normalizeMuscleGroup(raw) ?? raw;
+  }
+
+  static String? _firstString(Object? raw) {
+    if (raw is List && raw.isNotEmpty && raw.first is String) {
+      return raw.first as String;
+    }
+    return null;
+  }
 }
 
 class SetEntry {
@@ -157,14 +184,21 @@ class WorkoutSession {
     required this.exercises,
     required this.estimatedCalories,
     DateTime? startedAt,
+    this.pausedAt,
+    this.autoDiscardAt,
     this.isPartial = false,
     this.isAbandoned = false,
+    this.isPausedForResume = false,
     this.selectedExerciseIds = const [],
-  }) : startedAt = startedAt ?? date;
+    List<String>? targetMuscleGroups,
+  }) : startedAt = startedAt ?? date,
+       targetMuscleGroups = _normalizedTargets(muscleGroup, targetMuscleGroups);
 
   final String id;
   final DateTime date;
   final DateTime startedAt;
+  final DateTime? pausedAt;
+  final DateTime? autoDiscardAt;
   final String muscleGroup;
   final int targetDurationMinutes;
   final int actualDurationSeconds;
@@ -172,14 +206,35 @@ class WorkoutSession {
   final int estimatedCalories;
   final bool isPartial;
   final bool isAbandoned;
+  final bool isPausedForResume;
   final List<String> selectedExerciseIds;
+  final List<String> targetMuscleGroups;
 
   bool get isOngoing => isPartial && !isAbandoned;
+
+  String get targetMuscleLabel =>
+      targetMuscleGroupsLabel(targetMuscleGroups, fallback: muscleGroup);
+
+  bool targetsMuscle(String muscleGroup) =>
+      hasTargetMuscle(targetMuscleGroups, muscleGroup);
+
+  int elapsedSecondsForDisplay(DateTime now) {
+    if (!isOngoing || isPausedForResume) return actualDurationSeconds;
+    final live = now.difference(startedAt).inSeconds;
+    return live > actualDurationSeconds ? live : actualDurationSeconds;
+  }
+
+  DateTime resumeStartTime(DateTime now) {
+    if (!isPausedForResume) return startedAt;
+    return now.subtract(Duration(seconds: actualDurationSeconds));
+  }
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'date': date.toIso8601String(),
     'startedAt': startedAt.toIso8601String(),
+    'pausedAt': pausedAt?.toIso8601String(),
+    'autoDiscardAt': autoDiscardAt?.toIso8601String(),
     'muscleGroup': muscleGroup,
     'targetDurationMinutes': targetDurationMinutes,
     'actualDurationSeconds': actualDurationSeconds,
@@ -187,7 +242,9 @@ class WorkoutSession {
     'estimatedCalories': estimatedCalories,
     'isPartial': isPartial,
     'isAbandoned': isAbandoned,
+    'isPausedForResume': isPausedForResume,
     'selectedExerciseIds': selectedExerciseIds,
+    'targetMuscleGroups': targetMuscleGroups,
   };
 
   factory WorkoutSession.fromJson(Map<String, dynamic> j) {
@@ -196,12 +253,19 @@ class WorkoutSession {
     final startedAt = startedAtRaw == null
         ? date
         : DateTime.tryParse(startedAtRaw) ?? date;
+    final pausedAtRaw = j['pausedAt'] as String?;
+    final autoDiscardAtRaw = j['autoDiscardAt'] as String?;
+    final rawMuscleGroup = j['muscleGroup'] as String;
 
     return WorkoutSession(
       id: j['id'] as String,
       date: date,
       startedAt: startedAt,
-      muscleGroup: j['muscleGroup'] as String,
+      pausedAt: pausedAtRaw == null ? null : DateTime.tryParse(pausedAtRaw),
+      autoDiscardAt: autoDiscardAtRaw == null
+          ? null
+          : DateTime.tryParse(autoDiscardAtRaw),
+      muscleGroup: normalizeMuscleGroup(rawMuscleGroup) ?? rawMuscleGroup,
       targetDurationMinutes: j['targetDurationMinutes'] as int,
       actualDurationSeconds: j['actualDurationSeconds'] as int,
       exercises: [
@@ -211,8 +275,25 @@ class WorkoutSession {
       estimatedCalories: (j['estimatedCalories'] as num?)?.toInt() ?? 0,
       isPartial: j['isPartial'] as bool? ?? false,
       isAbandoned: j['isAbandoned'] as bool? ?? false,
+      isPausedForResume: j['isPausedForResume'] as bool? ?? false,
       selectedExerciseIds:
           (j['selectedExerciseIds'] as List<dynamic>?)?.cast<String>() ?? [],
+      targetMuscleGroups:
+          (j['targetMuscleGroups'] as List<dynamic>?)?.cast<String>() ??
+          [rawMuscleGroup],
     );
+  }
+
+  static List<String> _normalizedTargets(
+    String muscleGroup,
+    List<String>? targetGroups,
+  ) {
+    final normalized = normalizeTargetMuscleGroups(
+      targetGroups == null || targetGroups.isEmpty
+          ? [muscleGroup]
+          : targetGroups,
+    );
+    if (normalized.isNotEmpty) return normalized;
+    return [normalizeMuscleGroup(muscleGroup) ?? muscleGroup];
   }
 }

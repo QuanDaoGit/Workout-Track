@@ -56,6 +56,19 @@ class WorkoutStorageService {
     return ongoing.isEmpty ? null : ongoing.first;
   }
 
+  Future<WorkoutSession?> getExpiredPausedSession({DateTime? now}) async {
+    final currentTime = now ?? DateTime.now();
+    final sessions = await getSessions();
+    final expired = sessions.where((session) {
+      final discardAt = session.autoDiscardAt;
+      return session.isOngoing &&
+          session.isPausedForResume &&
+          discardAt != null &&
+          !discardAt.isAfter(currentTime);
+    }).toList()..sort((a, b) => a.autoDiscardAt!.compareTo(b.autoDiscardAt!));
+    return expired.isEmpty ? null : expired.first;
+  }
+
   Future<void> _writeSessions(List<WorkoutSession> sessions) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(

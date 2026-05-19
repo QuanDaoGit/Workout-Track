@@ -65,7 +65,7 @@ class _ClassSelectPageState extends State<ClassSelectPage> {
               ),
               const SizedBox(height: kSpace2),
               Text(
-                'Your class determines combat abilities.',
+                'Your class defines your training path.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.shareTechMono(
                   fontSize: 13,

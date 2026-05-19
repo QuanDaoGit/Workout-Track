@@ -127,4 +127,65 @@ const Map<String, List<String>> curatedExerciseIdsByMuscleGroup = {
     'Speed_Squats',
     'Zercher_Squats',
   ],
+  'Shoulders': [
+    'Push_Press',
+    'Seated_Front_Deltoid',
+    'Kettlebell_Sumo_High_Pull',
+    'Handstand_Push-Ups',
+    'Upright_Cable_Row',
+    'Plyo_Kettlebell_Pushups',
+    'Neck_Press',
+    'Overhead_Lat',
+    'One-Arm_Kettlebell_Snatch',
+    'Clean_and_Jerk',
+    'Standing_Military_Press',
+    'Dumbbell_Shoulder_Press',
+    'Arnold_Dumbbell_Press',
+    'Side_Lateral_Raise',
+    'Face_Pull',
+  ],
+  'Core': [
+    'Press_Sit-Up',
+    'Glute_Ham_Raise',
+    'Alternating_Renegade_Row',
+    'Plyo_Kettlebell_Pushups',
+    'One-Arm_Kettlebell_Floor_Press',
+    'Leg-Over_Floor_Press',
+    'One-Arm_Kettlebell_Snatch',
+    'Plank',
+    'Hanging_Leg_Raise',
+    'Russian_Twist',
+    'Crunches',
+    'Barbell_Ab_Rollout_-_On_Knees',
+    'Dead_Bug',
+    'Mountain_Climbers',
+    'Air_Bike',
+  ],
+  'Full Body': [
+    'Clean_and_Jerk',
+    'Atlas_Stones',
+    'Kettlebell_Sumo_High_Pull',
+    'Push_Press',
+    'One-Arm_Kettlebell_Snatch',
+    'Plyo_Kettlebell_Pushups',
+    'Barbell_Deadlift',
+    'Sumo_Deadlift',
+    'Overhead_Squat',
+    'Power_Clean',
+    'Clean_and_Press',
+    'Kettlebell_Thruster',
+    'Kettlebell_Turkish_Get-Up_Squat_style',
+    'One-Arm_Kettlebell_Swings',
+  ],
 };
+
+List<String> curatedExerciseIdsForMuscleGroups(Iterable<String> groups) {
+  final ids = <String>[];
+  final seen = <String>{};
+  for (final group in groups) {
+    for (final id in curatedExerciseIdsByMuscleGroup[group] ?? const []) {
+      if (seen.add(id)) ids.add(id);
+    }
+  }
+  return ids;
+}

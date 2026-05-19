@@ -14,7 +14,7 @@ class XpBoostService {
   final DateTime Function() _now;
 
   XpBoostService({DateTime Function()? nowProvider})
-      : _now = nowProvider ?? DateTime.now;
+    : _now = nowProvider ?? DateTime.now;
 
   /// Returns currently active (non-expired) potions.
   Future<List<XpBoostPotion>> getActivePotions() async {
@@ -89,7 +89,8 @@ class XpBoostService {
     if (active.isEmpty) return null;
 
     final multiplier = await getEffectiveMultiplier();
-    final multLabel = '${multiplier.toStringAsFixed(multiplier == multiplier.roundToDouble() ? 0 : 1)}x';
+    final multLabel =
+        '${multiplier.toStringAsFixed(multiplier == multiplier.roundToDouble() ? 0 : 1)}x';
 
     // Find earliest expiry
     final now = _now();
@@ -101,7 +102,9 @@ class XpBoostService {
     if (shortest == null || shortest.isNegative) return null;
 
     final hours = shortest.inHours;
-    final timeLabel = hours > 0 ? '${hours}h LEFT' : '${shortest.inMinutes}m LEFT';
+    final timeLabel = hours > 0
+        ? '${hours}h LEFT'
+        : '${shortest.inMinutes}m LEFT';
     return '$multLabel XP \u00B7 $timeLabel';
   }
 
@@ -111,8 +114,7 @@ class XpBoostService {
     if (raw == null || raw.isEmpty) return [];
     final list = jsonDecode(raw) as List<dynamic>;
     return [
-      for (final e in list)
-        XpBoostPotion.fromJson(e as Map<String, dynamic>),
+      for (final e in list) XpBoostPotion.fromJson(e as Map<String, dynamic>),
     ];
   }
 

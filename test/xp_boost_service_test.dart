@@ -49,9 +49,7 @@ void main() {
 
   group('getEffectiveMultiplier', () {
     test('returns 1.0 with no potions', () async {
-      final service = XpBoostService(
-        nowProvider: () => DateTime(2026, 5, 16),
-      );
+      final service = XpBoostService(nowProvider: () => DateTime(2026, 5, 16));
       expect(await service.getEffectiveMultiplier(), 1.0);
     });
 
@@ -131,9 +129,7 @@ void main() {
 
   group('getTotalBonusXP', () {
     test('starts at 0', () async {
-      final service = XpBoostService(
-        nowProvider: () => DateTime(2026, 5, 16),
-      );
+      final service = XpBoostService(nowProvider: () => DateTime(2026, 5, 16));
       expect(await service.getTotalBonusXP(), 0);
     });
   });

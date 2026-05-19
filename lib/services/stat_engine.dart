@@ -271,8 +271,10 @@ class StatEngine {
     return switch (session.muscleGroup.toLowerCase()) {
       'chest' => 'chest',
       'back' => 'lats',
+      'shoulders' => 'shoulders',
       'arms' => 'biceps',
       'legs' => 'quadriceps',
+      'core' => 'abdominals',
       _ => '',
     };
   }

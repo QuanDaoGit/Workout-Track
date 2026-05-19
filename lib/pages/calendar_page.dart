@@ -31,8 +31,11 @@ String fmtDayDate(DateTime d) {
 const _muscleColors = {
   'Chest': Color(0xFF00FF9C),
   'Back': Color(0xFFFFD700),
+  'Shoulders': Color(0xFF9B59B6),
   'Arms': Color(0xFFFF2D55),
   'Legs': Color(0xFF00BFFF),
+  'Core': Color(0xFFFF6B1A),
+  'Full Body': Color(0xFFE8E8FF),
 };
 
 class CalendarPage extends StatefulWidget {
@@ -375,8 +378,8 @@ class _CalendarPageState extends State<CalendarPage> {
                                       child: ListTile(
                                         title: Text(
                                           session.isAbandoned
-                                              ? '${session.muscleGroup} - ENDED EARLY'
-                                              : session.muscleGroup,
+                                              ? '${session.targetMuscleLabel} - ENDED EARLY'
+                                              : session.targetMuscleLabel,
                                         ),
                                         subtitle: Text(
                                           session.isAbandoned

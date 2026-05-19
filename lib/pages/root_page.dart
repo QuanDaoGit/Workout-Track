@@ -9,6 +9,7 @@ import '../theme/tokens.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import 'Workout session/active_workout.dart';
+import 'Workout session/workout_summary.dart';
 import 'home.dart';
 import 'profile_page.dart';
 import 'quests_page.dart';
@@ -21,11 +22,12 @@ class RootPage extends StatefulWidget {
   State<RootPage> createState() => _RootPageState();
 }
 
-class _RootPageState extends State<RootPage> {
+class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   int _currentIndex = 0;
   Timer? _dockTimer;
   WorkoutSession? _ongoingSession;
   bool _loadingOngoing = false;
+  bool _showingExpiredPausedSummary = false;
 
   final _homeKey = GlobalKey<HomePageState>();
   final _workoutKey = GlobalKey<WorkoutPageState>();
@@ -35,17 +37,29 @@ class _RootPageState extends State<RootPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadOngoingSession();
     _dockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_ongoingSession != null && mounted) setState(() {});
       _loadOngoingSession();
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showExpiredPausedSummaryIfNeeded();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _dockTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _showExpiredPausedSummaryIfNeeded();
+    }
   }
 
   void _selectTab(int index) {
@@ -81,6 +95,41 @@ class _RootPageState extends State<RootPage> {
     }
   }
 
+  Future<void> _showExpiredPausedSummaryIfNeeded() async {
+    if (_showingExpiredPausedSummary) return;
+    final session = await WorkoutStorageService().getExpiredPausedSession();
+    if (session == null || !mounted) return;
+    _showingExpiredPausedSummary = true;
+    await _loadOngoingSession();
+    if (!mounted) {
+      _showingExpiredPausedSummary = false;
+      return;
+    }
+    await Navigator.push(
+      context,
+      arcadeRoute(
+        (_) => WorkoutSummaryPage(
+          muscleGroup: session.muscleGroup,
+          targetMuscleGroups: session.targetMuscleGroups,
+          durationMinutes: session.targetDurationMinutes,
+          elapsedSeconds: session.actualDurationSeconds,
+          exerciseLogs: const [],
+          isPartial: true,
+          isAbandoned: true,
+          startedAt: session.startedAt,
+          sessionDate: session.date,
+          abandonedMessage:
+              'Saved workout automatically ended after midnight. Time-only XP awarded.',
+          resumeFromSession: session,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    _showingExpiredPausedSummary = false;
+    _loadOngoingSession();
+    _reloadQuestAwarePages();
+  }
+
   Future<void> _resumeOngoingSession(WorkoutSession session) async {
     final catalog = await ExerciseCatalogService().getFullCatalog();
     final byId = {for (final e in catalog) e.id: e};
@@ -98,6 +147,7 @@ class _RootPageState extends State<RootPage> {
       arcadeRoute(
         (_) => ActiveWorkoutPage(
           muscleGroup: session.muscleGroup,
+          targetMuscleGroups: session.targetMuscleGroups,
           durationMinutes: session.targetDurationMinutes,
           exercises: exercises,
           resumeFromSession: session,
@@ -110,10 +160,7 @@ class _RootPageState extends State<RootPage> {
   }
 
   int _liveElapsedSeconds(WorkoutSession session) {
-    final live = DateTime.now().difference(session.startedAt).inSeconds;
-    return live > session.actualDurationSeconds
-        ? live
-        : session.actualDurationSeconds;
+    return session.elapsedSecondsForDisplay(DateTime.now());
   }
 
   late final List<Widget> _pages = [
@@ -136,7 +183,7 @@ class _RootPageState extends State<RootPage> {
           Expanded(
             child: IndexedStack(index: _currentIndex, children: _pages),
           ),
-          if (ongoing != null)
+          if (ongoing != null && !ongoing.isPausedForResume)
             _ActiveWorkoutDock(
               session: ongoing,
               elapsedSeconds: _liveElapsedSeconds(ongoing),
@@ -230,7 +277,9 @@ class _ActiveWorkoutDock extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      session.muscleGroup.toUpperCase(),
+                      session.isPausedForResume
+                          ? '${session.targetMuscleLabel.toUpperCase()} SAVED'
+                          : session.targetMuscleLabel.toUpperCase(),
                       style: const TextStyle(
                         fontFamily: 'PressStart2P',
                         fontSize: 9,

@@ -87,9 +87,9 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
 
     await _service.setGoal(_selectedGoal!, targetWeight: weight);
     if (!mounted) return;
-    Navigator.of(context).pop(
-      GoalSelectionResult(goal: _selectedGoal!, targetWeight: weight),
-    );
+    Navigator.of(
+      context,
+    ).pop(GoalSelectionResult(goal: _selectedGoal!, targetWeight: weight));
   }
 
   @override
@@ -180,10 +180,7 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
             controller: _weightController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             autofocus: true,
-            style: GoogleFonts.shareTechMono(
-              color: kText,
-              fontSize: 24,
-            ),
+            style: GoogleFonts.shareTechMono(color: kText, fontSize: 24),
             decoration: InputDecoration(
               hintText: 'kg',
               hintStyle: GoogleFonts.shareTechMono(
@@ -294,18 +291,12 @@ class _GoalCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               '\u2192 $className',
-              style: GoogleFonts.shareTechMono(
-                color: kMutedText,
-                fontSize: 11,
-              ),
+              style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
             ),
             const SizedBox(height: 8),
             Text(
               description,
-              style: GoogleFonts.shareTechMono(
-                color: kMutedText,
-                fontSize: 11,
-              ),
+              style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
             ),
           ],
         ),

@@ -1,14 +1,16 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/overload_models.dart';
 import '../../models/workout_models.dart';
+import '../../services/progression_settings_service.dart';
 import '../../services/progressive_overload_service.dart';
+import '../../services/rest_timer_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/pixel_button.dart';
-import '../../widgets/segmented_progress_bar.dart';
+import '../../widgets/plate_calculator_sheet.dart';
+import '../../widgets/rest_timer_bar.dart';
 import '../../widgets/strobe_flash.dart';
 
 class _SetRow {
@@ -28,27 +30,27 @@ class ExerciseSessionPage extends StatefulWidget {
     super.key,
     required this.exercise,
     this.initialSets = const [],
+    this.restSeconds = 90,
   });
 
   final Exercise exercise;
   final List<SetEntry> initialSets;
+  final int restSeconds;
 
   @override
   State<ExerciseSessionPage> createState() => _ExerciseSessionPageState();
 }
 
 class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
-  static const int _restCells = 6;
-  static const int _restSecondsPerCell = 15;
-
   final List<_SetRow> _rows = [];
   final List<GlobalKey> _rowKeys = [];
   final Map<int, int> _rowFlashTriggers = {};
   List<SetEntry>? _previousSets;
   final Set<int> _lockedSets = {};
-  int _restCellsRemaining = 0;
-  bool _restActive = false;
-  Timer? _restTimer;
+  bool _plateCalcSeen = true;
+  bool _progressionEnabled = true;
+  OverloadSuggestion? _set1Suggestion;
+  final Set<int> _prefilledRows = {};
 
   ProgressiveOverloadService? _overloadService;
   final Map<int, OverloadDelta?> _deltas = {};
@@ -74,25 +76,71 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       _rowKeys.add(GlobalKey());
     }
     _loadOverloadService();
+    _loadPlateCalcFlag();
+    _loadProgressionSetting();
   }
 
   Future<void> _loadOverloadService() async {
     final service = ProgressiveOverloadService();
     await service.load();
+    final suggestion = await service.suggestNext(widget.exercise);
     if (!mounted) return;
     setState(() {
       _overloadService = service;
       _previousSets = service.getLastSessionSets(widget.exercise.id);
+      _set1Suggestion = suggestion;
     });
+    _maybePrefillSet1();
+  }
+
+  Future<void> _loadProgressionSetting() async {
+    final enabled = await ProgressionSettingsService().isEnabled();
+    if (!mounted) return;
+    setState(() => _progressionEnabled = enabled);
+    _maybePrefillSet1();
+  }
+
+  /// Pre-fills Set 1's controllers with the suggested weight + reps when
+  /// progression is enabled, the suggestion is loaded, and the row is empty.
+  /// Idempotent; safe to call from either loader.
+  void _maybePrefillSet1() {
+    if (!_progressionEnabled) return;
+    final suggestion = _set1Suggestion;
+    if (suggestion == null) return;
+    if (_rows.isEmpty) return;
+    if (_lockedSets.contains(0)) return;
+    final row = _rows[0];
+    if (row.weight.text.isNotEmpty || row.reps.text.isNotEmpty) return;
+    final weight = suggestion.weight;
+    final reps = suggestion.reps;
+    if (weight == null || reps == null) return;
+    row.weight.text = _fmtWeight(weight);
+    row.reps.text = reps.toString();
+    if (!mounted) return;
+    setState(() => _prefilledRows.add(0));
   }
 
   @override
   void dispose() {
-    _restTimer?.cancel();
     for (final row in _rows) {
       row.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _loadPlateCalcFlag() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool('plate_calc_seen') ?? false;
+    if (!mounted) return;
+    setState(() => _plateCalcSeen = seen);
+  }
+
+  Future<void> _markPlateCalcSeen() async {
+    if (!_plateCalcSeen && mounted) {
+      setState(() => _plateCalcSeen = true);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('plate_calc_seen', true);
   }
 
   InputDecoration _fieldDeco(String hint) => InputDecoration(
@@ -127,25 +175,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   }
 
   void _startRest() {
-    _restTimer?.cancel();
-    setState(() {
-      _restActive = true;
-      _restCellsRemaining = _restCells;
-    });
-    _restTimer = Timer.periodic(const Duration(seconds: _restSecondsPerCell), (
-      t,
-    ) {
-      if (!mounted) return;
-      if (_restCellsRemaining <= 1) {
-        t.cancel();
-        setState(() {
-          _restActive = false;
-          _restCellsRemaining = 0;
-        });
-        return;
-      }
-      setState(() => _restCellsRemaining--);
-    });
+    RestTimerService.instance.start(widget.restSeconds);
   }
 
   void _logSet(int index) {
@@ -181,6 +211,22 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
         _prSets.add(index);
         _prFlashTriggers[index] = (_prFlashTriggers[index] ?? 0) + 1;
       }
+      if (index == 0) {
+        // Linear progression: copy Set 1's load into all empty subsequent
+        // rows so the user only has to enter the top set. Pyramid / dropset
+        // users override by tapping into the row.
+        final weightText = row.weight.text;
+        final repsText = row.reps.text;
+        for (int i = 1; i < _rows.length; i++) {
+          if (_lockedSets.contains(i)) continue;
+          final r = _rows[i];
+          if (r.weight.text.isEmpty && r.reps.text.isEmpty) {
+            r.weight.text = weightText;
+            r.reps.text = repsText;
+            _prefilledRows.add(i);
+          }
+        }
+      }
     });
     _startRest();
   }
@@ -189,20 +235,22 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     setState(() => _lockedSets.remove(index));
   }
 
-  void _dismissRest() {
-    _restTimer?.cancel();
-    setState(() {
-      _restActive = false;
-      _restCellsRemaining = 0;
-    });
-  }
-
   void _addSet() {
     final newIndex = _rows.length;
+    final newRow = _SetRow();
+    // If Set 1 is logged, inherit its values into the new row (linear
+    // progression). User overrides by tapping the field.
+    if (_rows.isNotEmpty && _lockedSets.contains(0)) {
+      newRow.weight.text = _rows[0].weight.text;
+      newRow.reps.text = _rows[0].reps.text;
+    }
     setState(() {
-      _rows.add(_SetRow());
+      _rows.add(newRow);
       _rowKeys.add(GlobalKey());
       _rowFlashTriggers[newIndex] = 0;
+      if (newRow.weight.text.isNotEmpty || newRow.reps.text.isNotEmpty) {
+        _prefilledRows.add(newIndex);
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -212,34 +260,8 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     });
   }
 
-  Widget _buildRestBar() {
-    return GestureDetector(
-      onTap: _dismissRest,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: const BoxDecoration(
-          color: kCard,
-          borderRadius: BorderRadius.all(Radius.circular(4)),
-        ),
-        child: SegmentedProgressBar(
-          totalCells: _restCells,
-          litCells: _restCellsRemaining,
-          height: 8,
-        ),
-      ),
-    );
-  }
-
   String _fmtWeight(double w) {
     return w == w.roundToDouble() ? w.toInt().toString() : w.toString();
-  }
-
-  String _suggestionText(OverloadSuggestion s) {
-    if (s.weight == null && s.reps != null) return '\u2191 +1 rep';
-    if (s.weight != null && s.reps != null) {
-      return '\u2191 ${_fmtWeight(s.weight!)} kg \u00b7 ${s.reps} reps';
-    }
-    return '';
   }
 
   Widget _buildDeltaWidget(OverloadDelta d) {
@@ -248,24 +270,30 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     if (d.weightDiff != 0) {
       final sign = d.weightDiff > 0 ? '+' : '';
       final color = d.weightDiff > 0 ? kNeon : kDanger;
-      spans.add(TextSpan(
-        text: '$sign${_fmtWeight(d.weightDiff)} kg',
-        style: GoogleFonts.shareTechMono(fontSize: 11, color: color),
-      ));
+      spans.add(
+        TextSpan(
+          text: '$sign${_fmtWeight(d.weightDiff)} kg',
+          style: GoogleFonts.shareTechMono(fontSize: 11, color: color),
+        ),
+      );
     }
     if (d.weightDiff != 0 && d.repsDiff != 0) {
-      spans.add(TextSpan(
-        text: ' \u00b7 ',
-        style: GoogleFonts.shareTechMono(fontSize: 11, color: kMutedText),
-      ));
+      spans.add(
+        TextSpan(
+          text: ' \u00b7 ',
+          style: GoogleFonts.shareTechMono(fontSize: 11, color: kMutedText),
+        ),
+      );
     }
     if (d.repsDiff != 0) {
       final sign = d.repsDiff > 0 ? '+' : '';
       final color = d.repsDiff > 0 ? kNeon : kDanger;
-      spans.add(TextSpan(
-        text: '$sign${d.repsDiff} rep${d.repsDiff.abs() == 1 ? '' : 's'}',
-        style: GoogleFonts.shareTechMono(fontSize: 11, color: color),
-      ));
+      spans.add(
+        TextSpan(
+          text: '$sign${d.repsDiff} rep${d.repsDiff.abs() == 1 ? '' : 's'}',
+          style: GoogleFonts.shareTechMono(fontSize: 11, color: color),
+        ),
+      );
     }
     return RichText(text: TextSpan(children: spans));
   }
@@ -308,6 +336,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
         return;
       }
     }
+    RestTimerService.instance.start(widget.restSeconds);
     Navigator.of(context).pop([
       for (final row in _rows)
         SetEntry(
@@ -324,7 +353,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       appBar: AppBar(title: Text(widget.exercise.name)),
       body: Column(
         children: [
-          if (_restActive) _buildRestBar(),
+          const RestTimerBar(),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(kSpace4),
@@ -438,19 +467,10 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     final repsHint = prevSet != null ? prevSet.reps.toString() : '0';
     final isLocked = _lockedSets.contains(index);
     final flashTrigger = _rowFlashTriggers[index] ?? 0;
-
-    final svc = _overloadService;
-    final isBodyweight = prevSet != null && prevSet.weight == 0;
-    final suggestion = svc?.getSuggestion(
-      widget.exercise.id,
-      index,
-      isBodyweight,
+    final isPrefilled = _prefilledRows.contains(index);
+    final fieldStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+      color: isPrefilled ? kMutedText : null,
     );
-    final showSuggestion = suggestion != null &&
-        !isLocked &&
-        !_interactedRows.contains(index) &&
-        row.weight.text.isEmpty &&
-        row.reps.text.isEmpty;
 
     final delta = _deltas[index];
     final hasPR = _prSets.contains(index);
@@ -471,6 +491,14 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (index == 0 &&
+                    _progressionEnabled &&
+                    _set1Suggestion != null &&
+                    !isLocked)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 32, bottom: 4),
+                    child: _TryLine(suggestion: _set1Suggestion!),
+                  ),
                 Row(
                   children: [
                     SizedBox(
@@ -483,15 +511,66 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                     Expanded(
                       child: TextField(
                         controller: row.weight,
-                        decoration: _fieldDeco(weightHint),
+                        decoration: _fieldDeco(weightHint).copyWith(
+                          suffixIcon: Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: TooltipTheme(
+                              data: TooltipTheme.of(context).copyWith(
+                                decoration: BoxDecoration(
+                                  color: kCard,
+                                  border: Border.all(color: kCyan),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                textStyle: GoogleFonts.shareTechMono(
+                                  color: kText,
+                                  fontSize: 12,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                waitDuration: const Duration(milliseconds: 400),
+                                showDuration: const Duration(seconds: 2),
+                              ),
+                              child: IconButton(
+                                tooltip: 'Plate calculator',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                  minWidth: 28,
+                                  minHeight: 28,
+                                ),
+                                icon: const Icon(
+                                  Icons.calculate_sharp,
+                                  size: 16,
+                                  color: kCyan,
+                                ),
+                                onPressed: () async {
+                                  await _markPlateCalcSeen();
+                                  if (!mounted) return;
+                                  final entered = double.tryParse(
+                                    row.weight.text,
+                                  );
+                                  final fallback = prevSet?.weight;
+                                  PlateCalculatorSheet.show(
+                                    context,
+                                    initialTargetKg: entered ?? fallback,
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        style: Theme.of(context).textTheme.bodyMedium,
+                        style: fieldStyle,
                         enabled: !isLocked,
                         onTap: () {
                           _interactedRows.add(index);
                           _scrollToRow(index);
+                          if (_prefilledRows.contains(index)) {
+                            setState(() => _prefilledRows.remove(index));
+                          }
                         },
                       ),
                     ),
@@ -501,11 +580,14 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                         controller: row.reps,
                         decoration: _fieldDeco(repsHint),
                         keyboardType: TextInputType.number,
-                        style: Theme.of(context).textTheme.bodyMedium,
+                        style: fieldStyle,
                         enabled: !isLocked,
                         onTap: () {
                           _interactedRows.add(index);
                           _scrollToRow(index);
+                          if (_prefilledRows.contains(index)) {
+                            setState(() => _prefilledRows.remove(index));
+                          }
                         },
                       ),
                     ),
@@ -531,15 +613,40 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                     ),
                   ],
                 ),
-                if (showSuggestion)
+                if (prevSet != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 32, top: 4),
                     child: Text(
-                      _suggestionText(suggestion),
+                      'last: ${_fmtWeight(prevSet.weight)} kg × ${prevSet.reps}',
                       style: GoogleFonts.shareTechMono(
                         fontSize: 11,
                         color: kMutedText,
                       ),
+                    ),
+                  ),
+                if (index == 0 && !_plateCalcSeen)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 32, top: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'plate calc \u2192',
+                          style: GoogleFonts.shareTechMono(
+                            color: kMutedText,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: _markPlateCalcSeen,
+                          child: const Icon(
+                            Icons.close_sharp,
+                            size: 12,
+                            color: kMutedText,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 if (isLocked && (delta != null || hasPR))
@@ -559,6 +666,58 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TryLine extends StatelessWidget {
+  const _TryLine({required this.suggestion});
+
+  final OverloadSuggestion suggestion;
+
+  String _fmtWeight(double w) =>
+      w == w.roundToDouble() ? w.toInt().toString() : w.toString();
+
+  Color _color() {
+    switch (suggestion.reason) {
+      case OverloadReason.deload:
+        return kAmber;
+      case OverloadReason.detrained:
+        return kMutedText;
+      case OverloadReason.weightIncrease:
+      case OverloadReason.repTarget:
+      case null:
+        return kNeon.withValues(alpha: 0.7);
+    }
+  }
+
+  String _suffix() {
+    switch (suggestion.reason) {
+      case OverloadReason.deload:
+        return ' (lighter)';
+      case OverloadReason.detrained:
+        return ' (welcome back)';
+      default:
+        return '';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final w = suggestion.weight;
+    final r = suggestion.reps;
+    final core = w == null
+        ? '—'
+        : w == 0
+            ? '${r ?? 0} reps'
+            : '${_fmtWeight(w)} kg × ${r ?? 0}';
+    return Text(
+      'TRY: $core${_suffix()}',
+      style: GoogleFonts.shareTechMono(
+        fontSize: 11,
+        color: _color(),
+        letterSpacing: 0.8,
       ),
     );
   }

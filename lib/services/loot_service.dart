@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/loot_registry.dart';
+import '../data/muscle_groups.dart';
 import '../models/loot_item.dart';
 import '../models/loot_unlock_rule.dart';
 import '../models/workout_models.dart';
+import 'exercise_catalog_service.dart';
 
 class LootService {
   static const bool unlockAllLootForTestBuild = false;
@@ -99,7 +101,13 @@ class LootService {
     final owned = await _ownedIds(prefs);
     final newlyGranted = <String>[];
 
-    final completed = sessions.where((s) => !s.isOngoing).toList();
+    final completed = sessions.where((s) => !s.isPartial).toList();
+    final catalog = await ExerciseCatalogService().getFullCatalog();
+    final primaryMuscleById = {
+      for (final exercise in catalog)
+        if (exercise.primaryMuscle != null)
+          exercise.id: exercise.primaryMuscle!,
+    };
     final sessionCount = completed.length;
     final lifetimeVolume = completed.fold<double>(
       0,
@@ -116,17 +124,32 @@ class LootService {
     );
 
     int sessionsForMuscle(String muscleGroup) {
-      return completed.where((s) => s.muscleGroup == muscleGroup).length;
+      return completed
+          .where((s) => hasTargetMuscle(s.targetMuscleGroups, muscleGroup))
+          .length;
     }
 
     double volumeForMuscle(String muscleGroup) {
-      return completed
-          .where((s) => s.muscleGroup == muscleGroup)
-          .fold<double>(
-            0,
-            (sum, s) =>
-                sum + s.exercises.fold(0.0, (a, e) => a + e.totalVolume),
-          );
+      final normalized = normalizeMuscleGroup(muscleGroup);
+      if (normalized == null) return 0;
+      var total = 0.0;
+      for (final session in completed) {
+        final targets = session.targetMuscleGroups;
+        for (final log in session.exercises) {
+          final primary = primaryMuscleById[log.exerciseId];
+          final bucket = primary == null
+              ? null
+              : muscleGroupForDetailed(primary);
+          if (bucket == normalized) {
+            total += log.totalVolume;
+          } else if (bucket == null &&
+              targets.isNotEmpty &&
+              targets.contains(normalized)) {
+            total += log.totalVolume / targets.length;
+          }
+        }
+      }
+      return total;
     }
 
     bool meets(LootUnlockRule rule) {

@@ -70,10 +70,8 @@ class _LogWeightPageState extends State<LogWeightPage> {
     await Navigator.pushReplacement(
       context,
       arcadeRoute(
-        (_) => LogWeightRewardPage(
-          weightKg: kg,
-          bonusPotionGranted: bonusGranted,
-        ),
+        (_) =>
+            LogWeightRewardPage(weightKg: kg, bonusPotionGranted: bonusGranted),
       ),
     );
   }
@@ -94,15 +92,13 @@ class _LogWeightPageState extends State<LogWeightPage> {
             const Spacer(),
             TextField(
               controller: _controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               autofocus: true,
               textAlign: TextAlign.center,
               onChanged: (_) => setState(() {}),
-              style: GoogleFonts.shareTechMono(
-                color: kText,
-                fontSize: 24,
-              ),
+              style: GoogleFonts.shareTechMono(color: kText, fontSize: 24),
               decoration: InputDecoration(
                 hintText: '0.0',
                 hintStyle: GoogleFonts.shareTechMono(
@@ -133,10 +129,7 @@ class _LogWeightPageState extends State<LogWeightPage> {
             const SizedBox(height: 12),
             Text(
               'morning. before food. before water.',
-              style: GoogleFonts.shareTechMono(
-                color: kMutedText,
-                fontSize: 11,
-              ),
+              style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
             ),
             const Spacer(),
             PixelButton(

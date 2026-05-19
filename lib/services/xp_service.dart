@@ -49,12 +49,7 @@ class XpService {
 
   static int calculateLiveSessionXP(WorkoutSession session, {DateTime? now}) {
     final currentTime = now ?? DateTime.now();
-    final elapsedSeconds = session.isOngoing
-        ? max(
-            session.actualDurationSeconds,
-            currentTime.difference(session.startedAt).inSeconds,
-          )
-        : session.actualDurationSeconds;
+    final elapsedSeconds = session.elapsedSecondsForDisplay(currentTime);
 
     if (session.isAbandoned) {
       return _abandonedTimeXP(session, elapsedSeconds);

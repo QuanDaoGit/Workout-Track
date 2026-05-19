@@ -10,8 +10,7 @@ class BodyMetricsHistoryPage extends StatefulWidget {
   const BodyMetricsHistoryPage({super.key});
 
   @override
-  State<BodyMetricsHistoryPage> createState() =>
-      _BodyMetricsHistoryPageState();
+  State<BodyMetricsHistoryPage> createState() => _BodyMetricsHistoryPageState();
 }
 
 class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
@@ -107,68 +106,68 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
       body: _loading
           ? const Center(child: PixelLoader())
           : _entries.isEmpty
-              ? Center(
-                  child: Text(
-                    'NO ENTRIES',
-                    style: GoogleFonts.shareTechMono(
-                      color: kMutedText,
-                      fontSize: 13,
+          ? Center(
+              child: Text(
+                'NO ENTRIES',
+                style: GoogleFonts.shareTechMono(
+                  color: kMutedText,
+                  fontSize: 13,
+                ),
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              itemCount: _entries.length,
+              itemBuilder: (_, i) {
+                final entry = _entries[i];
+                final arrow = _directionArrow(i);
+                return GestureDetector(
+                  onLongPress: () => _confirmDelete(entry),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 14,
+                    ),
+                    margin: const EdgeInsets.only(bottom: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF121225),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _formatDate(entry.loggedAt),
+                            style: GoogleFonts.shareTechMono(
+                              color: kMutedText,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${entry.weightKg.toStringAsFixed(1)} kg',
+                          style: GoogleFonts.shareTechMono(
+                            color: kText,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (arrow.isNotEmpty) ...[
+                          const SizedBox(width: 10),
+                          Text(
+                            arrow,
+                            style: GoogleFonts.shareTechMono(
+                              color: kMutedText,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  itemCount: _entries.length,
-                  itemBuilder: (_, i) {
-                    final entry = _entries[i];
-                    final arrow = _directionArrow(i);
-                    return GestureDetector(
-                      onLongPress: () => _confirmDelete(entry),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 14,
-                        ),
-                        margin: const EdgeInsets.only(bottom: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF121225),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _formatDate(entry.loggedAt),
-                                style: GoogleFonts.shareTechMono(
-                                  color: kMutedText,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              '${entry.weightKg.toStringAsFixed(1)} kg',
-                              style: GoogleFonts.shareTechMono(
-                                color: kText,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            if (arrow.isNotEmpty) ...[
-                              const SizedBox(width: 10),
-                              Text(
-                                arrow,
-                                style: GoogleFonts.shareTechMono(
-                                  color: kMutedText,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                );
+              },
+            ),
     );
   }
 }

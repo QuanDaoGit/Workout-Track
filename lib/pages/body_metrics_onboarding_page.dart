@@ -17,8 +17,7 @@ class BodyMetricsOnboardingPage extends StatefulWidget {
       _BodyMetricsOnboardingPageState();
 }
 
-class _BodyMetricsOnboardingPageState
-    extends State<BodyMetricsOnboardingPage> {
+class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
   int _step = 0;
   bool _pledgeReady = false;
   Timer? _pledgeTimer;
@@ -153,10 +152,7 @@ class _BodyMetricsOnboardingPageState
             style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
           const Spacer(),
-          PixelButton(
-            label: 'CHOOSE PATH',
-            onPressed: _openGoalSelection,
-          ),
+          PixelButton(label: 'CHOOSE PATH', onPressed: _openGoalSelection),
         ],
       ),
     );
@@ -187,10 +183,7 @@ class _BodyMetricsOnboardingPageState
           _guidanceLine('wear the same thing each time.'),
           _guidanceLine('weekly cadence smooths the noise.'),
           const Spacer(),
-          PixelButton(
-            label: 'GOT IT',
-            onPressed: _completeOnboarding,
-          ),
+          PixelButton(label: 'GOT IT', onPressed: _completeOnboarding),
         ],
       ),
     );

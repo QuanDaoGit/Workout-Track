@@ -48,16 +48,16 @@ class _BodyMetricsChartPageState extends State<BodyMetricsChartPage> {
       body: _loading
           ? const Center(child: PixelLoader())
           : _entries.isEmpty
-              ? Center(
-                  child: Text(
-                    'NO ENTRIES YET',
-                    style: GoogleFonts.shareTechMono(
-                      color: kMutedText,
-                      fontSize: 13,
-                    ),
-                  ),
-                )
-              : _buildContent(),
+          ? Center(
+              child: Text(
+                'NO ENTRIES YET',
+                style: GoogleFonts.shareTechMono(
+                  color: kMutedText,
+                  fontSize: 13,
+                ),
+              ),
+            )
+          : _buildContent(),
     );
   }
 
@@ -75,22 +75,13 @@ class _BodyMetricsChartPageState extends State<BodyMetricsChartPage> {
       ),
       children: [
         // Chart
-        SizedBox(
-          height: 240,
-          child: _buildChart(),
-        ),
+        SizedBox(height: 240, child: _buildChart()),
         const SizedBox(height: 24),
 
         // Stats
-        _StatRow(
-          label: 'TOTAL ENTRIES',
-          value: '${_entries.length}',
-        ),
+        _StatRow(label: 'TOTAL ENTRIES', value: '${_entries.length}'),
         const SizedBox(height: 6),
-        _StatRow(
-          label: 'TIME SPAN',
-          value: '$weekSpan WEEKS',
-        ),
+        _StatRow(label: 'TIME SPAN', value: '$weekSpan WEEKS'),
         if (_goalState != null) ...[
           const SizedBox(height: 6),
           _StatRow(
@@ -145,10 +136,8 @@ class _BodyMetricsChartPageState extends State<BodyMetricsChartPage> {
           drawHorizontalLine: true,
           drawVerticalLine: false,
           horizontalInterval: 2,
-          getDrawingHorizontalLine: (_) => FlLine(
-            color: kBorder,
-            strokeWidth: 0.5,
-          ),
+          getDrawingHorizontalLine: (_) =>
+              FlLine(color: kBorder, strokeWidth: 0.5),
         ),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
@@ -184,11 +173,8 @@ class _BodyMetricsChartPageState extends State<BodyMetricsChartPage> {
             barWidth: 2,
             dotData: FlDotData(
               show: true,
-              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-                radius: 3,
-                color: kNeon,
-                strokeWidth: 0,
-              ),
+              getDotPainter: (_, __, ___, ____) =>
+                  FlDotCirclePainter(radius: 3, color: kNeon, strokeWidth: 0),
             ),
             belowBarData: BarAreaData(show: false),
           ),

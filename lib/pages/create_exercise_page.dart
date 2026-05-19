@@ -1,22 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../data/muscle_groups.dart';
 import '../models/workout_models.dart';
 import '../services/custom_exercise_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_chip.dart';
 import '../widgets/pixel_button.dart';
 
-/// Muscle groups available for custom exercises.
-const List<String> customMuscleGroups = [
-  'chest',
-  'back',
-  'legs',
-  'shoulders',
-  'arms',
-  'core',
-  'full body',
-];
+/// Muscle groups available for custom exercises — same canonical 7-bucket set
+/// used everywhere else in the app.
+const List<String> customMuscleGroups = canonicalMuscleGroups;
 
 class CreateExercisePage extends StatefulWidget {
   const CreateExercisePage({super.key, this.exercise});
@@ -127,19 +121,16 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
           // NAME
           Text(
             'NAME',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontSize: 10,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontSize: 10),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _nameController,
             maxLength: 40,
             onChanged: (_) => setState(() => _errorText = null),
-            style: GoogleFonts.shareTechMono(
-              color: kText,
-              fontSize: 14,
-            ),
+            style: GoogleFonts.shareTechMono(color: kText, fontSize: 14),
             decoration: InputDecoration(
               counterText: '',
               hintText: 'exercise name',
@@ -167,10 +158,7 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
             const SizedBox(height: 4),
             Text(
               _errorText!,
-              style: GoogleFonts.shareTechMono(
-                color: kDanger,
-                fontSize: 11,
-              ),
+              style: GoogleFonts.shareTechMono(color: kDanger, fontSize: 11),
             ),
           ],
 
@@ -179,9 +167,9 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
           // MUSCLE GROUP
           Text(
             'MUSCLE GROUP',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontSize: 10,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontSize: 10),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -202,9 +190,9 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
           // TYPE
           Text(
             'TYPE',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontSize: 10,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontSize: 10),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -228,27 +216,21 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
           // NOTE
           Text(
             'NOTE',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontSize: 10,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontSize: 10),
           ),
           const SizedBox(height: 4),
           Text(
             'form cues, setup, anything you want to remember',
-            style: GoogleFonts.shareTechMono(
-              color: kMutedText,
-              fontSize: 11,
-            ),
+            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _noteController,
             maxLength: 200,
             maxLines: 3,
-            style: GoogleFonts.shareTechMono(
-              color: kText,
-              fontSize: 14,
-            ),
+            style: GoogleFonts.shareTechMono(color: kText, fontSize: 14),
             decoration: InputDecoration(
               counterStyle: GoogleFonts.shareTechMono(
                 color: kMutedText,

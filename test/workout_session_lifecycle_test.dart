@@ -16,21 +16,35 @@ void main() {
     final date = DateTime(2026, 5, 14, 9);
     final legacy = _session(date: date).toJson()
       ..remove('startedAt')
+      ..remove('pausedAt')
+      ..remove('autoDiscardAt')
+      ..remove('isPausedForResume')
       ..remove('isAbandoned');
 
     final parsed = WorkoutSession.fromJson(legacy);
     expect(parsed.startedAt, date);
+    expect(parsed.pausedAt, isNull);
+    expect(parsed.autoDiscardAt, isNull);
+    expect(parsed.isPausedForResume, isFalse);
     expect(parsed.isAbandoned, isFalse);
     expect(parsed.isOngoing, isFalse);
 
+    final pausedAt = date.add(const Duration(minutes: 20));
+    final autoDiscardAt = DateTime(2026, 5, 15);
     final abandoned = _session(
       date: date,
       startedAt: date.subtract(const Duration(minutes: 10)),
+      pausedAt: pausedAt,
+      autoDiscardAt: autoDiscardAt,
       isPartial: true,
       isAbandoned: true,
+      isPausedForResume: true,
     );
     final json = abandoned.toJson();
     expect(json['startedAt'], abandoned.startedAt.toIso8601String());
+    expect(json['pausedAt'], pausedAt.toIso8601String());
+    expect(json['autoDiscardAt'], autoDiscardAt.toIso8601String());
+    expect(json['isPausedForResume'], isTrue);
     expect(json['isAbandoned'], isTrue);
   });
 
@@ -60,6 +74,33 @@ void main() {
       expect(XpService.calculateTotalXP([completed, ongoing, abandoned]), 110);
     },
   );
+
+  test('paused resumable sessions freeze elapsed time and resume clock', () {
+    final startedAt = DateTime(2026, 5, 14, 9);
+    final now = DateTime(2026, 5, 14, 12);
+    final live = _session(
+      date: startedAt,
+      startedAt: startedAt,
+      isPartial: true,
+      seconds: 600,
+    );
+    final paused = _session(
+      date: startedAt,
+      startedAt: startedAt,
+      pausedAt: startedAt.add(const Duration(minutes: 10)),
+      autoDiscardAt: DateTime(2026, 5, 15),
+      isPartial: true,
+      isPausedForResume: true,
+      seconds: 600,
+    );
+
+    expect(live.elapsedSecondsForDisplay(now), 10800);
+    expect(paused.elapsedSecondsForDisplay(now), 600);
+    expect(
+      paused.resumeStartTime(now),
+      now.subtract(const Duration(minutes: 10)),
+    );
+  });
 
   test(
     'abandoned sessions do not complete quests or side milestones',
@@ -119,6 +160,71 @@ void main() {
     );
     expect(sessions.where((session) => session.isOngoing).single.id, 'new');
   });
+
+  test(
+    'expired paused sessions are detected after auto-discard time',
+    () async {
+      final storage = WorkoutStorageService();
+      final now = DateTime(2026, 5, 14, 9);
+      final paused = _session(
+        date: now,
+        id: 'paused',
+        isPartial: true,
+        isPausedForResume: true,
+        pausedAt: now.add(const Duration(minutes: 5)),
+        autoDiscardAt: DateTime(2026, 5, 15),
+      );
+
+      await storage.replaceOngoingSession(paused);
+
+      expect(
+        await storage.getExpiredPausedSession(
+          now: DateTime(2026, 5, 14, 23, 59),
+        ),
+        isNull,
+      );
+      expect(
+        (await storage.getExpiredPausedSession(now: DateTime(2026, 5, 15)))?.id,
+        'paused',
+      );
+    },
+  );
+
+  test(
+    'auto-ended paused session is abandoned and no longer resumable',
+    () async {
+      final storage = WorkoutStorageService();
+      final now = DateTime(2026, 5, 14, 9);
+      final paused = _session(
+        date: now,
+        id: 'paused',
+        isPartial: true,
+        isPausedForResume: true,
+        seconds: 900,
+        targetMinutes: 30,
+        pausedAt: now.add(const Duration(minutes: 15)),
+        autoDiscardAt: DateTime(2026, 5, 15),
+      );
+
+      await storage.replaceOngoingSession(paused);
+      await storage.replaceOngoingWithAbandoned(
+        _session(
+          date: now,
+          id: 'ended',
+          isPartial: true,
+          isAbandoned: true,
+          seconds: paused.actualDurationSeconds,
+          targetMinutes: paused.targetDurationMinutes,
+          setCount: 0,
+        ),
+      );
+
+      final sessions = await storage.getSessions();
+      expect(await storage.getOngoingSession(), isNull);
+      expect(sessions.single.isAbandoned, isTrue);
+      expect(XpService.calculateTotalXP(sessions), 15);
+    },
+  );
 }
 
 WorkoutSession _session({
@@ -127,6 +233,9 @@ WorkoutSession _session({
   String id = 'session',
   bool isPartial = false,
   bool isAbandoned = false,
+  bool isPausedForResume = false,
+  DateTime? pausedAt,
+  DateTime? autoDiscardAt,
   int setCount = 3,
   int seconds = 1800,
   int targetMinutes = 30,
@@ -135,6 +244,8 @@ WorkoutSession _session({
     id: id,
     date: date,
     startedAt: startedAt,
+    pausedAt: pausedAt,
+    autoDiscardAt: autoDiscardAt,
     muscleGroup: 'Chest',
     targetDurationMinutes: targetMinutes,
     actualDurationSeconds: seconds,
@@ -151,6 +262,7 @@ WorkoutSession _session({
     estimatedCalories: 100,
     isPartial: isPartial,
     isAbandoned: isAbandoned,
+    isPausedForResume: isPausedForResume,
     selectedExerciseIds: const ['bench'],
   );
 }

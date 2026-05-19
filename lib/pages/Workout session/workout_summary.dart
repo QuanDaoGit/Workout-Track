@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../data/muscle_groups.dart';
 import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
 import '../../services/loot_service.dart';
@@ -19,24 +20,30 @@ class WorkoutSummaryPage extends StatefulWidget {
   const WorkoutSummaryPage({
     super.key,
     required this.muscleGroup,
+    this.targetMuscleGroups = const [],
     required this.durationMinutes,
     required this.elapsedSeconds,
     required this.exerciseLogs,
     this.isPartial = false,
     this.isAbandoned = false,
     this.startedAt,
+    this.sessionDate,
+    this.abandonedMessage,
     this.resumeFromSession,
     this.isProgramWorkout = false,
     this.advanceProgramRestDayOnCompletion = false,
   });
 
   final String muscleGroup;
+  final List<String> targetMuscleGroups;
   final int durationMinutes;
   final int elapsedSeconds;
   final List<ExerciseLog> exerciseLogs;
   final bool isPartial;
   final bool isAbandoned;
   final DateTime? startedAt;
+  final DateTime? sessionDate;
+  final String? abandonedMessage;
   final WorkoutSession? resumeFromSession;
   final bool isProgramWorkout;
   final bool advanceProgramRestDayOnCompletion;
@@ -53,16 +60,23 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   Map<String, int> _statDelta = {};
   Map<String, int> _combatStats = {};
 
-  late final int _estimatedCalories = CalorieService.estimateCalories(
-    widget.muscleGroup,
+  List<String> get _targetMuscleGroups {
+    final normalized = normalizeTargetMuscleGroups(widget.targetMuscleGroups);
+    if (normalized.isNotEmpty) return normalized;
+    return normalizeTargetMuscleGroups([widget.muscleGroup]);
+  }
+
+  late final int _estimatedCalories = CalorieService.estimateCaloriesForGroups(
+    _targetMuscleGroups,
     widget.elapsedSeconds,
   );
 
   late final WorkoutSession _savedSession = WorkoutSession(
     id: DateTime.now().millisecondsSinceEpoch.toString(),
-    date: DateTime.now(),
+    date: widget.sessionDate ?? DateTime.now(),
     startedAt: widget.startedAt,
     muscleGroup: widget.muscleGroup,
+    targetMuscleGroups: _targetMuscleGroups,
     targetDurationMinutes: widget.durationMinutes,
     actualDurationSeconds: widget.elapsedSeconds,
     exercises: widget.exerciseLogs,
@@ -204,7 +218,8 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                 if (widget.isAbandoned) ...[
                   const SizedBox(height: kSpace2),
                   Text(
-                    'Time XP only. No mission progress.',
+                    widget.abandonedMessage ??
+                        'Time XP only. No mission progress.',
                     style: Theme.of(context).textTheme.bodySmall,
                     textAlign: TextAlign.center,
                   ),

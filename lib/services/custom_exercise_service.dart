@@ -8,27 +8,26 @@ import '../models/workout_models.dart';
 class CustomExerciseService {
   static const _key = 'custom_exercises_v1';
 
-  /// Primary muscle mapping from user-friendly muscle group names.
-  static String primaryMuscleFor(String muscleGroup) => switch (muscleGroup) {
-    'chest' => 'chest',
-    'back' => 'lats',
-    'legs' => 'quadriceps',
-    'shoulders' => 'shoulders',
-    'arms' => 'biceps',
-    'core' => 'abdominals',
-    'full body' => 'chest',
-    _ => 'chest',
-  };
+  /// Primary muscle mapping from canonical muscle group names.
+  /// Case-insensitive so legacy lowercase values still resolve.
+  static String primaryMuscleFor(String muscleGroup) =>
+      switch (muscleGroup.toLowerCase()) {
+        'chest' => 'chest',
+        'back' => 'lats',
+        'legs' => 'quadriceps',
+        'shoulders' => 'shoulders',
+        'arms' => 'biceps',
+        'core' => 'abdominals',
+        'full body' => 'chest',
+        _ => 'chest',
+      };
 
   Future<List<Exercise>> getCustomExercises() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
     if (raw == null || raw.isEmpty) return [];
     final list = jsonDecode(raw) as List<dynamic>;
-    return [
-      for (final e in list)
-        Exercise.fromJson(e as Map<String, dynamic>),
-    ];
+    return [for (final e in list) Exercise.fromJson(e as Map<String, dynamic>)];
   }
 
   Future<void> saveCustomExercise({

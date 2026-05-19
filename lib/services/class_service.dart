@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/class_definitions.dart';
+import '../data/muscle_groups.dart';
 import '../models/character_class.dart';
 import '../models/class_state.dart';
 import 'exercise_catalog_service.dart';
@@ -47,18 +48,21 @@ class ClassService {
     await _saveState(state);
   }
 
-  /// Calculate total volume in the class's relevant muscle groups.
+  /// Calculate total volume in the class's relevant muscle buckets.
+  /// Maps each ExerciseLog's detailed primary muscle → canonical bucket,
+  /// then checks set membership against [musclesForClass].
   Future<double> getCurrentVolume(CharacterClass cls) async {
     final catalog = await _loadCatalog();
     final sessions = await WorkoutStorageService().getSessions();
-    final muscles = musclesForClass(cls);
+    final buckets = musclesForClass(cls);
     var total = 0.0;
 
     for (final session in sessions) {
       if (session.isOngoing) continue;
       for (final log in session.exercises) {
-        final muscle = catalog[log.exerciseId] ?? '';
-        if (muscles.contains(muscle.toLowerCase())) {
+        final detailed = catalog[log.exerciseId] ?? '';
+        final bucket = muscleGroupForDetailed(detailed);
+        if (bucket != null && buckets.contains(bucket)) {
           total += log.totalVolume;
         }
       }

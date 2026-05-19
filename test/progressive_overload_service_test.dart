@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:workout_track/models/overload_models.dart';
 import 'package:workout_track/models/workout_models.dart';
+import 'package:workout_track/services/exercise_kind_cache.dart';
 import 'package:workout_track/services/progressive_overload_service.dart';
 
 WorkoutSession _session({
@@ -28,17 +31,39 @@ ExerciseLog _log(String exerciseId, List<SetEntry> sets) {
 
 SetEntry _set(double weight, int reps) => SetEntry(weight: weight, reps: reps);
 
+Exercise _exercise(String id, {String? mechanic, String? equipment}) {
+  return Exercise(
+    id: id,
+    name: id,
+    level: 'beginner',
+    images: const [],
+    mechanic: mechanic,
+    equipment: equipment,
+  );
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    ExerciseKindCache.instance.resetForTest();
+  });
+
   group('getLastSessionSets', () {
     test('returns most recent session sets', () {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('bench', [_set(60, 10)])],
+          exercises: [
+            _log('bench', [_set(60, 10)]),
+          ],
         ),
         _session(
           date: DateTime(2025, 1, 3),
-          exercises: [_log('bench', [_set(80, 8)])],
+          exercises: [
+            _log('bench', [_set(80, 8)]),
+          ],
         ),
       ]);
       final sets = svc.getLastSessionSets('bench');
@@ -57,42 +82,91 @@ void main() {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('squat', [_set(100, 5)])],
+          exercises: [
+            _log('squat', [_set(100, 5)]),
+          ],
         ),
       ]);
       expect(svc.getLastSessionSets('bench'), isNull);
     });
   });
 
-  group('getSuggestion', () {
-    test('+5% weight rounded to nearest 2.5 kg', () {
+  group('suggestNext — compound (target 8)', () {
+    test('hit target → +2.5 kg / weightIncrease', () async {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('bench', [_set(80, 8)])],
+          exercises: [
+            _log('bench', [_set(80, 8)]),
+          ],
         ),
       ]);
-      final s = svc.getSuggestion('bench', 0, false);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 5),
+      );
       expect(s, isNotNull);
-      // 80 * 1.05 = 84, / 2.5 = 33.6, round = 34, * 2.5 = 85
-      expect(s!.weight, 85.0);
+      expect(s!.weight, 82.5);
       expect(s.reps, 8);
+      expect(s.reason, OverloadReason.weightIncrease);
     });
 
-    test('+1 rep for bodyweight', () {
+    test('missed by 1 → repeat weight at target / repTarget', () async {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('pullup', [_set(0, 10)])],
+          exercises: [
+            _log('bench', [_set(80, 7)]),
+          ],
         ),
       ]);
-      final s = svc.getSuggestion('pullup', 0, true);
-      expect(s, isNotNull);
-      expect(s!.weight, 0);
-      expect(s.reps, 11);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s!.weight, 80);
+      expect(s.reps, 8);
+      expect(s.reason, OverloadReason.repTarget);
     });
 
-    test('same weight when reps dropped mid-session', () {
+    test('missed by 4+ → −2.5 kg / deload', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', [_set(80, 3)]),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s!.weight, 77.5);
+      expect(s.reps, 8);
+      expect(s.reason, OverloadReason.deload);
+    });
+
+    test('22+ days gap → repeat weight / detrained', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', [_set(80, 8)]),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 30),
+      );
+      expect(s!.weight, 80);
+      expect(s.reps, 8);
+      expect(s.reason, OverloadReason.detrained);
+    });
+
+    test('picks top set across multiple sets in last session', () async {
+      // 80×8 first, then 80×6 fatigue drop. Top set is 80×8 → met target → +2.5.
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
@@ -101,26 +175,97 @@ void main() {
           ],
         ),
       ]);
-      final s = svc.getSuggestion('bench', 1, false);
-      expect(s, isNotNull);
-      expect(s!.weight, 80);
-      expect(s.reps, 6);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s!.weight, 82.5);
+      expect(s.reason, OverloadReason.weightIncrease);
     });
+  });
 
-    test('null when no history for exercise', () {
-      final svc = ProgressiveOverloadService.fromSessions([]);
-      expect(svc.getSuggestion('bench', 0, false), isNull);
-    });
-
-    test('null when setIndex out of range', () {
+  group('suggestNext — isolation (target 12)', () {
+    test('hit target → +2.5 kg', () async {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('bench', [_set(80, 8)])],
+          exercises: [
+            _log('curl', [_set(20, 12)]),
+          ],
         ),
       ]);
-      expect(svc.getSuggestion('bench', 5, false), isNull);
+      final s = await svc.suggestNext(
+        _exercise('curl', mechanic: 'isolation'),
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s!.weight, 22.5);
+      expect(s.reps, 12);
+      expect(s.reason, OverloadReason.weightIncrease);
     });
+
+    test('missed by 1 → repeat weight at 12-rep target', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('curl', [_set(20, 11)]),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('curl', mechanic: 'isolation'),
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s!.weight, 20);
+      expect(s.reps, 12);
+      expect(s.reason, OverloadReason.repTarget);
+    });
+  });
+
+  group('suggestNext — bodyweight (target 15)', () {
+    test('hit target → +1 rep, no weight increase', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('pullup', [_set(0, 15)]),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('pullup', mechanic: 'compound', equipment: 'body only'),
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s!.weight, 0);
+      expect(s.reps, 16);
+      expect(s.reason, OverloadReason.weightIncrease);
+    });
+
+    test('missed target → repeat reps target', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('pullup', [_set(0, 10)]),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('pullup', mechanic: 'compound', equipment: 'body only'),
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s!.weight, 0);
+      expect(s.reps, 15);
+      expect(s.reason, OverloadReason.repTarget);
+    });
+  });
+
+  test('no history → null', () async {
+    final svc = ProgressiveOverloadService.fromSessions([]);
+    final s = await svc.suggestNext(
+      _exercise('bench', mechanic: 'compound'),
+    );
+    expect(s, isNull);
   });
 
   group('getPersonalBest', () {
@@ -128,11 +273,15 @@ void main() {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('bench', [_set(80, 8)])],
+          exercises: [
+            _log('bench', [_set(80, 8)]),
+          ],
         ),
         _session(
           date: DateTime(2025, 1, 3),
-          exercises: [_log('bench', [_set(100, 5)])],
+          exercises: [
+            _log('bench', [_set(100, 5)]),
+          ],
         ),
       ]);
       // 80*(1+8/30) = 101.33, 100*(1+5/30) = 116.67
@@ -144,7 +293,9 @@ void main() {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('pullup', [_set(0, 10)])],
+          exercises: [
+            _log('pullup', [_set(0, 10)]),
+          ],
         ),
       ]);
       // 40*(1+10/30) = 53.33
@@ -162,10 +313,11 @@ void main() {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('bench', [_set(80, 8)])],
+          exercises: [
+            _log('bench', [_set(80, 8)]),
+          ],
         ),
       ]);
-      // 80*(1+8/30) = 101.33; 90*(1+8/30) = 114
       expect(svc.checkPR('bench', 90, 8, false), isTrue);
     });
 
@@ -173,15 +325,17 @@ void main() {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('bench', [_set(80, 8)])],
+          exercises: [
+            _log('bench', [_set(80, 8)]),
+          ],
         ),
       ]);
       expect(svc.checkPR('bench', 70, 8, false), isFalse);
     });
 
-    test('true for first-ever set', () {
+    test('false when no previous record exists', () {
       final svc = ProgressiveOverloadService.fromSessions([]);
-      expect(svc.checkPR('bench', 80, 8, false), isTrue);
+      expect(svc.checkPR('bench', 80, 8, false), isFalse);
     });
 
     test('false when reps is 0', () {
@@ -193,11 +347,11 @@ void main() {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('pullup', [_set(0, 10)])],
+          exercises: [
+            _log('pullup', [_set(0, 10)]),
+          ],
         ),
       ]);
-      // stored best: 40*(1+10/30) = 53.33
-      // new: 40*(1+12/30) = 56.0 > 53.33
       expect(svc.checkPR('pullup', 0, 12, true), isTrue);
     });
   });
@@ -207,7 +361,9 @@ void main() {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('bench', [_set(80, 8)])],
+          exercises: [
+            _log('bench', [_set(80, 8)]),
+          ],
         ),
       ]);
       final d = svc.getDelta('bench', 0, 85, 10);
@@ -220,7 +376,9 @@ void main() {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('bench', [_set(80, 8)])],
+          exercises: [
+            _log('bench', [_set(80, 8)]),
+          ],
         ),
       ]);
       final d = svc.getDelta('bench', 0, 75, 6);
@@ -238,7 +396,9 @@ void main() {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
-          exercises: [_log('bench', [_set(80, 8)])],
+          exercises: [
+            _log('bench', [_set(80, 8)]),
+          ],
         ),
       ]);
       expect(svc.getDelta('bench', 5, 80, 8), isNull);
@@ -247,7 +407,6 @@ void main() {
 
   group('epley1RM', () {
     test('weighted calculation', () {
-      // 100 * (1 + 5/30) = 116.67
       expect(
         ProgressiveOverloadService.epley1RM(100, 5, false),
         closeTo(116.67, 0.01),
@@ -255,7 +414,6 @@ void main() {
     });
 
     test('bodyweight uses 40.0', () {
-      // 40 * (1 + 10/30) = 53.33
       expect(
         ProgressiveOverloadService.epley1RM(0, 10, true),
         closeTo(53.33, 0.01),

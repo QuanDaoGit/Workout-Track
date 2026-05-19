@@ -32,11 +32,7 @@ class LevelBadge extends StatelessWidget {
       ),
       child: Text(
         exercise.levelLabel.toUpperCase(),
-        style: TextStyle(
-          fontFamily: 'PressStart2P',
-          fontSize: 9,
-          color: color,
-        ),
+        style: TextStyle(fontFamily: 'PressStart2P', fontSize: 9, color: color),
       ),
     );
   }

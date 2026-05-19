@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../data/curated_exercises.dart';
+import '../data/muscle_groups.dart';
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import '../services/exercise_catalog_service.dart';
@@ -380,8 +381,11 @@ class _InlineHistoryCalendar extends StatelessWidget {
   static const _muscleColors = {
     'Chest': Color(0xFF00FF9C),
     'Back': Color(0xFFFFD700),
+    'Shoulders': Color(0xFF9B59B6),
     'Arms': Color(0xFFFF2D55),
     'Legs': Color(0xFF00BFFF),
+    'Core': Color(0xFFFF6B1A),
+    'Full Body': Color(0xFFE8E8FF),
   };
 
   Map<DateTime, List<WorkoutSession>> get _sessionsByDay {
@@ -716,8 +720,8 @@ class _SessionListTile extends StatelessWidget {
                 child: ListTile(
                   title: Text(
                     session.isAbandoned
-                        ? '${session.muscleGroup} - ENDED EARLY'
-                        : session.muscleGroup,
+                        ? '${session.targetMuscleLabel} - ENDED EARLY'
+                        : session.targetMuscleLabel,
                   ),
                   subtitle: Text(
                     '${fmtDayDate(session.date)} · '
@@ -790,17 +794,29 @@ class _StatsTabState extends State<_StatsTab> {
   int _questXP = 0;
   int _recoveryXP = 0;
   int _potionBonusXP = 0;
+  Map<String, String> _primaryBucketByExerciseId = {};
   bool _loading = true;
   bool _showRecords = false;
 
   static const Map<String, Color> _muscleColors = {
     'Chest': Color(0xFF00FF9C),
     'Back': Color(0xFFFFD700),
+    'Shoulders': Color(0xFF9B59B6),
     'Arms': Color(0xFFFF2D55),
     'Legs': Color(0xFF00BFFF),
+    'Core': Color(0xFFFF6B1A),
+    'Full Body': Color(0xFFE8E8FF),
   };
 
-  static const List<String> _muscles = ['Chest', 'Back', 'Arms', 'Legs'];
+  static const List<String> _muscles = [
+    'Chest',
+    'Back',
+    'Shoulders',
+    'Arms',
+    'Legs',
+    'Core',
+    'Full Body',
+  ];
 
   @override
   void initState() {
@@ -818,6 +834,7 @@ class _StatsTabState extends State<_StatsTab> {
 
   Future<void> _load() async {
     final all = await WorkoutStorageService().getSessions();
+    final catalog = await ExerciseCatalogService().getFullCatalog();
     final questXP = await QuestService().claimedRewardXP();
     final restService = RestService();
     final currentRecoveryXP = await restService.effectiveRecoveryXP(all);
@@ -834,6 +851,11 @@ class _StatsTabState extends State<_StatsTab> {
     if (!mounted) return;
     setState(() {
       _sessions = all;
+      _primaryBucketByExerciseId = {
+        for (final exercise in catalog)
+          if (exercise.primaryMuscle != null)
+            exercise.id: muscleGroupForDetailed(exercise.primaryMuscle!) ?? '',
+      }..removeWhere((_, bucket) => bucket.isEmpty);
       _questXP = questXP;
       _recoveryXP = recoveryXP;
       _potionBonusXP = potionBonusXP;
@@ -842,6 +864,23 @@ class _StatsTabState extends State<_StatsTab> {
   }
 
   String _fmtVol(double v) => fmtVol(v);
+
+  Map<String, double> _sessionVolumeByMuscle(WorkoutSession session) {
+    final volumes = <String, double>{};
+    final targets = session.targetMuscleGroups;
+    for (final log in session.exercises) {
+      final bucket = _primaryBucketByExerciseId[log.exerciseId];
+      if (bucket != null) {
+        volumes[bucket] = (volumes[bucket] ?? 0) + log.totalVolume;
+      } else if (targets.isNotEmpty) {
+        final share = log.totalVolume / targets.length;
+        for (final target in targets) {
+          volumes[target] = (volumes[target] ?? 0) + share;
+        }
+      }
+    }
+    return volumes;
+  }
 
   String _fmtDate(DateTime d) {
     const months = [
@@ -880,8 +919,10 @@ class _StatsTabState extends State<_StatsTab> {
       if (idx < 0 || idx > 6) continue;
       final vol = s.exercises.fold(0.0, (sum, e) => sum + e.totalVolume);
       volumes[idx] += vol;
-      muscleVols[idx][s.muscleGroup] =
-          (muscleVols[idx][s.muscleGroup] ?? 0) + vol;
+      for (final entry in _sessionVolumeByMuscle(s).entries) {
+        muscleVols[idx][entry.key] =
+            (muscleVols[idx][entry.key] ?? 0) + entry.value;
+      }
     }
 
     return List.generate(7, (i) {
@@ -911,11 +952,14 @@ class _StatsTabState extends State<_StatsTab> {
     return _muscles.map((muscle) {
       double vol = 0;
       DateTime? lastTrained;
-      for (final s in _sessions.where(
-        (s) => !s.isPartial && s.muscleGroup == muscle,
-      )) {
+      for (final s in _sessions.where((s) => !s.isPartial)) {
+        final muscleVolumes = _sessionVolumeByMuscle(s);
+        final muscleVolume = muscleVolumes[muscle] ?? 0;
+        if (muscleVolume <= 0 && !s.targetMuscleGroups.contains(muscle)) {
+          continue;
+        }
         if (s.date.isAfter(cutoff)) {
-          vol += s.exercises.fold(0.0, (sum, e) => sum + e.totalVolume);
+          vol += muscleVolume;
         }
         if (lastTrained == null || s.date.isAfter(lastTrained)) {
           lastTrained = s.date;
@@ -1514,7 +1558,7 @@ class _ExercisesTab extends StatefulWidget {
 
 class _ExercisesTabState extends State<_ExercisesTab>
     with SingleTickerProviderStateMixin {
-  static const _groups = ['All', 'Chest', 'Back', 'Arms', 'Legs'];
+  static const _groups = ['All', ...canonicalMuscleGroups];
 
   String _selectedGroup = 'All';
   bool _favOnly = false;
@@ -1573,14 +1617,6 @@ class _ExercisesTabState extends State<_ExercisesTab>
         ? curatedExerciseIdsByMuscleGroup.values.expand((ids) => ids).toSet()
         : curatedExerciseIdsByMuscleGroup[_selectedGroup]?.toSet() ?? {};
 
-    // Map custom exercise muscle groups to existing filter groups
-    const muscleGroupToFilter = {
-      'chest': 'Chest',
-      'back': 'Back',
-      'arms': 'Arms',
-      'legs': 'Legs',
-    };
-
     return _catalog.where((e) {
       final matchesQuery =
           _query.isEmpty || e.name.toLowerCase().contains(_query.toLowerCase());
@@ -1589,8 +1625,8 @@ class _ExercisesTabState extends State<_ExercisesTab>
 
       if (e.isCustom) {
         if (_selectedGroup == 'All') return true;
-        final mapped = muscleGroupToFilter[e.muscleGroup];
-        return mapped == _selectedGroup;
+        final group = e.muscleGroup;
+        return group != null && hasTargetMuscle([group], _selectedGroup);
       }
       return allowedIds.contains(e.id);
     }).toList()..sort((a, b) {

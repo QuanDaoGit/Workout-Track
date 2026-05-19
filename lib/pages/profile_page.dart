@@ -21,6 +21,7 @@ import '../services/body_metrics_service.dart';
 import '../services/class_service.dart';
 import '../services/profile_service.dart';
 import '../services/program_service.dart';
+import '../services/progression_settings_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
 import '../services/stat_engine.dart';
@@ -81,6 +82,7 @@ class ProfilePageState extends State<ProfilePage> {
   int _recoveryXP = 0;
   int _potionBonusXP = 0;
   bool _bodyMetricsEnabled = false;
+  bool _progressionEnabled = true;
   BodyGoalState? _bodyGoalState;
   WeightEntry? _lastWeightEntry;
   bool _canLogWeight = false;
@@ -125,6 +127,7 @@ class ProfilePageState extends State<ProfilePage> {
     final classState = await classService.getState();
     final metricsService = BodyMetricsService();
     final bodyMetricsEnabled = await metricsService.isEnabled();
+    final progressionEnabled = await ProgressionSettingsService().isEnabled();
     BodyGoalState? bodyGoalState;
     WeightEntry? lastWeightEntry;
     bool canLogWeight = false;
@@ -156,6 +159,7 @@ class ProfilePageState extends State<ProfilePage> {
       _potionBonusXP = potionBonusXP;
       _classState = classState;
       _bodyMetricsEnabled = bodyMetricsEnabled;
+      _progressionEnabled = progressionEnabled;
       _bodyGoalState = bodyGoalState;
       _lastWeightEntry = lastWeightEntry;
       _canLogWeight = canLogWeight;
@@ -225,6 +229,12 @@ class ProfilePageState extends State<ProfilePage> {
       await BodyMetricsService().setEnabled(false);
     }
     await reload();
+  }
+
+  Future<void> _toggleProgression(bool value) async {
+    await ProgressionSettingsService().setEnabled(value);
+    if (!mounted) return;
+    setState(() => _progressionEnabled = value);
   }
 
   Future<void> _openLogWeight() async {
@@ -1094,6 +1104,15 @@ class ProfilePageState extends State<ProfilePage> {
               : 'Opt-in weekly weight tracking.',
           value: _bodyMetricsEnabled,
           onChanged: _toggleBodyMetrics,
+        ),
+        _SettingsToggleRow(
+          iconPath: 'assets/icons/control/icon_trophy.png',
+          title: 'Suggested loads',
+          subtitle: _progressionEnabled
+              ? 'TRY: prompts on Set 1 of each exercise.'
+              : 'No suggestions — every set entry blank.',
+          value: _progressionEnabled,
+          onChanged: _toggleProgression,
         ),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_target.png',

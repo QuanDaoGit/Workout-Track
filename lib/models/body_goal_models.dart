@@ -27,12 +27,11 @@ class BodyGoalState {
     BodyGoal? goal,
     DateTime? setAt,
     double? targetWeight,
-  }) =>
-      BodyGoalState(
-        goal: goal ?? this.goal,
-        setAt: setAt ?? this.setAt,
-        targetWeight: targetWeight ?? this.targetWeight,
-      );
+  }) => BodyGoalState(
+    goal: goal ?? this.goal,
+    setAt: setAt ?? this.setAt,
+    targetWeight: targetWeight ?? this.targetWeight,
+  );
 
   Map<String, dynamic> toJson() => {
     'goal': goal.name,

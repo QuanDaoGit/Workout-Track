@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/program_models.dart';
 import '../theme/tokens.dart';
+import 'muscle_groups.dart';
 
 const programsLibrary = [
   Program(
@@ -241,18 +242,33 @@ String programDayFocusSummary(ProgramDay day) {
 }
 
 String programDayPrimaryMuscleGroup(ProgramDay day) {
-  if (day.type == ProgramDayType.rest) return 'Chest';
+  final targets = programDayTargetMuscleGroups(day);
+  if (targets.isEmpty) return 'Chest';
+  return targets.first;
+}
+
+List<String> programDayTargetMuscleGroups(ProgramDay day) {
+  if (day.type == ProgramDayType.rest) return const [];
   return switch (day.focus) {
-    MuscleFocus.pull || MuscleFocus.backBiceps => 'Back',
-    MuscleFocus.legs || MuscleFocus.lower => 'Legs',
-    MuscleFocus.upper => day.dayNumber <= 2 ? 'Chest' : 'Back',
-    MuscleFocus.fullBody => switch (day.label) {
-      'FULL BODY B' => 'Back',
-      'FULL BODY C' => 'Legs',
-      _ => 'Chest',
-    },
-    MuscleFocus.shouldersCore => 'Arms',
-    _ => 'Chest',
+    MuscleFocus.push || MuscleFocus.chestTriceps => normalizeTargetMuscleGroups(
+      ['Chest', 'Shoulders', 'Arms'],
+    ),
+    MuscleFocus.pull ||
+    MuscleFocus.backBiceps => normalizeTargetMuscleGroups(['Back', 'Arms']),
+    MuscleFocus.legs ||
+    MuscleFocus.lower => normalizeTargetMuscleGroups(['Legs']),
+    MuscleFocus.upper => normalizeTargetMuscleGroups([
+      'Chest',
+      'Back',
+      'Shoulders',
+      'Arms',
+    ]),
+    MuscleFocus.fullBody => normalizeTargetMuscleGroups(['Full Body']),
+    MuscleFocus.shouldersCore => normalizeTargetMuscleGroups([
+      'Shoulders',
+      'Core',
+    ]),
+    null => const [],
   };
 }
 
