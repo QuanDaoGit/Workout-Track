@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../data/programs_library.dart';
 import '../models/program_models.dart';
@@ -167,7 +167,7 @@ class _ProgramCard extends StatelessWidget {
             const SizedBox(height: kSpace3),
             Text(
               program.description,
-              style: GoogleFonts.shareTechMono(
+              style: AppFonts.shareTechMono(
                 color: kText,
                 fontSize: 13,
                 height: 1.25,

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../../theme/app_fonts.dart';
 
 import '../../data/muscle_groups.dart';
 import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
+import '../../services/class_service.dart';
 import '../../services/loot_service.dart';
 import '../../services/program_service.dart';
 import '../../services/stat_engine.dart';
@@ -24,6 +25,7 @@ class WorkoutSummaryPage extends StatefulWidget {
     required this.durationMinutes,
     required this.elapsedSeconds,
     required this.exerciseLogs,
+    this.selectedExerciseIds = const [],
     this.isPartial = false,
     this.isAbandoned = false,
     this.startedAt,
@@ -39,6 +41,7 @@ class WorkoutSummaryPage extends StatefulWidget {
   final int durationMinutes;
   final int elapsedSeconds;
   final List<ExerciseLog> exerciseLogs;
+  final List<String> selectedExerciseIds;
   final bool isPartial;
   final bool isAbandoned;
   final DateTime? startedAt;
@@ -56,6 +59,10 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   bool _saving = false;
   bool _saved = false;
   int _shakeTrigger = 0;
+  late int _baseXP;
+  int _earnedXP = 0;
+  double _lckMultiplier = 1.0;
+  double _potionMultiplier = 1.0;
   int _potionBonusXP = 0;
   Map<String, int> _statDelta = {};
   Map<String, int> _combatStats = {};
@@ -71,7 +78,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     widget.elapsedSeconds,
   );
 
-  late final WorkoutSession _savedSession = WorkoutSession(
+  late final WorkoutSession _baseSession = WorkoutSession(
     id: DateTime.now().millisecondsSinceEpoch.toString(),
     date: widget.sessionDate ?? DateTime.now(),
     startedAt: widget.startedAt,
@@ -83,13 +90,14 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     estimatedCalories: _estimatedCalories,
     isPartial: widget.isPartial,
     isAbandoned: widget.isAbandoned,
+    selectedExerciseIds: widget.selectedExerciseIds,
   );
-
-  late final int _earnedXP = XpService.calculateSessionXP(_savedSession);
 
   @override
   void initState() {
     super.initState();
+    _baseXP = XpService.calculateBaseSessionXP(_baseSession);
+    _earnedXP = _baseXP;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() => _shakeTrigger++);
@@ -118,7 +126,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
 
     setState(() => _saving = true);
     if (widget.isAbandoned) {
-      await WorkoutStorageService().replaceOngoingWithAbandoned(_savedSession);
+      await WorkoutStorageService().replaceOngoingWithAbandoned(_baseSession);
       if (widget.resumeFromSession != null) {
         await ProgramService().clearOngoingProgramSession(
           widget.resumeFromSession!.id,
@@ -130,8 +138,29 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
           widget.resumeFromSession!.id,
         );
       }
-      await WorkoutStorageService().saveSession(_savedSession);
-      _potionBonusXP = await XpBoostService().consumeForSession(_earnedXP);
+      final currentClass = await ClassService().getCurrentClass();
+      final sessionWithClass = _sessionWithAward(
+        classAtSave: currentClass.name,
+      );
+      final existingSessions = await WorkoutStorageService().getSessions();
+      final lck = XpService.lckForSessions([
+        for (final session in existingSessions)
+          if (session.id != sessionWithClass.id) session,
+        sessionWithClass,
+      ], now: sessionWithClass.date);
+      _lckMultiplier = XpService.lckXpMultiplier(lck);
+      _potionMultiplier = await XpBoostService().consumeActivePotions();
+      _earnedXP = (_baseXP * _lckMultiplier * _potionMultiplier).round();
+      _potionBonusXP = (_baseXP * _lckMultiplier * (_potionMultiplier - 1.0))
+          .round();
+      final awardedSession = _sessionWithAward(
+        classAtSave: currentClass.name,
+        baseXP: _baseXP,
+        lckMultiplier: _lckMultiplier,
+        potionMultiplier: _potionMultiplier,
+        awardedXP: _earnedXP,
+      );
+      await WorkoutStorageService().saveSession(awardedSession);
       final engine = StatEngine();
       _statDelta = await engine.getLastSessionDelta();
       _combatStats = await engine.getStoredStats();
@@ -155,6 +184,47 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         _saved = true;
       });
     }
+  }
+
+  WorkoutSession _sessionWithAward({
+    String? classAtSave,
+    int? baseXP,
+    double? lckMultiplier,
+    double? potionMultiplier,
+    int? awardedXP,
+  }) {
+    return WorkoutSession(
+      id: _baseSession.id,
+      date: _baseSession.date,
+      startedAt: _baseSession.startedAt,
+      muscleGroup: _baseSession.muscleGroup,
+      targetMuscleGroups: _baseSession.targetMuscleGroups,
+      targetDurationMinutes: _baseSession.targetDurationMinutes,
+      actualDurationSeconds: _baseSession.actualDurationSeconds,
+      exercises: _baseSession.exercises,
+      estimatedCalories: _baseSession.estimatedCalories,
+      isPartial: _baseSession.isPartial,
+      isAbandoned: _baseSession.isAbandoned,
+      selectedExerciseIds: _baseSession.selectedExerciseIds,
+      baseXP: baseXP,
+      lckMultiplier: lckMultiplier,
+      potionMultiplier: potionMultiplier,
+      awardedXP: awardedXP,
+      classAtSave: classAtSave,
+    );
+  }
+
+  String get _xpMathLabel {
+    if (widget.isAbandoned) return '+$_earnedXP XP EARNED';
+    final lckLabel = XpService.multiplierLabel(_lckMultiplier);
+    final potionLabel = XpService.multiplierLabel(_potionMultiplier);
+    if (_lckMultiplier <= 1.0 && _potionMultiplier <= 1.0) {
+      return '+$_earnedXP XP EARNED';
+    }
+    final parts = <String>['+$_baseXP XP'];
+    if (_lckMultiplier > 1.0) parts.add('× $lckLabel LCK');
+    if (_potionMultiplier > 1.0) parts.add('× $potionLabel BOOST');
+    return '${parts.join(' ')} = +$_earnedXP XP';
   }
 
   void _goHome() {
@@ -226,10 +296,10 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                 ],
                 const SizedBox(height: kSpace3),
                 PulseColorText(
-                  '+$_earnedXP XP EARNED',
+                  _xpMathLabel,
                   style: const TextStyle(
                     fontFamily: 'PressStart2P',
-                    fontSize: 16,
+                    fontSize: 12,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -246,7 +316,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                       const SizedBox(width: 8),
                       Text(
                         '+$_potionBonusXP BONUS XP',
-                        style: GoogleFonts.shareTechMono(
+                        style: AppFonts.shareTechMono(
                           color: kAmber,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -417,7 +487,7 @@ class _StatDeltaText extends StatelessWidget {
     final color = delta > 0 ? kNeon : kMutedText;
     final statLabel = Text(
       stat,
-      style: GoogleFonts.shareTechMono(
+      style: AppFonts.shareTechMono(
         fontSize: 12,
         fontWeight: FontWeight.w700,
         color: color,
@@ -429,7 +499,7 @@ class _StatDeltaText extends StatelessWidget {
       children: [
         Text(
           '+$delta ',
-          style: GoogleFonts.shareTechMono(
+          style: AppFonts.shareTechMono(
             fontSize: 12,
             fontWeight: FontWeight.w700,
             color: color,
@@ -469,7 +539,7 @@ class _StatBox extends StatelessWidget {
             children: [
               Text(
                 value,
-                style: GoogleFonts.shareTechMono(
+                style: AppFonts.shareTechMono(
                   fontSize: 18,
                   color: kNeon,
                   fontWeight: FontWeight.bold,

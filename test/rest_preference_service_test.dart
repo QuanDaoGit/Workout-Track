@@ -12,17 +12,11 @@ void main() {
 
   group('RestPreferenceService.defaultForClass', () {
     test('Tank rests 180 seconds', () {
-      expect(
-        RestPreferenceService.defaultForClass(CharacterClass.tank),
-        180,
-      );
+      expect(RestPreferenceService.defaultForClass(CharacterClass.tank), 180);
     });
 
     test('Bruiser rests 90 seconds', () {
-      expect(
-        RestPreferenceService.defaultForClass(CharacterClass.bruiser),
-        90,
-      );
+      expect(RestPreferenceService.defaultForClass(CharacterClass.bruiser), 90);
     });
 
     test('Assassin rests 60 seconds', () {

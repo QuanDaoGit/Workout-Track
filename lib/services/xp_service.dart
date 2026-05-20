@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../models/workout_models.dart';
+import 'workout_metric_service.dart';
 
 class XpProgress {
   const XpProgress({
@@ -44,7 +45,8 @@ class XpService {
     if (session.isOngoing) {
       return _partialPerformanceXP(session, session.actualDurationSeconds);
     }
-    return _completedSessionXP(session, session.actualDurationSeconds);
+    return session.awardedXP ??
+        _completedSessionXP(session, session.actualDurationSeconds);
   }
 
   static int calculateLiveSessionXP(WorkoutSession session, {DateTime? now}) {
@@ -57,7 +59,29 @@ class XpService {
     if (session.isOngoing) {
       return _partialPerformanceXP(session, elapsedSeconds);
     }
-    return _completedSessionXP(session, elapsedSeconds);
+    return session.awardedXP ?? _completedSessionXP(session, elapsedSeconds);
+  }
+
+  static int calculateBaseSessionXP(WorkoutSession session) {
+    if (session.isAbandoned) {
+      return _abandonedTimeXP(session, session.actualDurationSeconds);
+    }
+    if (session.isOngoing) {
+      return _partialPerformanceXP(session, session.actualDurationSeconds);
+    }
+    return _completedSessionXP(session, session.actualDurationSeconds);
+  }
+
+  static int lckForSessions(List<WorkoutSession> sessions, {DateTime? now}) =>
+      min(WorkoutMetricService.currentStreak(sessions, now: now), 100);
+
+  static int lckDiamondCount(int lck) => (lck ~/ 25).clamp(0, 4).toInt();
+
+  static double lckXpMultiplier(int lck) => 1.0 + (lckDiamondCount(lck) * 0.5);
+
+  static String multiplierLabel(double multiplier) {
+    final fixed = multiplier.toStringAsFixed(1);
+    return '${fixed}x';
   }
 
   static int _completedSessionXP(WorkoutSession session, int elapsedSeconds) {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../models/workout_models.dart';
 import '../services/custom_exercise_service.dart';
@@ -59,14 +59,14 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
         ),
         content: Text(
           'PAST SESSIONS REMAIN.',
-          style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 13),
+          style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'CANCEL',
-              style: GoogleFonts.shareTechMono(color: kMutedText),
+              style: AppFonts.shareTechMono(color: kMutedText),
             ),
           ),
           FilledButton(
@@ -201,7 +201,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                         const SizedBox(width: 8),
                         Text(
                           exercise.muscleGroup!.toUpperCase(),
-                          style: GoogleFonts.shareTechMono(
+                          style: AppFonts.shareTechMono(
                             color: kMutedText,
                             fontSize: 12,
                           ),
@@ -209,14 +209,14 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                         if (exercise.exerciseType != null) ...[
                           Text(
                             ' / ',
-                            style: GoogleFonts.shareTechMono(
+                            style: AppFonts.shareTechMono(
                               color: kMutedText,
                               fontSize: 12,
                             ),
                           ),
                           Text(
                             exercise.exerciseType!.toUpperCase(),
-                            style: GoogleFonts.shareTechMono(
+                            style: AppFonts.shareTechMono(
                               color: kMutedText,
                               fontSize: 12,
                             ),
@@ -235,7 +235,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                     const SizedBox(height: 8),
                     Text(
                       exercise.userNote!,
-                      style: GoogleFonts.shareTechMono(
+                      style: AppFonts.shareTechMono(
                         textStyle: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ),
@@ -281,7 +281,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                           Expanded(
                             child: Text(
                               exercise.instructions[i],
-                              style: GoogleFonts.shareTechMono(
+                              style: AppFonts.shareTechMono(
                                 textStyle: Theme.of(
                                   context,
                                 ).textTheme.bodyMedium,
@@ -294,7 +294,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                 ] else if (!exercise.isCustom)
                   Text(
                     'No instructions available.',
-                    style: GoogleFonts.shareTechMono(
+                    style: AppFonts.shareTechMono(
                       textStyle: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),

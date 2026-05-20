@@ -76,6 +76,22 @@ class XpBoostService {
     return bonusXP;
   }
 
+  /// Consume active potions without writing a separate legacy bonus total.
+  ///
+  /// New workout sessions persist their final awarded XP on the session itself,
+  /// so adding the potion bonus to `_bonusTotalKey` would double count it.
+  Future<double> consumeActivePotions() async {
+    final active = await getActivePotions();
+    if (active.isEmpty) return 1.0;
+
+    final multiplier = await getEffectiveMultiplier();
+    final all = await _loadPotions();
+    final activeIds = active.map((p) => p.id).toSet();
+    all.removeWhere((p) => activeIds.contains(p.id));
+    await _savePotions(all);
+    return multiplier;
+  }
+
   /// Running total of all potion-boosted XP ever granted.
   Future<int> getTotalBonusXP() async {
     final prefs = await SharedPreferences.getInstance();

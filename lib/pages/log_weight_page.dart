@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../services/body_goal_service.dart';
 import '../services/body_metrics_service.dart';
@@ -98,15 +98,15 @@ class _LogWeightPageState extends State<LogWeightPage> {
               autofocus: true,
               textAlign: TextAlign.center,
               onChanged: (_) => setState(() {}),
-              style: GoogleFonts.shareTechMono(color: kText, fontSize: 24),
+              style: AppFonts.shareTechMono(color: kText, fontSize: 24),
               decoration: InputDecoration(
                 hintText: '0.0',
-                hintStyle: GoogleFonts.shareTechMono(
+                hintStyle: AppFonts.shareTechMono(
                   color: kMutedText,
                   fontSize: 24,
                 ),
                 suffixText: 'kg',
-                suffixStyle: GoogleFonts.shareTechMono(
+                suffixStyle: AppFonts.shareTechMono(
                   color: kMutedText,
                   fontSize: 14,
                 ),
@@ -129,7 +129,7 @@ class _LogWeightPageState extends State<LogWeightPage> {
             const SizedBox(height: 12),
             Text(
               'morning. before food. before water.',
-              style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+              style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
             ),
             const Spacer(),
             PixelButton(

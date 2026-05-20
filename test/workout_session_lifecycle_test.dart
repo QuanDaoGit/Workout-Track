@@ -19,7 +19,12 @@ void main() {
       ..remove('pausedAt')
       ..remove('autoDiscardAt')
       ..remove('isPausedForResume')
-      ..remove('isAbandoned');
+      ..remove('isAbandoned')
+      ..remove('baseXP')
+      ..remove('lckMultiplier')
+      ..remove('potionMultiplier')
+      ..remove('awardedXP')
+      ..remove('classAtSave');
 
     final parsed = WorkoutSession.fromJson(legacy);
     expect(parsed.startedAt, date);
@@ -27,6 +32,9 @@ void main() {
     expect(parsed.autoDiscardAt, isNull);
     expect(parsed.isPausedForResume, isFalse);
     expect(parsed.isAbandoned, isFalse);
+    expect(parsed.baseXP, isNull);
+    expect(parsed.awardedXP, isNull);
+    expect(parsed.classAtSave, isNull);
     expect(parsed.isOngoing, isFalse);
 
     final pausedAt = date.add(const Duration(minutes: 20));
@@ -74,6 +82,30 @@ void main() {
       expect(XpService.calculateTotalXP([completed, ongoing, abandoned]), 110);
     },
   );
+
+  test('persisted awarded XP overrides legacy formula for saved workouts', () {
+    final now = DateTime(2026, 5, 14, 9);
+    final awarded = _session(
+      date: now,
+      setCount: 2,
+      seconds: 1200,
+      baseXP: 80,
+      lckMultiplier: 2.0,
+      potionMultiplier: 1.5,
+      awardedXP: 240,
+      classAtSave: 'bruiser',
+    );
+
+    final parsed = WorkoutSession.fromJson(awarded.toJson());
+
+    expect(parsed.baseXP, 80);
+    expect(parsed.lckMultiplier, 2.0);
+    expect(parsed.potionMultiplier, 1.5);
+    expect(parsed.awardedXP, 240);
+    expect(parsed.classAtSave, 'bruiser');
+    expect(XpService.calculateBaseSessionXP(parsed), 80);
+    expect(XpService.calculateSessionXP(parsed), 240);
+  });
 
   test('paused resumable sessions freeze elapsed time and resume clock', () {
     final startedAt = DateTime(2026, 5, 14, 9);
@@ -239,6 +271,11 @@ WorkoutSession _session({
   int setCount = 3,
   int seconds = 1800,
   int targetMinutes = 30,
+  int? baseXP,
+  double? lckMultiplier,
+  double? potionMultiplier,
+  int? awardedXP,
+  String? classAtSave,
 }) {
   return WorkoutSession(
     id: id,
@@ -264,5 +301,10 @@ WorkoutSession _session({
     isAbandoned: isAbandoned,
     isPausedForResume: isPausedForResume,
     selectedExerciseIds: const ['bench'],
+    baseXP: baseXP,
+    lckMultiplier: lckMultiplier,
+    potionMultiplier: potionMultiplier,
+    awardedXP: awardedXP,
+    classAtSave: classAtSave,
   );
 }

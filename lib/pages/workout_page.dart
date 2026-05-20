@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../data/curated_exercises.dart';
 import '../data/muscle_groups.dart';
@@ -1316,7 +1316,7 @@ class _StatsTabState extends State<_StatsTab> {
                   children: [
                     Text(
                       _showRecords ? '[ HIDE RECORDS ]' : '[ SHOW RECORDS ]',
-                      style: GoogleFonts.shareTechMono(
+                      style: AppFonts.shareTechMono(
                         color: const Color(0xFF00FF9C),
                         fontSize: 13,
                       ),
@@ -1646,13 +1646,13 @@ class _ExercisesTabState extends State<_ExercisesTab>
           child: TextField(
             controller: _searchController,
             onChanged: (value) => setState(() => _query = value.trim()),
-            style: GoogleFonts.shareTechMono(
+            style: AppFonts.shareTechMono(
               color: const Color(0xFFE8E8FF),
               fontSize: 14,
             ),
             decoration: InputDecoration(
               hintText: 'Search exercises',
-              hintStyle: GoogleFonts.shareTechMono(
+              hintStyle: AppFonts.shareTechMono(
                 color: const Color(0xFF6B6B8A),
                 fontSize: 13,
               ),
@@ -1737,7 +1737,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
               },
               icon: const Icon(Icons.add_sharp, size: 16),
               label: const Text(
-                '+ CREATE',
+                'CREATE',
                 style: TextStyle(fontFamily: 'PressStart2P', fontSize: 9),
               ),
             ),
@@ -1771,7 +1771,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
                   child: Text(
                     _favOnly ? 'NO FAVORITES YET' : 'No exercises found',
                     style: _favOnly
-                        ? GoogleFonts.shareTechMono(
+                        ? AppFonts.shareTechMono(
                             color: const Color(0xFF6B6B8A),
                             fontSize: 13,
                             letterSpacing: 1.2,

@@ -23,3 +23,11 @@ const kSpace2 = 8.0;
 const kSpace3 = 12.0;
 const kSpace4 = 16.0;
 const kSpace5 = 24.0;
+
+// Shared layout rules for primary mobile surfaces.
+const kHomeHorizontalPadding = 16.0;
+const kCardPadding = 16.0;
+const kCardRadius = 4.0;
+const kSectionGap = 16.0;
+const kButtonHeight = 48.0;
+const kPrimaryCardBorderWidth = 1.2;

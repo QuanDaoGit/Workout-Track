@@ -23,7 +23,8 @@ class ClassSprite extends StatelessWidget {
       width: size,
       height: size,
       fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => _buildPlaceholder(),
+      filterQuality: FilterQuality.none,
+      errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
     );
   }
 

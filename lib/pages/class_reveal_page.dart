@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../models/character_class.dart';
 import '../theme/tokens.dart';
@@ -104,7 +104,7 @@ class _ClassRevealPageState extends State<ClassRevealPage> {
                     if (_step >= 1)
                       Text(
                         'PATH OF THE ${widget.characterClass.bodyGoalLabel}',
-                        style: GoogleFonts.shareTechMono(
+                        style: AppFonts.shareTechMono(
                           fontSize: 12,
                           color: kMutedText,
                         ),

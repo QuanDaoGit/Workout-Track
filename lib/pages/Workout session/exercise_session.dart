@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../../theme/app_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/overload_models.dart';
@@ -273,7 +273,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       spans.add(
         TextSpan(
           text: '$sign${_fmtWeight(d.weightDiff)} kg',
-          style: GoogleFonts.shareTechMono(fontSize: 11, color: color),
+          style: AppFonts.shareTechMono(fontSize: 11, color: color),
         ),
       );
     }
@@ -281,7 +281,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       spans.add(
         TextSpan(
           text: ' \u00b7 ',
-          style: GoogleFonts.shareTechMono(fontSize: 11, color: kMutedText),
+          style: AppFonts.shareTechMono(fontSize: 11, color: kMutedText),
         ),
       );
     }
@@ -291,7 +291,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       spans.add(
         TextSpan(
           text: '$sign${d.repsDiff} rep${d.repsDiff.abs() == 1 ? '' : 's'}',
-          style: GoogleFonts.shareTechMono(fontSize: 11, color: color),
+          style: AppFonts.shareTechMono(fontSize: 11, color: color),
         ),
       );
     }
@@ -468,9 +468,9 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     final isLocked = _lockedSets.contains(index);
     final flashTrigger = _rowFlashTriggers[index] ?? 0;
     final isPrefilled = _prefilledRows.contains(index);
-    final fieldStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-      color: isPrefilled ? kMutedText : null,
-    );
+    final fieldStyle = Theme.of(
+      context,
+    ).textTheme.bodyMedium?.copyWith(color: isPrefilled ? kMutedText : null);
 
     final delta = _deltas[index];
     final hasPR = _prSets.contains(index);
@@ -521,7 +521,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                                   border: Border.all(color: kCyan),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                textStyle: GoogleFonts.shareTechMono(
+                                textStyle: AppFonts.shareTechMono(
                                   color: kText,
                                   fontSize: 12,
                                 ),
@@ -618,7 +618,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                     padding: const EdgeInsets.only(left: 32, top: 4),
                     child: Text(
                       'last: ${_fmtWeight(prevSet.weight)} kg × ${prevSet.reps}',
-                      style: GoogleFonts.shareTechMono(
+                      style: AppFonts.shareTechMono(
                         fontSize: 11,
                         color: kMutedText,
                       ),
@@ -632,7 +632,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                       children: [
                         Text(
                           'plate calc \u2192',
-                          style: GoogleFonts.shareTechMono(
+                          style: AppFonts.shareTechMono(
                             color: kMutedText,
                             fontSize: 11,
                           ),
@@ -710,11 +710,11 @@ class _TryLine extends StatelessWidget {
     final core = w == null
         ? '—'
         : w == 0
-            ? '${r ?? 0} reps'
-            : '${_fmtWeight(w)} kg × ${r ?? 0}';
+        ? '${r ?? 0} reps'
+        : '${_fmtWeight(w)} kg × ${r ?? 0}';
     return Text(
       'TRY: $core${_suffix()}',
-      style: GoogleFonts.shareTechMono(
+      style: AppFonts.shareTechMono(
         fontSize: 11,
         color: _color(),
         letterSpacing: 0.8,

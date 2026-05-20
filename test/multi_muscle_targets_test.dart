@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/data/curated_exercises.dart';
@@ -7,6 +9,7 @@ import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/services/calorie_service.dart';
 import 'package:workout_track/services/loot_service.dart';
 import 'package:workout_track/services/quest_service.dart';
+import 'package:workout_track/services/workout_storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -162,6 +165,111 @@ void main() {
       'Full Body',
     ]);
   });
+
+  test(
+    'lastCompletedSession ignores partial and ended-early sessions',
+    () async {
+      final completed = _session(
+        date: DateTime(2026, 5, 13),
+        muscleGroup: 'Back',
+      );
+      final partial = _session(
+        date: DateTime(2026, 5, 14),
+        muscleGroup: 'Chest',
+      ).copyForTest(isPartial: true);
+      final abandoned = _session(
+        date: DateTime(2026, 5, 15),
+        muscleGroup: 'Legs',
+      ).copyForTest(isPartial: true, isAbandoned: true);
+      SharedPreferences.setMockInitialValues({
+        'workout_sessions': jsonEncode([
+          completed.toJson(),
+          partial.toJson(),
+          abandoned.toJson(),
+        ]),
+      });
+
+      final last = await WorkoutStorageService().lastCompletedSession();
+
+      expect(last?.id, completed.id);
+    },
+  );
+
+  test(
+    'top exercise ids for targets use completed history frequency',
+    () async {
+      final catalog = [
+        const Exercise(
+          id: 'bench',
+          name: 'Bench',
+          level: 'beginner',
+          images: [],
+          primaryMuscle: 'chest',
+        ),
+        const Exercise(
+          id: 'row',
+          name: 'Row',
+          level: 'beginner',
+          images: [],
+          primaryMuscle: 'lats',
+        ),
+        const Exercise(
+          id: 'curl',
+          name: 'Curl',
+          level: 'beginner',
+          images: [],
+          primaryMuscle: 'biceps',
+        ),
+      ];
+      SharedPreferences.setMockInitialValues({
+        'workout_sessions': jsonEncode([
+          _session(
+            date: DateTime(2026, 5, 10),
+            logs: const [
+              ExerciseLog(
+                exerciseId: 'bench',
+                exerciseName: 'Bench',
+                sets: [SetEntry(weight: 50, reps: 5)],
+              ),
+              ExerciseLog(
+                exerciseId: 'row',
+                exerciseName: 'Row',
+                sets: [SetEntry(weight: 50, reps: 5)],
+              ),
+            ],
+          ).toJson(),
+          _session(
+            date: DateTime(2026, 5, 11),
+            logs: const [
+              ExerciseLog(
+                exerciseId: 'bench',
+                exerciseName: 'Bench',
+                sets: [SetEntry(weight: 50, reps: 5)],
+              ),
+            ],
+          ).toJson(),
+          _session(
+            date: DateTime(2026, 5, 12),
+            logs: const [
+              ExerciseLog(
+                exerciseId: 'curl',
+                exerciseName: 'Curl',
+                sets: [SetEntry(weight: 20, reps: 8)],
+              ),
+            ],
+          ).toJson(),
+        ]),
+      });
+
+      final top = await WorkoutStorageService().topExerciseIdsForTargets(
+        const ['Chest', 'Back'],
+        catalog,
+        limit: 3,
+      );
+
+      expect(top, ['bench', 'row']);
+    },
+  );
 }
 
 WorkoutSession _session({
@@ -188,4 +296,23 @@ WorkoutSession _session({
         ],
     estimatedCalories: 100,
   );
+}
+
+extension on WorkoutSession {
+  WorkoutSession copyForTest({bool? isPartial, bool? isAbandoned}) {
+    return WorkoutSession(
+      id: id,
+      date: date,
+      startedAt: startedAt,
+      muscleGroup: muscleGroup,
+      targetMuscleGroups: targetMuscleGroups,
+      targetDurationMinutes: targetDurationMinutes,
+      actualDurationSeconds: actualDurationSeconds,
+      exercises: exercises,
+      estimatedCalories: estimatedCalories,
+      isPartial: isPartial ?? this.isPartial,
+      isAbandoned: isAbandoned ?? this.isAbandoned,
+      selectedExerciseIds: selectedExerciseIds,
+    );
+  }
 }

@@ -127,6 +127,19 @@ void main() {
     });
   });
 
+  group('consumeActivePotions', () {
+    test('returns multiplier and does not add legacy bonus XP', () async {
+      final service = XpBoostService(
+        nowProvider: () => DateTime(2026, 5, 16, 10, 0),
+      );
+      await service.grantPotion();
+
+      expect(await service.consumeActivePotions(), 2.0);
+      expect(await service.getActivePotions(), isEmpty);
+      expect(await service.getTotalBonusXP(), 0);
+    });
+  });
+
   group('getTotalBonusXP', () {
     test('starts at 0', () async {
       final service = XpBoostService(nowProvider: () => DateTime(2026, 5, 16));

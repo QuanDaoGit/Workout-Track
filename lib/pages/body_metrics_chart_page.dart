@@ -1,6 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../models/body_goal_models.dart';
 import '../models/body_metrics_models.dart';
@@ -51,10 +51,7 @@ class _BodyMetricsChartPageState extends State<BodyMetricsChartPage> {
           ? Center(
               child: Text(
                 'NO ENTRIES YET',
-                style: GoogleFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 13,
-                ),
+                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
               ),
             )
           : _buildContent(),
@@ -111,7 +108,7 @@ class _BodyMetricsChartPageState extends State<BodyMetricsChartPage> {
         child: Text(
           'LOG AT LEAST 2 ENTRIES\nTO SEE A CHART',
           textAlign: TextAlign.center,
-          style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+          style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
         ),
       );
     }
@@ -147,10 +144,7 @@ class _BodyMetricsChartPageState extends State<BodyMetricsChartPage> {
               interval: 2,
               getTitlesWidget: (value, _) => Text(
                 '${value.toInt()}',
-                style: GoogleFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 9,
-                ),
+                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 9),
               ),
             ),
           ),
@@ -190,10 +184,7 @@ class _BodyMetricsChartPageState extends State<BodyMetricsChartPage> {
                 label: HorizontalLineLabel(
                   show: true,
                   alignment: Alignment.topRight,
-                  style: GoogleFonts.shareTechMono(
-                    color: kMutedText,
-                    fontSize: 9,
-                  ),
+                  style: AppFonts.shareTechMono(color: kMutedText, fontSize: 9),
                   labelResolver: (_) => 'TARGET (NO DATE)',
                 ),
               ),
@@ -217,11 +208,11 @@ class _StatRow extends StatelessWidget {
       children: [
         Text(
           label,
-          style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+          style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
         ),
         Text(
           value,
-          style: GoogleFonts.shareTechMono(
+          style: AppFonts.shareTechMono(
             color: kText,
             fontSize: 11,
             fontWeight: FontWeight.w700,

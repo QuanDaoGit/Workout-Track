@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../models/body_metrics_models.dart';
 import '../services/body_metrics_service.dart';
@@ -48,14 +48,14 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
         ),
         content: Text(
           '${_formatDate(entry.loggedAt)} \u00B7 ${entry.weightKg.toStringAsFixed(1)} kg',
-          style: GoogleFonts.shareTechMono(color: kText, fontSize: 13),
+          style: AppFonts.shareTechMono(color: kText, fontSize: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'CANCEL',
-              style: GoogleFonts.shareTechMono(color: kMutedText),
+              style: AppFonts.shareTechMono(color: kMutedText),
             ),
           ),
           FilledButton(
@@ -109,10 +109,7 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
           ? Center(
               child: Text(
                 'NO ENTRIES',
-                style: GoogleFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 13,
-                ),
+                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
               ),
             )
           : ListView.builder(
@@ -138,7 +135,7 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
                         Expanded(
                           child: Text(
                             _formatDate(entry.loggedAt),
-                            style: GoogleFonts.shareTechMono(
+                            style: AppFonts.shareTechMono(
                               color: kMutedText,
                               fontSize: 12,
                             ),
@@ -146,7 +143,7 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
                         ),
                         Text(
                           '${entry.weightKg.toStringAsFixed(1)} kg',
-                          style: GoogleFonts.shareTechMono(
+                          style: AppFonts.shareTechMono(
                             color: kText,
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
@@ -156,7 +153,7 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
                           const SizedBox(width: 10),
                           Text(
                             arrow,
-                            style: GoogleFonts.shareTechMono(
+                            style: AppFonts.shareTechMono(
                               color: kMutedText,
                               fontSize: 12,
                             ),

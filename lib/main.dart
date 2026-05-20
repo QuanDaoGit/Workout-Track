@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'theme/app_fonts.dart';
 
 import 'pages/root_page.dart';
 import 'services/class_migration_service.dart';
@@ -49,6 +49,7 @@ class MyApp extends StatelessWidget {
       ),
       theme: ThemeData(
         useMaterial3: true,
+        fontFamily: AppFonts.shareTechMonoFamily,
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF00FF9C),
           brightness: Brightness.dark,
@@ -69,7 +70,7 @@ class MyApp extends StatelessWidget {
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
             foregroundColor: const Color(0xFF00FF9C),
-            textStyle: GoogleFonts.shareTechMono(),
+            textStyle: AppFonts.shareTechMono(),
             side: const BorderSide(color: Color(0xFF00FF9C), width: 1),
             shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.all(Radius.circular(4)),
@@ -80,7 +81,7 @@ class MyApp extends StatelessWidget {
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFF00FF9C),
             foregroundColor: const Color(0xFF0D0D1A),
-            textStyle: GoogleFonts.shareTechMono(
+            textStyle: AppFonts.shareTechMono(
               fontWeight: FontWeight.bold,
               letterSpacing: 1.5,
             ),
@@ -102,7 +103,7 @@ class MyApp extends StatelessWidget {
             side: BorderSide(color: Color(0xFF2A2A4A)),
           ),
         ),
-        textTheme: GoogleFonts.shareTechMonoTextTheme().copyWith(
+        textTheme: AppFonts.shareTechMonoTextTheme().copyWith(
           headlineLarge: const TextStyle(
             fontFamily: 'PressStart2P',
             fontSize: 18,
@@ -123,11 +124,11 @@ class MyApp extends StatelessWidget {
             fontSize: 12,
             color: Color(0xFFE8E8FF),
           ),
-          bodySmall: GoogleFonts.shareTechMono(
+          bodySmall: AppFonts.shareTechMono(
             color: const Color(0xFF6B6B8A),
             fontSize: 14,
           ),
-          bodyMedium: GoogleFonts.shareTechMono(
+          bodyMedium: AppFonts.shareTechMono(
             color: const Color(0xFFE8E8FF),
             fontSize: 14,
           ),

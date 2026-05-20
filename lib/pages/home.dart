@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
+import '../data/curated_exercises.dart';
 import '../data/muscle_groups.dart';
 import '../data/programs_library.dart';
 import '../models/loot_item.dart';
@@ -8,12 +9,14 @@ import '../models/program_models.dart';
 import '../models/profile_models.dart';
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
+import '../services/calorie_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/loot_service.dart';
 import '../services/profile_service.dart';
 import '../services/program_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
+import '../services/workout_defaults_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
@@ -22,6 +25,7 @@ import '../widgets/arcade_dialog_button_column.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
+import '../widgets/active_session_found_dialog.dart';
 import '../widgets/loot_avatar_frame.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
@@ -51,7 +55,7 @@ class HomePageState extends State<HomePage> {
   int _todayXP = 0;
   int _weeklyQuestCompleted = 0;
   int _weeklyQuestTotal = 5;
-  DateTime? _lastWorkoutDate;
+  WorkoutSession? _lastWorkout;
   String? _suggestedMuscle;
   String? _selectedTitle;
   int? _suggestedMissionRewardXP;
@@ -62,6 +66,7 @@ class HomePageState extends State<HomePage> {
   int? _preWorkoutLevel;
   bool _showXPGain = false;
   int _xpGainAmount = 0;
+  double _lckMultiplier = 1.0;
   bool _showLevelUp = false;
   int _levelUpShakeTrigger = 0;
   int _missionFlashTrigger = 0;
@@ -129,6 +134,9 @@ class HomePageState extends State<HomePage> {
     if (!mounted) return;
 
     final completed = all.where((s) => !s.isPartial).toList();
+    final lckMultiplier = XpService.lckXpMultiplier(
+      XpService.lckForSessions(completed, now: DateTime.now()),
+    );
     final partial = all.where((s) => s.isOngoing).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     final lastCompleted = completed.isEmpty
@@ -195,7 +203,7 @@ class HomePageState extends State<HomePage> {
 
     int? suggestedMissionRewardXP;
     for (final quest in questSummary.dailyQuests) {
-      if (quest.id == 'suggested_muscle' && !quest.claimed) {
+      if (quest.id == 'show_up' && !quest.claimed) {
         suggestedMissionRewardXP = quest.rewardXP;
         break;
       }
@@ -209,7 +217,7 @@ class HomePageState extends State<HomePage> {
       _todayXP = todayXP;
       _weeklyQuestCompleted = questSummary.weeklyCompleted;
       _weeklyQuestTotal = questSummary.weeklyTotal;
-      _lastWorkoutDate = lastCompleted?.date;
+      _lastWorkout = lastCompleted;
       _suggestedMuscle = suggestedMuscle;
       _selectedTitle = questSummary.selectedTitle;
       _suggestedMissionRewardXP = suggestedMissionRewardXP;
@@ -220,6 +228,7 @@ class HomePageState extends State<HomePage> {
       _programProgress = programProgress;
       _programDay = programDay;
       _programCompletedToday = programCompletedToday;
+      _lckMultiplier = lckMultiplier;
       _loading = false;
     });
   }
@@ -238,6 +247,180 @@ class HomePageState extends State<HomePage> {
     final theme = _equippedLoot[LootCategory.homeTheme];
     if (theme == null || theme.id == 'theme_default') return fallback;
     return Color.lerp(fallback, theme.color, 0.32) ?? fallback;
+  }
+
+  Widget _homeCard({
+    required Widget child,
+    Color background = kCard,
+    Color borderColor = kBorder,
+    double borderAlpha = 1.0,
+    double backgroundAlpha = 1.0,
+    double borderWidth = 1.0,
+    EdgeInsetsGeometry? padding,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: padding ?? const EdgeInsets.all(kCardPadding),
+      decoration: BoxDecoration(
+        color: _themedCardColor(background).withValues(alpha: backgroundAlpha),
+        border: Border.all(
+          color: borderColor.withValues(alpha: borderAlpha),
+          width: borderWidth,
+        ),
+        borderRadius: BorderRadius.circular(kCardRadius),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _missionHeader({required Color accent, Widget? trailing}) {
+    return Row(
+      children: [
+        ImageIcon(
+          const AssetImage('assets/icons/control/icon_play.png'),
+          size: 18,
+          color: accent,
+        ),
+        const SizedBox(width: kSpace2),
+        Text(
+          'TODAY\'S MISSION',
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: 10,
+            color: accent,
+          ),
+        ),
+        if (trailing != null) ...[const Spacer(), trailing],
+      ],
+    );
+  }
+
+  Widget _missionCard({
+    required Color accent,
+    Widget? trailing,
+    String? meta,
+    required String title,
+    String? detail,
+    Widget? middle,
+    String? supportText,
+    Color? supportColor,
+    String? primaryLabel,
+    VoidCallback? onPrimary,
+    String? secondaryLabel,
+    VoidCallback? onSecondary,
+    Color? borderColor,
+    Color titleColor = kText,
+  }) {
+    final titleSize = title.length > 18 ? 14.0 : 18.0;
+
+    return _homeCard(
+      background: const Color(0xFF17172C),
+      borderColor: borderColor ?? accent,
+      borderWidth: kPrimaryCardBorderWidth,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _missionHeader(accent: accent, trailing: trailing),
+          if (meta != null && meta.isNotEmpty) ...[
+            const SizedBox(height: kSpace5),
+            Text(
+              meta,
+              style: AppFonts.shareTechMono(
+                color: kMutedText,
+                fontSize: 13,
+                height: 1.2,
+              ),
+            ),
+          ] else
+            const SizedBox(height: kSpace5),
+          Text(
+            title,
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: titleSize,
+              color: titleColor,
+              height: 1.35,
+            ),
+          ),
+          if (detail != null && detail.isNotEmpty) ...[
+            const SizedBox(height: kSpace3),
+            Text(
+              detail,
+              style: AppFonts.shareTechMono(
+                color: kText.withValues(alpha: 0.78),
+                fontSize: 15,
+                height: 1.25,
+              ),
+            ),
+          ],
+          if (middle != null) ...[const SizedBox(height: kSpace4), middle],
+          if (supportText != null && supportText.isNotEmpty) ...[
+            const SizedBox(height: kSpace4),
+            Row(
+              children: [
+                ImageIcon(
+                  const AssetImage('assets/icons/control/icon_star.png'),
+                  size: 14,
+                  color: supportColor ?? kAmber,
+                ),
+                const SizedBox(width: kSpace2),
+                Expanded(
+                  child: Text(
+                    supportText,
+                    style: AppFonts.shareTechMono(
+                      color: supportColor ?? kAmber,
+                      fontSize: 13,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (primaryLabel != null && onPrimary != null) ...[
+            const SizedBox(height: kSpace5),
+            PixelButton(
+              label: primaryLabel,
+              color: accent,
+              minHeight: 56,
+              onPressed: onPrimary,
+            ),
+          ],
+          if (secondaryLabel != null && onSecondary != null) ...[
+            const SizedBox(height: kSpace2),
+            Center(
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(44, 44),
+                  foregroundColor: kMutedText,
+                ),
+                onPressed: onSecondary,
+                child: Text(
+                  secondaryLabel,
+                  style: AppFonts.shareTechMono(
+                    color: kMutedText,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _targetLineFromSummary(String summary) {
+    return summary.replaceAll(' - ', ' \u2022 ').toLowerCase();
+  }
+
+  String _programMissionTitle(ProgramDay day) {
+    return switch (day.label) {
+      'UPPER' => 'UPPER BODY',
+      'LOWER' => 'LOWER BODY',
+      'REST' => 'RECOVERY DAY',
+      _ => day.label,
+    };
   }
 
   LootItem? get _equippedTitle => _equippedLoot[LootCategory.titleBadge];
@@ -300,6 +483,7 @@ class HomePageState extends State<HomePage> {
     );
     final isProgramRestWorkout = await programService
         .isOngoingProgramRestSession(session.id);
+    final restSeconds = await WorkoutDefaultsService().getRestSeconds();
     if (!mounted) return;
     Navigator.push(
       context,
@@ -309,9 +493,96 @@ class HomePageState extends State<HomePage> {
           targetMuscleGroups: session.targetMuscleGroups,
           durationMinutes: session.targetDurationMinutes,
           exercises: exercises,
+          restSeconds: restSeconds,
           resumeFromSession: session,
           isProgramWorkout: isProgramWorkout,
           advanceProgramRestDayOnCompletion: isProgramRestWorkout,
+        ),
+      ),
+    ).then((_) => _onReturnFromWorkout());
+  }
+
+  Future<bool> _prepareNewWorkoutLaunch() async {
+    final ongoing = await WorkoutStorageService().getOngoingSession();
+    if (!mounted) return false;
+    if (ongoing == null) return true;
+
+    final action = await showActiveSessionFoundDialog(context);
+    if (!mounted || action == null) return false;
+    if (action == ActiveSessionAction.continueOld) {
+      await _continueWorkout(ongoing);
+      return false;
+    }
+
+    await _endOngoingWithoutSummary(ongoing);
+    return mounted;
+  }
+
+  Future<void> _endOngoingWithoutSummary(WorkoutSession session) async {
+    final elapsedSeconds = session.elapsedSecondsForDisplay(DateTime.now());
+    await WorkoutStorageService().replaceOngoingWithAbandoned(
+      WorkoutSession(
+        id: session.id,
+        date: DateTime.now(),
+        startedAt: session.startedAt,
+        muscleGroup: session.muscleGroup,
+        targetMuscleGroups: session.targetMuscleGroups,
+        targetDurationMinutes: session.targetDurationMinutes,
+        actualDurationSeconds: elapsedSeconds,
+        exercises: const [],
+        estimatedCalories: CalorieService.estimateCaloriesForGroups(
+          session.targetMuscleGroups,
+          elapsedSeconds,
+        ),
+        isPartial: true,
+        isAbandoned: true,
+      ),
+    );
+    await ProgramService().clearOngoingProgramSession(session.id);
+  }
+
+  Future<void> _launchWorkoutFromExerciseIds({
+    required String muscleGroup,
+    required List<String> targetMuscleGroups,
+    required List<String> exerciseIds,
+    bool isProgramWorkout = false,
+    bool advanceProgramRestDayOnCompletion = false,
+  }) async {
+    final shouldLaunch = await _prepareNewWorkoutLaunch();
+    if (!mounted || !shouldLaunch) return;
+
+    final catalog = await ExerciseCatalogService().getFullCatalog();
+    final byId = {for (final exercise in catalog) exercise.id: exercise};
+    final exercises = exerciseIds
+        .map((id) => byId[id])
+        .whereType<Exercise>()
+        .toList();
+    if (!mounted) return;
+    if (exercises.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not load workout exercises.')),
+      );
+      return;
+    }
+
+    final defaults = WorkoutDefaultsService();
+    final durationMinutes = await defaults.getDurationMinutes();
+    final restSeconds = await defaults.getRestSeconds();
+    if (!mounted) return;
+
+    _preWorkoutXP = _totalXP;
+    _preWorkoutLevel = _level;
+    Navigator.push(
+      context,
+      arcadeRoute(
+        (_) => ActiveWorkoutPage(
+          muscleGroup: muscleGroup,
+          targetMuscleGroups: targetMuscleGroups,
+          durationMinutes: durationMinutes,
+          exercises: exercises,
+          restSeconds: restSeconds,
+          isProgramWorkout: isProgramWorkout,
+          advanceProgramRestDayOnCompletion: advanceProgramRestDayOnCompletion,
         ),
       ),
     ).then((_) => _onReturnFromWorkout());
@@ -344,22 +615,28 @@ class HomePageState extends State<HomePage> {
     ).then((_) => _onReturnFromWorkout());
   }
 
-  void _startProgramWorkout(ProgramDay day) {
-    _preWorkoutXP = _totalXP;
-    _preWorkoutLevel = _level;
-    Navigator.push(
-      context,
-      arcadeRoute(
-        (_) => StartWorkoutPage(
-          initialMuscleGroup: programDayPrimaryMuscleGroup(day),
-          initialMuscleGroups: programDayTargetMuscleGroups(day),
-          programDayLabel: day.label,
-          programFocusSummary: programDayFocusSummary(day),
-          programCuratedExerciseIds: day.suggestedExerciseIds,
-          isProgramWorkout: true,
-        ),
-      ),
-    ).then((_) => _onReturnFromWorkout());
+  Future<void> _startProgramWorkout(ProgramDay day) async {
+    final targetGroups = programDayTargetMuscleGroups(day);
+    final exerciseIds = day.suggestedExerciseIds.isNotEmpty
+        ? day.suggestedExerciseIds
+        : curatedExerciseIdsForMuscleGroups(targetGroups);
+    await _launchWorkoutFromExerciseIds(
+      muscleGroup: programDayPrimaryMuscleGroup(day),
+      targetMuscleGroups: targetGroups,
+      exerciseIds: exerciseIds,
+      isProgramWorkout: true,
+    );
+  }
+
+  Future<void> _repeatLastWorkout(WorkoutSession session) async {
+    final exerciseIds = session.selectedExerciseIds.isNotEmpty
+        ? session.selectedExerciseIds
+        : session.exercises.map((log) => log.exerciseId).toList();
+    await _launchWorkoutFromExerciseIds(
+      muscleGroup: session.muscleGroup,
+      targetMuscleGroups: session.targetMuscleGroups,
+      exerciseIds: exerciseIds,
+    );
   }
 
   Future<void> _onReturnFromWorkout() async {
@@ -472,7 +749,7 @@ class HomePageState extends State<HomePage> {
         ? '1 exercise'
         : '$exerciseCount exercises';
     final prefix = session.isPausedForResume ? 'Saved' : exerciseLabel;
-    return '$prefix · ${_fmtDuration(elapsedSeconds)}';
+    return '$prefix | ${_fmtDuration(elapsedSeconds)}';
   }
 
   int _sessionCompletedExerciseCount(WorkoutSession session) {
@@ -511,19 +788,6 @@ class HomePageState extends State<HomePage> {
     return session.elapsedSecondsForDisplay(DateTime.now());
   }
 
-  String _lastWorkoutLabel() {
-    final lastDate = _lastWorkoutDate;
-    if (lastDate == null) return 'No completed workouts yet';
-
-    final today = DateUtils.dateOnly(DateTime.now());
-    final last = DateUtils.dateOnly(lastDate);
-    final daysAgo = today.difference(last).inDays;
-
-    if (daysAgo <= 0) return 'Last workout: Today';
-    if (daysAgo == 1) return 'Last workout: Yesterday';
-    return 'Last workout: $daysAgo days ago';
-  }
-
   // ── Character bar ──────────────────────────────────────────────────────────
 
   Widget _buildCharacterBar() {
@@ -535,13 +799,10 @@ class HomePageState extends State<HomePage> {
         titleItem?.color ??
         (_selectedTitle == null ? const Color(0xFF6B6B8A) : kAmber);
 
-    final card = Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _themedCardColor(const Color(0xFF121225)),
-        borderRadius: BorderRadius.circular(4),
-      ),
+    final card = _homeCard(
+      background: const Color(0xFF121225),
+      borderColor: kBorder,
+      borderAlpha: 0.85,
       child: Row(
         children: [
           LootAvatarFrame(
@@ -559,7 +820,7 @@ class HomePageState extends State<HomePage> {
                   _profile.displayName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.shareTechMono(
+                  style: AppFonts.shareTechMono(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     color: const Color(0xFFE8E8FF),
@@ -570,7 +831,7 @@ class HomePageState extends State<HomePage> {
                   titleLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.shareTechMono(
+                  style: AppFonts.shareTechMono(
                     fontSize: 11,
                     color: titleColor,
                   ),
@@ -600,18 +861,28 @@ class HomePageState extends State<HomePage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                ArcadeProgressBar(
-                  value: xpProgress.fraction,
-                  height: 10,
-                  flashOnIncrease: true,
-                  increaseSignal: _totalXP,
+                Row(
+                  children: [
+                    Expanded(
+                      child: ArcadeProgressBar(
+                        value: xpProgress.fraction,
+                        height: 10,
+                        flashOnIncrease: true,
+                        increaseSignal: _totalXP,
+                      ),
+                    ),
+                    if (_lckMultiplier > 1.0) ...[
+                      const SizedBox(width: 8),
+                      _LckMultiplierBadge(multiplier: _lckMultiplier),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 5),
                 Row(
                   children: [
                     Text(
                       xpProgress.label,
-                      style: GoogleFonts.shareTechMono(
+                      style: AppFonts.shareTechMono(
                         color: const Color(0xFF6B6B8A),
                         fontSize: 10,
                       ),
@@ -620,7 +891,7 @@ class HomePageState extends State<HomePage> {
                       const Spacer(),
                       Text(
                         '+$_todayXP today',
-                        style: GoogleFonts.shareTechMono(
+                        style: AppFonts.shareTechMono(
                           color: const Color(0xFF00FF9C),
                           fontSize: 10,
                         ),
@@ -724,13 +995,12 @@ class HomePageState extends State<HomePage> {
     return ArcadeTap(
       onTap: widget.onViewQuests,
       borderRadius: BorderRadius.circular(4),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: _themedCardColor(const Color(0xFF121225)),
-          borderRadius: BorderRadius.circular(4),
-        ),
+      child: _homeCard(
+        background: const Color(0xFF121225),
+        backgroundAlpha: 0.86,
+        borderColor: kBorder,
+        borderAlpha: 0.8,
+        padding: const EdgeInsets.all(kSpace3),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -741,7 +1011,7 @@ class HomePageState extends State<HomePage> {
                   style: TextStyle(
                     fontFamily: 'PressStart2P',
                     fontSize: 8,
-                    color: Color(0xFF555577),
+                    color: kMutedText,
                   ),
                 ),
                 const Spacer(),
@@ -750,14 +1020,14 @@ class HomePageState extends State<HomePage> {
                   style: const TextStyle(
                     fontFamily: 'PressStart2P',
                     fontSize: 9,
-                    color: Color(0xFFE8E8FF),
+                    color: kText,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Text(
                   'VIEW ALL >',
-                  style: GoogleFonts.shareTechMono(
-                    color: const Color(0xFF00FF9C),
+                  style: AppFonts.shareTechMono(
+                    color: kNeon,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
@@ -772,9 +1042,7 @@ class HomePageState extends State<HomePage> {
                     child: Container(
                       height: 8,
                       decoration: BoxDecoration(
-                        color: i < _weeklyQuestCompleted
-                            ? const Color(0xFF00FF9C)
-                            : const Color(0xFF2A2A4A),
+                        color: i < _weeklyQuestCompleted ? kNeon : kBorder,
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -836,6 +1104,10 @@ class HomePageState extends State<HomePage> {
       return _buildRecoveryMissionPanel(restInfo);
     }
 
+    if (session == null && _programProgress == null && _lastWorkout != null) {
+      return _buildRepeatLastMissionPanel(_lastWorkout!);
+    }
+
     final muscle = session?.targetMuscleLabel ?? _suggestedMuscle;
     final title = session != null
         ? session.isPausedForResume
@@ -847,121 +1119,49 @@ class HomePageState extends State<HomePage> {
     final detail = session != null
         ? _sessionProgressLabel(session)
         : muscle != null
-        ? 'Suggested: $muscle'
+        ? muscle.toLowerCase()
         : 'Pick a muscle group and start small';
     final rewardLabel = _missionRewardLabel(session);
-
-    final panel = Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _themedCardColor(const Color(0xFF17172C)),
-        border: Border.all(color: const Color(0xFF00FF9C), width: 1.2),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    final savedProgress = session != null && session.isPausedForResume
+        ? Row(
             children: [
-              const ImageIcon(
-                AssetImage('assets/icons/control/icon_play.png'),
-                size: 14,
-                color: Color(0xFF00FF9C),
+              Expanded(
+                child: ArcadeProgressBar(
+                  value: _sessionExerciseProgress(session),
+                  height: 6,
+                ),
               ),
-              const SizedBox(width: 8),
-              const Text(
-                'MAIN MISSION',
-                style: TextStyle(
+              const SizedBox(width: 10),
+              Text(
+                '${_sessionCompletedExerciseCount(session)}/'
+                '${_sessionTotalExerciseCount(session)} CLEARED',
+                style: const TextStyle(
                   fontFamily: 'PressStart2P',
-                  fontSize: 10,
-                  color: Color(0xFF00FF9C),
-                ),
-              ),
-              if (rewardLabel != null) ...[
-                const Spacer(),
-                _MissionRewardChip(label: rewardLabel),
-              ],
-            ],
-          ),
-          const SizedBox(height: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.shareTechMono(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFFE8E8FF),
-                  height: 1.05,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                detail,
-                style: GoogleFonts.shareTechMono(
-                  color: const Color(0xFF6B6B8A),
-                  fontSize: 13,
+                  fontSize: 8,
+                  color: kMutedText,
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 14),
-          if (session != null && session.isPausedForResume) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: ArcadeProgressBar(
-                    value: _sessionExerciseProgress(session),
-                    height: 6,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  '${_sessionCompletedExerciseCount(session)}/'
-                  '${_sessionTotalExerciseCount(session)} CLEARED',
-                  style: const TextStyle(
-                    fontFamily: 'PressStart2P',
-                    fontSize: 8,
-                    color: kMutedText,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-          ],
-          Row(
-            children: [
-              const ImageIcon(
-                AssetImage('assets/icons/control/icon_star.png'),
-                size: 14,
-                color: Color(0xFFFFD700),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                session != null
-                    ? session.isPausedForResume
-                          ? 'Saved until midnight'
-                          : 'Pick up where you left off'
-                    : 'Balance your build',
-                style: GoogleFonts.shareTechMono(
-                  color: const Color(0xFFFFD700),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          PixelButton(
-            label: session != null ? 'CONTINUE' : 'BEGIN WORKOUT!',
-            color: const Color(0xFF00FF9C),
-            onPressed: session == null
-                ? _startWorkout
-                : () => _continueWorkout(session),
-          ),
-        ],
-      ),
+          )
+        : null;
+
+    final panel = _missionCard(
+      accent: kNeon,
+      trailing: rewardLabel == null
+          ? null
+          : _MissionRewardChip(label: rewardLabel),
+      title: title.toUpperCase(),
+      detail: detail,
+      middle: savedProgress,
+      supportText: session != null
+          ? session.isPausedForResume
+                ? 'Saved until midnight'
+                : 'Pick up where you left off'
+          : 'Balance your build',
+      primaryLabel: session != null ? 'CONTINUE' : 'START WORKOUT',
+      onPrimary: session == null
+          ? _startWorkout
+          : () => _continueWorkout(session),
     );
 
     if (session == null) return panel;
@@ -977,83 +1177,50 @@ class HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildRepeatLastMissionPanel(WorkoutSession session) {
+    final exerciseCount = session.selectedExerciseIds.isNotEmpty
+        ? session.selectedExerciseIds.length
+        : session.exercises.length;
+    final title = session.targetMuscleLabel.toUpperCase();
+    final primaryLabel = title.length <= 12 ? 'REPEAT $title' : 'REPEAT LAST';
+
+    return _missionCard(
+      accent: kNeon,
+      trailing: _MissionRewardChip(
+        label: _suggestedMissionRewardXP == null
+            ? '+5 XP'
+            : '+$_suggestedMissionRewardXP XP',
+      ),
+      meta: 'REPEAT LAST',
+      title: title,
+      detail: '$exerciseCount exercises ready',
+      supportText: 'Same loadout. Empty sets.',
+      primaryLabel: primaryLabel,
+      onPrimary: () => _repeatLastWorkout(session),
+      secondaryLabel: 'Manual workout',
+      onSecondary: () => _startWorkout(trainAnyway: true),
+    );
+  }
+
   Widget _buildProgramMissionPanel({
     required ProgramDay day,
     required ProgramProgress progress,
   }) {
     final rewardLabel = _missionRewardLabel(null);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _themedCardColor(const Color(0xFF17172C)),
-        border: Border.all(color: kNeon, width: 1.2),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const ImageIcon(
-                AssetImage('assets/icons/control/icon_play.png'),
-                size: 14,
-                color: kNeon,
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'PROGRAM DAY',
-                style: TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 10,
-                  color: kNeon,
-                ),
-              ),
-              if (rewardLabel != null) ...[
-                const Spacer(),
-                _MissionRewardChip(label: rewardLabel),
-              ],
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}',
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            day.label,
-            style: const TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 16,
-              color: kNeon,
-              height: 1.25,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            programDayFocusSummary(day),
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          PixelButton(
-            label: 'START WORKOUT',
-            color: kNeon,
-            onPressed: () => _startProgramWorkout(day),
-          ),
-          const SizedBox(height: 10),
-          Center(
-            child: TextButton(
-              onPressed: () => _startWorkout(trainAnyway: true),
-              child: const Text(
-                'skip to manual',
-                style: TextStyle(color: kMutedText),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return _missionCard(
+      accent: kNeon,
+      trailing: rewardLabel == null
+          ? null
+          : _MissionRewardChip(label: rewardLabel),
+      meta:
+          'PROGRAM DAY  \u2022  WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}',
+      title: _programMissionTitle(day),
+      detail: _targetLineFromSummary(programDayFocusSummary(day)),
+      primaryLabel: 'START WORKOUT',
+      onPrimary: () => _startProgramWorkout(day),
+      secondaryLabel: 'Manual workout',
+      onSecondary: () => _startWorkout(trainAnyway: true),
     );
   }
 
@@ -1062,68 +1229,16 @@ class HomePageState extends State<HomePage> {
     required int week,
     required int dayNumber,
   }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _themedCardColor(const Color(0xFF17172C)),
-        border: Border.all(color: kMutedText, width: 1.2),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const ImageIcon(
-                AssetImage('assets/icons/control/icon_play.png'),
-                size: 14,
-                color: kNeon,
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'PROGRAM DAY',
-                style: TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 10,
-                  color: kNeon,
-                ),
-              ),
-              const Spacer(),
-              const _MissionClearedChip(),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'WEEK $week - DAY $dayNumber',
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            day.label,
-            style: const TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 16,
-              color: kMutedText,
-              height: 1.25,
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            '\u2713 CLEARED',
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 10,
-              color: kNeon,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Next program day unlocks after today.',
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
-          ),
-        ],
-      ),
+    return _missionCard(
+      accent: kNeon,
+      borderColor: kMutedText,
+      trailing: const _MissionClearedChip(),
+      meta: 'PROGRAM DAY  \u2022  WEEK $week - DAY $dayNumber',
+      title: _programMissionTitle(day),
+      titleColor: kMutedText,
+      detail: _targetLineFromSummary(programDayFocusSummary(day)),
+      supportText: 'Mission complete. Next program day unlocks tomorrow.',
+      supportColor: kNeon,
     );
   }
 
@@ -1132,100 +1247,37 @@ class HomePageState extends State<HomePage> {
     required ProgramProgress progress,
     required RestDayInfo restInfo,
   }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _themedCardColor(const Color(0xFF17172C)),
-        border: Border.all(color: kCyan, width: 1.2),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return _missionCard(
+      accent: kCyan,
+      trailing: _MissionRewardChip(label: '+${restInfo.recoveryXP} XP'),
+      meta:
+          'PROGRAM REST  \u2022  WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}',
+      title: _programMissionTitle(day),
+      detail: 'Stats protected. Recovery runs all day.',
+      middle: Row(
         children: [
-          Row(
-            children: [
-              const ImageIcon(
-                AssetImage('assets/icons/control/icon_play.png'),
-                size: 14,
-                color: kCyan,
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'PROGRAM REST',
-                style: TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 10,
-                  color: kCyan,
-                ),
-              ),
-              const Spacer(),
-              _MissionRewardChip(label: '+${restInfo.recoveryXP} XP'),
-            ],
+          const RestIcon(
+            assetPath: RestAssets.recoveryShield,
+            fallbackAssetPath: 'assets/icons/control/icon_shield.png',
+            size: 15,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(width: 8),
           Text(
-            'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}',
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            day.label,
-            style: GoogleFonts.shareTechMono(
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
-              color: kText,
-              height: 1.05,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Stats protected. Recovery runs all day.',
-            style: GoogleFonts.shareTechMono(
-              color: kMutedText,
-              fontSize: 12,
-              height: 1.15,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              const RestIcon(
-                assetPath: RestAssets.recoveryShield,
-                fallbackAssetPath: 'assets/icons/control/icon_shield.png',
-                size: 15,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${restInfo.shieldCharges} / ${RestService.maxShieldCharges} shields ready',
-                style: GoogleFonts.shareTechMono(color: kAmber, fontSize: 12),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          PixelButton(
-            label: 'KEEP RESTING',
-            color: kCyan,
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Recovery day in progress.')),
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: TextButton(
-              onPressed: () => _startWorkout(
-                trainAnyway: false,
-                advanceProgramRestDayOnCompletion: true,
-              ),
-              child: Text(
-                'Train anyway',
-                style: GoogleFonts.shareTechMono(color: kMutedText),
-              ),
-            ),
+            '${restInfo.shieldCharges} / ${RestService.maxShieldCharges} shields ready',
+            style: AppFonts.shareTechMono(color: kAmber, fontSize: 12),
           ),
         ],
+      ),
+      primaryLabel: 'KEEP RESTING',
+      onPrimary: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Recovery day in progress.')),
+        );
+      },
+      secondaryLabel: 'Train anyway',
+      onSecondary: () => _startWorkout(
+        trainAnyway: false,
+        advanceProgramRestDayOnCompletion: true,
       ),
     );
   }
@@ -1233,144 +1285,35 @@ class HomePageState extends State<HomePage> {
   Widget _buildCompletedMissionPanel() {
     final muscle = _suggestedMuscle;
     final title = muscle != null ? 'Train $muscle' : 'Today\'s mission';
-    final detail = muscle != null ? 'Suggested: $muscle' : '';
+    final detail = muscle != null ? muscle.toLowerCase() : '';
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _themedCardColor(const Color(0xFF17172C)),
-        border: Border.all(color: kMutedText, width: 1.2),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const ImageIcon(
-                AssetImage('assets/icons/control/icon_play.png'),
-                size: 14,
-                color: Color(0xFF00FF9C),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'MAIN MISSION',
-                style: TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 10,
-                  color: Color(0xFF00FF9C),
-                ),
-              ),
-              const Spacer(),
-              const _MissionClearedChip(),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: GoogleFonts.shareTechMono(
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
-              color: kMutedText,
-              height: 1.05,
-            ),
-          ),
-          if (detail.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              detail,
-              style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 13),
-            ),
-          ],
-          const SizedBox(height: 14),
-          const Text(
-            '\u2713 MISSION COMPLETE',
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 10,
-              color: Color(0xFF00FF9C),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Rest up. Tomorrow brings\na new challenge.',
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
-          ),
-        ],
-      ),
+    return _missionCard(
+      accent: kNeon,
+      borderColor: kMutedText,
+      trailing: const _MissionClearedChip(),
+      meta: 'CLEARED',
+      title: title.toUpperCase(),
+      titleColor: kMutedText,
+      detail: detail,
+      supportText: 'Mission complete. Tomorrow brings a new challenge.',
+      supportColor: kNeon,
     );
   }
 
   Widget _buildRecoveryMissionPanel(RestDayInfo restInfo) {
     final rewardLabel = '+${restInfo.recoveryXP} XP';
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _themedCardColor(const Color(0xFF17172C)),
-        border: Border.all(color: kCyan, width: 1.2),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
+    return _missionCard(
+      accent: kCyan,
+      trailing: _MissionRewardChip(label: rewardLabel),
+      meta: 'RECOVERY DAY',
+      title: 'RECOVERY DAY',
+      detail: 'Stats protected. Recovery runs all day.',
+      middle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const ImageIcon(
-                AssetImage('assets/icons/control/icon_play.png'),
-                size: 14,
-                color: kCyan,
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'RECOVERY DAY',
-                style: TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 10,
-                  color: kCyan,
-                ),
-              ),
-              const Spacer(),
-              _MissionRewardChip(label: rewardLabel),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Expanded(child: RestScene(height: 68)),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Recovery day',
-                      style: GoogleFonts.shareTechMono(
-                        fontSize: 23,
-                        fontWeight: FontWeight.w700,
-                        color: kText,
-                        height: 1.05,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Stats protected. Recovery runs all day.',
-                      style: GoogleFonts.shareTechMono(
-                        color: kMutedText,
-                        fontSize: 12,
-                        height: 1.15,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
+          const RestScene(height: 68),
+          const SizedBox(height: kSpace3),
           Row(
             children: [
               const RestIcon(
@@ -1381,22 +1324,14 @@ class HomePageState extends State<HomePage> {
               const SizedBox(width: 8),
               Text(
                 '${restInfo.shieldCharges} / ${RestService.maxShieldCharges} shields ready',
-                style: GoogleFonts.shareTechMono(color: kAmber, fontSize: 12),
+                style: AppFonts.shareTechMono(color: kAmber, fontSize: 12),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Center(
-            child: TextButton(
-              onPressed: () => _startWorkout(trainAnyway: false),
-              child: Text(
-                'Train anyway',
-                style: GoogleFonts.shareTechMono(color: kMutedText),
-              ),
-            ),
-          ),
         ],
       ),
+      secondaryLabel: 'Train anyway',
+      onSecondary: () => _startWorkout(trainAnyway: false),
     );
   }
 
@@ -1487,33 +1422,123 @@ class HomePageState extends State<HomePage> {
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
+  String _compactSessionDate(DateTime date) {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final sessionDay = DateUtils.dateOnly(date);
+    final daysAgo = today.difference(sessionDay).inDays;
+    if (daysAgo <= 0) return 'Today';
+    if (daysAgo == 1) return 'Yesterday';
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}';
+  }
+
+  String _lastWorkoutSubtitle(WorkoutSession session) {
+    final exerciseCount = session.exercises.length;
+    final exerciseLabel = exerciseCount == 1
+        ? '1 exercise'
+        : '$exerciseCount exercises';
+    return '${_compactSessionDate(session.date)} | '
+        '${_fmtDuration(session.actualDurationSeconds)} | $exerciseLabel';
+  }
+
   Widget _buildLastWorkoutStat() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: _themedCardColor(
-          const Color(0xFF121225),
-        ).withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(4),
+    final session = _lastWorkout;
+    final title = session?.targetMuscleLabel ?? 'No completed workouts yet';
+    final subtitle = session == null
+        ? 'Start your first run today'
+        : _lastWorkoutSubtitle(session);
+
+    return _homeCard(
+      background: const Color(0xFF121225),
+      backgroundAlpha: 0.78,
+      borderColor: kBorder,
+      borderAlpha: 0.72,
+      padding: const EdgeInsets.symmetric(
+        horizontal: kSpace4,
+        vertical: kSpace3,
       ),
       child: Row(
         children: [
           const ImageIcon(
             AssetImage('assets/icons/control/icon_time.png'),
-            size: 16,
-            color: Color(0xFF6B6B8A),
+            size: 18,
+            color: kMutedText,
           ),
-          const SizedBox(width: 8),
-          Text(
-            _lastWorkoutLabel(),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF6B6B8A),
-              fontSize: 12,
+          const SizedBox(width: kSpace3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppFonts.shareTechMono(
+                    color: kText,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: kSpace1),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppFonts.shareTechMono(
+                    color: kMutedText,
+                    fontSize: 12,
+                    height: 1.2,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildHomeHeader() {
+    return Row(
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            border: Border.all(color: kBorder),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Image.asset(
+            'assets/branding/app_logo.png',
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.low,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'Ironbit',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            color: kNeon,
+            fontSize: 19,
+            height: 1.1,
+          ),
+        ),
+        const Spacer(),
+      ],
     );
   }
 
@@ -1524,39 +1549,37 @@ class HomePageState extends State<HomePage> {
     }
 
     return Scaffold(
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          16,
-          16,
-          24 + MediaQuery.of(context).padding.bottom,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Workout Tracker',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: const Color(0xFF00FF9C),
+      body: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            kHomeHorizontalPadding,
+            kSpace3,
+            kHomeHorizontalPadding,
+            kSpace5 + MediaQuery.of(context).padding.bottom,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHomeHeader(),
+              const SizedBox(height: kSectionGap),
+              StrobeFlash(
+                trigger: _missionFlashTrigger,
+                borderRadius: BorderRadius.circular(kCardRadius),
+                toggles: 2,
+                toggleMs: 16,
+                child: _buildMainMissionPanel(),
               ),
-            ),
-            const SizedBox(height: 16),
-            _buildCharacterBar(),
-            const SizedBox(height: 18),
-            StrobeFlash(
-              trigger: _missionFlashTrigger,
-              borderRadius: BorderRadius.circular(4),
-              toggles: 2,
-              toggleMs: 16,
-              child: _buildMainMissionPanel(),
-            ),
-            _buildSecondaryOngoingSessions(),
-            const SizedBox(height: 16),
-            _buildLastWorkoutStat(),
-            const SizedBox(height: 14),
-            _buildWeeklyQuestsCard(),
-            const SizedBox(height: 24),
-          ],
+              _buildSecondaryOngoingSessions(),
+              const SizedBox(height: kSectionGap),
+              _buildCharacterBar(),
+              const SizedBox(height: kSectionGap),
+              _buildLastWorkoutStat(),
+              const SizedBox(height: kSectionGap),
+              _buildWeeklyQuestsCard(),
+              const SizedBox(height: kSpace5),
+            ],
+          ),
         ),
       ),
     );
@@ -1604,6 +1627,32 @@ class _MissionRewardChip extends StatelessWidget {
           fontSize: 8,
           color: kAmber,
         ),
+      ),
+    );
+  }
+}
+
+class _LckMultiplierBadge extends StatelessWidget {
+  const _LckMultiplierBadge({required this.multiplier});
+
+  final double multiplier;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = 'x${XpService.multiplierLabel(multiplier)}';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: kAmber.withValues(alpha: 0.12),
+        border: Border.all(color: kAmber),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: PulseColorText(
+        label,
+        style: const TextStyle(fontFamily: 'PressStart2P', fontSize: 7),
+        colorA: kAmber,
+        colorB: Colors.white,
+        periodMs: 1000,
       ),
     );
   }

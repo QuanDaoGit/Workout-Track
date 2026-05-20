@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../models/body_goal_models.dart';
 import '../services/body_goal_service.dart';
@@ -49,14 +49,14 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
         ),
         content: Text(
           'YOU CAN CHANGE ANYTIME. NO PENALTY.',
-          style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'CANCEL',
-              style: GoogleFonts.shareTechMono(color: kMutedText),
+              style: AppFonts.shareTechMono(color: kMutedText),
             ),
           ),
           FilledButton(
@@ -173,22 +173,22 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
           const SizedBox(height: 4),
           Text(
             '(OPTIONAL)',
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 12),
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
           ),
           const SizedBox(height: 24),
           TextField(
             controller: _weightController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             autofocus: true,
-            style: GoogleFonts.shareTechMono(color: kText, fontSize: 24),
+            style: AppFonts.shareTechMono(color: kText, fontSize: 24),
             decoration: InputDecoration(
               hintText: 'kg',
-              hintStyle: GoogleFonts.shareTechMono(
+              hintStyle: AppFonts.shareTechMono(
                 color: kMutedText,
                 fontSize: 24,
               ),
               suffixText: 'kg',
-              suffixStyle: GoogleFonts.shareTechMono(
+              suffixStyle: AppFonts.shareTechMono(
                 color: kMutedText,
                 fontSize: 14,
               ),
@@ -211,7 +211,7 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
           const SizedBox(height: 8),
           Text(
             "where you'd like to head. no deadline.",
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
           const Spacer(),
           PixelButton(
@@ -225,7 +225,7 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
               onPressed: _saving ? null : () => _saveAndReturn(skip: true),
               child: Text(
                 'SKIP',
-                style: GoogleFonts.shareTechMono(color: kMutedText),
+                style: AppFonts.shareTechMono(color: kMutedText),
               ),
             ),
           ),
@@ -272,7 +272,7 @@ class _GoalCard extends StatelessWidget {
               children: [
                 Text(
                   icon,
-                  style: GoogleFonts.shareTechMono(
+                  style: AppFonts.shareTechMono(
                     color: borderColor,
                     fontSize: 18,
                   ),
@@ -291,12 +291,12 @@ class _GoalCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               '\u2192 $className',
-              style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+              style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
             ),
             const SizedBox(height: 8),
             Text(
               description,
-              style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+              style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
             ),
           ],
         ),

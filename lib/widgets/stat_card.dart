@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../services/stat_engine.dart';
+import '../services/xp_service.dart';
 import '../theme/tokens.dart';
 import 'segmented_progress_bar.dart';
 
@@ -24,11 +25,7 @@ class StatCard extends StatelessWidget {
   }
 
   int _luckDiamonds(int value) {
-    if (value >= 40) return 4;
-    if (value >= 25) return 3;
-    if (value >= 10) return 2;
-    if (value >= 5) return 1;
-    return 0;
+    return XpService.lckDiamondCount(value);
   }
 
   @override
@@ -47,13 +44,13 @@ class StatCard extends StatelessWidget {
           const Row(
             children: [
               ImageIcon(
-                AssetImage('assets/icons/control/icon_sword.png'),
+                AssetImage('assets/icons/control/icon_star.png'),
                 color: kNeon,
                 size: 18,
               ),
               SizedBox(width: 8),
               Text(
-                'COMBAT STATS',
+                'CHARACTER STATS',
                 style: TextStyle(
                   fontFamily: 'PressStart2P',
                   fontSize: 10,
@@ -147,7 +144,7 @@ class _LuckRow extends StatelessWidget {
         ),
         Expanded(
           child: Text(
-            List.generate(4, (i) => i < filled ? '◆' : '◇').join(),
+            List.generate(4, (i) => i < filled ? '\u25C6' : '\u25C7').join(),
             style: const TextStyle(
               color: kNeon,
               fontSize: 14,
@@ -185,7 +182,7 @@ class _StatTrailing extends StatelessWidget {
           child: Text(
             '$value',
             textAlign: TextAlign.right,
-            style: GoogleFonts.shareTechMono(
+            style: AppFonts.shareTechMono(
               color: valueColor,
               fontSize: 14,
               fontWeight: FontWeight.w700,

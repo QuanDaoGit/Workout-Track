@@ -80,18 +80,21 @@ void main() {
       },
     );
 
-    test('cached value survives a memo reset (round-trip through prefs)', () async {
-      await ExerciseKindCache.instance.classify(
-        'squat',
-        mechanic: 'compound',
-      );
-      ExerciseKindCache.instance.resetForTest();
-      final reloaded = await ExerciseKindCache.instance.classify(
-        'squat',
-        // Pretend the mechanic field changed; cache should still win.
-        mechanic: 'isolation',
-      );
-      expect(reloaded, ExerciseKind.compound);
-    });
+    test(
+      'cached value survives a memo reset (round-trip through prefs)',
+      () async {
+        await ExerciseKindCache.instance.classify(
+          'squat',
+          mechanic: 'compound',
+        );
+        ExerciseKindCache.instance.resetForTest();
+        final reloaded = await ExerciseKindCache.instance.classify(
+          'squat',
+          // Pretend the mechanic field changed; cache should still win.
+          mechanic: 'isolation',
+        );
+        expect(reloaded, ExerciseKind.compound);
+      },
+    );
   });
 }

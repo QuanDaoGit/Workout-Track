@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../../theme/app_fonts.dart';
 
 import '../../data/muscle_groups.dart';
 import '../../models/workout_models.dart';
@@ -281,6 +281,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           durationMinutes: widget.durationMinutes,
           elapsedSeconds: _elapsedSeconds,
           exerciseLogs: _buildExerciseLogs(),
+          selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
           isPartial: false,
           startedAt: _sessionStartTime,
           resumeFromSession: widget.resumeFromSession,
@@ -390,6 +391,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           durationMinutes: widget.durationMinutes,
           elapsedSeconds: _elapsedSeconds,
           exerciseLogs: const [],
+          selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
           isPartial: true,
           isAbandoned: true,
           startedAt: _sessionStartTime,
@@ -627,7 +629,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                           ),
                           Text(
                             '$_completedExerciseCount/${widget.exercises.length} cleared',
-                            style: GoogleFonts.shareTechMono(
+                            style: AppFonts.shareTechMono(
                               color: const Color(0xFFE8E8FF),
                               fontWeight: FontWeight.bold,
                             ),

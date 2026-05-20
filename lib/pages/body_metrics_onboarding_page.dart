@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../services/body_metrics_service.dart';
 import '../theme/tokens.dart';
@@ -94,25 +94,25 @@ class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
           Text(
             'this log is private.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
           const SizedBox(height: 4),
           Text(
             'the app does not judge what you weigh.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
           const SizedBox(height: 4),
           Text(
             'you log when you want.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
           const SizedBox(height: 4),
           Text(
             'rewards come for showing up.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
           const Spacer(),
           PixelButton(
@@ -149,7 +149,7 @@ class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
           Text(
             'this helps tailor your rewards.\nyou can change anytime.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
           const Spacer(),
           PixelButton(label: 'CHOOSE PATH', onPressed: _openGoalSelection),
@@ -194,7 +194,7 @@ class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Text(
         text,
-        style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+        style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
       ),
     );
   }

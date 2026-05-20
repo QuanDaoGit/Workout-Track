@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../theme/tokens.dart';
 import 'pixel_loader.dart';
 
 class PixelButton extends StatefulWidget {
@@ -10,6 +11,7 @@ class PixelButton extends StatefulWidget {
   final bool isLoading;
   final Color? color;
   final bool fullWidth;
+  final double minHeight;
 
   const PixelButton({
     super.key,
@@ -18,6 +20,7 @@ class PixelButton extends StatefulWidget {
     this.isLoading = false,
     this.color,
     this.fullWidth = true,
+    this.minHeight = kButtonHeight,
   });
 
   @override
@@ -74,10 +77,10 @@ class _PixelButtonState extends State<PixelButton> {
 
   @override
   Widget build(BuildContext context) {
-    final fill = widget.color ?? const Color(0xFF00FF9C);
-    const disabledFill = Color(0xFF2A2A3E);
-    const disabledFg = Color(0xFF555577);
-    const fg = Color(0xFF0D0D1A);
+    final fill = widget.color ?? kNeon;
+    const disabledFill = kBorderDark;
+    const disabledFg = kDim;
+    const fg = kBg;
     final shadow = _darken(fill);
 
     final width = widget.fullWidth ? double.infinity : null;
@@ -99,6 +102,7 @@ class _PixelButtonState extends State<PixelButton> {
 
     final core = Container(
       width: width,
+      constraints: BoxConstraints(minHeight: widget.minHeight),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: _enabled ? fill : disabledFill,

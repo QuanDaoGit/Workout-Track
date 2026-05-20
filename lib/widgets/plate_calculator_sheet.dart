@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../services/plate_calculator.dart';
 import '../theme/tokens.dart';
@@ -136,7 +136,7 @@ class _PlateCalculatorSheetState extends State<PlateCalculatorSheet> {
                   Text(
                     '${plates.map((p) => '${_fmtKg(p)} kg').join(' + ')} = ${_fmtKg(perSideTotal)} kg per side',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.shareTechMono(
+                    style: AppFonts.shareTechMono(
                       color: kMutedText,
                       fontSize: 12,
                     ),
@@ -146,26 +146,17 @@ class _PlateCalculatorSheetState extends State<PlateCalculatorSheet> {
             else if (cannotLoad)
               Text(
                 'Cannot load this weight with standard plates.',
-                style: GoogleFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 12,
-                ),
+                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
               )
             else if (belowBar)
               Text(
                 'Target is at or below the bar weight.',
-                style: GoogleFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 12,
-                ),
+                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
               )
             else
               Text(
                 'Enter a target weight above the bar.',
-                style: GoogleFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 12,
-                ),
+                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
               ),
           ],
         ),
@@ -194,7 +185,7 @@ class _NumberField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: GoogleFonts.shareTechMono(
+          style: AppFonts.shareTechMono(
             color: kMutedText,
             fontSize: 10,
             letterSpacing: 1.2,
@@ -208,13 +199,13 @@ class _NumberField extends StatelessWidget {
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'[0-9\.,]')),
           ],
-          style: GoogleFonts.shareTechMono(color: kText, fontSize: 18),
+          style: AppFonts.shareTechMono(color: kText, fontSize: 18),
           decoration: InputDecoration(
             isDense: true,
             filled: true,
             fillColor: kBg,
             suffixText: suffix,
-            suffixStyle: GoogleFonts.shareTechMono(
+            suffixStyle: AppFonts.shareTechMono(
               color: kMutedText,
               fontSize: 12,
             ),
@@ -265,7 +256,7 @@ class _BarbellView extends StatelessWidget {
                 const SizedBox(width: 10),
                 Text(
                   'per side',
-                  style: GoogleFonts.shareTechMono(
+                  style: AppFonts.shareTechMono(
                     color: kMutedText,
                     fontSize: 12,
                   ),

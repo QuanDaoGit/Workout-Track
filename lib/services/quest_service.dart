@@ -3,9 +3,11 @@ import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../data/muscle_groups.dart';
+import '../data/class_definitions.dart';
+import '../models/character_class.dart';
 import '../models/quest_models.dart';
 import '../models/workout_models.dart';
+import 'class_service.dart';
 import 'rest_service.dart';
 import 'xp_boost_service.dart';
 import 'xp_service.dart';
@@ -23,7 +25,11 @@ class QuestService {
   }) async {
     final currentTime = now ?? DateTime.now();
     final state = await _loadState(currentTime);
-    final stats = _QuestStats.fromSessions(sessions, currentTime);
+    final currentClass = await ClassService().getCurrentClass();
+    final stats = _QuestStats.fromSessions(sessions, currentTime, currentClass);
+    final lckMultiplier = XpService.lckXpMultiplier(
+      XpService.lckForSessions(sessions, now: currentTime),
+    );
     final restService = RestService(nowProvider: () => currentTime);
     final currentRecoveryXP = await restService.effectiveRecoveryXP(
       sessions,
@@ -49,9 +55,9 @@ class QuestService {
         recoveryXP +
         potionBonusXP;
 
-    final daily = _buildDailyQuests(state, stats, baseXP, currentTime);
-    final weekly = _buildWeeklyQuests(state, stats, baseXP, currentTime);
-    final side = _buildSideQuests(state, stats, baseXP);
+    final daily = _buildDailyQuests(state, stats, lckMultiplier);
+    final weekly = _buildWeeklyQuests(state, stats, baseXP, lckMultiplier);
+    final side = _buildSideQuests(state, stats, baseXP, lckMultiplier);
     final earnedTitles = [
       for (final quest in side)
         if (quest.claimed && quest.rewardTitle != null) quest.rewardTitle!,
@@ -215,21 +221,32 @@ class QuestService {
   List<QuestItem> _buildDailyQuests(
     QuestState state,
     _QuestStats stats,
-    int baseXP,
-    DateTime now,
+    double lckMultiplier,
   ) {
-    final selected = _dailyPoolFor(now);
-    const percents = [2, 3, 4];
+    const templates = [
+      _DailyTemplate('show_up', 'Show Up', 'Complete any workout today.', 5),
+      _DailyTemplate(
+        'class_focus',
+        'Class Focus',
+        "Train one of your class's primary muscle groups.",
+        10,
+      ),
+      _DailyTemplate(
+        'volume_floor',
+        'Volume Floor',
+        'Log 1,000 kg total volume today.',
+        15,
+      ),
+    ];
 
     return [
-      for (int i = 0; i < selected.length; i++)
+      for (final template in templates)
         _dailyQuestItem(
-          selected[i],
+          template,
           state,
           stats,
-          baseXP,
           state.dailyPeriodKey,
-          percents[i],
+          lckMultiplier,
         ),
     ];
   }
@@ -238,27 +255,25 @@ class QuestService {
     _DailyTemplate template,
     QuestState state,
     _QuestStats stats,
-    int baseXP,
     String periodKey,
-    int percent,
+    double lckMultiplier,
   ) {
     final claimKey = 'daily:$periodKey:${template.id}';
     final claim = state.claims[claimKey];
-    final completed = template.isManual
-        ? state.manualDoneKeys.contains(claimKey)
-        : _isDailyAutoComplete(template.id, stats);
+    final completed = _isDailyAutoComplete(template.id, stats);
 
     return QuestItem(
       id: template.id,
       claimKey: claimKey,
       category: QuestCategory.daily,
       title: template.title,
-      description: _dailyDescription(template, stats),
-      rewardXP: claim?.xp ?? _rewardXP(baseXP, percent, 75),
+      description: template.description,
+      rewardXP:
+          claim?.xp ?? _applyMultiplier(template.baseRewardXP, lckMultiplier),
       completed: completed,
       claimed: claim != null,
-      isManual: template.isManual,
-      progressLabel: completed ? 'DONE' : template.progressLabel,
+      isManual: false,
+      progressLabel: _dailyProgress(template.id, stats),
     );
   }
 
@@ -266,7 +281,7 @@ class QuestService {
     QuestState state,
     _QuestStats stats,
     int baseXP,
-    DateTime now,
+    double lckMultiplier,
   ) {
     const templates = [
       _WeeklyTemplate(
@@ -298,7 +313,7 @@ class QuestService {
 
     return [
       for (final template in templates)
-        _weeklyQuestItem(template, state, stats, baseXP),
+        _weeklyQuestItem(template, state, stats, baseXP, lckMultiplier),
     ];
   }
 
@@ -307,6 +322,7 @@ class QuestService {
     QuestState state,
     _QuestStats stats,
     int baseXP,
+    double lckMultiplier,
   ) {
     final claimKey = 'weekly:${state.weeklyPeriodKey}:${template.id}';
     final claim = state.claims[claimKey];
@@ -325,7 +341,12 @@ class QuestService {
       category: QuestCategory.weekly,
       title: template.title,
       description: template.description,
-      rewardXP: claim?.xp ?? _rewardXP(baseXP, template.percent, 400),
+      rewardXP:
+          claim?.xp ??
+          _applyMultiplier(
+            _rewardXP(baseXP, template.percent, 400),
+            lckMultiplier,
+          ),
       completed: completed,
       claimed: claim != null,
       isManual: false,
@@ -337,6 +358,7 @@ class QuestService {
     QuestState state,
     _QuestStats stats,
     int baseXP,
+    double lckMultiplier,
   ) {
     const templates = [
       _SideTemplate(
@@ -378,7 +400,7 @@ class QuestService {
 
     return [
       for (final template in templates)
-        _sideQuestItem(template, state, stats, baseXP),
+        _sideQuestItem(template, state, stats, baseXP, lckMultiplier),
     ];
   }
 
@@ -387,6 +409,7 @@ class QuestService {
     QuestState state,
     _QuestStats stats,
     int baseXP,
+    double lckMultiplier,
   ) {
     final claimKey = 'side:${template.id}';
     final claim = state.claims[claimKey];
@@ -405,7 +428,12 @@ class QuestService {
       category: QuestCategory.side,
       title: template.title,
       description: template.description,
-      rewardXP: claim?.xp ?? _rewardXP(baseXP, template.percent, 500),
+      rewardXP:
+          claim?.xp ??
+          _applyMultiplier(
+            _rewardXP(baseXP, template.percent, 500),
+            lckMultiplier,
+          ),
       completed: completed,
       claimed: claim != null,
       isManual: false,
@@ -416,22 +444,20 @@ class QuestService {
 
   bool _isDailyAutoComplete(String id, _QuestStats stats) {
     return switch (id) {
-      'complete_workout' => stats.todayCompletedSessions >= 1,
-      'suggested_muscle' =>
-        stats.suggestedMuscle != null &&
-            stats.todayMuscles.contains(stats.suggestedMuscle),
+      'show_up' => stats.todayCompletedSessions >= 1,
+      'class_focus' => stats.todayClassFocusTrained,
+      'volume_floor' => stats.todayVolume >= 1000,
       _ => false,
     };
   }
 
-  String _dailyDescription(_DailyTemplate template, _QuestStats stats) {
-    if (template.id == 'suggested_muscle') {
-      final muscle = stats.suggestedMuscle;
-      return muscle == null
-          ? 'Build history to unlock a target muscle.'
-          : 'Train $muscle today.';
-    }
-    return template.description;
+  String _dailyProgress(String id, _QuestStats stats) {
+    return switch (id) {
+      'show_up' => '${min(stats.todayCompletedSessions, 1)} / 1',
+      'class_focus' => stats.todayClassFocusTrained ? 'DONE' : '0 / 1',
+      'volume_floor' => '${min(stats.todayVolume.round(), 1000)} / 1000 kg',
+      _ => '',
+    };
   }
 
   String _weeklyProgress(String id, _QuestStats stats) {
@@ -474,79 +500,14 @@ class QuestService {
     return min(cap, max(1, scaled));
   }
 
+  int _applyMultiplier(int baseXP, double multiplier) =>
+      (baseXP * multiplier).round();
+
   static String _dateKey(DateTime date) {
     final day = DateTime(date.year, date.month, date.day);
     return '${day.year.toString().padLeft(4, '0')}-'
         '${day.month.toString().padLeft(2, '0')}-'
         '${day.day.toString().padLeft(2, '0')}';
-  }
-
-  List<_DailyTemplate> _dailyPoolFor(DateTime now) {
-    const pool = [
-      _DailyTemplate(
-        'stretch',
-        'Stretch 5 min',
-        'Mark done after a short stretch.',
-        true,
-        'MANUAL',
-      ),
-      _DailyTemplate(
-        'protein',
-        'Protein snack',
-        'Have a protein bar or meal.',
-        true,
-        'MANUAL',
-      ),
-      _DailyTemplate(
-        'hydrate',
-        'Hydrate',
-        'Drink water before or after training.',
-        true,
-        'MANUAL',
-      ),
-      _DailyTemplate(
-        'warm_up',
-        'Warm up',
-        'Do a short warm-up before lifting.',
-        true,
-        'MANUAL',
-      ),
-      _DailyTemplate(
-        'walk_10',
-        'Walk 10 min',
-        'Take a short walk today.',
-        true,
-        'MANUAL',
-      ),
-      _DailyTemplate(
-        'sleep_check',
-        'Sleep check',
-        'Note that you protected recovery.',
-        true,
-        'MANUAL',
-      ),
-      _DailyTemplate(
-        'complete_workout',
-        'Complete workout',
-        'Finish one workout today.',
-        false,
-        'AUTO',
-      ),
-      _DailyTemplate(
-        'suggested_muscle',
-        'Train target',
-        'Train your suggested muscle.',
-        false,
-        'AUTO',
-      ),
-    ];
-
-    final seed = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).difference(DateTime(2020)).inDays;
-    return [for (int i = 0; i < 3; i++) pool[(seed + i) % pool.length]];
   }
 }
 
@@ -554,6 +515,8 @@ class _QuestStats {
   const _QuestStats({
     required this.todayCompletedSessions,
     required this.todayMuscles,
+    required this.todayVolume,
+    required this.todayClassFocusTrained,
     required this.weekCompletedSessions,
     required this.weekSetCount,
     required this.weekMuscleGroups,
@@ -563,11 +526,12 @@ class _QuestStats {
     required this.lifetimeMuscleGroups,
     required this.lifetimeDurationSeconds,
     required this.lifetimeVolume,
-    required this.suggestedMuscle,
   });
 
   final int todayCompletedSessions;
   final Set<String> todayMuscles;
+  final double todayVolume;
+  final bool todayClassFocusTrained;
   final int weekCompletedSessions;
   final int weekSetCount;
   final int weekMuscleGroups;
@@ -577,11 +541,11 @@ class _QuestStats {
   final int lifetimeMuscleGroups;
   final int lifetimeDurationSeconds;
   final double lifetimeVolume;
-  final String? suggestedMuscle;
 
   factory _QuestStats.fromSessions(
     List<WorkoutSession> sessions,
     DateTime now,
+    CharacterClass currentClass,
   ) {
     final completed = sessions.where((session) => !session.isPartial).toList();
     final today = DateTime(now.year, now.month, now.day);
@@ -618,6 +582,21 @@ class _QuestStats {
             (logSum, log) => logSum + log.totalVolume,
           ),
     );
+    final todayVolume = todaySessions.fold(
+      0.0,
+      (sum, session) =>
+          sum +
+          session.exercises.fold(
+            0.0,
+            (logSum, log) => logSum + log.totalVolume,
+          ),
+    );
+    final classTargets = musclesForClass(currentClass);
+    final todayClassFocusTrained = todaySessions.any(
+      (session) => session.targetMuscleGroups.any(
+        (target) => classTargets.contains(target),
+      ),
+    );
     final lifetimeDurationSeconds = completed.fold(
       0,
       (sum, session) => sum + session.actualDurationSeconds,
@@ -628,6 +607,8 @@ class _QuestStats {
       todayMuscles: todaySessions
           .expand((session) => session.targetMuscleGroups)
           .toSet(),
+      todayVolume: todayVolume,
+      todayClassFocusTrained: todayClassFocusTrained,
       weekCompletedSessions: weekSessions.length,
       weekSetCount: weekSetCount,
       weekMuscleGroups: weekSessions
@@ -646,55 +627,11 @@ class _QuestStats {
           .length,
       lifetimeDurationSeconds: lifetimeDurationSeconds,
       lifetimeVolume: lifetimeVolume,
-      suggestedMuscle: _suggestedMuscle(completed, now),
     );
   }
 
   static bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
-
-  static String? _suggestedMuscle(
-    List<WorkoutSession> completed,
-    DateTime now,
-  ) {
-    if (completed.isEmpty) return null;
-    final cutoff = now.subtract(const Duration(days: 30));
-    const muscles = canonicalMuscleGroups;
-    final volumes = {for (final muscle in muscles) muscle: 0.0};
-    final lastDate = <String, DateTime>{};
-
-    for (final session in completed) {
-      final targets = session.targetMuscleGroups;
-      if (session.date.isAfter(cutoff)) {
-        final volume = session.exercises.fold(
-          0.0,
-          (sum, log) => sum + log.totalVolume,
-        );
-        final share = targets.isEmpty ? 0.0 : volume / targets.length;
-        for (final target in targets) {
-          volumes[target] = (volumes[target] ?? 0) + share;
-        }
-      }
-      for (final target in targets) {
-        final previous = lastDate[target];
-        if (previous == null || session.date.isAfter(previous)) {
-          lastDate[target] = session.date;
-        }
-      }
-    }
-
-    return muscles.reduce((a, b) {
-      final aVolume = volumes[a]!;
-      final bVolume = volumes[b]!;
-      if (aVolume != bVolume) return aVolume < bVolume ? a : b;
-      final aDate = lastDate[a];
-      final bDate = lastDate[b];
-      if (aDate == null && bDate == null) return a.compareTo(b) <= 0 ? a : b;
-      if (aDate == null) return a;
-      if (bDate == null) return b;
-      return aDate.isBefore(bDate) ? a : b;
-    });
-  }
 }
 
 class _DailyTemplate {
@@ -702,15 +639,13 @@ class _DailyTemplate {
     this.id,
     this.title,
     this.description,
-    this.isManual,
-    this.progressLabel,
+    this.baseRewardXP,
   );
 
   final String id;
   final String title;
   final String description;
-  final bool isManual;
-  final String progressLabel;
+  final int baseRewardXP;
 }
 
 class _WeeklyTemplate {

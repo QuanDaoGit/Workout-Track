@@ -262,9 +262,7 @@ void main() {
 
   test('no history → null', () async {
     final svc = ProgressiveOverloadService.fromSessions([]);
-    final s = await svc.suggestNext(
-      _exercise('bench', mechanic: 'compound'),
-    );
+    final s = await svc.suggestNext(_exercise('bench', mechanic: 'compound'));
     expect(s, isNull);
   });
 

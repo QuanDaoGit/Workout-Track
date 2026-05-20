@@ -30,7 +30,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  google_fonts: ^8.1.0
   fl_chart: ^0.69.0
   drift: ^2.22.0
   sqlite3_flutter_libs: ^0.5.0
@@ -80,6 +79,10 @@ flutter:
     - family: PressStart2P
       fonts:
         - asset: fonts/pressstart2p/PressStart2P-Regular.ttf
+          weight: 400
+    - family: ShareTechMono
+      fonts:
+        - asset: fonts/sharetechmono/ShareTechMono-Regular.ttf
           weight: 400
   # To add assets to your application, add an assets section, like this:
   assets:
@@ -215,6 +218,7 @@ flutter:
     - assets/classes/icons/
     - assets/classes/sigils/
     - assets/classes/avatars/
+    - assets/branding/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

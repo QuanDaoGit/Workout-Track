@@ -1,11 +1,11 @@
 {
-    "name": "student_task",
-    "short_name": "student_task",
+    "name": "Ironbit",
+    "short_name": "Ironbit",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "A strength-training RPG tracker.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

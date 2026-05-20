@@ -191,6 +191,11 @@ class WorkoutSession {
     this.isPausedForResume = false,
     this.selectedExerciseIds = const [],
     List<String>? targetMuscleGroups,
+    this.baseXP,
+    this.lckMultiplier,
+    this.potionMultiplier,
+    this.awardedXP,
+    this.classAtSave,
   }) : startedAt = startedAt ?? date,
        targetMuscleGroups = _normalizedTargets(muscleGroup, targetMuscleGroups);
 
@@ -209,6 +214,11 @@ class WorkoutSession {
   final bool isPausedForResume;
   final List<String> selectedExerciseIds;
   final List<String> targetMuscleGroups;
+  final int? baseXP;
+  final double? lckMultiplier;
+  final double? potionMultiplier;
+  final int? awardedXP;
+  final String? classAtSave;
 
   bool get isOngoing => isPartial && !isAbandoned;
 
@@ -245,6 +255,11 @@ class WorkoutSession {
     'isPausedForResume': isPausedForResume,
     'selectedExerciseIds': selectedExerciseIds,
     'targetMuscleGroups': targetMuscleGroups,
+    if (baseXP != null) 'baseXP': baseXP,
+    if (lckMultiplier != null) 'lckMultiplier': lckMultiplier,
+    if (potionMultiplier != null) 'potionMultiplier': potionMultiplier,
+    if (awardedXP != null) 'awardedXP': awardedXP,
+    if (classAtSave != null) 'classAtSave': classAtSave,
   };
 
   factory WorkoutSession.fromJson(Map<String, dynamic> j) {
@@ -281,6 +296,11 @@ class WorkoutSession {
       targetMuscleGroups:
           (j['targetMuscleGroups'] as List<dynamic>?)?.cast<String>() ??
           [rawMuscleGroup],
+      baseXP: (j['baseXP'] as num?)?.toInt(),
+      lckMultiplier: (j['lckMultiplier'] as num?)?.toDouble(),
+      potionMultiplier: (j['potionMultiplier'] as num?)?.toDouble(),
+      awardedXP: (j['awardedXP'] as num?)?.toInt(),
+      classAtSave: j['classAtSave'] as String?,
     );
   }
 

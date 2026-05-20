@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../data/class_definitions.dart';
 import '../models/character_class.dart';
@@ -67,10 +67,7 @@ class _ClassSelectPageState extends State<ClassSelectPage> {
               Text(
                 'Your class defines your training path.',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.shareTechMono(
-                  fontSize: 13,
-                  color: kMutedText,
-                ),
+                style: AppFonts.shareTechMono(fontSize: 13, color: kMutedText),
               ),
               const SizedBox(height: kSpace5),
               for (final cls in CharacterClass.values) ...[
@@ -95,7 +92,7 @@ class _ClassSelectPageState extends State<ClassSelectPage> {
                     onPressed: () => Navigator.pop(context),
                     child: Text(
                       'CANCEL',
-                      style: GoogleFonts.shareTechMono(
+                      style: AppFonts.shareTechMono(
                         fontSize: 12,
                         color: kMutedText,
                       ),
@@ -162,7 +159,7 @@ class _ClassCard extends StatelessWidget {
                   const SizedBox(height: kSpace1),
                   Text(
                     'PATH OF THE ${characterClass.bodyGoalLabel}',
-                    style: GoogleFonts.shareTechMono(
+                    style: AppFonts.shareTechMono(
                       fontSize: 11,
                       color: kMutedText,
                     ),
@@ -170,7 +167,7 @@ class _ClassCard extends StatelessWidget {
                   const SizedBox(height: kSpace1),
                   Text(
                     focusMusclesLabel(characterClass),
-                    style: GoogleFonts.shareTechMono(
+                    style: AppFonts.shareTechMono(
                       fontSize: 11,
                       color: color.withValues(alpha: 0.7),
                     ),

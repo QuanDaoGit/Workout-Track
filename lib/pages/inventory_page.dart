@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../data/loot_registry.dart';
 import '../models/loot_item.dart';
@@ -61,14 +61,14 @@ class _InventoryPageState extends State<InventoryPage> {
         ),
         content: Text(
           item.description,
-          style: GoogleFonts.shareTechMono(fontSize: 14, color: kMutedText),
+          style: AppFonts.shareTechMono(fontSize: 14, color: kMutedText),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'CANCEL',
-              style: GoogleFonts.shareTechMono(color: kMutedText),
+              style: AppFonts.shareTechMono(color: kMutedText),
             ),
           ),
           SizedBox(
@@ -114,7 +114,7 @@ class _InventoryPageState extends State<InventoryPage> {
             const SizedBox(height: kSpace3),
             Text(
               hint,
-              style: GoogleFonts.shareTechMono(fontSize: 14, color: kMutedText),
+              style: AppFonts.shareTechMono(fontSize: 14, color: kMutedText),
             ),
           ],
         ),
@@ -320,7 +320,7 @@ class _LootGridTile extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: GoogleFonts.shareTechMono(
+              style: AppFonts.shareTechMono(
                 fontSize: 10,
                 color: owned ? Colors.white : kMutedText,
                 height: 1.0,
@@ -395,7 +395,7 @@ class _TitleLootRow extends StatelessWidget {
                   children: [
                     Text(
                       item.name,
-                      style: GoogleFonts.shareTechMono(
+                      style: AppFonts.shareTechMono(
                         fontSize: 15,
                         color: owned ? item.color : kMutedText,
                         fontWeight: FontWeight.w700,
@@ -404,7 +404,7 @@ class _TitleLootRow extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       owned ? item.description : hint,
-                      style: GoogleFonts.shareTechMono(
+                      style: AppFonts.shareTechMono(
                         fontSize: 12,
                         color: kMutedText,
                       ),

@@ -8,6 +8,7 @@ import 'package:workout_track/models/rest_models.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/services/rest_service.dart';
 import 'package:workout_track/services/stat_engine.dart';
+import 'package:workout_track/services/xp_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -80,6 +81,39 @@ void main() {
       expect(stats['DEF'], greaterThan(0));
     },
   );
+
+  test('class-at-save focus adds a 20 percent effective stat bonus', () async {
+    final now = DateTime(2026, 5, 14, 10);
+
+    await _seedSessions([
+      _session(
+        date: now,
+        classAtSave: 'bruiser',
+        logs: [_log('bench', weight: 100, reps: 10, sets: 1)],
+      ),
+      _session(
+        date: now.add(const Duration(minutes: 1)),
+        id: 'assassin',
+        classAtSave: 'assassin',
+        logs: [_log('crunch', weight: 100, reps: 10, sets: 1)],
+      ),
+      _session(
+        date: now.add(const Duration(minutes: 2)),
+        id: 'tank',
+        classAtSave: 'tank',
+        logs: [_log('squat', weight: 100, reps: 10, sets: 1)],
+      ),
+    ]);
+
+    final stats = await StatEngine(
+      nowProvider: () => now,
+      catalog: catalog,
+    ).calculateAllStats();
+
+    expect(stats['STR'], _statFromVolume(1200));
+    expect(stats['AGI'], _statFromVolume(1200));
+    expect(stats['VIT'], _statFromVolume(1200));
+  });
 
   test('ignores partial and abandoned sessions', () async {
     final now = DateTime(2026, 5, 14, 10);
@@ -162,6 +196,27 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await _seedSessions(_streakSessions(now: now, days: 200));
     expect(await engine.calculateLuck(), 100);
+  });
+
+  test('LCK XP multiplier thresholds use 25-point diamond tiers', () {
+    expect(XpService.lckDiamondCount(0), 0);
+    expect(XpService.lckXpMultiplier(0), 1.0);
+    expect(XpService.lckDiamondCount(24), 0);
+    expect(XpService.lckXpMultiplier(24), 1.0);
+    expect(XpService.lckDiamondCount(25), 1);
+    expect(XpService.lckXpMultiplier(25), 1.5);
+    expect(XpService.lckDiamondCount(49), 1);
+    expect(XpService.lckXpMultiplier(49), 1.5);
+    expect(XpService.lckDiamondCount(50), 2);
+    expect(XpService.lckXpMultiplier(50), 2.0);
+    expect(XpService.lckDiamondCount(74), 2);
+    expect(XpService.lckXpMultiplier(74), 2.0);
+    expect(XpService.lckDiamondCount(75), 3);
+    expect(XpService.lckXpMultiplier(75), 2.5);
+    expect(XpService.lckDiamondCount(99), 3);
+    expect(XpService.lckXpMultiplier(99), 2.5);
+    expect(XpService.lckDiamondCount(100), 4);
+    expect(XpService.lckXpMultiplier(100), 3.0);
   });
 
   test('planned rest days do not advance decay', () async {
@@ -317,7 +372,7 @@ void main() {
     expect(stored['STR'], 720);
   });
 
-  test('stores combat stats and touched last-session delta', () async {
+  test('stores character stats and touched last-session delta', () async {
     final first = DateTime(2026, 5, 13, 10);
     final second = DateTime(2026, 5, 14, 10);
     await _seedSessions([
@@ -371,6 +426,7 @@ WorkoutSession _session({
   String muscleGroup = 'Chest',
   bool isPartial = false,
   bool isAbandoned = false,
+  String? classAtSave,
 }) {
   return WorkoutSession(
     id: id,
@@ -382,6 +438,7 @@ WorkoutSession _session({
     estimatedCalories: 100,
     isPartial: isPartial,
     isAbandoned: isAbandoned,
+    classAtSave: classAtSave,
   );
 }
 

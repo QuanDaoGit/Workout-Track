@@ -49,12 +49,6 @@ class QuestsPageState extends State<QuestsPage> {
     });
   }
 
-  Future<void> _markDone(QuestItem quest) async {
-    await _questService.markManualDone(quest.claimKey);
-    await reload();
-    widget.onQuestChanged?.call();
-  }
-
   Future<void> _claim(QuestItem quest) async {
     final xp = await _questService.claimReward(quest.claimKey, _sessions);
     await reload();
@@ -100,7 +94,6 @@ class QuestsPageState extends State<QuestsPage> {
               title: 'DAILY QUESTS',
               subtitle: 'Resets at 00:00',
               quests: summary.dailyQuests,
-              onDone: _markDone,
               onClaim: _claim,
             ),
             const SizedBox(height: 24),
@@ -112,7 +105,6 @@ class QuestsPageState extends State<QuestsPage> {
                 total: summary.weeklyTotal,
                 completed: summary.weeklyCompleted,
               ),
-              onDone: _markDone,
               onClaim: _claim,
             ),
             const SizedBox(height: 24),
@@ -120,7 +112,6 @@ class QuestsPageState extends State<QuestsPage> {
               title: 'SIDE QUESTS',
               subtitle: 'Permanent milestones',
               quests: summary.sideQuests,
-              onDone: _markDone,
               onClaim: _claim,
             ),
             const SizedBox(height: 24),
@@ -216,7 +207,6 @@ class _QuestSection extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.quests,
-    required this.onDone,
     required this.onClaim,
     this.header,
   });
@@ -225,7 +215,6 @@ class _QuestSection extends StatelessWidget {
   final String subtitle;
   final List<QuestItem> quests;
   final Widget? header;
-  final ValueChanged<QuestItem> onDone;
   final ValueChanged<QuestItem> onClaim;
 
   @override
@@ -261,11 +250,7 @@ class _QuestSection extends StatelessWidget {
         for (final quest in quests)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: _QuestCard(
-              quest: quest,
-              onDone: () => onDone(quest),
-              onClaim: () => onClaim(quest),
-            ),
+            child: _QuestCard(quest: quest, onClaim: () => onClaim(quest)),
           ),
       ],
     );
@@ -273,14 +258,9 @@ class _QuestSection extends StatelessWidget {
 }
 
 class _QuestCard extends StatelessWidget {
-  const _QuestCard({
-    required this.quest,
-    required this.onDone,
-    required this.onClaim,
-  });
+  const _QuestCard({required this.quest, required this.onClaim});
 
   final QuestItem quest;
-  final VoidCallback onDone;
   final VoidCallback onClaim;
 
   @override
@@ -342,7 +322,7 @@ class _QuestCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            _QuestAction(quest: quest, onDone: onDone, onClaim: onClaim),
+            _QuestAction(quest: quest, onClaim: onClaim),
           ],
         ),
       ),
@@ -359,14 +339,9 @@ class _QuestCard extends StatelessWidget {
 }
 
 class _QuestAction extends StatelessWidget {
-  const _QuestAction({
-    required this.quest,
-    required this.onDone,
-    required this.onClaim,
-  });
+  const _QuestAction({required this.quest, required this.onClaim});
 
   final QuestItem quest;
-  final VoidCallback onDone;
   final VoidCallback onClaim;
 
   @override
@@ -380,9 +355,6 @@ class _QuestAction extends StatelessWidget {
         fullWidth: false,
         onPressed: onClaim,
       );
-    }
-    if (quest.isManual) {
-      return PixelButton(label: 'Done', fullWidth: false, onPressed: onDone);
     }
     return _StatusBadge(
       label: '+${quest.rewardXP} XP',

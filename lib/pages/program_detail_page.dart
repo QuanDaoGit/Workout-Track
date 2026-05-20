@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../data/programs_library.dart';
 import '../models/program_models.dart';
@@ -125,12 +125,12 @@ class _ProgramDetailPageState extends State<ProgramDetailPage> {
                 const SizedBox(height: kSpace3),
                 Text(
                   '${widget.program.daysPerWeek} days/week - ${widget.program.recommendedWeeks} weeks',
-                  style: GoogleFonts.shareTechMono(color: kAmber, fontSize: 13),
+                  style: AppFonts.shareTechMono(color: kAmber, fontSize: 13),
                 ),
                 const SizedBox(height: kSpace2),
                 Text(
                   widget.program.description,
-                  style: GoogleFonts.shareTechMono(
+                  style: AppFonts.shareTechMono(
                     color: kText,
                     fontSize: 14,
                     height: 1.25,
@@ -222,14 +222,14 @@ class _ProgramDayCard extends StatelessWidget {
           const SizedBox(height: kSpace2),
           Text(
             programDayFocusSummary(day),
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 13),
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
           ),
           if (exercises.isNotEmpty) ...[
             const SizedBox(height: kSpace2),
             for (final exercise in exercises.take(6))
               Text(
                 '- $exercise',
-                style: GoogleFonts.shareTechMono(color: kText, fontSize: 12),
+                style: AppFonts.shareTechMono(color: kText, fontSize: 12),
               ),
           ],
         ],

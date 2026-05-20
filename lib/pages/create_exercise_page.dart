@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../data/muscle_groups.dart';
 import '../models/workout_models.dart';
@@ -130,11 +130,11 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
             controller: _nameController,
             maxLength: 40,
             onChanged: (_) => setState(() => _errorText = null),
-            style: GoogleFonts.shareTechMono(color: kText, fontSize: 14),
+            style: AppFonts.shareTechMono(color: kText, fontSize: 14),
             decoration: InputDecoration(
               counterText: '',
               hintText: 'exercise name',
-              hintStyle: GoogleFonts.shareTechMono(
+              hintStyle: AppFonts.shareTechMono(
                 color: kMutedText,
                 fontSize: 13,
               ),
@@ -158,7 +158,7 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
             const SizedBox(height: 4),
             Text(
               _errorText!,
-              style: GoogleFonts.shareTechMono(color: kDanger, fontSize: 11),
+              style: AppFonts.shareTechMono(color: kDanger, fontSize: 11),
             ),
           ],
 
@@ -223,16 +223,16 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
           const SizedBox(height: 4),
           Text(
             'form cues, setup, anything you want to remember',
-            style: GoogleFonts.shareTechMono(color: kMutedText, fontSize: 11),
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _noteController,
             maxLength: 200,
             maxLines: 3,
-            style: GoogleFonts.shareTechMono(color: kText, fontSize: 14),
+            style: AppFonts.shareTechMono(color: kText, fontSize: 14),
             decoration: InputDecoration(
-              counterStyle: GoogleFonts.shareTechMono(
+              counterStyle: AppFonts.shareTechMono(
                 color: kMutedText,
                 fontSize: 10,
               ),
@@ -267,10 +267,7 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
                 'CANCEL',
-                style: GoogleFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 12,
-                ),
+                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
               ),
             ),
           ),

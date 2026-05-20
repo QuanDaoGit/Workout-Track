@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/workout_models.dart';
+import '../theme/app_fonts.dart';
+import '../theme/tokens.dart';
 import 'arcade_image_filter.dart';
 import 'level_badge.dart';
 
@@ -68,7 +70,7 @@ class ExerciseCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (isCustom || exercise.imageAssetPath.isEmpty)
+                    if (isCustom)
                       const ColoredBox(
                         color: Color(0xFF0D0D1A),
                         child: Center(
@@ -79,6 +81,8 @@ class ExerciseCard extends StatelessWidget {
                           ),
                         ),
                       )
+                    else if (exercise.imageAssetPath.isEmpty)
+                      const _NoPhotoPlaceholder()
                     else
                       ArcadeImageFilter(
                         borderRadius: BorderRadius.zero,
@@ -87,18 +91,7 @@ class ExerciseCard extends StatelessWidget {
                           fit: BoxFit.cover,
                           filterQuality: FilterQuality.low,
                           errorBuilder: (context, error, stackTrace) =>
-                              const ColoredBox(
-                                color: Color(0xFF0D0D1A),
-                                child: Center(
-                                  child: ImageIcon(
-                                    AssetImage(
-                                      'assets/icons/control/icon_sword.png',
-                                    ),
-                                    color: Color(0xFF2A2A4A),
-                                    size: 24,
-                                  ),
-                                ),
-                              ),
+                              const _NoPhotoPlaceholder(),
                         ),
                       ),
                     Container(
@@ -214,6 +207,36 @@ class ExerciseCard extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoPhotoPlaceholder extends StatelessWidget {
+  const _NoPhotoPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: kBg,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(6),
+      child: Container(
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border.all(color: kBorder),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          'NO\nPHOTO',
+          textAlign: TextAlign.center,
+          style: AppFonts.shareTechMono(
+            color: kMutedText,
+            fontSize: 9,
+            height: 1.1,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );

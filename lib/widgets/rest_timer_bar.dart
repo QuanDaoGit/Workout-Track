@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../services/rest_timer_service.dart';
 import '../theme/tokens.dart';
@@ -147,7 +147,7 @@ class _ExpandedRestBar extends StatelessWidget {
                   children: [
                     Text(
                       'REST',
-                      style: GoogleFonts.shareTechMono(
+                      style: AppFonts.shareTechMono(
                         color: kMutedText,
                         fontSize: 11,
                         letterSpacing: 1.2,
@@ -164,7 +164,7 @@ class _ExpandedRestBar extends StatelessWidget {
                     const SizedBox(width: 10),
                     Text(
                       fmt(remaining),
-                      style: GoogleFonts.shareTechMono(
+                      style: AppFonts.shareTechMono(
                         color: kNeon,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -190,7 +190,7 @@ class _ExpandedRestBar extends StatelessWidget {
                 ),
                 child: Text(
                   'SKIP',
-                  style: GoogleFonts.shareTechMono(
+                  style: AppFonts.shareTechMono(
                     color: kMutedText,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,

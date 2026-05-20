@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../data/loot_registry.dart';
 import '../data/programs_library.dart';
@@ -26,6 +26,7 @@ import '../services/quest_service.dart';
 import '../services/rest_service.dart';
 import '../services/stat_engine.dart';
 import '../services/loot_service.dart';
+import '../services/workout_defaults_service.dart';
 import '../services/workout_metric_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_boost_service.dart';
@@ -313,7 +314,7 @@ class ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 14),
               Text(
                 description,
-                style: GoogleFonts.shareTechMono(
+                style: AppFonts.shareTechMono(
                   color: const Color(0xFF6B6B8A),
                   fontSize: 14,
                 ),
@@ -479,6 +480,18 @@ class ProfilePageState extends State<ProfilePage> {
           },
         );
       },
+    );
+  }
+
+  void _showWorkoutDefaultsSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF121225),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+      ),
+      builder: (context) => const _WorkoutDefaultsSheet(),
     );
   }
 
@@ -737,9 +750,18 @@ class ProfilePageState extends State<ProfilePage> {
                     const SizedBox(height: 4),
                     Text(
                       'PATH OF THE ${cls.bodyGoalLabel}',
-                      style: GoogleFonts.shareTechMono(
+                      style: AppFonts.shareTechMono(
                         fontSize: 11,
                         color: const Color(0xFF6B6B8A),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _classBonusLabel(cls),
+                      style: AppFonts.shareTechMono(
+                        fontSize: 11,
+                        color: color,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -748,8 +770,10 @@ class ProfilePageState extends State<ProfilePage> {
             ],
           ),
           const SizedBox(height: 12),
-          Center(
-            child: TextButton(
+          SizedBox(
+            width: double.infinity,
+            child: PixelButton(
+              label: 'CHANGE CLASS',
               onPressed: () async {
                 await Navigator.push(
                   context,
@@ -759,18 +783,21 @@ class ProfilePageState extends State<ProfilePage> {
                 );
                 reload();
               },
-              child: Text(
-                'CHANGE CLASS',
-                style: GoogleFonts.shareTechMono(
-                  fontSize: 11,
-                  color: const Color(0xFF6B6B8A),
-                ),
-              ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _classBonusLabel(CharacterClass cls) {
+    return switch (cls) {
+      CharacterClass.bruiser =>
+        'STAT BONUS: +20% STR gain from chest, back, arms training.',
+      CharacterClass.assassin =>
+        'STAT BONUS: +20% AGI gain from shoulders, core training.',
+      CharacterClass.tank => 'STAT BONUS: +20% VIT gain from legs training.',
+    };
   }
 
   Widget _buildProgramsSection() {
@@ -820,7 +847,7 @@ class ProfilePageState extends State<ProfilePage> {
                       const SizedBox(height: 5),
                       Text(
                         'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}/7',
-                        style: GoogleFonts.shareTechMono(
+                        style: AppFonts.shareTechMono(
                           color: const Color(0xFF6B6B8A),
                           fontSize: 12,
                         ),
@@ -886,7 +913,7 @@ class ProfilePageState extends State<ProfilePage> {
         const SizedBox(height: 10),
         Text(
           lastLoggedLabel,
-          style: GoogleFonts.shareTechMono(
+          style: AppFonts.shareTechMono(
             color: const Color(0xFF6B6B8A),
             fontSize: 11,
           ),
@@ -895,7 +922,7 @@ class ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: 4),
           Text(
             'heading toward ${goal!.targetWeight!.toStringAsFixed(1)} kg',
-            style: GoogleFonts.shareTechMono(
+            style: AppFonts.shareTechMono(
               color: const Color(0xFF6B6B8A),
               fontSize: 11,
             ),
@@ -913,7 +940,7 @@ class ProfilePageState extends State<ProfilePage> {
               const SizedBox(width: 6),
               Text(
                 _activeBoostLabel!,
-                style: GoogleFonts.shareTechMono(
+                style: AppFonts.shareTechMono(
                   color: const Color(0xFFFFD700),
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -950,7 +977,7 @@ class ProfilePageState extends State<ProfilePage> {
           _profile.displayName,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.shareTechMono(
+          style: AppFonts.shareTechMono(
             fontSize: 22,
             fontWeight: FontWeight.w700,
             color: const Color(0xFFE8E8FF),
@@ -961,7 +988,7 @@ class ProfilePageState extends State<ProfilePage> {
           title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.shareTechMono(color: titleColor, fontSize: 13),
+          style: AppFonts.shareTechMono(color: titleColor, fontSize: 13),
         ),
       ],
     );
@@ -975,7 +1002,7 @@ class ProfilePageState extends State<ProfilePage> {
             controller: _nameController,
             maxLength: 20,
             onSubmitted: (_) => _saveDisplayName(),
-            style: GoogleFonts.shareTechMono(
+            style: AppFonts.shareTechMono(
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: const Color(0xFFE8E8FF),
@@ -1123,14 +1150,9 @@ class ProfilePageState extends State<ProfilePage> {
         ),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_gear.png',
-          title: 'Preferences',
-          subtitle: 'Units, defaults, and workout behavior.',
-          onTap: () => _showComingSoon(
-            title: 'Preferences',
-            description:
-                'App preferences will be added after the core flows settle.',
-            iconPath: 'assets/icons/control/icon_gear.png',
-          ),
+          title: 'Workout Defaults',
+          subtitle: 'Duration target and rest timer.',
+          onTap: _showWorkoutDefaultsSheet,
         ),
         const SizedBox(height: 18),
         const _SectionHeader(title: 'APP SUPPORT'),
@@ -1190,6 +1212,216 @@ class ProfilePageState extends State<ProfilePage> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _WorkoutDefaultsSheet extends StatefulWidget {
+  const _WorkoutDefaultsSheet();
+
+  @override
+  State<_WorkoutDefaultsSheet> createState() => _WorkoutDefaultsSheetState();
+}
+
+class _WorkoutDefaultsSheetState extends State<_WorkoutDefaultsSheet> {
+  final WorkoutDefaultsService _service = WorkoutDefaultsService();
+  int _durationMinutes = WorkoutDefaultsService.defaultDurationMinutes;
+  int _restSeconds = 90;
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final duration = await _service.getDurationMinutes();
+    final rest = await _service.getRestSeconds();
+    if (!mounted) return;
+    setState(() {
+      _durationMinutes = duration;
+      _restSeconds = rest;
+      _loading = false;
+    });
+  }
+
+  String _fmtRest(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remaining = seconds % 60;
+    return '$minutes:${remaining.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    await _service.setDurationMinutes(_durationMinutes);
+    await _service.setRestSeconds(_restSeconds);
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        18,
+        20,
+        20 + MediaQuery.of(context).padding.bottom,
+      ),
+      child: _loading
+          ? const SizedBox(height: 140, child: Center(child: PixelLoader()))
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    ImageIcon(
+                      AssetImage('assets/icons/control/icon_gear.png'),
+                      size: 22,
+                      color: Color(0xFF00FF9C),
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'WORKOUT DEFAULTS',
+                        style: TextStyle(
+                          fontFamily: 'PressStart2P',
+                          fontSize: 11,
+                          color: Color(0xFF00FF9C),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Used for quick starts. You can still stop whenever the workout is done.',
+                  style: AppFonts.shareTechMono(
+                    color: const Color(0xFF6B6B8A),
+                    fontSize: 13,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _DefaultStepper(
+                  label: 'DURATION TARGET',
+                  value: '$_durationMinutes min',
+                  onDecrease:
+                      _durationMinutes <=
+                          WorkoutDefaultsService.minDurationMinutes
+                      ? null
+                      : () => setState(() => _durationMinutes -= 15),
+                  onIncrease:
+                      _durationMinutes >=
+                          WorkoutDefaultsService.maxDurationMinutes
+                      ? null
+                      : () => setState(() => _durationMinutes += 15),
+                ),
+                const SizedBox(height: 10),
+                _DefaultStepper(
+                  label: 'REST BETWEEN SETS',
+                  value: _fmtRest(_restSeconds),
+                  onDecrease: _restSeconds <= 30
+                      ? null
+                      : () => setState(() => _restSeconds -= 15),
+                  onIncrease: _restSeconds >= 300
+                      ? null
+                      : () => setState(() => _restSeconds += 15),
+                ),
+                const SizedBox(height: 18),
+                PixelButton(
+                  label: _saving ? 'SAVING...' : 'SAVE DEFAULTS',
+                  onPressed: _saving ? null : _save,
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _DefaultStepper extends StatelessWidget {
+  const _DefaultStepper({
+    required this.label,
+    required this.value,
+    required this.onDecrease,
+    required this.onIncrease,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback? onDecrease;
+  final VoidCallback? onIncrease;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        border: Border.all(color: const Color(0xFF2A2A4A)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 8,
+                    color: Color(0xFFFFD700),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  value,
+                  style: AppFonts.shareTechMono(
+                    color: const Color(0xFFE8E8FF),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _DefaultStepButton(icon: Icons.remove_sharp, onPressed: onDecrease),
+          const SizedBox(width: 8),
+          _DefaultStepButton(icon: Icons.add_sharp, onPressed: onIncrease),
+        ],
+      ),
+    );
+  }
+}
+
+class _DefaultStepButton extends StatelessWidget {
+  const _DefaultStepButton({required this.icon, required this.onPressed});
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton(
+      onPressed: onPressed,
+      style: FilledButton.styleFrom(
+        backgroundColor: onPressed == null
+            ? const Color(0xFF2A2A3E)
+            : const Color(0xFF00FF9C),
+        foregroundColor: onPressed == null
+            ? const Color(0xFF555577)
+            : const Color(0xFF0D0D1A),
+        minimumSize: const Size(40, 40),
+        padding: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      ),
+      child: Icon(icon, size: 20),
     );
   }
 }
@@ -1613,7 +1845,7 @@ class _ScheduleInfoRow extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: GoogleFonts.shareTechMono(
+              style: AppFonts.shareTechMono(
                 color: const Color(0xFFE8E8FF),
                 fontSize: 13,
                 fontWeight: FontWeight.w700,

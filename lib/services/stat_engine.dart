@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/class_definitions.dart';
+import '../data/muscle_groups.dart';
+import '../models/character_class.dart';
 import '../models/workout_models.dart';
 import 'exercise_catalog_service.dart';
 import 'rest_service.dart';
@@ -206,9 +209,18 @@ class StatEngine {
     final volumes = {for (final stat in volumeStats) stat: 0.0};
     for (final session in sessions) {
       for (final log in session.exercises) {
-        final stat = _statForLog(log, session, catalog);
-        if (stat == null) continue;
-        volumes[stat] = (volumes[stat] ?? 0) + _volumeForLog(log);
+        final volume = _volumeForLog(log);
+        final primary = _primaryForLog(log, session, catalog);
+        final stat = _statForPrimaryMuscle(primary);
+        if (stat != null) {
+          volumes[stat] = (volumes[stat] ?? 0) + volume;
+        }
+
+        final classBonusStat = _classBonusStatForLog(session, primary);
+        if (classBonusStat != null) {
+          volumes[classBonusStat] =
+              (volumes[classBonusStat] ?? 0) + (volume * 0.2);
+        }
       }
     }
 
@@ -240,8 +252,11 @@ class StatEngine {
   ) {
     final touched = <String>{};
     for (final log in session.exercises) {
-      final stat = _statForLog(log, session, catalog);
+      final primary = _primaryForLog(log, session, catalog);
+      final stat = _statForPrimaryMuscle(primary);
       if (stat != null) touched.add(stat);
+      final classBonusStat = _classBonusStatForLog(session, primary);
+      if (classBonusStat != null) touched.add(classBonusStat);
     }
     return touched;
   }
@@ -258,13 +273,33 @@ class StatEngine {
     );
   }
 
-  String? _statForLog(
+  String _primaryForLog(
     ExerciseLog log,
     WorkoutSession session,
     Map<String, String> catalog,
   ) {
     final primary = catalog[log.exerciseId];
-    return _statForPrimaryMuscle(primary ?? _fallbackPrimary(session));
+    return primary ?? _fallbackPrimary(session);
+  }
+
+  String? _classBonusStatForLog(WorkoutSession session, String primaryMuscle) {
+    final cls = _classFromStoredName(session.classAtSave);
+    if (cls == null) return null;
+    final bucket = muscleGroupForDetailed(primaryMuscle);
+    if (bucket == null || !musclesForClass(cls).contains(bucket)) return null;
+    return switch (cls) {
+      CharacterClass.bruiser => 'STR',
+      CharacterClass.assassin => 'AGI',
+      CharacterClass.tank => 'VIT',
+    };
+  }
+
+  CharacterClass? _classFromStoredName(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    for (final cls in CharacterClass.values) {
+      if (cls.name == raw) return cls;
+    }
+    return null;
   }
 
   String _fallbackPrimary(WorkoutSession session) {

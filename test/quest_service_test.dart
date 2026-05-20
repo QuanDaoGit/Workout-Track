@@ -14,28 +14,24 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('daily manual completion resets with a new local day', () async {
+  test('daily quests are fixed, automatic, and training-derived', () async {
     final service = QuestService();
-    final dayOne = DateTime(2026, 5, 13, 10);
-    final dayTwo = dayOne.add(const Duration(days: 1));
+    final now = DateTime(2026, 5, 13, 10);
 
-    final initial = await service.getSummary(const [], now: dayOne);
-    final manual = initial.dailyQuests.firstWhere((quest) => quest.isManual);
+    final initial = await service.getSummary(const [], now: now);
+    expect(initial.dailyQuests.map((quest) => quest.id), [
+      'show_up',
+      'class_focus',
+      'volume_floor',
+    ]);
+    expect(initial.dailyQuests.where((quest) => quest.isManual), isEmpty);
+    expect(initial.dailyQuests.where((quest) => quest.completed), isEmpty);
 
-    await service.markManualDone(manual.claimKey, now: dayOne);
-    final completed = await service.getSummary(const [], now: dayOne);
-    expect(
-      completed.dailyQuests
-          .firstWhere((quest) => quest.claimKey == manual.claimKey)
-          .completed,
-      isTrue,
-    );
-
-    final reset = await service.getSummary(const [], now: dayTwo);
-    expect(
-      reset.dailyQuests.where((quest) => quest.isManual && quest.completed),
-      isEmpty,
-    );
+    final completed = await service.getSummary([
+      _session(date: now, setCount: 4),
+    ], now: now);
+    expect(completed.dailyQuests.every((quest) => quest.completed), isTrue);
+    expect(completed.dailyQuests.map((quest) => quest.rewardXP), [5, 10, 15]);
   });
 
   test('weekly workout quests reset on the next Monday period', () async {
@@ -61,36 +57,77 @@ void main() {
     );
   });
 
-  test(
-    'manual quests require done before claiming and only claim once',
-    () async {
-      final service = QuestService();
-      final now = DateTime(2026, 5, 13, 10);
-      final initial = await service.getSummary(const [], now: now);
-      final manual = initial.dailyQuests.firstWhere((quest) => quest.isManual);
+  test('automatic daily rewards claim once after completion', () async {
+    final service = QuestService();
+    final now = DateTime(2026, 5, 13, 10);
+    final empty = await service.getSummary(const [], now: now);
+    final showUp = empty.dailyQuests.firstWhere(
+      (quest) => quest.id == 'show_up',
+    );
 
-      expect(await service.claimReward(manual.claimKey, const [], now: now), 0);
+    expect(await service.claimReward(showUp.claimKey, const [], now: now), 0);
 
-      await service.markManualDone(manual.claimKey, now: now);
-      final firstClaim = await service.claimReward(
-        manual.claimKey,
-        const [],
-        now: now,
-      );
-      final secondClaim = await service.claimReward(
-        manual.claimKey,
-        const [],
-        now: now,
-      );
+    final sessions = [_session(date: now)];
+    final completed = await service.getSummary(sessions, now: now);
+    final claimable = completed.dailyQuests.firstWhere(
+      (quest) => quest.id == 'show_up',
+    );
+    final firstClaim = await service.claimReward(
+      claimable.claimKey,
+      sessions,
+      now: now,
+    );
+    final secondClaim = await service.claimReward(
+      claimable.claimKey,
+      sessions,
+      now: now,
+    );
 
-      expect(firstClaim, greaterThan(0));
-      expect(secondClaim, 0);
-      expect(
-        (await service.getSummary(const [], now: now)).claimedRewardXP,
-        firstClaim,
-      );
-    },
-  );
+    expect(firstClaim, 5);
+    expect(secondClaim, 0);
+    expect((await service.getSummary(sessions, now: now)).claimedRewardXP, 5);
+  });
+
+  test('unclaimed daily rewards do not carry forward after midnight', () async {
+    final service = QuestService();
+    final dayOne = DateTime(2026, 5, 13, 10);
+    final dayTwo = dayOne.add(const Duration(days: 1));
+    final dayOneSessions = [_session(date: dayOne)];
+    final dayOneSummary = await service.getSummary(dayOneSessions, now: dayOne);
+    final dayOneShowUp = dayOneSummary.dailyQuests.firstWhere(
+      (quest) => quest.id == 'show_up',
+    );
+
+    expect(dayOneShowUp.claimable, isTrue);
+    expect(
+      await service.claimReward(
+        dayOneShowUp.claimKey,
+        dayOneSessions,
+        now: dayTwo,
+      ),
+      0,
+    );
+  });
+
+  test('LCK multiplier applies when quest rewards are claimed', () async {
+    final service = QuestService();
+    final now = DateTime(2026, 5, 13, 10);
+    final sessions = [
+      for (var i = 24; i >= 0; i--)
+        _session(date: DateTime(now.year, now.month, now.day - i, 10)),
+    ];
+
+    final summary = await service.getSummary(sessions, now: now);
+    final classFocus = summary.dailyQuests.firstWhere(
+      (quest) => quest.id == 'class_focus',
+    );
+
+    expect(classFocus.rewardXP, 15);
+    expect(
+      await service.claimReward(classFocus.claimKey, sessions, now: now),
+      15,
+    );
+  });
 
   test(
     'saved workout history completes retroactive weekly and side quests',

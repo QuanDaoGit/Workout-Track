@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../theme/tokens.dart';
 import '../widgets/pixel_button.dart';
@@ -42,7 +42,7 @@ class LogWeightRewardPage extends StatelessWidget {
               const SizedBox(height: 16),
               Text(
                 'weight: ${weightKg.toStringAsFixed(1)} kg',
-                style: GoogleFonts.shareTechMono(color: kText, fontSize: 14),
+                style: AppFonts.shareTechMono(color: kText, fontSize: 14),
               ),
               const SizedBox(height: 40),
               // Base potion
@@ -72,7 +72,7 @@ class LogWeightRewardPage extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           'for 24h',
-                          style: GoogleFonts.shareTechMono(
+                          style: AppFonts.shareTechMono(
                             color: kMutedText,
                             fontSize: 11,
                           ),
@@ -110,7 +110,7 @@ class LogWeightRewardPage extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             'for 24h',
-                            style: GoogleFonts.shareTechMono(
+                            style: AppFonts.shareTechMono(
                               color: kMutedText,
                               fontSize: 11,
                             ),

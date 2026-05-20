@@ -176,6 +176,7 @@ const Map<String, List<String>> curatedExerciseIdsByMuscleGroup = {
     'Kettlebell_Thruster',
     'Kettlebell_Turkish_Get-Up_Squat_style',
     'One-Arm_Kettlebell_Swings',
+    'Bench_Sprint',
   ],
 };
 

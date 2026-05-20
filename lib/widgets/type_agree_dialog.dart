@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_fonts.dart';
 
 import '../theme/tokens.dart';
 import 'pixel_button.dart';
@@ -61,21 +61,21 @@ class _TypeAgreeDialogState extends State<TypeAgreeDialog> {
         children: [
           Text(
             widget.message,
-            style: GoogleFonts.shareTechMono(fontSize: 13, color: kText),
+            style: AppFonts.shareTechMono(fontSize: 13, color: kText),
           ),
           const SizedBox(height: kSpace4),
           Text(
             'Type AGREE to confirm:',
-            style: GoogleFonts.shareTechMono(fontSize: 12, color: kMutedText),
+            style: AppFonts.shareTechMono(fontSize: 12, color: kMutedText),
           ),
           const SizedBox(height: kSpace2),
           TextField(
             controller: _controller,
             autofocus: true,
-            style: GoogleFonts.shareTechMono(fontSize: 14, color: kText),
+            style: AppFonts.shareTechMono(fontSize: 14, color: kText),
             decoration: InputDecoration(
               hintText: 'AGREE',
-              hintStyle: GoogleFonts.shareTechMono(
+              hintStyle: AppFonts.shareTechMono(
                 fontSize: 14,
                 color: kMutedText.withValues(alpha: 0.4),
               ),
@@ -102,7 +102,7 @@ class _TypeAgreeDialogState extends State<TypeAgreeDialog> {
           onPressed: () => Navigator.pop(context, false),
           child: Text(
             'CANCEL',
-            style: GoogleFonts.shareTechMono(fontSize: 12, color: kMutedText),
+            style: AppFonts.shareTechMono(fontSize: 12, color: kMutedText),
           ),
         ),
         PixelButton(
