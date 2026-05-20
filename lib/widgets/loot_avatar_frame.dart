@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/tokens.dart';
+
 class LootAvatarFrame extends StatelessWidget {
   final String avatarPath;
   final String? framePath;
@@ -25,7 +27,7 @@ class LootAvatarFrame extends StatelessWidget {
           Container(
             margin: EdgeInsets.all(size * 0.08),
             decoration: BoxDecoration(
-              color: const Color(0xFF0D0D1A),
+              color: kBg,
               borderRadius: BorderRadius.circular(4),
               border: Border.all(color: borderColor),
             ),
@@ -38,7 +40,7 @@ class LootAvatarFrame extends StatelessWidget {
                   fit: BoxFit.contain,
                   filterQuality: FilterQuality.none,
                   errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.person_sharp, color: Color(0xFF6B6B8A)),
+                      const Icon(Icons.person_sharp, color: kMutedText),
                 ),
               ),
             ),

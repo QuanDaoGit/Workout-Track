@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/workout_models.dart';
 import '../../services/xp_service.dart';
+import '../../theme/tokens.dart';
 import '../workout_page.dart' show fmtVol;
 
 class SessionDetailPage extends StatelessWidget {
@@ -135,7 +136,7 @@ class SessionDetailPage extends StatelessWidget {
                                     child: Text(
                                       'Set ${i + 1}',
                                       style: const TextStyle(
-                                        color: Color(0xFF6B6B8A),
+                                        color: kMutedText,
                                         fontSize: 12,
                                       ),
                                     ),
@@ -152,7 +153,7 @@ class SessionDetailPage extends StatelessWidget {
                                 ],
                               ),
                             ),
-                          const Divider(height: 16, color: Color(0xFF2A2A4A)),
+                          const Divider(height: 16, color: kBorder),
                           Text(
                             'Volume: ${log.totalVolume.toStringAsFixed(0)} kg',
                             style: const TextStyle(

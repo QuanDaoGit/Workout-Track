@@ -193,6 +193,80 @@ void main() {
     expect(sessions.where((session) => session.isOngoing).single.id, 'new');
   });
 
+  test('completed sessions mark today mission as completed', () async {
+    final storage = WorkoutStorageService();
+    final now = DateTime(2026, 5, 14, 9);
+
+    await storage.saveSession(_session(date: now));
+
+    expect(
+      await WorkoutStorageService.missionFinishStateToday(now: now),
+      MissionFinishState.completed,
+    );
+  });
+
+  test('ended early replacement is idempotent and finishes mission', () async {
+    final storage = WorkoutStorageService();
+    final now = DateTime(2026, 5, 14, 9);
+    final ongoing = _session(
+      date: now,
+      id: 'active',
+      isPartial: true,
+      seconds: 600,
+      targetMinutes: 30,
+    );
+    final ended = _session(
+      date: now,
+      id: 'active',
+      isPartial: true,
+      isAbandoned: true,
+      seconds: 600,
+      targetMinutes: 30,
+      setCount: 0,
+    );
+
+    await storage.replaceOngoingSession(ongoing);
+    await storage.replaceOngoingWithAbandoned(ended, markMissionFinished: true);
+    await storage.replaceOngoingWithAbandoned(ended, markMissionFinished: true);
+
+    final sessions = await storage.getSessions();
+    expect(await storage.getOngoingSession(), isNull);
+    expect(sessions, hasLength(1));
+    expect(sessions.single.isAbandoned, isTrue);
+    expect(XpService.calculateTotalXP(sessions), 10);
+    expect(
+      await WorkoutStorageService.missionFinishStateToday(now: now),
+      MissionFinishState.endedEarly,
+    );
+  });
+
+  test(
+    'abandoned cleanup without user end early does not finish mission',
+    () async {
+      final storage = WorkoutStorageService();
+      final now = DateTime(2026, 5, 14, 9);
+      final ongoing = _session(date: now, id: 'active', isPartial: true);
+
+      await storage.replaceOngoingSession(ongoing);
+      await storage.replaceOngoingWithAbandoned(
+        _session(
+          date: now,
+          id: 'active',
+          isPartial: true,
+          isAbandoned: true,
+          seconds: 600,
+          targetMinutes: 30,
+          setCount: 0,
+        ),
+      );
+
+      expect(
+        await WorkoutStorageService.missionFinishStateToday(now: now),
+        MissionFinishState.none,
+      );
+    },
+  );
+
   test(
     'expired paused sessions are detected after auto-discard time',
     () async {

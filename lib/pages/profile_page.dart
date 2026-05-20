@@ -31,6 +31,7 @@ import '../services/workout_metric_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
+import '../theme/tokens.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/loot_avatar_frame.dart';
@@ -274,7 +275,7 @@ class ProfilePageState extends State<ProfilePage> {
   }) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF121225),
+      backgroundColor: kCard,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
       ),
@@ -315,7 +316,7 @@ class ProfilePageState extends State<ProfilePage> {
               Text(
                 description,
                 style: AppFonts.shareTechMono(
-                  color: const Color(0xFF6B6B8A),
+                  color: kMutedText,
                   fontSize: 14,
                 ),
               ),
@@ -352,7 +353,7 @@ class ProfilePageState extends State<ProfilePage> {
 
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF121225),
+      backgroundColor: kCard,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
@@ -456,7 +457,7 @@ class ProfilePageState extends State<ProfilePage> {
                         : 'Choose at least one training day and one rest day.',
                     style: TextStyle(
                       color: valid
-                          ? const Color(0xFF6B6B8A)
+                          ? kMutedText
                           : const Color(0xFFFFD700),
                       fontSize: 12,
                     ),
@@ -486,7 +487,7 @@ class ProfilePageState extends State<ProfilePage> {
   void _showWorkoutDefaultsSheet() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF121225),
+      backgroundColor: kCard,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
@@ -584,7 +585,7 @@ class ProfilePageState extends State<ProfilePage> {
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF17172C),
+            color: kSurface2,
             border: Border.all(color: const Color(0xFF00FF9C), width: 1.2),
             borderRadius: BorderRadius.circular(4),
           ),
@@ -632,7 +633,7 @@ class ProfilePageState extends State<ProfilePage> {
                   Text(
                     xpProgress.label,
                     style: const TextStyle(
-                      color: Color(0xFF6B6B8A),
+                      color: kMutedText,
                       fontSize: 11,
                     ),
                   ),
@@ -719,7 +720,7 @@ class ProfilePageState extends State<ProfilePage> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
+        color: kCard,
         border: Border.all(color: color.withValues(alpha: 0.4)),
         borderRadius: BorderRadius.circular(4),
       ),
@@ -752,7 +753,7 @@ class ProfilePageState extends State<ProfilePage> {
                       'PATH OF THE ${cls.bodyGoalLabel}',
                       style: AppFonts.shareTechMono(
                         fontSize: 11,
-                        color: const Color(0xFF6B6B8A),
+                        color: kMutedText,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -820,8 +821,8 @@ class ProfilePageState extends State<ProfilePage> {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF121225),
-              border: Border.all(color: const Color(0xFF2A2A4A)),
+              color: kCard,
+              border: Border.all(color: kBorder),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Row(
@@ -848,7 +849,7 @@ class ProfilePageState extends State<ProfilePage> {
                       Text(
                         'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}/7',
                         style: AppFonts.shareTechMono(
-                          color: const Color(0xFF6B6B8A),
+                          color: kMutedText,
                           fontSize: 12,
                         ),
                       ),
@@ -896,7 +897,7 @@ class ProfilePageState extends State<ProfilePage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFF121225),
+                color: kCard,
                 border: Border.all(color: const Color(0xFF00BFFF)),
                 borderRadius: BorderRadius.circular(4),
               ),
@@ -914,7 +915,7 @@ class ProfilePageState extends State<ProfilePage> {
         Text(
           lastLoggedLabel,
           style: AppFonts.shareTechMono(
-            color: const Color(0xFF6B6B8A),
+            color: kMutedText,
             fontSize: 11,
           ),
         ),
@@ -923,7 +924,7 @@ class ProfilePageState extends State<ProfilePage> {
           Text(
             'heading toward ${goal!.targetWeight!.toStringAsFixed(1)} kg',
             style: AppFonts.shareTechMono(
-              color: const Color(0xFF6B6B8A),
+              color: kMutedText,
               fontSize: 11,
             ),
           ),
@@ -968,7 +969,7 @@ class ProfilePageState extends State<ProfilePage> {
     final titleColor =
         titleItem?.color ??
         (_summary!.selectedTitle == null
-            ? const Color(0xFF6B6B8A)
+            ? kMutedText
             : const Color(0xFFFFD700));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1012,7 +1013,7 @@ class ProfilePageState extends State<ProfilePage> {
               isDense: true,
               contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 9),
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF3D3A68)),
+                borderSide: BorderSide(color: kBorderVariant),
                 borderRadius: BorderRadius.all(Radius.circular(4)),
               ),
               focusedBorder: OutlineInputBorder(
@@ -1030,7 +1031,7 @@ class ProfilePageState extends State<ProfilePage> {
         ),
         _SmallIconButton(
           iconPath: 'assets/icons/control/icon_clear.png',
-          color: const Color(0xFF6B6B8A),
+          color: kMutedText,
           onPressed: _cancelDisplayNameEdit,
         ),
       ],
@@ -1301,7 +1302,7 @@ class _WorkoutDefaultsSheetState extends State<_WorkoutDefaultsSheet> {
                 Text(
                   'Used for quick starts. You can still stop whenever the workout is done.',
                   style: AppFonts.shareTechMono(
-                    color: const Color(0xFF6B6B8A),
+                    color: kMutedText,
                     fontSize: 13,
                     height: 1.3,
                   ),
@@ -1361,8 +1362,8 @@ class _DefaultStepper extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
-        border: Border.all(color: const Color(0xFF2A2A4A)),
+        color: kCard,
+        border: Border.all(color: kBorder),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -1416,7 +1417,7 @@ class _DefaultStepButton extends StatelessWidget {
             : const Color(0xFF00FF9C),
         foregroundColor: onPressed == null
             ? const Color(0xFF555577)
-            : const Color(0xFF0D0D1A),
+            : kBg,
         minimumSize: const Size(40, 40),
         padding: EdgeInsets.zero,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -1439,8 +1440,8 @@ class _ProfileTabs extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFF121225),
-        border: Border.all(color: const Color(0xFF2A2A4A)),
+        color: kCard,
+        border: Border.all(color: kBorder),
         borderRadius: BorderRadius.circular(4),
       ),
       child: SizedBox(
@@ -1479,8 +1480,8 @@ class _ProfileTabs extends StatelessWidget {
                                 fontFamily: 'PressStart2P',
                                 fontSize: 7,
                                 color: selectedIndex == i
-                                    ? const Color(0xFF0D0D1A)
-                                    : const Color(0xFF6B6B8A),
+                                    ? kBg
+                                    : kMutedText,
                               ),
                             ),
                           ),
@@ -1516,9 +1517,9 @@ class _AvatarChoice extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: const Color(0xFF121225),
+          color: kCard,
           border: Border.all(
-            color: selected ? const Color(0xFF00FF9C) : const Color(0xFF2A2A4A),
+            color: selected ? const Color(0xFF00FF9C) : kBorder,
             width: selected ? 1.5 : 1,
           ),
           borderRadius: BorderRadius.circular(4),
@@ -1624,7 +1625,7 @@ class _StatTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF121225),
+        color: kCard,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -1644,7 +1645,7 @@ class _StatTile extends StatelessWidget {
                   style: const TextStyle(
                     fontFamily: 'PressStart2P',
                     fontSize: 7,
-                    color: Color(0xFF6B6B8A),
+                    color: kMutedText,
                   ),
                 ),
                 const SizedBox(height: 5),
@@ -1684,9 +1685,9 @@ class _TitleRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF121225),
+          color: kCard,
           border: Border.all(
-            color: selected ? const Color(0xFF00FF9C) : const Color(0xFF2A2A4A),
+            color: selected ? const Color(0xFF00FF9C) : kBorder,
           ),
           borderRadius: BorderRadius.circular(4),
         ),
@@ -1700,7 +1701,7 @@ class _TitleRow extends StatelessWidget {
               ),
               color: selected
                   ? const Color(0xFFFFD700)
-                  : const Color(0xFF6B6B8A),
+                  : kMutedText,
               size: 18,
             ),
             const SizedBox(width: 12),
@@ -1718,7 +1719,7 @@ class _TitleRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   const Text(
                     'Side Quest title',
-                    style: TextStyle(color: Color(0xFF6B6B8A), fontSize: 12),
+                    style: TextStyle(color: kMutedText, fontSize: 12),
                   ),
                 ],
               ),
@@ -1747,7 +1748,7 @@ class _InfoPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF121225),
+        color: kCard,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -1755,7 +1756,7 @@ class _InfoPanel extends StatelessWidget {
           ImageIcon(
             AssetImage(iconPath),
             size: 20,
-            color: const Color(0xFF6B6B8A),
+            color: kMutedText,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1773,7 +1774,7 @@ class _InfoPanel extends StatelessWidget {
                 Text(
                   subtitle,
                   style: const TextStyle(
-                    color: Color(0xFF6B6B8A),
+                    color: kMutedText,
                     fontSize: 12,
                   ),
                 ),
@@ -1826,8 +1827,8 @@ class _ScheduleInfoRow extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
-        border: Border.all(color: const Color(0xFF2A2A4A)),
+        color: kCard,
+        border: Border.all(color: kBorder),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -1880,9 +1881,9 @@ class _WeekdayToggle extends StatelessWidget {
         height: 40,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF00FF9C) : const Color(0xFF1A1A2E),
+          color: selected ? const Color(0xFF00FF9C) : kCard,
           border: Border.all(
-            color: selected ? const Color(0xFF00FF9C) : const Color(0xFF2A2A4A),
+            color: selected ? const Color(0xFF00FF9C) : kBorder,
           ),
           borderRadius: BorderRadius.circular(4),
         ),
@@ -1891,7 +1892,7 @@ class _WeekdayToggle extends StatelessWidget {
           style: TextStyle(
             fontFamily: 'PressStart2P',
             fontSize: 8,
-            color: selected ? const Color(0xFF0D0D1A) : const Color(0xFF6B6B8A),
+            color: selected ? kBg : kMutedText,
           ),
         ),
       ),
@@ -1924,7 +1925,7 @@ class _SettingsRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFF121225),
+            color: kCard,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -1950,7 +1951,7 @@ class _SettingsRow extends StatelessWidget {
                     Text(
                       subtitle,
                       style: const TextStyle(
-                        color: Color(0xFF6B6B8A),
+                        color: kMutedText,
                         fontSize: 12,
                       ),
                     ),
@@ -1964,7 +1965,7 @@ class _SettingsRow extends StatelessWidget {
                 const ImageIcon(
                   AssetImage('assets/icons/control/icon_next.png'),
                   size: 16,
-                  color: Color(0xFF6B6B8A),
+                  color: kMutedText,
                 ),
             ],
           ),
@@ -1996,7 +1997,7 @@ class _SettingsToggleRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF121225),
+          color: kCard,
           borderRadius: BorderRadius.circular(4),
         ),
         child: Row(
@@ -2022,7 +2023,7 @@ class _SettingsToggleRow extends StatelessWidget {
                   Text(
                     subtitle,
                     style: const TextStyle(
-                      color: Color(0xFF6B6B8A),
+                      color: kMutedText,
                       fontSize: 12,
                     ),
                   ),
@@ -2035,8 +2036,8 @@ class _SettingsToggleRow extends StatelessWidget {
               onChanged: onChanged,
               activeThumbColor: const Color(0xFF00FF9C),
               activeTrackColor: const Color(0xFF00FF9C).withValues(alpha: 0.3),
-              inactiveThumbColor: const Color(0xFF6B6B8A),
-              inactiveTrackColor: const Color(0xFF2A2A4A),
+              inactiveThumbColor: kMutedText,
+              inactiveTrackColor: kBorder,
             ),
           ],
         ),
@@ -2056,7 +2057,7 @@ class _MiniTextBadge extends StatelessWidget {
       label,
       style: const TextStyle(
         fontFamily: 'PressStart2P',
-        color: Color(0xFF6B6B8A),
+        color: kMutedText,
         fontSize: 7,
       ),
     );

@@ -47,7 +47,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2E),
+        backgroundColor: kSurface3,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         title: const Text(
           'DELETE THIS EXERCISE?',
@@ -82,7 +82,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
               style: TextStyle(
                 fontFamily: 'PressStart2P',
                 fontSize: 9,
-                color: Color(0xFF0D0D1A),
+                color: kBg,
               ),
             ),
           ),
@@ -117,7 +117,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                 ),
               ),
               style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFF0D0D1A).withValues(alpha: 0.7),
+                backgroundColor: kBg.withValues(alpha: 0.7),
               ),
             ),
             actions: [
@@ -135,7 +135,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                 children: [
                   if (exercise.isCustom)
                     const ColoredBox(
-                      color: Color(0xFF1A1A2E),
+                      color: kCard,
                       child: Center(
                         child: ImageIcon(
                           AssetImage('assets/icons/control/icon_hammer.png'),
@@ -152,11 +152,11 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                         fit: BoxFit.cover,
                         filterQuality: FilterQuality.low,
                         errorBuilder: (context, error, stack) =>
-                            const ColoredBox(color: Color(0xFF1A1A2E)),
+                            const ColoredBox(color: kCard),
                       ),
                     )
                   else
-                    const ColoredBox(color: Color(0xFF1A1A2E)),
+                    const ColoredBox(color: kCard),
                 ],
               ),
             ),
@@ -331,7 +331,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                       style: TextStyle(
                         fontFamily: 'PressStart2P',
                         fontSize: 10,
-                        color: Color(0xFF0D0D1A),
+                        color: kBg,
                       ),
                     ),
                   ),
@@ -395,12 +395,12 @@ class _BouncingFavoriteIconState extends State<_BouncingFavoriteIcon>
           ),
           color: widget.isFavorite
               ? const Color(0xFFFF2D55)
-              : const Color(0xFF6B6B8A),
+              : kMutedText,
           size: 24,
         ),
       ),
       style: IconButton.styleFrom(
-        backgroundColor: const Color(0xFF0D0D1A).withValues(alpha: 0.7),
+        backgroundColor: kBg.withValues(alpha: 0.7),
       ),
     );
   }

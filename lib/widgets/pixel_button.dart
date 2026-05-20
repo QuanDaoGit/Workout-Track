@@ -90,7 +90,7 @@ class _PixelButtonState extends State<PixelButton> {
     final translateY = (_enabled && _pressed) ? 2.0 : 0.0;
 
     final content = widget.isLoading
-        ? const PixelLoader(size: 16, color: Color(0xFF0D0D1A))
+        ? const PixelLoader(size: 16, color: kBg)
         : Text(
             widget.label,
             style: TextStyle(
@@ -113,6 +113,7 @@ class _PixelButtonState extends State<PixelButton> {
             width: borderBottom,
           ),
         ),
+        boxShadow: (_enabled && fill == kNeon) ? neonGlow() : null,
       ),
       alignment: Alignment.center,
       child: content,
@@ -138,7 +139,7 @@ class _PixelButtonState extends State<PixelButton> {
                 child: IgnorePointer(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: const Color(0xFF00FF9C).withValues(alpha: 0.3),
+                      color: kNeon.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),

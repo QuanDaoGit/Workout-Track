@@ -54,6 +54,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   int _elapsedSeconds = 0;
   Timer? _timer;
   late DateTime _sessionStartTime;
+  late final String _sessionId;
   late Map<String, _ExerciseStatus> _status;
   final Map<String, List<SetEntry>> _loggedSets = {};
   final Map<String, GlobalKey> _exerciseKeys = {};
@@ -76,6 +77,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _sessionId =
+        widget.resumeFromSession?.id ??
+        DateTime.now().microsecondsSinceEpoch.toString();
 
     if (widget.resumeFromSession != null) {
       _sessionStartTime = widget.resumeFromSession!.resumeStartTime(
@@ -282,6 +286,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           elapsedSeconds: _elapsedSeconds,
           exerciseLogs: _buildExerciseLogs(),
           selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
+          sessionId: _sessionId,
           isPartial: false,
           startedAt: _sessionStartTime,
           resumeFromSession: widget.resumeFromSession,
@@ -299,12 +304,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _updateElapsed();
     _timer?.cancel();
     final logs = _buildExerciseLogs();
-    final sessionId =
-        widget.resumeFromSession?.id ??
-        DateTime.now().millisecondsSinceEpoch.toString();
     await WorkoutStorageService().replaceOngoingSession(
       WorkoutSession(
-        id: sessionId,
+        id: _sessionId,
         date: DateTime.now(),
         startedAt: _sessionStartTime,
         muscleGroup: widget.muscleGroup,
@@ -322,7 +324,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     );
     if (widget.isProgramWorkout || widget.advanceProgramRestDayOnCompletion) {
       await ProgramService().markOngoingProgramSession(
-        sessionId,
+        _sessionId,
         restDayWorkout: widget.advanceProgramRestDayOnCompletion,
       );
     }
@@ -345,11 +347,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     RestTimerService.instance.cancel();
     final logs = _buildExerciseLogs();
     final now = DateTime.now();
-    final sessionId =
-        widget.resumeFromSession?.id ?? now.millisecondsSinceEpoch.toString();
     await WorkoutStorageService().replaceOngoingSession(
       WorkoutSession(
-        id: sessionId,
+        id: _sessionId,
         date: now,
         startedAt: _sessionStartTime,
         pausedAt: now,
@@ -370,7 +370,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     );
     if (widget.isProgramWorkout || widget.advanceProgramRestDayOnCompletion) {
       await ProgramService().markOngoingProgramSession(
-        sessionId,
+        _sessionId,
         restDayWorkout: widget.advanceProgramRestDayOnCompletion,
       );
     }
@@ -392,8 +392,10 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           elapsedSeconds: _elapsedSeconds,
           exerciseLogs: const [],
           selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
+          sessionId: _sessionId,
           isPartial: true,
           isAbandoned: true,
+          markMissionFinished: true,
           startedAt: _sessionStartTime,
           resumeFromSession: widget.resumeFromSession,
           isProgramWorkout: widget.isProgramWorkout,
@@ -408,7 +410,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2E),
+        backgroundColor: kSurface3,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         title: const Text('END EARLY?'),
         content: Column(
@@ -453,7 +455,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2E),
+        backgroundColor: kSurface3,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         title: const Text('END EARLY?'),
         content: Column(
@@ -624,7 +626,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                             child: Text(
                               'Target: ${widget.durationMinutes} min',
                               style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(color: const Color(0xFF6B6B8A)),
+                                  ?.copyWith(color: kMutedText),
                             ),
                           ),
                           Text(

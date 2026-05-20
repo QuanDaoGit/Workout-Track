@@ -71,7 +71,7 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
               style: TextStyle(
                 fontFamily: 'PressStart2P',
                 fontSize: 9,
-                color: Color(0xFF0D0D1A),
+                color: kBg,
               ),
             ),
           ),
@@ -127,7 +127,7 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
                     ),
                     margin: const EdgeInsets.only(bottom: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF121225),
+                      color: kCard,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Row(

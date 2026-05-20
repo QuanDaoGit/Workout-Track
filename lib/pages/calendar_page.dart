@@ -4,6 +4,7 @@ import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import '../services/rest_service.dart';
 import '../services/workout_storage_service.dart';
+import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/calendar_day_marker.dart';
 import '../widgets/pixel_loader.dart';
@@ -183,7 +184,7 @@ class _CalendarPageState extends State<CalendarPage> {
                     ? const Color(0xFF00FF9C)
                     : isPast || isToday
                     ? const Color(0xFFE8E8FF)
-                    : const Color(0xFF6B6B8A),
+                    : kMutedText,
                 fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
               ),
             ),
@@ -264,7 +265,7 @@ class _CalendarPageState extends State<CalendarPage> {
                               d,
                               textAlign: TextAlign.center,
                               style: const TextStyle(
-                                color: Color(0xFF6B6B8A),
+                                color: kMutedText,
                                 fontSize: 11,
                                 fontFamily: 'PressStart2P',
                               ),
@@ -323,7 +324,7 @@ class _CalendarPageState extends State<CalendarPage> {
                   ),
 
                   const SizedBox(height: 16),
-                  const Divider(color: Color(0xFF2A2A4A)),
+                  const Divider(color: kBorder),
                   const SizedBox(height: 8),
 
                   // ── Session list ─────────────────────────────────────
@@ -386,7 +387,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                               ? 'Time XP only'
                                               : '${session.exercises.length} exercises',
                                           style: const TextStyle(
-                                            color: Color(0xFF6B6B8A),
+                                            color: kMutedText,
                                           ),
                                         ),
                                         trailing: Text(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'theme/app_fonts.dart';
+import 'theme/tokens.dart';
 
 import 'pages/root_page.dart';
 import 'services/class_migration_service.dart';
@@ -37,112 +38,123 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: const RootPage(),
-      builder: (context, child) => Stack(
-        children: [
-          child!,
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(painter: _ScanlinePainter()),
-            ),
+      builder: (context, child) => DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [kBgGradientTop, kBgGradientBottom],
           ),
-        ],
+        ),
+        child: Stack(
+          children: [
+            child!,
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(painter: _ScanlinePainter()),
+              ),
+            ),
+          ],
+        ),
       ),
       theme: ThemeData(
         useMaterial3: true,
         fontFamily: AppFonts.shareTechMonoFamily,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF00FF9C),
+          seedColor: kNeon,
           brightness: Brightness.dark,
         ),
-        scaffoldBackgroundColor: const Color(0xFF0D0D1A),
-        cardColor: const Color(0xFF1A1A2E),
+        scaffoldBackgroundColor: Colors.transparent,
+        cardColor: kCard,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0D0D1A),
-          foregroundColor: Color(0xFF00FF9C),
+          backgroundColor: Colors.transparent,
+          foregroundColor: kNeon,
           elevation: 0,
           titleTextStyle: TextStyle(
             fontFamily: 'PressStart2P',
             fontSize: 14,
-            color: Color(0xFF00FF9C),
+            color: kNeon,
           ),
-          shape: Border(bottom: BorderSide(color: Color(0xFF2A2A4A))),
+          shape: Border(bottom: BorderSide(color: kBorder)),
         ),
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF00FF9C),
+            foregroundColor: kNeon,
             textStyle: AppFonts.shareTechMono(),
-            side: const BorderSide(color: Color(0xFF00FF9C), width: 1),
+            side: const BorderSide(color: kNeon, width: 1),
             shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(4)),
+              borderRadius: BorderRadius.all(Radius.circular(kCardRadius)),
             ),
           ),
         ),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF00FF9C),
-            foregroundColor: const Color(0xFF0D0D1A),
+            backgroundColor: kNeon,
+            foregroundColor: kBg,
+            elevation: 6,
+            shadowColor: kNeon.withValues(alpha: 0.45),
             textStyle: AppFonts.shareTechMono(
               fontWeight: FontWeight.bold,
               letterSpacing: 1.5,
             ),
             shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(4)),
+              borderRadius: BorderRadius.all(Radius.circular(kCardRadius)),
             ),
           ),
         ),
         chipTheme: const ChipThemeData(
-          selectedColor: Color(0xFF00FF9C),
+          selectedColor: kNeon,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(4)),
+            borderRadius: BorderRadius.all(Radius.circular(kCardRadius)),
           ),
         ),
         cardTheme: const CardThemeData(
-          color: Color(0xFF1A1A2E),
+          color: kCard,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(4)),
-            side: BorderSide(color: Color(0xFF2A2A4A)),
+            borderRadius: BorderRadius.all(Radius.circular(kCardRadius)),
+            side: BorderSide(color: kBorder),
           ),
         ),
         textTheme: AppFonts.shareTechMonoTextTheme().copyWith(
           headlineLarge: const TextStyle(
             fontFamily: 'PressStart2P',
             fontSize: 18,
-            color: Color(0xFF00FF9C),
+            color: kNeon,
           ),
           headlineMedium: const TextStyle(
             fontFamily: 'PressStart2P',
             fontSize: 14,
-            color: Color(0xFF00FF9C),
+            color: kNeon,
           ),
           headlineSmall: const TextStyle(
             fontFamily: 'PressStart2P',
             fontSize: 11,
-            color: Color(0xFF00FF9C),
+            color: kNeon,
           ),
           titleLarge: const TextStyle(
             fontFamily: 'PressStart2P',
             fontSize: 12,
-            color: Color(0xFFE8E8FF),
+            color: kText,
           ),
           bodySmall: AppFonts.shareTechMono(
-            color: const Color(0xFF6B6B8A),
+            color: kMutedText,
             fontSize: 14,
           ),
           bodyMedium: AppFonts.shareTechMono(
-            color: const Color(0xFFE8E8FF),
+            color: kText,
             fontSize: 14,
           ),
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: Color(0xFF0D0D1A),
-          selectedItemColor: Color(0xFF00FF9C),
-          unselectedItemColor: Color(0xFF6B6B8A),
+          backgroundColor: Colors.transparent,
+          selectedItemColor: kNeon,
+          unselectedItemColor: kMutedText,
         ),
         dialogTheme: const DialogThemeData(
-          backgroundColor: Color(0xFF1A1A2E),
+          backgroundColor: kSurface3,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(4)),
-            side: BorderSide(color: Color(0xFF2A2A4A)),
+            borderRadius: BorderRadius.all(Radius.circular(kCardRadius)),
+            side: BorderSide(color: kBorder),
           ),
         ),
       ),

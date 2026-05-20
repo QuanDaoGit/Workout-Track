@@ -22,10 +22,7 @@ class WorkoutStorageService {
       await StatEngine().calculateAllStats();
       await RestService().refreshWeeklyShieldProgress(sessions);
       if (!session.isAbandoned) {
-        await markMissionFinished(
-          session.date,
-          MissionFinishState.completed,
-        );
+        await markMissionFinished(session.date, MissionFinishState.completed);
       }
     }
   }
@@ -77,10 +74,9 @@ class WorkoutStorageService {
     bool markMissionFinished = false,
   }) async {
     final sessions = await getSessions();
-    final updated = sessions
-        .where((s) => !s.isOngoing && s.id != session.id)
-        .toList()
-      ..add(session);
+    final updated =
+        sessions.where((s) => !s.isOngoing && s.id != session.id).toList()
+          ..add(session);
     await _writeSessions(updated);
     if (markMissionFinished) {
       await WorkoutStorageService.markMissionFinished(

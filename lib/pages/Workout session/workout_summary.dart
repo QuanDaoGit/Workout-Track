@@ -26,8 +26,10 @@ class WorkoutSummaryPage extends StatefulWidget {
     required this.elapsedSeconds,
     required this.exerciseLogs,
     this.selectedExerciseIds = const [],
+    this.sessionId,
     this.isPartial = false,
     this.isAbandoned = false,
+    this.markMissionFinished = false,
     this.startedAt,
     this.sessionDate,
     this.abandonedMessage,
@@ -42,8 +44,10 @@ class WorkoutSummaryPage extends StatefulWidget {
   final int elapsedSeconds;
   final List<ExerciseLog> exerciseLogs;
   final List<String> selectedExerciseIds;
+  final String? sessionId;
   final bool isPartial;
   final bool isAbandoned;
+  final bool markMissionFinished;
   final DateTime? startedAt;
   final DateTime? sessionDate;
   final String? abandonedMessage;
@@ -79,7 +83,10 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   );
 
   late final WorkoutSession _baseSession = WorkoutSession(
-    id: DateTime.now().millisecondsSinceEpoch.toString(),
+    id:
+        widget.sessionId ??
+        widget.resumeFromSession?.id ??
+        DateTime.now().microsecondsSinceEpoch.toString(),
     date: widget.sessionDate ?? DateTime.now(),
     startedAt: widget.startedAt,
     muscleGroup: widget.muscleGroup,
@@ -126,12 +133,11 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
 
     setState(() => _saving = true);
     if (widget.isAbandoned) {
-      await WorkoutStorageService().replaceOngoingWithAbandoned(_baseSession);
-      if (widget.resumeFromSession != null) {
-        await ProgramService().clearOngoingProgramSession(
-          widget.resumeFromSession!.id,
-        );
-      }
+      await WorkoutStorageService().replaceOngoingWithAbandoned(
+        _baseSession,
+        markMissionFinished: widget.markMissionFinished,
+      );
+      await ProgramService().clearOngoingProgramSession(_baseSession.id);
     } else {
       if (widget.resumeFromSession != null) {
         await WorkoutStorageService().deleteSession(

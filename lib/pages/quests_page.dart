@@ -9,6 +9,7 @@ import '../services/rest_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
+import '../theme/tokens.dart';
 import '../widgets/arcade_progress_bar.dart';
 
 class QuestsPage extends StatefulWidget {
@@ -27,6 +28,7 @@ class QuestsPageState extends State<QuestsPage> {
   QuestSummary? _summary;
   int _recoveryXP = 0;
   int _potionBonusXP = 0;
+  final Set<String> _claimingKeys = {};
 
   @override
   void initState() {
@@ -50,13 +52,17 @@ class QuestsPageState extends State<QuestsPage> {
   }
 
   Future<void> _claim(QuestItem quest) async {
-    final xp = await _questService.claimReward(quest.claimKey, _sessions);
-    await reload();
-    widget.onQuestChanged?.call();
-    if (!mounted || xp <= 0) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Claimed +$xp XP')));
+    if (!_claimingKeys.add(quest.claimKey)) return;
+    try {
+      final xp = await _questService.claimReward(quest.claimKey, _sessions);
+      await reload();
+      widget.onQuestChanged?.call();
+      if (!mounted || xp <= 0) return;
+      final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+      messenger.showSnackBar(SnackBar(content: Text('Claimed +$xp XP')));
+    } finally {
+      _claimingKeys.remove(quest.claimKey);
+    }
   }
 
   @override
@@ -182,7 +188,7 @@ class _RewardsBar extends StatelessWidget {
                 Text(
                   xpLabel,
                   style: const TextStyle(
-                    color: Color(0xFF6B6B8A),
+                    color: kMutedText,
                     fontSize: 11,
                   ),
                 ),
@@ -243,7 +249,7 @@ class _QuestSection extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           subtitle,
-          style: const TextStyle(color: Color(0xFF6B6B8A), fontSize: 11),
+          style: const TextStyle(color: kMutedText, fontSize: 11),
         ),
         if (header != null) ...[const SizedBox(height: 12), header!],
         const SizedBox(height: 12),
@@ -275,7 +281,7 @@ class _QuestCard extends StatelessWidget {
               AssetImage(_iconPath()),
               color: quest.completed
                   ? const Color(0xFF00FF9C)
-                  : const Color(0xFF6B6B8A),
+                  : kMutedText,
               size: 20,
             ),
             const SizedBox(width: 12),
@@ -294,7 +300,7 @@ class _QuestCard extends StatelessWidget {
                   Text(
                     quest.description,
                     style: const TextStyle(
-                      color: Color(0xFF6B6B8A),
+                      color: kMutedText,
                       fontSize: 12,
                     ),
                   ),
@@ -313,7 +319,7 @@ class _QuestCard extends StatelessWidget {
                     Text(
                       quest.progressLabel!,
                       style: const TextStyle(
-                        color: Color(0xFF6B6B8A),
+                        color: kMutedText,
                         fontSize: 10,
                       ),
                     ),
@@ -347,7 +353,7 @@ class _QuestAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (quest.claimed) {
-      return _StatusBadge(label: 'CLAIMED', color: const Color(0xFF6B6B8A));
+      return _StatusBadge(label: 'CLAIMED', color: kMutedText);
     }
     if (quest.claimable) {
       return PixelButton(
@@ -402,7 +408,7 @@ class _SegmentedProgressBar extends StatelessWidget {
               decoration: BoxDecoration(
                 color: i < completed
                     ? const Color(0xFF00FF9C)
-                    : const Color(0xFF2A2A4A),
+                    : kBorder,
                 borderRadius: BorderRadius.circular(4),
               ),
             ),

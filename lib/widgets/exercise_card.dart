@@ -47,11 +47,11 @@ class ExerciseCard extends StatelessWidget {
         height: 80,
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A2E),
+          color: kCard,
           border: Border.all(
             color: useSelectedBorder
                 ? const Color(0xFF00FF9C)
-                : const Color(0xFF2A2A4A),
+                : kBorder,
             width: useSelectedBorder ? 1.5 : 1,
           ),
           borderRadius: BorderRadius.circular(4),
@@ -72,7 +72,7 @@ class ExerciseCard extends StatelessWidget {
                   children: [
                     if (isCustom)
                       const ColoredBox(
-                        color: Color(0xFF0D0D1A),
+                        color: kBg,
                         child: Center(
                           child: ImageIcon(
                             AssetImage('assets/icons/control/icon_hammer.png'),
@@ -95,7 +95,7 @@ class ExerciseCard extends StatelessWidget {
                         ),
                       ),
                     Container(
-                      color: const Color(0xFF0D0D1A).withValues(alpha: 0.4),
+                      color: kBg.withValues(alpha: 0.4),
                     ),
                   ],
                 ),
@@ -151,7 +151,7 @@ class ExerciseCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 icon: const ImageIcon(
                   AssetImage('assets/icons/control/icon_expand.png'),
-                  color: Color(0xFF6B6B8A),
+                  color: kMutedText,
                   size: 20,
                 ),
                 onPressed: onInfoPressed,
@@ -162,7 +162,7 @@ class ExerciseCard extends StatelessWidget {
                 padding: EdgeInsets.only(right: 4),
                 child: ImageIcon(
                   AssetImage('assets/icons/control/icon_next.png'),
-                  color: Color(0xFF6B6B8A),
+                  color: kMutedText,
                   size: 16,
                 ),
               ),
@@ -191,7 +191,7 @@ class ExerciseCard extends StatelessWidget {
                       border: Border.all(
                         color: isSelected
                             ? const Color(0xFF00FF9C)
-                            : const Color(0xFF2A2A4A),
+                            : kBorder,
                         width: 1.5,
                       ),
                       borderRadius: BorderRadius.circular(4),
@@ -200,7 +200,7 @@ class ExerciseCard extends StatelessWidget {
                         ? const Icon(
                             Icons.check_sharp,
                             size: 16,
-                            color: Color(0xFF0D0D1A),
+                            color: kBg,
                           )
                         : null,
                   ),
@@ -290,7 +290,7 @@ class _BouncingHeartIconState extends State<_BouncingHeartIcon>
           ),
           color: widget.isFavorite
               ? const Color(0xFFFF2D55)
-              : const Color(0xFF6B6B8A),
+              : kMutedText,
           size: 20,
         ),
       ),

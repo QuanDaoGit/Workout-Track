@@ -61,7 +61,8 @@ class HomePageState extends State<HomePage> {
   int? _suggestedMissionRewardXP;
   RestDayInfo? _todayRestInfo;
   ProfileData _profile = ProfileData.defaults();
-  bool _missionCompletedToday = false;
+  MissionFinishState _missionFinishStateToday = MissionFinishState.none;
+  WorkoutSession? _endedEarlyToday;
   int? _preWorkoutXP;
   int? _preWorkoutLevel;
   bool _showXPGain = false;
@@ -129,8 +130,8 @@ class HomePageState extends State<HomePage> {
     final equippedLoot = await LootService().getEquippedLoot();
     final programCompletedToday = await programService
         .completedSnapshotForToday(now: today);
-    final missionCompleted =
-        await WorkoutStorageService.isMissionCompletedToday();
+    final missionFinishState =
+        await WorkoutStorageService.missionFinishStateToday();
     if (!mounted) return;
 
     final completed = all.where((s) => !s.isPartial).toList();
@@ -139,6 +140,11 @@ class HomePageState extends State<HomePage> {
     );
     final partial = all.where((s) => s.isOngoing).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
+    final endedEarlyToday =
+        all
+            .where((s) => s.isAbandoned && DateUtils.dateOnly(s.date) == today)
+            .toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
     final lastCompleted = completed.isEmpty
         ? null
         : completed.reduce((a, b) => a.date.isAfter(b.date) ? a : b);
@@ -223,7 +229,8 @@ class HomePageState extends State<HomePage> {
       _suggestedMissionRewardXP = suggestedMissionRewardXP;
       _todayRestInfo = todayRestInfo;
       _profile = profile;
-      _missionCompletedToday = missionCompleted;
+      _missionFinishStateToday = missionFinishState;
+      _endedEarlyToday = endedEarlyToday.isEmpty ? null : endedEarlyToday.first;
       _equippedLoot = equippedLoot;
       _programProgress = programProgress;
       _programDay = programDay;
@@ -257,6 +264,7 @@ class HomePageState extends State<HomePage> {
     double backgroundAlpha = 1.0,
     double borderWidth = 1.0,
     EdgeInsetsGeometry? padding,
+    List<BoxShadow>? boxShadow,
   }) {
     return Container(
       width: double.infinity,
@@ -268,6 +276,7 @@ class HomePageState extends State<HomePage> {
           width: borderWidth,
         ),
         borderRadius: BorderRadius.circular(kCardRadius),
+        boxShadow: boxShadow,
       ),
       child: child,
     );
@@ -314,9 +323,10 @@ class HomePageState extends State<HomePage> {
     final titleSize = title.length > 18 ? 14.0 : 18.0;
 
     return _homeCard(
-      background: const Color(0xFF17172C),
+      background: kSurface2,
       borderColor: borderColor ?? accent,
       borderWidth: kPrimaryCardBorderWidth,
+      boxShadow: neonGlow(color: borderColor ?? accent),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -669,7 +679,7 @@ class HomePageState extends State<HomePage> {
     }
 
     // Step 3: Mission card flash (after 1000ms, if completed today)
-    if (_missionCompletedToday) {
+    if (_missionFinishStateToday != MissionFinishState.none) {
       Future.delayed(const Duration(milliseconds: 1000), () {
         if (!mounted) return;
         setState(() => _missionFlashTrigger++);
@@ -797,10 +807,10 @@ class HomePageState extends State<HomePage> {
     final titleLabel = titleItem?.name ?? _selectedTitle ?? 'untitled';
     final titleColor =
         titleItem?.color ??
-        (_selectedTitle == null ? const Color(0xFF6B6B8A) : kAmber);
+        (_selectedTitle == null ? kMutedText : kAmber);
 
     final card = _homeCard(
-      background: const Color(0xFF121225),
+      background: kCard,
       borderColor: kBorder,
       borderAlpha: 0.85,
       child: Row(
@@ -883,7 +893,7 @@ class HomePageState extends State<HomePage> {
                     Text(
                       xpProgress.label,
                       style: AppFonts.shareTechMono(
-                        color: const Color(0xFF6B6B8A),
+                        color: kMutedText,
                         fontSize: 10,
                       ),
                     ),
@@ -938,8 +948,8 @@ class HomePageState extends State<HomePage> {
       height: 22,
       padding: const EdgeInsets.symmetric(horizontal: 7),
       decoration: BoxDecoration(
-        color: const Color(0xFF151529),
-        border: Border.all(color: const Color(0xFF3D3A68), width: 1),
+        color: kCard,
+        border: Border.all(color: kBorderVariant, width: 1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -996,7 +1006,7 @@ class HomePageState extends State<HomePage> {
       onTap: widget.onViewQuests,
       borderRadius: BorderRadius.circular(4),
       child: _homeCard(
-        background: const Color(0xFF121225),
+        background: kCard,
         backgroundAlpha: 0.86,
         borderColor: kBorder,
         borderAlpha: 0.8,
@@ -1093,8 +1103,14 @@ class HomePageState extends State<HomePage> {
       );
     }
 
-    if (session == null && _missionCompletedToday) {
+    if (session == null &&
+        _missionFinishStateToday == MissionFinishState.completed) {
       return _buildCompletedMissionPanel();
+    }
+
+    if (session == null &&
+        _missionFinishStateToday == MissionFinishState.endedEarly) {
+      return _buildEndedEarlyMissionPanel();
     }
     final restInfo = _todayRestInfo;
     if (session == null &&
@@ -1300,6 +1316,26 @@ class HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildEndedEarlyMissionPanel() {
+    final session = _endedEarlyToday;
+    final title = session?.targetMuscleLabel ?? 'Today\'s mission';
+    final detail = session == null
+        ? ''
+        : '${_fmtDuration(session.actualDurationSeconds)} logged';
+
+    return _missionCard(
+      accent: kAmber,
+      borderColor: kAmber,
+      trailing: const _MissionFinishedChip(),
+      meta: 'FINISHED',
+      title: title.toUpperCase(),
+      titleColor: kMutedText,
+      detail: detail,
+      supportText: 'Time-only XP awarded. Tomorrow brings a new run.',
+      supportColor: kAmber,
+    );
+  }
+
   Widget _buildRecoveryMissionPanel(RestDayInfo restInfo) {
     final rewardLabel = '+${restInfo.recoveryXP} XP';
 
@@ -1373,7 +1409,7 @@ class HomePageState extends State<HomePage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: _themedCardColor(const Color(0xFF121225)),
+            color: _themedCardColor(kCard),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -1401,7 +1437,7 @@ class HomePageState extends State<HomePage> {
                     Text(
                       _sessionProgressLabel(session),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF6B6B8A),
+                        color: kMutedText,
                         fontSize: 12,
                       ),
                     ),
@@ -1462,7 +1498,7 @@ class HomePageState extends State<HomePage> {
         : _lastWorkoutSubtitle(session);
 
     return _homeCard(
-      background: const Color(0xFF121225),
+      background: kCard,
       backgroundAlpha: 0.78,
       borderColor: kBorder,
       borderAlpha: 0.72,
@@ -1601,6 +1637,30 @@ class _MissionClearedChip extends StatelessWidget {
       child: const Text(
         '\u2713 CLEARED',
         style: TextStyle(fontFamily: 'PressStart2P', fontSize: 8, color: kNeon),
+      ),
+    );
+  }
+}
+
+class _MissionFinishedChip extends StatelessWidget {
+  const _MissionFinishedChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: kAmber.withValues(alpha: 0.12),
+        border: Border.all(color: kAmber),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        'FINISHED',
+        style: TextStyle(
+          fontFamily: 'PressStart2P',
+          fontSize: 8,
+          color: kAmber,
+        ),
       ),
     );
   }

@@ -16,6 +16,7 @@ import '../services/workout_metric_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
+import '../theme/tokens.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/calendar_day_marker.dart';
@@ -86,7 +87,7 @@ class WorkoutPageState extends State<WorkoutPage>
           labelStyle: const TextStyle(fontFamily: 'PressStart2P', fontSize: 9),
           indicatorColor: const Color(0xFF00FF9C),
           labelColor: const Color(0xFF00FF9C),
-          unselectedLabelColor: const Color(0xFF6B6B8A),
+          unselectedLabelColor: kMutedText,
         ),
       ),
       body: TabBarView(
@@ -183,9 +184,9 @@ class _HistoryTabState extends State<_HistoryTab> {
               child: Column(
                 children: [
                   _StatRow(label: 'Total Sessions', value: '$_totalSessions'),
-                  const Divider(height: 24, color: Color(0xFF2A2A4A)),
+                  const Divider(height: 24, color: kBorder),
                   _StatRow(label: 'This Month', value: '$_thisMonth'),
-                  const Divider(height: 24, color: Color(0xFF2A2A4A)),
+                  const Divider(height: 24, color: kBorder),
                   _StatRow(
                     label: 'Train Days',
                     value:
@@ -276,8 +277,8 @@ class _HistoryViewControl extends StatelessWidget {
       height: 48,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFF121225),
-        border: Border.all(color: const Color(0xFF2A2A4A)),
+        color: kCard,
+        border: Border.all(color: kBorder),
         borderRadius: BorderRadius.circular(4),
       ),
       child: LayoutBuilder(
@@ -344,8 +345,8 @@ class _HistoryViewSegment extends StatelessWidget {
             curve: Curves.easeOutCubic,
             style: TextStyle(
               color: selected
-                  ? const Color(0xFF0D0D1A)
-                  : const Color(0xFF6B6B8A),
+                  ? kBg
+                  : kMutedText,
               fontFamily: 'PressStart2P',
               fontSize: 8,
             ),
@@ -500,7 +501,7 @@ class _InlineHistoryCalendar extends StatelessWidget {
                           day,
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                            color: Color(0xFF6B6B8A),
+                            color: kMutedText,
                             fontSize: 9,
                             fontFamily: 'PressStart2P',
                           ),
@@ -644,7 +645,7 @@ class _CalendarCell extends StatelessWidget {
                     ? const Color(0xFF00FF9C)
                     : isPast || isToday
                     ? const Color(0xFFE8E8FF)
-                    : const Color(0xFF6B6B8A),
+                    : kMutedText,
                 fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
               ),
             ),
@@ -726,7 +727,7 @@ class _SessionListTile extends StatelessWidget {
                   subtitle: Text(
                     '${fmtDayDate(session.date)} · '
                     '${session.isAbandoned ? 'Time XP only' : '${session.exercises.length} exercises'}',
-                    style: const TextStyle(color: Color(0xFF6B6B8A)),
+                    style: const TextStyle(color: kMutedText),
                   ),
                   trailing: Text('$mins min'),
                 ),
@@ -1037,7 +1038,7 @@ class _StatsTabState extends State<_StatsTab> {
             const ImageIcon(
               AssetImage('assets/icons/control/icon_sword.png'),
               size: 48,
-              color: Color(0xFF2A2A4A),
+              color: kBorder,
             ),
             const SizedBox(height: 16),
             Text(
@@ -1134,7 +1135,7 @@ class _StatsTabState extends State<_StatsTab> {
                   Text(
                     xpProgress.label,
                     style: const TextStyle(
-                      color: Color(0xFF6B6B8A),
+                      color: kMutedText,
                       fontSize: 10,
                     ),
                   ),
@@ -1167,7 +1168,7 @@ class _StatsTabState extends State<_StatsTab> {
           ),
 
           const SizedBox(height: 24),
-          const Divider(color: Color(0xFF2A2A4A)),
+          const Divider(color: kBorder),
           const SizedBox(height: 16),
 
           // ── Section 2: This Week ───────────────────────────────────────
@@ -1218,7 +1219,7 @@ class _StatsTabState extends State<_StatsTab> {
                         return Text(
                           days[value.toInt()],
                           style: const TextStyle(
-                            color: Color(0xFF6B6B8A),
+                            color: kMutedText,
                             fontSize: 10,
                           ),
                         );
@@ -1256,14 +1257,14 @@ class _StatsTabState extends State<_StatsTab> {
                       ? const Color(0xFF00FF9C)
                       : pct < 0
                       ? const Color(0xFFFF2D55)
-                      : const Color(0xFF6B6B8A),
+                      : kMutedText,
                 ),
               ),
             ],
           ),
 
           const SizedBox(height: 24),
-          const Divider(color: Color(0xFF2A2A4A)),
+          const Divider(color: kBorder),
           const SizedBox(height: 16),
 
           // ── Section 3: Muscle Balance ──────────────────────────────────
@@ -1274,7 +1275,7 @@ class _StatsTabState extends State<_StatsTab> {
           const SizedBox(height: 4),
           Text(
             'Last 30 days',
-            style: const TextStyle(color: Color(0xFF6B6B8A), fontSize: 12),
+            style: const TextStyle(color: kMutedText, fontSize: 12),
           ),
           const SizedBox(height: 16),
 
@@ -1293,7 +1294,7 @@ class _StatsTabState extends State<_StatsTab> {
                 child: Text(
                   'Suggested next',
                   style: const TextStyle(
-                    color: Color(0xFF6B6B8A),
+                    color: kMutedText,
                     fontSize: 10,
                   ),
                 ),
@@ -1302,7 +1303,7 @@ class _StatsTabState extends State<_StatsTab> {
           ],
 
           const SizedBox(height: 16),
-          const Divider(color: Color(0xFF2A2A4A)),
+          const Divider(color: kBorder),
           const SizedBox(height: 16),
 
           // ── Section 4: Personal Bests ──────────────────────────────────
@@ -1379,7 +1380,7 @@ class _StatsTabState extends State<_StatsTab> {
                                               Text(
                                                 '${entry.value.weight}kg × ${entry.value.reps} reps',
                                                 style: const TextStyle(
-                                                  color: Color(0xFF6B6B8A),
+                                                  color: kMutedText,
                                                   fontSize: 12,
                                                 ),
                                               ),
@@ -1389,7 +1390,7 @@ class _StatsTabState extends State<_StatsTab> {
                                         Text(
                                           _fmtDate(entry.value.date),
                                           style: const TextStyle(
-                                            color: Color(0xFF6B6B8A),
+                                            color: kMutedText,
                                             fontSize: 12,
                                           ),
                                         ),
@@ -1427,7 +1428,7 @@ class _RankBadge extends StatelessWidget {
       case 'Squire':
         return const Color(0xFF00FF9C);
       default:
-        return const Color(0xFF6B6B8A);
+        return kMutedText;
     }
   }
 
@@ -1491,7 +1492,7 @@ class _StatPip extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(color: Color(0xFF6B6B8A), fontSize: 9),
+          style: const TextStyle(color: kMutedText, fontSize: 9),
         ),
       ],
     );
@@ -1522,7 +1523,7 @@ class _MuscleBalanceRow extends StatelessWidget {
           width: 56,
           child: Text(
             data.muscle,
-            style: const TextStyle(color: Color(0xFF6B6B8A), fontSize: 12),
+            style: const TextStyle(color: kMutedText, fontSize: 12),
           ),
         ),
         const SizedBox(width: 8),
@@ -1538,7 +1539,7 @@ class _MuscleBalanceRow extends StatelessWidget {
           width: 72,
           child: Text(
             '${fmtVol(data.volume)} kg',
-            style: const TextStyle(color: Color(0xFF6B6B8A), fontSize: 12),
+            style: const TextStyle(color: kMutedText, fontSize: 12),
             textAlign: TextAlign.right,
           ),
         ),
@@ -1653,12 +1654,12 @@ class _ExercisesTabState extends State<_ExercisesTab>
             decoration: InputDecoration(
               hintText: 'Search exercises',
               hintStyle: AppFonts.shareTechMono(
-                color: const Color(0xFF6B6B8A),
+                color: kMutedText,
                 fontSize: 13,
               ),
               prefixIcon: const Icon(
                 Icons.search_sharp,
-                color: Color(0xFF6B6B8A),
+                color: kMutedText,
               ),
               suffixIcon: _query.isEmpty
                   ? null
@@ -1670,18 +1671,18 @@ class _ExercisesTabState extends State<_ExercisesTab>
                       },
                       icon: const Icon(
                         Icons.close_sharp,
-                        color: Color(0xFF6B6B8A),
+                        color: kMutedText,
                       ),
                     ),
               filled: true,
-              fillColor: const Color(0xFF1A1A2E),
+              fillColor: kCard,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 12,
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: Color(0xFF2A2A4A)),
+                borderSide: const BorderSide(color: kBorder),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(4),
@@ -1712,8 +1713,8 @@ class _ExercisesTabState extends State<_ExercisesTab>
                 selected: selected,
                 labelStyle: TextStyle(
                   color: selected
-                      ? const Color(0xFF0D0D1A)
-                      : const Color(0xFF6B6B8A),
+                      ? kBg
+                      : kMutedText,
                   fontSize: 11,
                 ),
                 onSelected: (_) => setState(() => _selectedGroup = group),
@@ -1759,7 +1760,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
                       child: Container(
                         height: 80,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1A1A2E),
+                          color: kCard,
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -1772,7 +1773,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
                     _favOnly ? 'NO FAVORITES YET' : 'No exercises found',
                     style: _favOnly
                         ? AppFonts.shareTechMono(
-                            color: const Color(0xFF6B6B8A),
+                            color: kMutedText,
                             fontSize: 13,
                             letterSpacing: 1.2,
                           )
@@ -1813,7 +1814,7 @@ class _FavChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const red = Color(0xFFFF2D55);
-    const dark = Color(0xFF0D0D1A);
+    const dark = kBg;
     final fg = selected ? dark : red;
     return GestureDetector(
       onTap: onSelected,

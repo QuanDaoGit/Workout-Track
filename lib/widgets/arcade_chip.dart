@@ -73,7 +73,7 @@ class _ArcadeChipState extends State<ArcadeChip> {
     final textColor = selected
         ? widget.selectedColor
         : widget.unselectedTextColor;
-    final bg = selected ? kCard : const Color(0xFF1F1F35);
+    final bg = kCard;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
