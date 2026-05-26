@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,6 +14,10 @@ class WorkoutStorageService {
   static const String _sessionsKey = 'workout_sessions';
   static const String _lastCompletedDateKey = 'last_completed_date';
   static const String _lastMissionFinishTypeKey = 'last_mission_finish_type';
+  static final StreamController<void> _changes =
+      StreamController<void>.broadcast();
+
+  static Stream<void> get changes => _changes.stream;
 
   Future<void> saveSession(WorkoutSession session) async {
     final sessions = await getSessions();
@@ -57,6 +62,7 @@ class WorkoutStorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastCompletedDateKey, _dateKey(date));
     await prefs.setString(_lastMissionFinishTypeKey, state.name);
+    _emitChanged();
   }
 
   static String _dateKey(DateTime date) {
@@ -86,6 +92,20 @@ class WorkoutStorageService {
     }
   }
 
+  Future<void> annotateSessionStatDelta(
+    String sessionId,
+    Map<String, int> delta,
+  ) async {
+    final sessions = await getSessions();
+    var found = false;
+    final updated = [
+      for (final session in sessions)
+        _annotatedIfMatch(session, sessionId, delta, () => found = true),
+    ];
+    if (!found) return;
+    await _writeSessions(updated);
+  }
+
   Future<WorkoutSession?> getOngoingSession() async {
     final sessions = await getSessions();
     final ongoing = sessions.where((s) => s.isOngoing).toList()
@@ -112,6 +132,7 @@ class WorkoutStorageService {
       _sessionsKey,
       jsonEncode(sessions.map((s) => s.toJson()).toList()),
     );
+    _emitChanged();
   }
 
   Future<List<WorkoutSession>> getSessions() async {
@@ -212,4 +233,48 @@ class WorkoutStorageService {
     final updated = sessions.where((s) => s.id != id).toList();
     await _writeSessions(updated);
   }
+
+  static void _emitChanged() {
+    if (!_changes.isClosed) _changes.add(null);
+  }
+}
+
+WorkoutSession _annotatedIfMatch(
+  WorkoutSession session,
+  String sessionId,
+  Map<String, int> statDelta,
+  void Function() markFound,
+) {
+  if (session.id != sessionId) return session;
+  markFound();
+  return _withStatDelta(session, statDelta);
+}
+
+WorkoutSession _withStatDelta(
+  WorkoutSession session,
+  Map<String, int> statDelta,
+) {
+  return WorkoutSession(
+    id: session.id,
+    date: session.date,
+    startedAt: session.startedAt,
+    pausedAt: session.pausedAt,
+    autoDiscardAt: session.autoDiscardAt,
+    muscleGroup: session.muscleGroup,
+    targetMuscleGroups: session.targetMuscleGroups,
+    targetDurationMinutes: session.targetDurationMinutes,
+    actualDurationSeconds: session.actualDurationSeconds,
+    exercises: session.exercises,
+    estimatedCalories: session.estimatedCalories,
+    isPartial: session.isPartial,
+    isAbandoned: session.isAbandoned,
+    isPausedForResume: session.isPausedForResume,
+    selectedExerciseIds: session.selectedExerciseIds,
+    baseXP: session.baseXP,
+    lckMultiplier: session.lckMultiplier,
+    potionMultiplier: session.potionMultiplier,
+    awardedXP: session.awardedXP,
+    classAtSave: session.classAtSave,
+    statDelta: Map<String, int>.from(statDelta),
+  );
 }

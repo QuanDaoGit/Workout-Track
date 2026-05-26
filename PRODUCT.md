@@ -10,7 +10,13 @@ Adding or removing a bucket requires updating: the `canonicalMuscleGroups` list,
 
 ## Character stats and XP
 
-STR, DEF, VIT, and AGI are cumulative training stats derived from logged exercise volume. LCK is not a crit stat. LCK equals the current training streak capped at 100 and drives an award-time XP multiplier:
+STR, DEF, VIT, AGI, and END are cumulative workout-output stats. They start at 10 so a new character has a visible baseline; LCK starts at 0 because it is streak-derived. STR/DEF/VIT/AGI are derived from logged exercise volume by primary muscle. END is class-neutral and grows from logged reps:
+
+- 1-7 reps: each rep counts 0.5x toward END
+- 8-14 reps: each rep counts 1.0x toward END
+- 15+ reps: each rep counts 1.5x toward END
+
+END is backfilled from existing workout history because those reps are real logged training data. LCK is not a crit stat and is not a workout-output stat. LCK equals the current training streak capped at 100 and drives an award-time XP multiplier:
 
 - LCK 0-24: 0 diamonds, 1.0x XP
 - LCK 25-49: 1 diamond, 1.5x XP
@@ -30,7 +36,7 @@ Class choice has a session-time mechanical bonus. The class active when the work
 - Assassin: +20% AGI effective volume from shoulders and core training.
 - Tank: +20% VIT effective volume from legs training.
 
-The bonus uses actual logged exercise primary-muscle attribution, not only the selected workout target.
+The bonus uses actual logged exercise primary-muscle attribution, not only the selected workout target. END has no class bonus.
 
 ## Quest ethics
 

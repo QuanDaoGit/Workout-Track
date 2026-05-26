@@ -25,6 +25,7 @@ class _ScanlinePainter extends CustomPainter {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await MigrationService.runOnce();
+  await MigrationService.runEndStatBackfillOnce();
   await StatEngine().applyDecayIfNeeded();
   await ClassMigrationService().migrateIfNeeded();
   runApp(const MyApp());
@@ -91,8 +92,7 @@ class MyApp extends StatelessWidget {
           style: FilledButton.styleFrom(
             backgroundColor: kNeon,
             foregroundColor: kBg,
-            elevation: 6,
-            shadowColor: kNeon.withValues(alpha: 0.45),
+            elevation: 0,
             textStyle: AppFonts.shareTechMono(
               fontWeight: FontWeight.bold,
               letterSpacing: 1.5,
@@ -136,14 +136,8 @@ class MyApp extends StatelessWidget {
             fontSize: 12,
             color: kText,
           ),
-          bodySmall: AppFonts.shareTechMono(
-            color: kMutedText,
-            fontSize: 14,
-          ),
-          bodyMedium: AppFonts.shareTechMono(
-            color: kText,
-            fontSize: 14,
-          ),
+          bodySmall: AppFonts.shareTechMono(color: kMutedText, fontSize: 14),
+          bodyMedium: AppFonts.shareTechMono(color: kText, fontSize: 14),
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: Colors.transparent,

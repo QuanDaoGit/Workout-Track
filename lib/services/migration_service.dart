@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'stat_engine.dart';
+
 /// One-shot cleanup of dead `shared_preferences` keys left over from the
 /// battle / dungeon / scrap / ability / ultimate systems.
 ///
@@ -8,6 +10,7 @@ class MigrationService {
   const MigrationService._();
 
   static const _doneKey = 'migration_v1_battle_strip_done';
+  static const _endStatDoneKey = 'migration_v2_end_stat_done';
 
   static const _deadKeys = <String>[
     // Battle / dungeon / scrap
@@ -47,5 +50,16 @@ class MigrationService {
     }
 
     await prefs.setBool(_doneKey, true);
+  }
+
+  static Future<void> runEndStatBackfillOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_endStatDoneKey) == true) return;
+
+    final stats = await StatEngine().calculateAllStats();
+    if ((stats['END'] ?? 0) > StatEngine.baseOutputStatValue) {
+      await StatEngine.markEndBackfillNoticePending();
+    }
+    await prefs.setBool(_endStatDoneKey, true);
   }
 }

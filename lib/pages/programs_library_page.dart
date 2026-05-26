@@ -9,14 +9,33 @@ import '../widgets/arcade_route.dart';
 import '../widgets/pixel_button.dart';
 import 'program_detail_page.dart';
 
-class ProgramsLibraryPage extends StatefulWidget {
+class ProgramsLibraryPage extends StatelessWidget {
   const ProgramsLibraryPage({super.key});
 
   @override
-  State<ProgramsLibraryPage> createState() => _ProgramsLibraryPageState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Programs')),
+      body: const ProgramsLibraryBody(),
+    );
+  }
 }
 
-class _ProgramsLibraryPageState extends State<ProgramsLibraryPage> {
+class ProgramsLibraryBody extends StatefulWidget {
+  const ProgramsLibraryBody({
+    super.key,
+    this.embedded = false,
+    this.reloadToken = 0,
+  });
+
+  final bool embedded;
+  final int reloadToken;
+
+  @override
+  State<ProgramsLibraryBody> createState() => _ProgramsLibraryBodyState();
+}
+
+class _ProgramsLibraryBodyState extends State<ProgramsLibraryBody> {
   final ProgramService _programService = ProgramService();
   ProgramProgress? _activeProgress;
   bool _loading = true;
@@ -25,6 +44,14 @@ class _ProgramsLibraryPageState extends State<ProgramsLibraryPage> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProgramsLibraryBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.reloadToken != widget.reloadToken) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -66,7 +93,7 @@ class _ProgramsLibraryPageState extends State<ProgramsLibraryPage> {
             const SizedBox(height: kSpace2),
             PixelButton(
               label: 'CANCEL',
-              color: kBorderDark,
+              secondary: true,
               onPressed: () => Navigator.of(ctx).pop(false),
             ),
           ],
@@ -90,29 +117,97 @@ class _ProgramsLibraryPageState extends State<ProgramsLibraryPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Programs')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView.separated(
-              padding: EdgeInsets.fromLTRB(
-                kSpace4,
-                kSpace4,
-                kSpace4,
-                kSpace5 + MediaQuery.of(context).padding.bottom,
-              ),
-              itemBuilder: (context, index) {
-                final program = programsLibrary[index];
-                return _ProgramCard(
-                  program: program,
-                  active: _activeProgress?.programId == program.id,
-                  onTap: () => _openDetail(program),
-                  onStart: () => _startProgram(program),
-                );
-              },
-              separatorBuilder: (_, _) => const SizedBox(height: kSpace3),
-              itemCount: programsLibrary.length,
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final bottomPadding = widget.embedded
+        ? kSpace5
+        : kSpace5 + MediaQuery.of(context).padding.bottom;
+
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(kSpace4, kSpace4, kSpace4, bottomPadding),
+      itemBuilder: (context, index) {
+        if (index == 0 && _activeProgress != null) {
+          return _ActiveProgramSummary(progress: _activeProgress!);
+        }
+
+        final programIndex = _activeProgress == null ? index : index - 1;
+        final program = programsLibrary[programIndex];
+        return _ProgramCard(
+          program: program,
+          active: _activeProgress?.programId == program.id,
+          onTap: () => _openDetail(program),
+          onStart: () => _startProgram(program),
+        );
+      },
+      separatorBuilder: (_, _) => const SizedBox(height: kSpace3),
+      itemCount: programsLibrary.length + (_activeProgress == null ? 0 : 1),
+    );
+  }
+}
+
+class _ActiveProgramSummary extends StatelessWidget {
+  const _ActiveProgramSummary({required this.progress});
+
+  final ProgramProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final program = programById(progress.programId);
+    if (program == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(kSpace4),
+      decoration: BoxDecoration(
+        color: kSurface2,
+        border: Border.all(color: kNeon),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          const ImageIcon(
+            AssetImage('assets/icons/control/icon_scroll.png'),
+            color: kNeon,
+            size: 20,
+          ),
+          const SizedBox(width: kSpace3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'ACTIVE PROGRAM',
+                  style: TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 8,
+                    color: kMutedText,
+                  ),
+                ),
+                const SizedBox(height: kSpace2),
+                Text(
+                  program.name,
+                  style: const TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 10,
+                    color: kText,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: kSpace1),
+                Text(
+                  'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}/7',
+                  style: AppFonts.shareTechMono(
+                    color: kMutedText,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
+          ),
+          _MiniTextBadge(label: '${progress.completedSessions} DONE'),
+        ],
+      ),
     );
   }
 }
@@ -206,6 +301,32 @@ class _TierBadge extends StatelessWidget {
       child: Text(
         normalized,
         style: TextStyle(fontFamily: 'PressStart2P', fontSize: 7, color: color),
+      ),
+    );
+  }
+}
+
+class _MiniTextBadge extends StatelessWidget {
+  const _MiniTextBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+      decoration: BoxDecoration(
+        color: kNeon.withValues(alpha: 0.12),
+        border: Border.all(color: kNeon),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: 'PressStart2P',
+          fontSize: 7,
+          color: kNeon,
+        ),
       ),
     );
   }

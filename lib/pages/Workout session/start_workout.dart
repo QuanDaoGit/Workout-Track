@@ -646,38 +646,37 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
                     }
                   },
                   style: FilledButton.styleFrom(
-                    backgroundColor: kBorderDark,
-                    foregroundColor: isFavorite ? kDanger : kMutedText,
+                    backgroundColor: kBorderVariant,
+                    foregroundColor: kText,
+                    side: const BorderSide(color: kBorder),
                   ),
                   icon: Icon(
                     isFavorite
                         ? Icons.favorite_sharp
                         : Icons.favorite_border_sharp,
                     size: 18,
+                    color: isFavorite ? kDanger : kText,
                   ),
                   label: Text(isFavorite ? 'FAVORITE' : 'MARK FAVORITE'),
+                ),
+                const SizedBox(height: kSpace4),
+                PixelButton(
+                  label: isSelected ? 'DESELECT' : 'SELECT',
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _toggleSelectedExercise(exercise.id);
+                  },
+                ),
+                const SizedBox(height: kSpace2),
+                PixelButton(
+                  label: 'CLOSE',
+                  secondary: true,
+                  onPressed: () => Navigator.pop(context),
                 ),
               ],
             ),
           ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(context),
-              style: FilledButton.styleFrom(
-                backgroundColor: kBorderDark,
-                foregroundColor: kText,
-              ),
-              child: const Text('CLOSE'),
-            ),
-            PixelButton(
-              label: isSelected ? 'DESELECT' : 'SELECT',
-              fullWidth: false,
-              onPressed: () {
-                Navigator.pop(context);
-                _toggleSelectedExercise(exercise.id);
-              },
-            ),
-          ],
+          actions: const [],
         ),
       ),
     );

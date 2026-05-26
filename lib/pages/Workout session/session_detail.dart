@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../models/workout_models.dart';
+import '../../services/stat_engine.dart';
 import '../../services/xp_service.dart';
+import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../workout_page.dart' show fmtVol;
 
@@ -49,6 +51,11 @@ class SessionDetailPage extends StatelessWidget {
     final exerciseLogs = session.exercises
         .where((log) => log.sets.isNotEmpty)
         .toList();
+    final statDelta = {
+      for (final entry in session.statDelta.entries)
+        if (entry.value > 0 && StatEngine.stats.contains(entry.key))
+          entry.key: entry.value,
+    };
 
     return Scaffold(
       appBar: AppBar(title: Text(_fmtDate(session.date))),
@@ -103,6 +110,10 @@ class SessionDetailPage extends StatelessWidget {
             ),
 
             if (exerciseLogs.isNotEmpty) ...[
+              if (statDelta.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                _StatDeltaCard(delta: statDelta),
+              ],
               const SizedBox(height: 24),
 
               Text(
@@ -167,6 +178,60 @@ class SessionDetailPage extends StatelessWidget {
                   ),
                 ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatDeltaCard extends StatelessWidget {
+  const _StatDeltaCard({required this.delta});
+
+  final Map<String, int> delta;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                ImageIcon(
+                  AssetImage('assets/icons/control/icon_star.png'),
+                  color: kAmber,
+                  size: 16,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'STAT GAINS',
+                  style: TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 8,
+                    color: kAmber,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                for (final entry in delta.entries)
+                  Text(
+                    '+${entry.value} ${entry.key}',
+                    style: AppFonts.shareTechMono(
+                      color: kNeon,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
       ),

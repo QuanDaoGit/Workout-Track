@@ -24,7 +24,8 @@ void main() {
       ..remove('lckMultiplier')
       ..remove('potionMultiplier')
       ..remove('awardedXP')
-      ..remove('classAtSave');
+      ..remove('classAtSave')
+      ..remove('statDelta');
 
     final parsed = WorkoutSession.fromJson(legacy);
     expect(parsed.startedAt, date);
@@ -35,6 +36,7 @@ void main() {
     expect(parsed.baseXP, isNull);
     expect(parsed.awardedXP, isNull);
     expect(parsed.classAtSave, isNull);
+    expect(parsed.statDelta, isEmpty);
     expect(parsed.isOngoing, isFalse);
 
     final pausedAt = date.add(const Duration(minutes: 20));
@@ -105,6 +107,15 @@ void main() {
     expect(parsed.classAtSave, 'bruiser');
     expect(XpService.calculateBaseSessionXP(parsed), 80);
     expect(XpService.calculateSessionXP(parsed), 240);
+  });
+
+  test('session stat delta persists with backward-compatible default', () {
+    final now = DateTime(2026, 5, 14, 9);
+    final session = _session(date: now, statDelta: {'STR': 3, 'END': 12});
+
+    final parsed = WorkoutSession.fromJson(session.toJson());
+
+    expect(parsed.statDelta, {'STR': 3, 'END': 12});
   });
 
   test('paused resumable sessions freeze elapsed time and resume clock', () {
@@ -192,6 +203,47 @@ void main() {
     );
     expect(sessions.where((session) => session.isOngoing).single.id, 'new');
   });
+
+  test('session writes emit storage change signal', () async {
+    final storage = WorkoutStorageService();
+    final now = DateTime(2026, 5, 14, 9);
+    final emitted = expectLater(WorkoutStorageService.changes, emits(isNull));
+
+    await storage.replaceOngoingSession(
+      _session(date: now, id: 'active', isPartial: true),
+    );
+
+    await emitted;
+  });
+
+  test('mission finish marker emits storage change signal', () async {
+    final now = DateTime(2026, 5, 14, 9);
+    final emitted = expectLater(WorkoutStorageService.changes, emits(isNull));
+
+    await WorkoutStorageService.markMissionFinished(
+      now,
+      MissionFinishState.endedEarly,
+    );
+
+    await emitted;
+  });
+
+  test(
+    'annotating session stat delta rewrites session without recalculation',
+    () async {
+      final storage = WorkoutStorageService();
+      final now = DateTime(2026, 5, 14, 9);
+
+      await storage.replaceOngoingSession(
+        _session(date: now, id: 'active', isPartial: true),
+      );
+      await storage.annotateSessionStatDelta('active', {'STR': 4, 'END': 9});
+
+      final session = (await storage.getSessions()).single;
+      expect(session.statDelta, {'STR': 4, 'END': 9});
+      expect(session.isPartial, isTrue);
+    },
+  );
 
   test('completed sessions mark today mission as completed', () async {
     final storage = WorkoutStorageService();
@@ -350,6 +402,7 @@ WorkoutSession _session({
   double? potionMultiplier,
   int? awardedXP,
   String? classAtSave,
+  Map<String, int> statDelta = const {},
 }) {
   return WorkoutSession(
     id: id,
@@ -380,5 +433,6 @@ WorkoutSession _session({
     potionMultiplier: potionMultiplier,
     awardedXP: awardedXP,
     classAtSave: classAtSave,
+    statDelta: statDelta,
   );
 }

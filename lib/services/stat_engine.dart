@@ -24,9 +24,13 @@ class StatEngine {
   static const _lastDeltaKey = 'combat_stat_last_delta';
   static const _lastSessionDateKey = 'combat_stats_last_session_date';
   static const _lastDecayDateKey = 'combat_stats_last_decay_date';
+  static const endBackfillNoticeKey = 'end_stat_backfill_notice_pending';
 
-  static const stats = ['STR', 'DEF', 'VIT', 'AGI', 'LCK'];
-  static const volumeStats = ['STR', 'DEF', 'VIT', 'AGI'];
+  static const outputStats = ['STR', 'DEF', 'VIT', 'AGI', 'END'];
+  static const stats = ['STR', 'DEF', 'VIT', 'AGI', 'END', 'LCK'];
+  static const volumeStats = outputStats;
+  static const _kgVolumeStats = ['STR', 'DEF', 'VIT', 'AGI'];
+  static const baseOutputStatValue = 10;
 
   final DateTime Function() _nowProvider;
   final Map<String, String>? _catalogOverride;
@@ -104,7 +108,37 @@ class StatEngine {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(combatStatsKey);
     if (stored == null) return calculateAllStats();
+    final sessions = await _loadCompletedSessions(prefs);
+    if (sessions.isEmpty) {
+      final baseline = _emptyStats();
+      await prefs.setString(combatStatsKey, jsonEncode(baseline));
+      return baseline;
+    }
     return _decodeStats(stored);
+  }
+
+  static double endurancePointsForSet(SetEntry set) {
+    if (set.reps <= 0) return 0;
+    final multiplier = set.reps <= 7
+        ? 0.5
+        : set.reps <= 14
+        ? 1.0
+        : 1.5;
+    return set.reps * multiplier;
+  }
+
+  static Future<void> markEndBackfillNoticePending() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(endBackfillNoticeKey, true);
+  }
+
+  static Future<bool> consumeEndBackfillNotice() async {
+    final prefs = await SharedPreferences.getInstance();
+    final pending = prefs.getBool(endBackfillNoticeKey) ?? false;
+    if (pending) {
+      await prefs.remove(endBackfillNoticeKey);
+    }
+    return pending;
   }
 
   /// Check and apply decay if needed.
@@ -174,7 +208,7 @@ class StatEngine {
     return [
         for (final item in decoded)
           WorkoutSession.fromJson(item as Map<String, dynamic>),
-      ].where((session) => !session.isPartial).toList()
+      ].where((session) => !session.isPartial && !session.isAbandoned).toList()
       ..sort((a, b) => a.date.compareTo(b.date));
   }
 
@@ -206,10 +240,12 @@ class StatEngine {
     List<WorkoutSession> sessions,
     Map<String, String> catalog,
   ) {
-    final volumes = {for (final stat in volumeStats) stat: 0.0};
+    final volumes = {for (final stat in _kgVolumeStats) stat: 0.0};
+    var endurance = 0.0;
     for (final session in sessions) {
       for (final log in session.exercises) {
         final volume = _volumeForLog(log);
+        endurance += _endurancePointsForLog(log);
         final primary = _primaryForLog(log, session, catalog);
         final stat = _statForPrimaryMuscle(primary);
         if (stat != null) {
@@ -225,7 +261,9 @@ class StatEngine {
     }
 
     return {
-      for (final stat in volumeStats) stat: _statFromVolume(volumes[stat] ?? 0),
+      for (final stat in _kgVolumeStats)
+        stat: _withOutputBaseline(_statFromVolume(volumes[stat] ?? 0)),
+      'END': _withOutputBaseline(endurance.floor()),
       'LCK': _luckForSessions(sessions, catalog),
     };
   }
@@ -237,10 +275,11 @@ class StatEngine {
     required Map<String, String> catalog,
   }) {
     final touched = _touchedStatsForSession(latestSession, catalog);
-    final delta = <String, int>{
-      for (final stat in touched)
-        stat: (after[stat] ?? 0) - (before[stat] ?? 0),
-    };
+    final delta = <String, int>{};
+    for (final stat in touched) {
+      final value = (after[stat] ?? 0) - (before[stat] ?? 0);
+      if (value != 0) delta[stat] = value;
+    }
     final luckDelta = (after['LCK'] ?? 0) - (before['LCK'] ?? 0);
     if (luckDelta > 0) delta['LCK'] = luckDelta;
     return delta;
@@ -252,6 +291,7 @@ class StatEngine {
   ) {
     final touched = <String>{};
     for (final log in session.exercises) {
+      if (_endurancePointsForLog(log) > 0) touched.add('END');
       final primary = _primaryForLog(log, session, catalog);
       final stat = _statForPrimaryMuscle(primary);
       if (stat != null) touched.add(stat);
@@ -341,8 +381,19 @@ class StatEngine {
     });
   }
 
+  double _endurancePointsForLog(ExerciseLog log) {
+    return log.sets.fold<double>(
+      0,
+      (sum, set) => sum + endurancePointsForSet(set),
+    );
+  }
+
   int _statFromVolume(double volume) {
     return min(1000, (100 * log(volume / 500 + 1)).floor());
+  }
+
+  int _withOutputBaseline(int value) {
+    return min(1000, baseOutputStatValue + value);
   }
 
   Map<String, int> _mergePeaks(
@@ -372,7 +423,10 @@ class StatEngine {
     };
   }
 
-  Map<String, int> _emptyStats() => {for (final stat in stats) stat: 0};
+  Map<String, int> _emptyStats() => {
+    for (final stat in outputStats) stat: baseOutputStatValue,
+    'LCK': 0,
+  };
 
   DateTime _dateOnly(DateTime date) =>
       DateTime(date.year, date.month, date.day);

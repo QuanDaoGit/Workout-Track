@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
@@ -36,6 +38,35 @@ import '../widgets/rest_icon.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
 
+class CompletedMissionCopy {
+  const CompletedMissionCopy({required this.title, required this.detail});
+
+  final String title;
+  final String detail;
+}
+
+CompletedMissionCopy completedMissionCopy(WorkoutSession? session) {
+  if (session == null) {
+    return const CompletedMissionCopy(
+      title: 'TODAY\'S MISSION',
+      detail: 'Cleared',
+    );
+  }
+
+  final totalExercises = session.selectedExerciseIds.isNotEmpty
+      ? session.selectedExerciseIds.length
+      : session.exercises.length;
+  final exerciseLabel = totalExercises == 1
+      ? '1 exercise'
+      : '$totalExercises exercises';
+  final minutes = session.actualDurationSeconds ~/ 60;
+
+  return CompletedMissionCopy(
+    title: session.targetMuscleLabel.toUpperCase(),
+    detail: 'Today | $minutes min | $exerciseLabel',
+  );
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key, this.onViewQuests, this.onViewProfile});
 
@@ -56,6 +87,7 @@ class HomePageState extends State<HomePage> {
   int _weeklyQuestCompleted = 0;
   int _weeklyQuestTotal = 5;
   WorkoutSession? _lastWorkout;
+  WorkoutSession? _completedWorkoutToday;
   String? _suggestedMuscle;
   String? _selectedTitle;
   int? _suggestedMissionRewardXP;
@@ -75,14 +107,26 @@ class HomePageState extends State<HomePage> {
   ProgramProgress? _programProgress;
   ProgramDay? _programDay;
   ProgramDaySnapshot? _programCompletedToday;
+  StreamSubscription<void>? _storageSubscription;
 
   @override
   void initState() {
     super.initState();
+    _storageSubscription = WorkoutStorageService.changes.listen((_) {
+      if (!mounted) return;
+      setState(() => _ongoingSessions = []);
+      _loadData();
+    });
     _loadData();
   }
 
   Future<void> reload() => _loadData();
+
+  @override
+  void dispose() {
+    _storageSubscription?.cancel();
+    super.dispose();
+  }
 
   Future<void> _loadData() async {
     final all = await WorkoutStorageService().getSessions();
@@ -143,6 +187,16 @@ class HomePageState extends State<HomePage> {
     final endedEarlyToday =
         all
             .where((s) => s.isAbandoned && DateUtils.dateOnly(s.date) == today)
+            .toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
+    final completedToday =
+        all
+            .where(
+              (s) =>
+                  !s.isPartial &&
+                  !s.isAbandoned &&
+                  DateUtils.dateOnly(s.date) == today,
+            )
             .toList()
           ..sort((a, b) => b.date.compareTo(a.date));
     final lastCompleted = completed.isEmpty
@@ -224,6 +278,9 @@ class HomePageState extends State<HomePage> {
       _weeklyQuestCompleted = questSummary.weeklyCompleted;
       _weeklyQuestTotal = questSummary.weeklyTotal;
       _lastWorkout = lastCompleted;
+      _completedWorkoutToday = completedToday.isEmpty
+          ? null
+          : completedToday.first;
       _suggestedMuscle = suggestedMuscle;
       _selectedTitle = questSummary.selectedTitle;
       _suggestedMissionRewardXP = suggestedMissionRewardXP;
@@ -452,7 +509,7 @@ class HomePageState extends State<HomePage> {
               children: [
                 PixelButton(
                   label: 'Cancel',
-                  color: kBorderDark,
+                  secondary: true,
                   onPressed: () => Navigator.of(ctx).pop(),
                 ),
                 PixelButton(
@@ -725,7 +782,7 @@ class HomePageState extends State<HomePage> {
                 ),
                 PixelButton(
                   label: 'TRAIN ANYWAY',
-                  color: kBorderDark,
+                  secondary: true,
                   onPressed: () {
                     Navigator.of(ctx).pop();
                     _startWorkout(
@@ -806,8 +863,7 @@ class HomePageState extends State<HomePage> {
     final titleItem = _equippedTitle;
     final titleLabel = titleItem?.name ?? _selectedTitle ?? 'untitled';
     final titleColor =
-        titleItem?.color ??
-        (_selectedTitle == null ? kMutedText : kAmber);
+        titleItem?.color ?? (_selectedTitle == null ? kMutedText : kAmber);
 
     final card = _homeCard(
       background: kCard,
@@ -1071,6 +1127,11 @@ class HomePageState extends State<HomePage> {
 
   Widget _buildMainMissionPanel() {
     final session = _ongoingSessions.isNotEmpty ? _ongoingSessions.first : null;
+
+    if (_missionFinishStateToday == MissionFinishState.endedEarly) {
+      return _buildEndedEarlyMissionPanel();
+    }
+
     if (session == null && _programProgress != null && _programDay != null) {
       final completedSnapshot = _programCompletedToday;
       if (completedSnapshot != null &&
@@ -1108,10 +1169,6 @@ class HomePageState extends State<HomePage> {
       return _buildCompletedMissionPanel();
     }
 
-    if (session == null &&
-        _missionFinishStateToday == MissionFinishState.endedEarly) {
-      return _buildEndedEarlyMissionPanel();
-    }
     final restInfo = _todayRestInfo;
     if (session == null &&
         restInfo != null &&
@@ -1299,18 +1356,16 @@ class HomePageState extends State<HomePage> {
   }
 
   Widget _buildCompletedMissionPanel() {
-    final muscle = _suggestedMuscle;
-    final title = muscle != null ? 'Train $muscle' : 'Today\'s mission';
-    final detail = muscle != null ? muscle.toLowerCase() : '';
+    final copy = completedMissionCopy(_completedWorkoutToday);
 
     return _missionCard(
       accent: kNeon,
       borderColor: kMutedText,
       trailing: const _MissionClearedChip(),
       meta: 'CLEARED',
-      title: title.toUpperCase(),
+      title: copy.title,
       titleColor: kMutedText,
-      detail: detail,
+      detail: copy.detail,
       supportText: 'Mission complete. Tomorrow brings a new challenge.',
       supportColor: kNeon,
     );

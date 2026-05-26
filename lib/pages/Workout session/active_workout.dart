@@ -238,8 +238,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                 FilledButton(
                   onPressed: () => Navigator.of(ctx).pop(true),
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF2A2A3E),
-                    foregroundColor: kMutedText,
+                    backgroundColor: kBorderVariant,
+                    foregroundColor: kText,
+                    side: const BorderSide(color: kBorder),
                   ),
                   child: const Text('SKIP REST'),
                 ),
@@ -426,8 +427,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                 FilledButton(
                   onPressed: () => Navigator.of(ctx).pop(),
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF2A2A3E),
-                    foregroundColor: const Color(0xFF00FF9C),
+                    backgroundColor: kBorderVariant,
+                    foregroundColor: kText,
+                    side: const BorderSide(color: kBorder),
                   ),
                   child: const Text('KEEP TRAINING'),
                 ),

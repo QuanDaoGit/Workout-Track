@@ -169,6 +169,12 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       await WorkoutStorageService().saveSession(awardedSession);
       final engine = StatEngine();
       _statDelta = await engine.getLastSessionDelta();
+      if (_statDelta.isNotEmpty) {
+        await WorkoutStorageService().annotateSessionStatDelta(
+          awardedSession.id,
+          _statDelta,
+        );
+      }
       _combatStats = await engine.getStoredStats();
       final allSessions = await WorkoutStorageService().getSessions();
       await LootService().evaluateUnlocks(

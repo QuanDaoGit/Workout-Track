@@ -4,6 +4,7 @@ import '../models/workout_models.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
 import 'arcade_image_filter.dart';
+import 'arcade_tap.dart';
 import 'level_badge.dart';
 
 class ExerciseCard extends StatelessWidget {
@@ -38,25 +39,25 @@ class ExerciseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final useSelectedBorder = isSelected && !showCheckbox;
-
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onInfoPressed,
-      child: Container(
-        height: 80,
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: kCard,
-          border: Border.all(
-            color: useSelectedBorder
-                ? const Color(0xFF00FF9C)
-                : kBorder,
-            width: useSelectedBorder ? 1.5 : 1,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ArcadeTap(
+        onTap: onTap,
+        onLongPress: onInfoPressed,
+        borderRadius: BorderRadius.circular(4),
+        child: AnimatedContainer(
+          duration: kMotionBase,
+          curve: kMotionCurve,
+          height: 80,
+          decoration: BoxDecoration(
+            color: isSelected ? Color.lerp(kCard, kNeon, 0.08)! : kCard,
+            border: Border.all(
+              color: isSelected ? kNeon : kBorder,
+              width: isSelected ? 1.5 : 1,
+            ),
+            borderRadius: BorderRadius.circular(4),
           ),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
+          child: Row(
           children: [
             // Thumbnail
             ClipRRect(
@@ -175,39 +176,77 @@ class ExerciseCard extends StatelessWidget {
                   onToggle: onFavoriteToggle,
                 ),
               ),
-            // Checkbox
-            if (showCheckbox)
-              GestureDetector(
-                onTap: onCheckboxToggle,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFF00FF9C)
-                          : Colors.transparent,
-                      border: Border.all(
-                        color: isSelected
-                            ? const Color(0xFF00FF9C)
-                            : kBorder,
-                        width: 1.5,
-                      ),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: isSelected
-                        ? const Icon(
-                            Icons.check_sharp,
-                            size: 16,
-                            color: kBg,
-                          )
-                        : null,
-                  ),
-                ),
-              ),
+            // Checkbox — display-only; the whole card toggles via ArcadeTap.
+            if (showCheckbox) _SelectionCheckbox(selected: isSelected),
           ],
         ),
+      ),
+      ),
+    );
+  }
+}
+
+/// Selection indicator for the picker. Animates its fill/border on toggle and
+/// pops the check in on becoming selected (mirrors `_BouncingHeartIcon`).
+class _SelectionCheckbox extends StatefulWidget {
+  const _SelectionCheckbox({required this.selected});
+
+  final bool selected;
+
+  @override
+  State<_SelectionCheckbox> createState() => _SelectionCheckboxState();
+}
+
+class _SelectionCheckboxState extends State<_SelectionCheckbox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: kMotionPop,
+  );
+
+  late final Animation<double> _scale = TweenSequence<double>([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.2), weight: 1),
+    TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0), weight: 1),
+  ]).animate(_controller);
+
+  @override
+  void didUpdateWidget(_SelectionCheckbox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selected && !oldWidget.selected) {
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.selected;
+    return Padding(
+      padding: const EdgeInsets.only(right: 12),
+      child: AnimatedContainer(
+        duration: kMotionFast,
+        curve: kMotionCurve,
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          color: selected ? kNeon : Colors.transparent,
+          border: Border.all(
+            color: selected ? kNeon : kBorder,
+            width: 1.5,
+          ),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: selected
+            ? ScaleTransition(
+                scale: _scale,
+                child: const Icon(Icons.check_sharp, size: 16, color: kBg),
+              )
+            : null,
       ),
     );
   }

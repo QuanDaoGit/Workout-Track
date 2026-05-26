@@ -77,7 +77,7 @@ class _ProgramDetailPageState extends State<ProgramDetailPage> {
             const SizedBox(height: kSpace2),
             PixelButton(
               label: 'CANCEL',
-              color: kBorderDark,
+              secondary: true,
               onPressed: () => Navigator.of(ctx).pop(false),
             ),
           ],

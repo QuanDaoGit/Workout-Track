@@ -37,6 +37,12 @@ const kSectionGap = 16.0;
 const kButtonHeight = 48.0;
 const kPrimaryCardBorderWidth = 1.2;
 
+// Motion — shared durations + easing for arcade interactions.
+const kMotionFast = Duration(milliseconds: 120);
+const kMotionBase = Duration(milliseconds: 180);
+const kMotionPop = Duration(milliseconds: 220);
+const Curve kMotionCurve = Curves.easeOutCubic;
+
 // Focused neon bloom for emissive depth on dark surfaces.
 List<BoxShadow> neonGlow({Color color = kNeon, double opacity = 0.22, double blur = 16}) =>
     [BoxShadow(color: color.withValues(alpha: opacity), blurRadius: blur, spreadRadius: -2)];

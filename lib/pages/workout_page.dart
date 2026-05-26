@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_fonts.dart';
 
 import '../data/curated_exercises.dart';
@@ -21,11 +22,14 @@ import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/calendar_day_marker.dart';
 import '../widgets/exercise_card.dart';
+import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
 import 'Workout session/session_detail.dart';
+import 'Workout session/start_workout.dart';
 import 'calendar_page.dart';
 import 'create_exercise_page.dart';
 import 'exercise_detail.dart';
+import 'programs_library_page.dart';
 
 String fmtVol(double v) {
   final rounded = v.round();
@@ -61,7 +65,13 @@ class WorkoutPageState extends State<WorkoutPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_onTabSettled);
+  }
+
+  void _onTabSettled() {
+    if (_tabController.indexIsChanging) return;
+    _recordSubTabView(_tabController.index == 0 ? 'logs' : 'library');
   }
 
   @override
@@ -77,26 +87,194 @@ class WorkoutPageState extends State<WorkoutPage>
         title: const Text('Workout'),
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
           tabs: const [
-            Tab(text: 'HISTORY'),
-            Tab(text: 'EXERCISES'),
-            Tab(text: 'STATS'),
+            Tab(text: 'LOGS'),
+            Tab(text: 'LIBRARY'),
           ],
           labelStyle: const TextStyle(fontFamily: 'PressStart2P', fontSize: 9),
-          indicatorColor: const Color(0xFF00FF9C),
-          labelColor: const Color(0xFF00FF9C),
+          indicatorColor: kNeon,
+          labelColor: kNeon,
           unselectedLabelColor: kMutedText,
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          _HistoryTab(reloadToken: _reloadToken),
-          const _ExercisesTab(),
-          _StatsTab(reloadToken: _reloadToken),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _LogsTab(reloadToken: _reloadToken),
+                _LibraryTab(reloadToken: _reloadToken),
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Logs Tab (History ⇄ Trends) ──────────────────────────────────────────────
+
+class _LogsTab extends StatefulWidget {
+  const _LogsTab({required this.reloadToken});
+
+  final int reloadToken;
+
+  @override
+  State<_LogsTab> createState() => _LogsTabState();
+}
+
+enum _LogsView { history, trends }
+
+class _LogsTabState extends State<_LogsTab> {
+  _LogsView _view = _LogsView.history;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+          child: _SubTabToggle(
+            labels: const ['HISTORY', 'TRENDS'],
+            selectedIndex: _view == _LogsView.history ? 0 : 1,
+            onChanged: (i) {
+              setState(
+                () => _view = i == 0 ? _LogsView.history : _LogsView.trends,
+              );
+              _recordSubTabView(i == 0 ? 'history' : 'trends');
+            },
+          ),
+        ),
+        Expanded(
+          child: IndexedStack(
+            index: _view == _LogsView.history ? 0 : 1,
+            children: [
+              _HistoryTab(reloadToken: widget.reloadToken),
+              _StatsTab(reloadToken: widget.reloadToken),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Library Tab (Programs ⇄ Exercises) ───────────────────────────────────────
+
+class _LibraryTab extends StatefulWidget {
+  const _LibraryTab({required this.reloadToken});
+
+  final int reloadToken;
+
+  @override
+  State<_LibraryTab> createState() => _LibraryTabState();
+}
+
+enum _LibraryView { programs, exercises }
+
+class _LibraryTabState extends State<_LibraryTab> {
+  _LibraryView _view = _LibraryView.programs;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+          child: _SubTabToggle(
+            labels: const ['PROGRAMS', 'EXERCISES'],
+            selectedIndex: _view == _LibraryView.programs ? 0 : 1,
+            onChanged: (i) {
+              setState(
+                () => _view = i == 0
+                    ? _LibraryView.programs
+                    : _LibraryView.exercises,
+              );
+              _recordSubTabView(i == 0 ? 'programs' : 'exercises');
+            },
+          ),
+        ),
+        Expanded(
+          child: IndexedStack(
+            index: _view == _LibraryView.programs ? 0 : 1,
+            children: [
+              ProgramsLibraryBody(
+                embedded: true,
+                reloadToken: widget.reloadToken,
+              ),
+              const _ExercisesTab(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Shared helpers ───────────────────────────────────────────────────────────
+
+/// Local-only usage counter per Workout sub-view (no UI, no PII). Informs
+/// future IA decisions about which sub-tabs are actually used.
+Future<void> _recordSubTabView(String name) async {
+  final prefs = await SharedPreferences.getInstance();
+  final key = 'workout_subtab_taps_$name';
+  await prefs.setInt(key, (prefs.getInt(key) ?? 0) + 1);
+}
+
+void _openStartWorkout(BuildContext context, {VoidCallback? onReturn}) {
+  Navigator.push(context, arcadeRoute((_) => const StartWorkoutPage())).then((
+    _,
+  ) {
+    if (onReturn != null) onReturn();
+  });
+}
+
+/// Consistent empty-state block: pixel icon, verb-first headline, one-line body,
+/// and an optional primary CTA. Used across Workout sub-tabs.
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.icon,
+    required this.title,
+    required this.body,
+    this.ctaLabel,
+    this.onCta,
+  });
+
+  final String icon;
+  final String title;
+  final String body;
+  final String? ctaLabel;
+  final VoidCallback? onCta;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ImageIcon(AssetImage(icon), size: 48, color: kBorder),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              body,
+              style: Theme.of(context).textTheme.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+            if (ctaLabel != null && onCta != null) ...[
+              const SizedBox(height: 20),
+              PixelButton(label: ctaLabel!, fullWidth: false, onPressed: onCta),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -169,6 +347,19 @@ class _HistoryTabState extends State<_HistoryTab> {
       return const Center(child: PixelLoader());
     }
 
+    // Empty state: no zeros card, no view toggle — just the invitation to train.
+    if (_browsable.isEmpty) {
+      return _EmptyState(
+        icon: 'assets/icons/control/icon_sword.png',
+        title: 'READY TO LIFT?',
+        body:
+            'Your first workout starts here —\n'
+            'log a session and your stats begin to climb.',
+        ctaLabel: 'NEW WORKOUT',
+        onCta: () => _openStartWorkout(context, onReturn: _load),
+      );
+    }
+
     final bottomPadding = 120 + MediaQuery.of(context).padding.bottom;
 
     return SingleChildScrollView(
@@ -176,8 +367,6 @@ class _HistoryTabState extends State<_HistoryTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('HISTORY', style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 16),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -199,38 +388,32 @@ class _HistoryTabState extends State<_HistoryTab> {
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
-            child: _HistoryViewControl(
-              selected: _view,
-              onChanged: (view) => setState(() => _view = view),
+            child: _SubTabToggle(
+              labels: const ['LIST', 'CALENDAR'],
+              selectedIndex: _view == _HistoryView.list ? 0 : 1,
+              onChanged: (i) => setState(
+                () =>
+                    _view = i == 0 ? _HistoryView.list : _HistoryView.calendar,
+              ),
             ),
           ),
           const SizedBox(height: 16),
           if (_view == _HistoryView.list)
-            _browsable.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Text(
-                      'No sessions yet',
-                      style: Theme.of(context).textTheme.bodySmall,
+            Column(
+              children: [
+                for (final session in _browsable)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _SessionListTile(
+                      session: session,
+                      onTap: () => Navigator.push(
+                        context,
+                        arcadeRoute((_) => SessionDetailPage(session: session)),
+                      ).then((_) => _load()),
                     ),
-                  )
-                : Column(
-                    children: [
-                      for (final session in _browsable)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: _SessionListTile(
-                            session: session,
-                            onTap: () => Navigator.push(
-                              context,
-                              arcadeRoute(
-                                (_) => SessionDetailPage(session: session),
-                              ),
-                            ).then((_) => _load()),
-                          ),
-                        ),
-                    ],
-                  )
+                  ),
+              ],
+            )
           else
             _InlineHistoryCalendar(
               sessions: _browsable,
@@ -263,16 +446,22 @@ class _HistoryTabState extends State<_HistoryTab> {
   }
 }
 
-class _HistoryViewControl extends StatelessWidget {
-  const _HistoryViewControl({required this.selected, required this.onChanged});
+/// Generic 2+-segment pill toggle used for Workout sub-tab inner views
+/// (LOGS: History/Trends, LIBRARY: Programs/Exercises) and History's
+/// List/Calendar switch. Animated sliding indicator over labelled segments.
+class _SubTabToggle extends StatelessWidget {
+  const _SubTabToggle({
+    required this.labels,
+    required this.selectedIndex,
+    required this.onChanged,
+  });
 
-  final _HistoryView selected;
-  final ValueChanged<_HistoryView> onChanged;
+  final List<String> labels;
+  final int selectedIndex;
+  final ValueChanged<int> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = selected == _HistoryView.list ? 0 : 1;
-
     return Container(
       height: 48,
       padding: const EdgeInsets.all(3),
@@ -283,7 +472,7 @@ class _HistoryViewControl extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final segmentWidth = constraints.maxWidth / 2;
+          final segmentWidth = constraints.maxWidth / labels.length;
           return Stack(
             children: [
               AnimatedPositioned(
@@ -295,23 +484,20 @@ class _HistoryViewControl extends StatelessWidget {
                 width: segmentWidth,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF00FF9C),
+                    color: kNeon.withValues(alpha: 0.18),
+                    border: Border.all(color: kNeon),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
               ),
               Row(
                 children: [
-                  _HistoryViewSegment(
-                    label: 'LIST',
-                    selected: selected == _HistoryView.list,
-                    onTap: () => onChanged(_HistoryView.list),
-                  ),
-                  _HistoryViewSegment(
-                    label: 'CALENDAR',
-                    selected: selected == _HistoryView.calendar,
-                    onTap: () => onChanged(_HistoryView.calendar),
-                  ),
+                  for (int i = 0; i < labels.length; i++)
+                    _SubTabSegment(
+                      label: labels[i],
+                      selected: selectedIndex == i,
+                      onTap: () => onChanged(i),
+                    ),
                 ],
               ),
             ],
@@ -322,8 +508,8 @@ class _HistoryViewControl extends StatelessWidget {
   }
 }
 
-class _HistoryViewSegment extends StatelessWidget {
-  const _HistoryViewSegment({
+class _SubTabSegment extends StatelessWidget {
+  const _SubTabSegment({
     required this.label,
     required this.selected,
     required this.onTap,
@@ -344,9 +530,7 @@ class _HistoryViewSegment extends StatelessWidget {
             duration: const Duration(milliseconds: 160),
             curve: Curves.easeOutCubic,
             style: TextStyle(
-              color: selected
-                  ? kBg
-                  : kMutedText,
+              color: selected ? kNeon : kMutedText,
               fontFamily: 'PressStart2P',
               fontSize: 8,
             ),
@@ -1031,28 +1215,12 @@ class _StatsTabState extends State<_StatsTab> {
     final completed = _sessions.where((s) => !s.isPartial).toList();
 
     if (completed.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const ImageIcon(
-              AssetImage('assets/icons/control/icon_sword.png'),
-              size: 48,
-              color: kBorder,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'NO DATA YET',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Complete your first quest\nto unlock your stats.',
-              style: Theme.of(context).textTheme.bodySmall,
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+      return _EmptyState(
+        icon: 'assets/icons/control/icon_graph.png',
+        title: 'NO DATA YET',
+        body: 'Log a workout to see your trends take shape.',
+        ctaLabel: 'NEW WORKOUT',
+        onCta: () => _openStartWorkout(context, onReturn: _load),
       );
     }
 
@@ -1134,10 +1302,7 @@ class _StatsTabState extends State<_StatsTab> {
                   const SizedBox(height: 6),
                   Text(
                     xpProgress.label,
-                    style: const TextStyle(
-                      color: kMutedText,
-                      fontSize: 10,
-                    ),
+                    style: const TextStyle(color: kMutedText, fontSize: 10),
                   ),
                   const SizedBox(height: 16),
 
@@ -1293,10 +1458,7 @@ class _StatsTabState extends State<_StatsTab> {
                 padding: const EdgeInsets.only(left: 64, bottom: 4),
                 child: Text(
                   'Suggested next',
-                  style: const TextStyle(
-                    color: kMutedText,
-                    fontSize: 10,
-                  ),
+                  style: const TextStyle(color: kMutedText, fontSize: 10),
                 ),
               ),
             const SizedBox(height: 8),
@@ -1490,10 +1652,7 @@ class _StatPip extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(color: kMutedText, fontSize: 9),
-        ),
+        Text(label, style: const TextStyle(color: kMutedText, fontSize: 9)),
       ],
     );
   }
@@ -1657,10 +1816,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
                 color: kMutedText,
                 fontSize: 13,
               ),
-              prefixIcon: const Icon(
-                Icons.search_sharp,
-                color: kMutedText,
-              ),
+              prefixIcon: const Icon(Icons.search_sharp, color: kMutedText),
               suffixIcon: _query.isEmpty
                   ? null
                   : IconButton(
@@ -1669,10 +1825,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
                         _searchController.clear();
                         setState(() => _query = '');
                       },
-                      icon: const Icon(
-                        Icons.close_sharp,
-                        color: kMutedText,
-                      ),
+                      icon: const Icon(Icons.close_sharp, color: kMutedText),
                     ),
               filled: true,
               fillColor: kCard,
@@ -1712,9 +1865,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
                 label: Text(group),
                 selected: selected,
                 labelStyle: TextStyle(
-                  color: selected
-                      ? kBg
-                      : kMutedText,
+                  color: selected ? kBg : kMutedText,
                   fontSize: 11,
                 ),
                 onSelected: (_) => setState(() => _selectedGroup = group),

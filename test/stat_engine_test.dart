@@ -26,6 +26,25 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  test('new users start with baseline output stats and zero LCK', () async {
+    final now = DateTime(2026, 5, 14, 10);
+    await _seedSessions([]);
+
+    final stats = await StatEngine(
+      nowProvider: () => now,
+      catalog: catalog,
+    ).calculateAllStats();
+
+    expect(stats, {
+      'STR': 10,
+      'DEF': 10,
+      'VIT': 10,
+      'AGI': 10,
+      'END': 10,
+      'LCK': 0,
+    });
+  });
+
   test('calculates weighted and bodyweight volume with cap', () async {
     final now = DateTime(2026, 5, 14, 10);
     await _seedSessions([
@@ -44,7 +63,8 @@ void main() {
     ).calculateAllStats();
     final expected = _statFromVolume(5800);
 
-    expect(stats['STR'], expected);
+    expect(stats['STR'], 10 + expected);
+    expect(stats['END'], 80);
 
     await _seedSessions([
       _session(
@@ -58,6 +78,45 @@ void main() {
     ).calculateAllStats();
 
     expect(capped['STR'], 1000);
+  });
+
+  test('calculates END from rep bands and caps at 1000', () async {
+    final now = DateTime(2026, 5, 14, 10);
+    await _seedSessions([
+      _session(
+        date: now,
+        logs: [
+          _log('bench', weight: 50, reps: 5),
+          _log('bench', weight: 50, reps: 10),
+          _log('bench', weight: 50, reps: 15),
+        ],
+      ),
+    ]);
+
+    final stats = await StatEngine(
+      nowProvider: () => now,
+      catalog: catalog,
+    ).calculateAllStats();
+
+    expect(
+      StatEngine.endurancePointsForSet(const SetEntry(weight: 50, reps: 5)),
+      2.5,
+    );
+    expect(stats['END'], 45);
+
+    await _seedSessions([
+      _session(
+        date: now,
+        logs: [_log('bench', weight: 50, reps: 20, sets: 100)],
+      ),
+    ]);
+
+    final capped = await StatEngine(
+      nowProvider: () => now,
+      catalog: catalog,
+    ).calculateAllStats();
+
+    expect(capped['END'], 1000);
   });
 
   test(
@@ -77,8 +136,8 @@ void main() {
         catalog: catalog,
       ).calculateAllStats();
 
-      expect(stats['STR'], 0);
-      expect(stats['DEF'], greaterThan(0));
+      expect(stats['STR'], 10);
+      expect(stats['DEF'], greaterThan(10));
     },
   );
 
@@ -110,9 +169,10 @@ void main() {
       catalog: catalog,
     ).calculateAllStats();
 
-    expect(stats['STR'], _statFromVolume(1200));
-    expect(stats['AGI'], _statFromVolume(1200));
-    expect(stats['VIT'], _statFromVolume(1200));
+    expect(stats['STR'], 10 + _statFromVolume(1200));
+    expect(stats['AGI'], 10 + _statFromVolume(1200));
+    expect(stats['VIT'], 10 + _statFromVolume(1200));
+    expect(stats['END'], 40);
   });
 
   test('ignores partial and abandoned sessions', () async {
@@ -136,7 +196,14 @@ void main() {
       catalog: catalog,
     ).calculateAllStats();
 
-    expect(stats, {'STR': 0, 'DEF': 0, 'VIT': 0, 'AGI': 0, 'LCK': 0});
+    expect(stats, {
+      'STR': 10,
+      'DEF': 10,
+      'VIT': 10,
+      'AGI': 10,
+      'END': 10,
+      'LCK': 0,
+    });
   });
 
   test('LCK reflects current training streak capped at 100', () async {
@@ -226,11 +293,25 @@ void main() {
     ]);
     await prefs.setString(
       StatEngine.combatStatsKey,
-      jsonEncode({'STR': 800, 'DEF': 500, 'VIT': 100, 'AGI': 0, 'LCK': 40}),
+      jsonEncode({
+        'STR': 800,
+        'DEF': 500,
+        'VIT': 100,
+        'AGI': 0,
+        'END': 30,
+        'LCK': 40,
+      }),
     );
     await prefs.setString(
       'combat_stat_peaks',
-      jsonEncode({'STR': 1000, 'DEF': 1000, 'VIT': 100, 'AGI': 0, 'LCK': 40}),
+      jsonEncode({
+        'STR': 1000,
+        'DEF': 1000,
+        'VIT': 100,
+        'AGI': 0,
+        'END': 30,
+        'LCK': 40,
+      }),
     );
     await prefs.setString(
       'combat_stats_last_session_date',
@@ -259,11 +340,25 @@ void main() {
       ]);
       await prefs.setString(
         StatEngine.combatStatsKey,
-        jsonEncode({'STR': 800, 'DEF': 500, 'VIT': 100, 'AGI': 0, 'LCK': 40}),
+        jsonEncode({
+          'STR': 800,
+          'DEF': 500,
+          'VIT': 100,
+          'AGI': 0,
+          'END': 100,
+          'LCK': 40,
+        }),
       );
       await prefs.setString(
         'combat_stat_peaks',
-        jsonEncode({'STR': 1000, 'DEF': 1000, 'VIT': 100, 'AGI': 0, 'LCK': 40}),
+        jsonEncode({
+          'STR': 1000,
+          'DEF': 1000,
+          'VIT': 100,
+          'AGI': 0,
+          'END': 100,
+          'LCK': 40,
+        }),
       );
       await prefs.setString(
         'combat_stats_last_session_date',
@@ -282,6 +377,7 @@ void main() {
       expect(decayed['STR'], 720);
       expect(decayed['DEF'], 500);
       expect(decayed['VIT'], 90);
+      expect(decayed['END'], 90);
       expect(decayed['LCK'], 0);
     },
   );
@@ -294,11 +390,25 @@ void main() {
     ]);
     await prefs.setString(
       StatEngine.combatStatsKey,
-      jsonEncode({'STR': 800, 'DEF': 500, 'VIT': 100, 'AGI': 0, 'LCK': 40}),
+      jsonEncode({
+        'STR': 800,
+        'DEF': 500,
+        'VIT': 100,
+        'AGI': 0,
+        'END': 100,
+        'LCK': 40,
+      }),
     );
     await prefs.setString(
       'combat_stat_peaks',
-      jsonEncode({'STR': 1000, 'DEF': 1000, 'VIT': 100, 'AGI': 0, 'LCK': 40}),
+      jsonEncode({
+        'STR': 1000,
+        'DEF': 1000,
+        'VIT': 100,
+        'AGI': 0,
+        'END': 100,
+        'LCK': 40,
+      }),
     );
     await prefs.setString(
       'combat_stats_last_session_date',
@@ -349,11 +459,25 @@ void main() {
     ]);
     await prefs.setString(
       StatEngine.combatStatsKey,
-      jsonEncode({'STR': 800, 'DEF': 0, 'VIT': 0, 'AGI': 0, 'LCK': 0}),
+      jsonEncode({
+        'STR': 800,
+        'DEF': 0,
+        'VIT': 0,
+        'AGI': 0,
+        'END': 50,
+        'LCK': 0,
+      }),
     );
     await prefs.setString(
       'combat_stat_peaks',
-      jsonEncode({'STR': 1000, 'DEF': 0, 'VIT': 0, 'AGI': 0, 'LCK': 0}),
+      jsonEncode({
+        'STR': 1000,
+        'DEF': 0,
+        'VIT': 0,
+        'AGI': 0,
+        'END': 50,
+        'LCK': 0,
+      }),
     );
     await prefs.setString(
       'combat_stats_last_session_date',
@@ -391,8 +515,12 @@ void main() {
     );
     // Two consecutive-day sessions: STR grew with the new volume, LCK grew
     // with the streak (1 → 2). Both deltas should be present.
-    expect(delta.keys, containsAll(['STR', 'LCK']));
-    expect(delta['STR'], stats['STR']! - _statFromVolume(250));
+    expect(delta.keys, containsAll(['STR', 'END', 'LCK']));
+    expect(
+      delta['STR'],
+      stats['STR']! - (StatEngine.baseOutputStatValue + _statFromVolume(250)),
+    );
+    expect(delta['END'], 3);
     expect(delta['LCK'], 1);
   });
 
@@ -408,6 +536,20 @@ void main() {
     expect(engine.getRankColor(450), const Color(0xFF00BFFF));
     expect(engine.getRankColor(650), const Color(0xFFFFD700));
     expect(engine.getRankColor(900), const Color(0xFF00FF9C));
+  });
+
+  test('legacy cached zero stats with no sessions read as baseline', () async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      StatEngine.combatStatsKey,
+      jsonEncode({'STR': 0, 'DEF': 0, 'VIT': 0, 'AGI': 0, 'LCK': 0}),
+    );
+
+    final stats = await StatEngine(catalog: catalog).getStoredStats();
+
+    expect(stats['END'], 10);
+    expect(stats['STR'], 10);
+    expect(stats['LCK'], 0);
   });
 }
 

@@ -28,6 +28,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   WorkoutSession? _ongoingSession;
   bool _loadingOngoing = false;
   bool _showingExpiredPausedSummary = false;
+  StreamSubscription<void>? _storageSubscription;
 
   final _homeKey = GlobalKey<HomePageState>();
   final _workoutKey = GlobalKey<WorkoutPageState>();
@@ -43,6 +44,11 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       if (_ongoingSession != null && mounted) setState(() {});
       _loadOngoingSession();
     });
+    _storageSubscription = WorkoutStorageService.changes.listen((_) {
+      if (!mounted) return;
+      setState(() => _ongoingSession = null);
+      _reloadQuestAwarePages();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showExpiredPausedSummaryIfNeeded();
     });
@@ -52,6 +58,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _dockTimer?.cancel();
+    _storageSubscription?.cancel();
     super.dispose();
   }
 

@@ -196,6 +196,7 @@ class WorkoutSession {
     this.potionMultiplier,
     this.awardedXP,
     this.classAtSave,
+    this.statDelta = const {},
   }) : startedAt = startedAt ?? date,
        targetMuscleGroups = _normalizedTargets(muscleGroup, targetMuscleGroups);
 
@@ -219,6 +220,7 @@ class WorkoutSession {
   final double? potionMultiplier;
   final int? awardedXP;
   final String? classAtSave;
+  final Map<String, int> statDelta;
 
   bool get isOngoing => isPartial && !isAbandoned;
 
@@ -260,6 +262,7 @@ class WorkoutSession {
     if (potionMultiplier != null) 'potionMultiplier': potionMultiplier,
     if (awardedXP != null) 'awardedXP': awardedXP,
     if (classAtSave != null) 'classAtSave': classAtSave,
+    if (statDelta.isNotEmpty) 'statDelta': statDelta,
   };
 
   factory WorkoutSession.fromJson(Map<String, dynamic> j) {
@@ -301,7 +304,17 @@ class WorkoutSession {
       potionMultiplier: (j['potionMultiplier'] as num?)?.toDouble(),
       awardedXP: (j['awardedXP'] as num?)?.toInt(),
       classAtSave: j['classAtSave'] as String?,
+      statDelta: _decodeStatDelta(j['statDelta']),
     );
+  }
+
+  static Map<String, int> _decodeStatDelta(Object? raw) {
+    if (raw is! Map) return const {};
+    return {
+      for (final entry in raw.entries)
+        if (entry.key is String && entry.value is num)
+          entry.key as String: (entry.value as num).toInt(),
+    };
   }
 
   static List<String> _normalizedTargets(

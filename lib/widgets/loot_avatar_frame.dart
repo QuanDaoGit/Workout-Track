@@ -7,6 +7,8 @@ class LootAvatarFrame extends StatelessWidget {
   final String? framePath;
   final double size;
   final Color borderColor;
+  final Color? glowColor;
+  final double glowOpacity;
 
   const LootAvatarFrame({
     super.key,
@@ -14,11 +16,13 @@ class LootAvatarFrame extends StatelessWidget {
     this.framePath,
     required this.size,
     this.borderColor = const Color(0xFF3A3A5C),
+    this.glowColor,
+    this.glowOpacity = 0.22,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final framedAvatar = SizedBox(
       width: size,
       height: size,
       child: Stack(
@@ -55,6 +59,16 @@ class LootAvatarFrame extends StatelessWidget {
             ),
         ],
       ),
+    );
+
+    if (glowColor == null) return framedAvatar;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: neonGlow(color: glowColor!, opacity: glowOpacity, blur: 22),
+      ),
+      child: framedAvatar,
     );
   }
 }

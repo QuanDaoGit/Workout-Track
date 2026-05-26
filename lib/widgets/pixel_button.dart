@@ -13,6 +13,11 @@ class PixelButton extends StatefulWidget {
   final bool fullWidth;
   final double minHeight;
 
+  /// Secondary style: filled blue-grey (`kBorderVariant`) with a white label,
+  /// no glow. Use for dismiss/secondary actions (CLOSE, CANCEL). Neon is
+  /// reserved for primary actions.
+  final bool secondary;
+
   const PixelButton({
     super.key,
     required this.label,
@@ -21,6 +26,7 @@ class PixelButton extends StatefulWidget {
     this.color,
     this.fullWidth = true,
     this.minHeight = kButtonHeight,
+    this.secondary = false,
   });
 
   @override
@@ -42,6 +48,11 @@ class _PixelButtonState extends State<PixelButton> {
     final l = (hsl.lightness - amount).clamp(0.0, 1.0);
     return hsl.withLightness(l).toColor();
   }
+
+  // A fill earns a color-matched glow only if it's a bright/identity color —
+  // muted/secondary fills (grey) would bloom into invisible mud, so skip them.
+  static bool _isGlowableFill(Color c) =>
+      c != kBorderDark && c != kDim && c != kMutedText;
 
   @override
   void dispose() {
@@ -77,10 +88,12 @@ class _PixelButtonState extends State<PixelButton> {
 
   @override
   Widget build(BuildContext context) {
-    final fill = widget.color ?? kNeon;
+    final secondary = widget.secondary;
+    final fill = widget.color ?? (secondary ? kBorderVariant : kNeon);
     const disabledFill = kBorderDark;
     const disabledFg = kDim;
-    const fg = kBg;
+    // Secondary = white label on blue-grey; primary = dark label on neon.
+    final fg = secondary ? kText : kBg;
     final shadow = _darken(fill);
 
     final width = widget.fullWidth ? double.infinity : null;
@@ -90,7 +103,7 @@ class _PixelButtonState extends State<PixelButton> {
     final translateY = (_enabled && _pressed) ? 2.0 : 0.0;
 
     final content = widget.isLoading
-        ? const PixelLoader(size: 16, color: kBg)
+        ? PixelLoader(size: 16, color: fg)
         : Text(
             widget.label,
             style: TextStyle(
@@ -100,21 +113,26 @@ class _PixelButtonState extends State<PixelButton> {
             ),
           );
 
+    final decoration = BoxDecoration(
+      color: _enabled ? fill : disabledFill,
+      borderRadius: BorderRadius.circular(4),
+      border: Border(
+        bottom: BorderSide(
+          color: _enabled ? shadow : Colors.transparent,
+          width: borderBottom,
+        ),
+      ),
+      // Neon glow only for bright primary fills — never secondary/muted.
+      boxShadow: (_enabled && !secondary && _isGlowableFill(fill))
+          ? neonGlow(color: fill)
+          : null,
+    );
+
     final core = Container(
       width: width,
       constraints: BoxConstraints(minHeight: widget.minHeight),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: _enabled ? fill : disabledFill,
-        borderRadius: BorderRadius.circular(4),
-        border: Border(
-          bottom: BorderSide(
-            color: _enabled ? shadow : Colors.transparent,
-            width: borderBottom,
-          ),
-        ),
-        boxShadow: (_enabled && fill == kNeon) ? neonGlow() : null,
-      ),
+      decoration: decoration,
       alignment: Alignment.center,
       child: content,
     );

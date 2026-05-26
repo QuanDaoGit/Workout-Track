@@ -1,9 +1,17 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/services/migration_service.dart';
+import 'package:workout_track/services/stat_engine.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
 
   test('removes old battle and class keys once', () async {
     const doneKey = 'migration_v1_battle_strip_done';
@@ -52,4 +60,56 @@ void main() {
 
     expect(prefs.getString('scrap'), '250');
   });
+
+  test('END stat migration backfills from existing reps once', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final session = WorkoutSession(
+      id: 'history',
+      date: DateTime(2026, 5, 14, 9),
+      muscleGroup: 'Chest',
+      targetDurationMinutes: 30,
+      actualDurationSeconds: 1800,
+      exercises: const [
+        ExerciseLog(
+          exerciseId: 'bench',
+          exerciseName: 'Bench',
+          sets: [SetEntry(weight: 50, reps: 15)],
+        ),
+      ],
+      estimatedCalories: 100,
+    );
+    await prefs.setString('workout_sessions', jsonEncode([session.toJson()]));
+
+    await MigrationService.runEndStatBackfillOnce();
+
+    final stored =
+        jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
+            as Map<String, dynamic>;
+    expect(stored['END'], 32);
+    expect(prefs.getBool('migration_v2_end_stat_done'), isTrue);
+    expect(prefs.getBool(StatEngine.endBackfillNoticeKey), isTrue);
+
+    await prefs.setString(StatEngine.combatStatsKey, jsonEncode({'END': 0}));
+    await MigrationService.runEndStatBackfillOnce();
+
+    final secondStored =
+        jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
+            as Map<String, dynamic>;
+    expect(secondStored['END'], 0);
+  });
+
+  test(
+    'END stat migration does not show history notice for baseline only',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+
+      await MigrationService.runEndStatBackfillOnce();
+
+      final stored =
+          jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
+              as Map<String, dynamic>;
+      expect(stored['END'], StatEngine.baseOutputStatValue);
+      expect(prefs.getBool(StatEngine.endBackfillNoticeKey), isNull);
+    },
+  );
 }

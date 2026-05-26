@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
 import '../data/loot_registry.dart';
-import '../data/programs_library.dart';
 import '../models/body_goal_models.dart';
 import '../models/body_metrics_models.dart';
 import '../models/loot_item.dart';
@@ -10,7 +9,6 @@ import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
 
 import '../models/profile_models.dart';
-import '../models/program_models.dart';
 import '../models/quest_models.dart';
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
@@ -20,7 +18,6 @@ import '../services/body_goal_service.dart';
 import '../services/body_metrics_service.dart';
 import '../services/class_service.dart';
 import '../services/profile_service.dart';
-import '../services/program_service.dart';
 import '../services/progression_settings_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
@@ -44,7 +41,6 @@ import 'class_select_page.dart';
 import 'goal_selection_page.dart';
 import 'inventory_page.dart';
 import 'log_weight_page.dart';
-import 'programs_library_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, this.onProfileChanged});
@@ -72,7 +68,6 @@ class ProfilePageState extends State<ProfilePage> {
   final StatEngine _statEngine = StatEngine();
   final RestService _restService = RestService();
   final LootService _lootService = LootService();
-  final ProgramService _programService = ProgramService();
   final TextEditingController _nameController = TextEditingController();
 
   bool _loading = true;
@@ -93,10 +88,10 @@ class ProfilePageState extends State<ProfilePage> {
   Map<String, int> _combatStats = {
     for (final stat in StatEngine.stats) stat: 0,
   };
+  bool _showEndBackfillNotice = false;
   ProfileData _profile = ProfileData.defaults();
   Map<LootCategory, LootItem> _equippedLoot = {};
   int _ownedLootCount = 0;
-  ProgramProgress? _programProgress;
   ClassState? _classState;
 
   @override
@@ -116,6 +111,8 @@ class ProfilePageState extends State<ProfilePage> {
     final summary = await _questService.getSummary(sessions);
     final profile = await _profileService.loadProfile();
     final combatStats = await _statEngine.getStoredStats();
+    final showEndBackfillNotice =
+        _showEndBackfillNotice || await StatEngine.consumeEndBackfillNotice();
     final restState = await _restService.refreshWeeklyShieldProgress(sessions);
     final recoveryXP = _restService.effectiveRecoveryXPForState(
       sessions: sessions,
@@ -123,7 +120,6 @@ class ProfilePageState extends State<ProfilePage> {
     );
     final equippedLoot = await _lootService.getEquippedLoot();
     final ownedLootCount = await _lootService.getOwnedCount();
-    final programProgress = await _programService.getActiveProgress();
     final potionBonusXP = await XpBoostService().getTotalBonusXP();
     final classService = ClassService();
     final classState = await classService.getState();
@@ -154,10 +150,10 @@ class ProfilePageState extends State<ProfilePage> {
       _restState = restState;
       _recoveryXP = recoveryXP;
       _combatStats = combatStats;
+      _showEndBackfillNotice = showEndBackfillNotice;
       _profile = profile;
       _equippedLoot = equippedLoot;
       _ownedLootCount = ownedLootCount;
-      _programProgress = programProgress;
       _potionBonusXP = potionBonusXP;
       _classState = classState;
       _bodyMetricsEnabled = bodyMetricsEnabled;
@@ -191,26 +187,12 @@ class ProfilePageState extends State<ProfilePage> {
     widget.onProfileChanged?.call();
   }
 
-  Future<void> _selectTitle(String title) async {
-    await _questService.selectTitle(title);
-    await reload();
-    widget.onProfileChanged?.call();
-  }
-
   LootItem? get _equippedTitle => _equippedLoot[LootCategory.titleBadge];
 
   LootItem? get _equippedFrame => _equippedLoot[LootCategory.avatarFrame];
 
   Future<void> _openInventory() async {
     await Navigator.of(context).push(arcadeRoute((_) => const InventoryPage()));
-    await reload();
-    widget.onProfileChanged?.call();
-  }
-
-  Future<void> _openPrograms() async {
-    await Navigator.of(
-      context,
-    ).push(arcadeRoute((_) => const ProgramsLibraryPage()));
     await reload();
     widget.onProfileChanged?.call();
   }
@@ -315,10 +297,7 @@ class ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 14),
               Text(
                 description,
-                style: AppFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 14,
-                ),
+                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 14),
               ),
               const SizedBox(height: 18),
               PixelButton(
@@ -456,9 +435,7 @@ class ProfilePageState extends State<ProfilePage> {
                         ? 'Changes start next Monday.'
                         : 'Choose at least one training day and one rest day.',
                     style: TextStyle(
-                      color: valid
-                          ? kMutedText
-                          : const Color(0xFFFFD700),
+                      color: valid ? kMutedText : const Color(0xFFFFD700),
                       fontSize: 12,
                     ),
                   ),
@@ -561,6 +538,8 @@ class ProfilePageState extends State<ProfilePage> {
 
   Widget _buildGuildCard() {
     final summary = _summary!;
+    final cls = _classState?.currentClass ?? CharacterClass.bruiser;
+    final classColor = cls.themeColor;
     final totalXP =
         XpService.calculateTotalXP(_sessions) +
         summary.claimedRewardXP +
@@ -583,11 +562,12 @@ class ProfilePageState extends State<ProfilePage> {
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(kSpace4),
           decoration: BoxDecoration(
             color: kSurface2,
-            border: Border.all(color: const Color(0xFF00FF9C), width: 1.2),
+            border: Border.all(color: classColor.withValues(alpha: 0.75)),
             borderRadius: BorderRadius.circular(4),
+            boxShadow: neonGlow(color: classColor, opacity: 0.16, blur: 18),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -598,25 +578,23 @@ class ProfilePageState extends State<ProfilePage> {
                   LootAvatarFrame(
                     avatarPath: _profile.avatarPath,
                     framePath: _equippedFrame?.assetPath,
-                    size: 86,
+                    size: 130,
+                    borderColor: classColor,
+                    glowColor: classColor,
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: kSpace4),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _editingName ? _buildNameEditor() : _buildNameBlock(),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: kSpace3),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
                           children: [
                             _RankBadge(label: rank),
                             _StatusBadge(label: 'LV. $level'),
-                            _StatusBadge(
-                              label:
-                                  'BAG $_ownedLootCount/${lootRegistry.length}',
-                            ),
                           ],
                         ),
                       ],
@@ -624,23 +602,20 @@ class ProfilePageState extends State<ProfilePage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: kSpace4),
               ArcadeProgressBar(value: xpProgress.fraction),
-              const SizedBox(height: 8),
+              const SizedBox(height: kSpace2),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     xpProgress.label,
-                    style: const TextStyle(
-                      color: kMutedText,
-                      fontSize: 11,
-                    ),
+                    style: const TextStyle(color: kMutedText, fontSize: 11),
                   ),
                   Text(
                     '${summary.claimableCount} rewards ready',
-                    style: const TextStyle(
-                      color: Color(0xFFFFD700),
+                    style: TextStyle(
+                      color: summary.claimableCount > 0 ? kAmber : kMutedText,
                       fontSize: 11,
                     ),
                   ),
@@ -649,31 +624,9 @@ class ProfilePageState extends State<ProfilePage> {
             ],
           ),
         ),
-        const SizedBox(height: 18),
-        StatCard(stats: _combatStats),
-        const SizedBox(height: 12),
-        _buildClassSection(),
-        const SizedBox(height: 12),
-        _buildProgramsSection(),
-        if (_bodyMetricsEnabled) ...[
-          const SizedBox(height: 12),
-          _buildBodyMetricsSection(),
-        ],
-        const SizedBox(height: 12),
-        PixelButton(label: 'LOOT INVENTORY', onPressed: _openInventory),
-        const SizedBox(height: 18),
-        const _SectionHeader(title: 'RPG CORE'),
-        const SizedBox(height: 10),
+        const SizedBox(height: kSpace3),
         Row(
           children: [
-            Expanded(
-              child: _StatTile(
-                iconPath: 'assets/icons/control/icon_star.png',
-                label: 'LEVEL',
-                value: '$level',
-              ),
-            ),
-            const SizedBox(width: 8),
             Expanded(
               child: _StatTile(
                 iconPath: 'assets/icons/control/icon_time.png',
@@ -681,11 +634,7 @@ class ProfilePageState extends State<ProfilePage> {
                 value: '$trainingDays this wk',
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
+            const SizedBox(width: kSpace2),
             Expanded(
               child: _StatTile(
                 iconPath: 'assets/icons/control/icon_scroll.png',
@@ -693,7 +642,7 @@ class ProfilePageState extends State<ProfilePage> {
                 value: '$completedQuests/${quests.length}',
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: kSpace2),
             Expanded(
               child: _StatTile(
                 iconPath: 'assets/icons/control/icon_shield.png',
@@ -703,12 +652,19 @@ class ProfilePageState extends State<ProfilePage> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        _StatTile(
-          iconPath: 'assets/icons/control/icon_trophy.png',
-          label: 'LIFETIME XP',
-          value: '$totalXP XP',
+        const SizedBox(height: kSpace4),
+        StatCard(
+          stats: _combatStats,
+          showEndBackfillNotice: _showEndBackfillNotice,
         ),
+        const SizedBox(height: kSpace3),
+        _buildClassSection(),
+        const SizedBox(height: kSpace3),
+        _buildLootInventoryEntry(),
+        if (_bodyMetricsEnabled) ...[
+          const SizedBox(height: kSpace3),
+          _buildBodyMetricsSection(),
+        ],
       ],
     );
   }
@@ -718,11 +674,12 @@ class ProfilePageState extends State<ProfilePage> {
     final color = cls.themeColor;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(kSpace4),
       decoration: BoxDecoration(
-        color: kCard,
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        color: Color.lerp(kSurface2, color, 0.08),
+        border: Border.all(color: color.withValues(alpha: 0.7)),
         borderRadius: BorderRadius.circular(4),
+        boxShadow: neonGlow(color: color, opacity: 0.12, blur: 16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -732,10 +689,10 @@ class ProfilePageState extends State<ProfilePage> {
               ClassSprite(
                 assetPath: 'assets/classes/icons/${cls.name}.png',
                 placeholderTint: color,
-                size: 36,
+                size: 58,
                 placeholderLabel: cls.displayName[0],
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: kSpace3),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -744,11 +701,12 @@ class ProfilePageState extends State<ProfilePage> {
                       cls.displayName,
                       style: TextStyle(
                         fontFamily: 'PressStart2P',
-                        fontSize: 10,
+                        fontSize: 11,
                         color: color,
+                        height: 1.35,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: kSpace1),
                     Text(
                       'PATH OF THE ${cls.bodyGoalLabel}',
                       style: AppFonts.shareTechMono(
@@ -756,13 +714,14 @@ class ProfilePageState extends State<ProfilePage> {
                         color: kMutedText,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: kSpace2),
                     Text(
                       _classBonusLabel(cls),
                       style: AppFonts.shareTechMono(
                         fontSize: 11,
-                        color: color,
+                        color: kText,
                         fontWeight: FontWeight.w700,
+                        height: 1.25,
                       ),
                     ),
                   ],
@@ -770,11 +729,10 @@ class ProfilePageState extends State<ProfilePage> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: PixelButton(
-              label: 'CHANGE CLASS',
+          const SizedBox(height: kSpace3),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
               onPressed: () async {
                 await Navigator.push(
                   context,
@@ -784,6 +742,20 @@ class ProfilePageState extends State<ProfilePage> {
                 );
                 reload();
               },
+              style: TextButton.styleFrom(
+                foregroundColor: color,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 34),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Change class >',
+                style: AppFonts.shareTechMono(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
         ],
@@ -801,72 +773,62 @@ class ProfilePageState extends State<ProfilePage> {
     };
   }
 
-  Widget _buildProgramsSection() {
-    final progress = _programProgress;
-    final program = progress == null ? null : programById(progress.programId);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionHeader(title: 'PROGRAMS'),
-        const SizedBox(height: 10),
-        if (progress == null || program == null)
-          _InfoPanel(
-            iconPath: 'assets/icons/control/icon_scroll.png',
-            title: 'No active program',
-            subtitle: 'Pick a weekly plan and follow one day at a time.',
-          )
-        else
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: kCard,
-              border: Border.all(color: kBorder),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              children: [
-                const ImageIcon(
-                  AssetImage('assets/icons/control/icon_scroll.png'),
-                  size: 20,
-                  color: Color(0xFF00FF9C),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        program.name,
-                        style: const TextStyle(
-                          fontFamily: 'PressStart2P',
-                          fontSize: 9,
-                          color: Color(0xFFE8E8FF),
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}/7',
-                        style: AppFonts.shareTechMono(
-                          color: kMutedText,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                _MiniTextBadge(label: '${progress.completedSessions} DONE'),
-              ],
-            ),
-          ),
-        const SizedBox(height: 10),
-        PixelButton(
-          label: progress == null ? 'BROWSE PROGRAMS' : 'MANAGE',
-          onPressed: _openPrograms,
+  Widget _buildLootInventoryEntry() {
+    return InkWell(
+      onTap: _openInventory,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(kSpace4),
+        decoration: BoxDecoration(
+          color: kCard,
+          border: Border.all(color: kBorder),
+          borderRadius: BorderRadius.circular(4),
         ),
-      ],
+        child: Row(
+          children: [
+            const ImageIcon(
+              AssetImage('assets/icons/control/icon_bag.png'),
+              size: 24,
+              color: kAmber,
+            ),
+            const SizedBox(width: kSpace3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'LOOT INVENTORY · $_ownedLootCount/${lootRegistry.length}',
+                    style: const TextStyle(
+                      fontFamily: 'PressStart2P',
+                      fontSize: 9,
+                      color: kText,
+                      height: 1.3,
+                    ),
+                  ),
+                  const SizedBox(height: kSpace1),
+                  Text(
+                    'Frames, titles, and themes live here.',
+                    style: AppFonts.shareTechMono(
+                      color: kMutedText,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: kSpace2),
+            const Text(
+              '>',
+              style: TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 12,
+                color: kNeon,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -914,19 +876,13 @@ class ProfilePageState extends State<ProfilePage> {
         const SizedBox(height: 10),
         Text(
           lastLoggedLabel,
-          style: AppFonts.shareTechMono(
-            color: kMutedText,
-            fontSize: 11,
-          ),
+          style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
         ),
         if (goal?.targetWeight != null) ...[
           const SizedBox(height: 4),
           Text(
             'heading toward ${goal!.targetWeight!.toStringAsFixed(1)} kg',
-            style: AppFonts.shareTechMono(
-              color: kMutedText,
-              fontSize: 11,
-            ),
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
         ],
         if (_activeBoostLabel != null) ...[
@@ -958,7 +914,11 @@ class ProfilePageState extends State<ProfilePage> {
           onPressed: _canLogWeight ? _openLogWeight : null,
         ),
         const SizedBox(height: 8),
-        PixelButton(label: 'VIEW TREND', onPressed: _openBodyMetricsChart),
+        PixelButton(
+          label: 'VIEW TREND',
+          secondary: true,
+          onPressed: _openBodyMetricsChart,
+        ),
       ],
     );
   }
@@ -1039,8 +999,6 @@ class ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildLoadout() {
-    final summary = _summary!;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1061,59 +1019,10 @@ class ProfilePageState extends State<ProfilePage> {
               ),
           ],
         ),
-        const SizedBox(height: 22),
-        const _SectionHeader(title: 'TITLES'),
-        const SizedBox(height: 10),
-        if (summary.earnedTitles.isEmpty)
-          _InfoPanel(
-            iconPath: 'assets/icons/control/icon_lock.png',
-            title: 'No titles unlocked',
-            subtitle: 'Claim Side Quest rewards to unlock titles.',
-          )
-        else
-          for (final title in summary.earnedTitles)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _TitleRow(
-                title: title,
-                selected: summary.selectedTitle == title,
-                onTap: () => _selectTitle(title),
-              ),
-            ),
-        const SizedBox(height: 14),
+        const SizedBox(height: kSpace5),
         const _SectionHeader(title: 'COSMETICS'),
-        const SizedBox(height: 10),
-        _LockedFeatureRow(
-          iconPath: 'assets/icons/control/icon_shield.png',
-          title: 'Badge Frame',
-          subtitle: 'Decorative borders for your Guild Card.',
-          onTap: () => _showComingSoon(
-            title: 'Badge Frame',
-            description: 'Future cosmetic frames will let you style your card.',
-            iconPath: 'assets/icons/control/icon_shield.png',
-          ),
-        ),
-        _LockedFeatureRow(
-          iconPath: 'assets/icons/control/icon_flag.png',
-          title: 'Guild Banner',
-          subtitle: 'A profile banner for milestone themes.',
-          onTap: () => _showComingSoon(
-            title: 'Guild Banner',
-            description: 'Banners will unlock more profile personality later.',
-            iconPath: 'assets/icons/control/icon_flag.png',
-          ),
-        ),
-        _LockedFeatureRow(
-          iconPath: 'assets/icons/control/icon_brush.png',
-          title: 'Profile Theme',
-          subtitle: 'Alternate color kits for your RPG profile.',
-          onTap: () => _showComingSoon(
-            title: 'Profile Theme',
-            description:
-                'Theme choices will arrive after the core app is stable.',
-            iconPath: 'assets/icons/control/icon_brush.png',
-          ),
-        ),
+        const SizedBox(height: kSpace3),
+        _buildLootInventoryEntry(),
       ],
     );
   }
@@ -1415,9 +1324,7 @@ class _DefaultStepButton extends StatelessWidget {
         backgroundColor: onPressed == null
             ? const Color(0xFF2A2A3E)
             : const Color(0xFF00FF9C),
-        foregroundColor: onPressed == null
-            ? const Color(0xFF555577)
-            : kBg,
+        foregroundColor: onPressed == null ? const Color(0xFF555577) : kBg,
         minimumSize: const Size(40, 40),
         padding: EdgeInsets.zero,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -1460,7 +1367,8 @@ class _ProfileTabs extends StatelessWidget {
                   width: tabWidth,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: const Color(0xFF00FF9C),
+                      color: kNeon.withValues(alpha: 0.18),
+                      border: Border.all(color: kNeon),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -1479,9 +1387,7 @@ class _ProfileTabs extends StatelessWidget {
                               style: TextStyle(
                                 fontFamily: 'PressStart2P',
                                 fontSize: 7,
-                                color: selectedIndex == i
-                                    ? kBg
-                                    : kMutedText,
+                                color: selectedIndex == i ? kNeon : kMutedText,
                               ),
                             ),
                           ),
@@ -1666,155 +1572,6 @@ class _StatTile extends StatelessWidget {
   }
 }
 
-class _TitleRow extends StatelessWidget {
-  const _TitleRow({
-    required this.title,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String title;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: kCard,
-          border: Border.all(
-            color: selected ? const Color(0xFF00FF9C) : kBorder,
-          ),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          children: [
-            ImageIcon(
-              AssetImage(
-                selected
-                    ? 'assets/icons/control/icon_star.png'
-                    : 'assets/icons/control/icon_shield.png',
-              ),
-              color: selected
-                  ? const Color(0xFFFFD700)
-                  : kMutedText,
-              size: 18,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Color(0xFFE8E8FF),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Side Quest title',
-                    style: TextStyle(color: kMutedText, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            if (selected) const _StatusBadge(label: 'ACTIVE'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoPanel extends StatelessWidget {
-  const _InfoPanel({
-    required this.iconPath,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final String iconPath;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: kCard,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        children: [
-          ImageIcon(
-            AssetImage(iconPath),
-            size: 20,
-            color: kMutedText,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Color(0xFFE8E8FF),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    color: kMutedText,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LockedFeatureRow extends StatelessWidget {
-  const _LockedFeatureRow({
-    required this.iconPath,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final String iconPath;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: _SettingsRow(
-        iconPath: iconPath,
-        title: title,
-        subtitle: subtitle,
-        trailingLabel: 'LOCKED',
-        onTap: onTap,
-      ),
-    );
-  }
-}
-
 class _ScheduleInfoRow extends StatelessWidget {
   const _ScheduleInfoRow({required this.label, required this.value});
 
@@ -1906,14 +1663,12 @@ class _SettingsRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
-    this.trailingLabel,
   });
 
   final String iconPath;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-  final String? trailingLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1950,23 +1705,17 @@ class _SettingsRow extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       subtitle,
-                      style: const TextStyle(
-                        color: kMutedText,
-                        fontSize: 12,
-                      ),
+                      style: const TextStyle(color: kMutedText, fontSize: 12),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              if (trailingLabel != null)
-                _MiniTextBadge(label: trailingLabel!)
-              else
-                const ImageIcon(
-                  AssetImage('assets/icons/control/icon_next.png'),
-                  size: 16,
-                  color: kMutedText,
-                ),
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_next.png'),
+                size: 16,
+                color: kMutedText,
+              ),
             ],
           ),
         ),
@@ -2022,10 +1771,7 @@ class _SettingsToggleRow extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      color: kMutedText,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: kMutedText, fontSize: 12),
                   ),
                 ],
               ),
@@ -2041,24 +1787,6 @@ class _SettingsToggleRow extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _MiniTextBadge extends StatelessWidget {
-  const _MiniTextBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontFamily: 'PressStart2P',
-        color: kMutedText,
-        fontSize: 7,
       ),
     );
   }

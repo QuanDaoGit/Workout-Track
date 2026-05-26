@@ -38,8 +38,9 @@ Future<ActiveSessionAction?> showActiveSessionFoundDialog(
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(),
                 style: FilledButton.styleFrom(
-                  backgroundColor: kBorderDark,
+                  backgroundColor: kBorderVariant,
                   foregroundColor: kText,
+                  side: const BorderSide(color: kBorder),
                 ),
                 child: const Text('CANCEL'),
               ),
