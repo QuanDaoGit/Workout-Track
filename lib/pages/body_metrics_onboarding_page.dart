@@ -43,7 +43,10 @@ class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
   Future<void> _openGoalSelection() async {
     final result = await Navigator.push<GoalSelectionResult>(
       context,
-      arcadeRoute((_) => const GoalSelectionPage()),
+      arcadeRoute(
+        (_) => const GoalSelectionPage(),
+        motion: ArcadeRouteMotion.fade,
+      ),
     );
     if (result != null && mounted) {
       // Goal has been set via GoalSelectionPage

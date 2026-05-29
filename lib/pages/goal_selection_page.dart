@@ -4,6 +4,8 @@ import '../theme/app_fonts.dart';
 import '../models/body_goal_models.dart';
 import '../services/body_goal_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/motion/arcade_text_field.dart';
+import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_button.dart';
 
 /// Result returned from GoalSelectionPage.
@@ -176,36 +178,21 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
             style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
           ),
           const SizedBox(height: 24),
-          TextField(
+          ArcadeTextField(
             controller: _weightController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             autofocus: true,
             style: AppFonts.shareTechMono(color: kText, fontSize: 24),
-            decoration: InputDecoration(
-              hintText: 'kg',
-              hintStyle: AppFonts.shareTechMono(
-                color: kMutedText,
-                fontSize: 24,
-              ),
-              suffixText: 'kg',
-              suffixStyle: AppFonts.shareTechMono(
-                color: kMutedText,
-                fontSize: 14,
-              ),
-              filled: true,
-              fillColor: kCard,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 16,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: kBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: kNeon),
-              ),
+            hintText: 'kg',
+            hintStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 24),
+            suffixText: 'kg',
+            suffixStyle: AppFonts.shareTechMono(
+              color: kMutedText,
+              fontSize: 14,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 13,
             ),
           ),
           const SizedBox(height: 8),
@@ -256,8 +243,9 @@ class _GoalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return HoldDepress(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(

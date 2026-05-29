@@ -17,6 +17,7 @@ import '../../widgets/arcade_image_filter.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/exercise_card.dart';
 import '../../widgets/level_badge.dart';
+import '../../widgets/motion/arcade_text_field.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/pixel_loader.dart';
 import 'active_workout.dart';
@@ -292,6 +293,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
           isProgramWorkout: isProgramWorkout,
           advanceProgramRestDayOnCompletion: advanceProgramRestDayOnCompletion,
         ),
+        motion: ArcadeRouteMotion.flow,
       ),
     );
   }
@@ -516,36 +518,23 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
           ),
         ],
         const SizedBox(height: kSpace2),
-        TextField(
+        ArcadeTextField(
           controller: _searchController,
           onChanged: (query) => setState(() => _searchQuery = query),
           style: AppFonts.shareTechMono(color: kText, fontSize: 14),
-          decoration: InputDecoration(
-            hintText: 'Search exercises',
-            hintStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
-            prefixIcon: const Padding(
-              padding: EdgeInsets.all(12),
-              child: ImageIcon(
-                AssetImage('assets/icons/control/icon_search.png'),
-                color: kMutedText,
-                size: 18,
-              ),
+          hintText: 'Search exercises',
+          hintStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
+          prefixIcon: const Padding(
+            padding: EdgeInsets.all(12),
+            child: ImageIcon(
+              AssetImage('assets/icons/control/icon_search.png'),
+              color: kMutedText,
+              size: 18,
             ),
-            filled: true,
-            fillColor: kBg,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: const BorderSide(color: kBorder),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: const BorderSide(color: kBorder),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: const BorderSide(color: kNeon),
-            ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
           ),
         ),
       ],
@@ -785,6 +774,7 @@ class _SelectionBar extends StatelessWidget {
             PixelButton(
               label: 'CONTINUE',
               fullWidth: false,
+              powerOn: true,
               onPressed: onContinue,
             ),
           ],

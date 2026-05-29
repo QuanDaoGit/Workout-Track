@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
+import '../data/class_definitions.dart';
 import '../data/loot_registry.dart';
 import '../models/body_goal_models.dart';
 import '../models/body_metrics_models.dart';
@@ -31,13 +32,16 @@ import '../services/xp_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
+import '../widgets/lck_buff_badge.dart';
 import '../widgets/loot_avatar_frame.dart';
+import '../widgets/motion/arcade_text_field.dart';
+import '../widgets/motion/hold_depress.dart';
+import '../widgets/motion/phosphor_tap.dart';
 import '../widgets/rest_icon.dart';
 import '../widgets/class_sprite.dart';
 import '../widgets/stat_card.dart';
 import 'body_metrics_chart_page.dart';
 import 'body_metrics_onboarding_page.dart';
-import 'class_select_page.dart';
 import 'goal_selection_page.dart';
 import 'inventory_page.dart';
 import 'log_weight_page.dart';
@@ -93,6 +97,10 @@ class ProfilePageState extends State<ProfilePage> {
   Map<LootCategory, LootItem> _equippedLoot = {};
   int _ownedLootCount = 0;
   ClassState? _classState;
+  RespecStatus _respecStatus = const RespecStatus(
+    RespecAvailability.available,
+    0,
+  );
 
   @override
   void initState() {
@@ -123,6 +131,7 @@ class ProfilePageState extends State<ProfilePage> {
     final potionBonusXP = await XpBoostService().getTotalBonusXP();
     final classService = ClassService();
     final classState = await classService.getState();
+    final respecStatus = await classService.respecStatus();
     final metricsService = BodyMetricsService();
     final bodyMetricsEnabled = await metricsService.isEnabled();
     final progressionEnabled = await ProgressionSettingsService().isEnabled();
@@ -156,6 +165,7 @@ class ProfilePageState extends State<ProfilePage> {
       _ownedLootCount = ownedLootCount;
       _potionBonusXP = potionBonusXP;
       _classState = classState;
+      _respecStatus = respecStatus;
       _bodyMetricsEnabled = bodyMetricsEnabled;
       _progressionEnabled = progressionEnabled;
       _bodyGoalState = bodyGoalState;
@@ -192,7 +202,9 @@ class ProfilePageState extends State<ProfilePage> {
   LootItem? get _equippedFrame => _equippedLoot[LootCategory.avatarFrame];
 
   Future<void> _openInventory() async {
-    await Navigator.of(context).push(arcadeRoute((_) => const InventoryPage()));
+    await Navigator.of(context).push(
+      arcadeRoute((_) => const InventoryPage(), motion: ArcadeRouteMotion.fade),
+    );
     await reload();
     widget.onProfileChanged?.call();
   }
@@ -204,7 +216,10 @@ class ProfilePageState extends State<ProfilePage> {
         if (!mounted) return;
         final result = await Navigator.push<bool>(
           context,
-          arcadeRoute((_) => const BodyMetricsOnboardingPage()),
+          arcadeRoute(
+            (_) => const BodyMetricsOnboardingPage(),
+            motion: ArcadeRouteMotion.fade,
+          ),
         );
         if (result != true) return;
       }
@@ -222,14 +237,20 @@ class ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _openLogWeight() async {
-    await Navigator.push(context, arcadeRoute((_) => const LogWeightPage()));
+    await Navigator.push(
+      context,
+      arcadeRoute((_) => const LogWeightPage(), motion: ArcadeRouteMotion.fade),
+    );
     await reload();
   }
 
   Future<void> _openBodyMetricsChart() async {
     await Navigator.push(
       context,
-      arcadeRoute((_) => const BodyMetricsChartPage()),
+      arcadeRoute(
+        (_) => const BodyMetricsChartPage(),
+        motion: ArcadeRouteMotion.fade,
+      ),
     );
     await reload();
   }
@@ -237,7 +258,10 @@ class ProfilePageState extends State<ProfilePage> {
   Future<void> _changeGoal() async {
     final result = await Navigator.push<GoalSelectionResult>(
       context,
-      arcadeRoute((_) => const GoalSelectionPage()),
+      arcadeRoute(
+        (_) => const GoalSelectionPage(),
+        motion: ArcadeRouteMotion.fade,
+      ),
     );
     if (result != null) await reload();
   }
@@ -548,6 +572,8 @@ class ProfilePageState extends State<ProfilePage> {
     final level = XpService.getLevel(totalXP);
     final rank = XpService.getRank(level);
     final xpProgress = XpService.progressForTotalXP(totalXP);
+    final lck = _combatStats['LCK'] ?? 0;
+    final lckMultiplier = XpService.lckXpMultiplier(lck);
     final trainingDays = WorkoutMetricService.trainingDaysThisWeek(_sessions);
     final quests = [
       ...summary.dailyQuests,
@@ -597,13 +623,34 @@ class ProfilePageState extends State<ProfilePage> {
                             _StatusBadge(label: 'LV. $level'),
                           ],
                         ),
+                        if (_classState?.mostRecentFormerClass != null) ...[
+                          const SizedBox(height: kSpace2),
+                          Text(
+                            'Former path: '
+                            '${_classState!.mostRecentFormerClass!.clazz.displayName}',
+                            style: AppFonts.shareTechMono(
+                              color: kMutedText,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: kSpace4),
-              ArcadeProgressBar(value: xpProgress.fraction),
+              Row(
+                children: [
+                  Expanded(
+                    child: ArcadeProgressBar(value: xpProgress.fraction),
+                  ),
+                  if (lckMultiplier > 1.0) ...[
+                    const SizedBox(width: 8),
+                    LckBuffBadge(multiplier: lckMultiplier, lck: lck),
+                  ],
+                ],
+              ),
               const SizedBox(height: kSpace2),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -625,32 +672,11 @@ class ProfilePageState extends State<ProfilePage> {
           ),
         ),
         const SizedBox(height: kSpace3),
-        Row(
-          children: [
-            Expanded(
-              child: _StatTile(
-                iconPath: 'assets/icons/control/icon_time.png',
-                label: 'TRAIN DAYS',
-                value: '$trainingDays this wk',
-              ),
-            ),
-            const SizedBox(width: kSpace2),
-            Expanded(
-              child: _StatTile(
-                iconPath: 'assets/icons/control/icon_scroll.png',
-                label: 'QUESTS',
-                value: '$completedQuests/${quests.length}',
-              ),
-            ),
-            const SizedBox(width: kSpace2),
-            Expanded(
-              child: _StatTile(
-                iconPath: 'assets/icons/control/icon_shield.png',
-                label: 'TITLES',
-                value: '$titleCount',
-              ),
-            ),
-          ],
+        _GlanceMetricsStrip(
+          trainingDays: trainingDays,
+          completedQuests: completedQuests,
+          totalQuests: quests.length,
+          titleCount: titleCount,
         ),
         const SizedBox(height: kSpace4),
         StatCard(
@@ -732,35 +758,117 @@ class ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: kSpace3),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  arcadeRoute(
-                    (_) => const ClassSelectPage(isFirstSelection: false),
-                  ),
-                );
-                reload();
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: color,
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 34),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(
-                'Change class >',
-                style: AppFonts.shareTechMono(
-                  color: color,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
+            child: _buildChangeClassButton(color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChangeClassButton(Color color) {
+    final status = _respecStatus;
+    final (label, enabled) = switch (status.availability) {
+      RespecAvailability.locked => (
+        'CLASS LOCKED — ${status.daysRemaining} DAYS LEFT',
+        false,
+      ),
+      RespecAvailability.cooldown => (
+        'CHANGE CLASS — ${status.daysRemaining} DAYS LEFT',
+        false,
+      ),
+      RespecAvailability.available => ('CHANGE CLASS', true),
+    };
+    return TextButton(
+      onPressed: enabled ? _openRespec : null,
+      style: TextButton.styleFrom(
+        foregroundColor: color,
+        disabledForegroundColor: kMutedText,
+        padding: EdgeInsets.zero,
+        minimumSize: const Size(0, 34),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(
+        label,
+        style: AppFonts.shareTechMono(
+          color: enabled ? color : kMutedText,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  int _currentLevel() {
+    final summary = _summary;
+    final totalXP =
+        XpService.calculateTotalXP(_sessions) +
+        (summary?.claimedRewardXP ?? 0) +
+        _recoveryXP +
+        _potionBonusXP;
+    return XpService.getLevel(totalXP);
+  }
+
+  Future<void> _openRespec() async {
+    final level = _currentLevel();
+    final options = await ClassService().availableRespecClasses(level);
+    if (!mounted) return;
+    final picked = await showModalBottomSheet<CharacterClass>(
+      context: context,
+      backgroundColor: kSurface2,
+      builder: (sheetContext) => _RespecPickerSheet(options: options),
+    );
+    if (picked == null || !mounted) return;
+
+    final current = _classState?.currentClass ?? CharacterClass.bruiser;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: kSurface3,
+        title: const Text(
+          'CHANGE CLASS',
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: 11,
+            color: kNeon,
+          ),
+        ),
+        content: Text(
+          'Your former path: ${current.displayName} will be recorded on your '
+          'guild card. Continue?',
+          style: AppFonts.shareTechMono(
+            color: kText,
+            fontSize: 13,
+            height: 1.3,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              'CANCEL',
+              style: AppFonts.shareTechMono(color: kMutedText),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              'CONFIRM',
+              style: AppFonts.shareTechMono(
+                color: picked.themeColor,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
         ],
       ),
     );
+    if (confirmed != true || !mounted) return;
+
+    await ClassService().respec(picked);
+    // Quests are derived live from the current class, so reloading recomputes
+    // the current week against the new class; past completions are preserved
+    // (they're derived from logged sessions, untouched here).
+    if (mounted) reload();
   }
 
   String _classBonusLabel(CharacterClass cls) {
@@ -770,11 +878,12 @@ class ProfilePageState extends State<ProfilePage> {
       CharacterClass.assassin =>
         'STAT BONUS: +20% AGI gain from shoulders, core training.',
       CharacterClass.tank => 'STAT BONUS: +20% VIT gain from legs training.',
+      CharacterClass.vanguard => 'STAT BONUS: +20% gain on whatever you train.',
     };
   }
 
   Widget _buildLootInventoryEntry() {
-    return InkWell(
+    return HoldDepress(
       onTap: _openInventory,
       borderRadius: BorderRadius.circular(4),
       child: Container(
@@ -854,8 +963,9 @@ class ProfilePageState extends State<ProfilePage> {
         const _SectionHeader(title: 'BODY METRICS'),
         const SizedBox(height: 10),
         if (goal != null)
-          GestureDetector(
+          HoldDepress(
             onTap: _changeGoal,
+            borderRadius: BorderRadius.circular(4),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -959,7 +1069,7 @@ class ProfilePageState extends State<ProfilePage> {
     return Row(
       children: [
         Expanded(
-          child: TextField(
+          child: ArcadeTextField(
             controller: _nameController,
             maxLength: 20,
             onSubmitted: (_) => _saveDisplayName(),
@@ -968,18 +1078,10 @@ class ProfilePageState extends State<ProfilePage> {
               fontWeight: FontWeight.w700,
               color: const Color(0xFFE8E8FF),
             ),
-            decoration: const InputDecoration(
-              counterText: '',
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-              enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: kBorderVariant),
-                borderRadius: BorderRadius.all(Radius.circular(4)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF00FF9C)),
-                borderRadius: BorderRadius.all(Radius.circular(4)),
-              ),
+            counterText: '',
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 9,
             ),
           ),
         ),
@@ -1340,7 +1442,7 @@ class _ProfileTabs extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelect;
 
-  static const _labels = ['Guild Card', 'Loadout', 'Settings'];
+  static const _labels = ['Character', 'Loadout', 'Settings'];
 
   @override
   Widget build(BuildContext context) {
@@ -1377,7 +1479,7 @@ class _ProfileTabs extends StatelessWidget {
                   children: [
                     for (int i = 0; i < _labels.length; i++)
                       Expanded(
-                        child: InkWell(
+                        child: PhosphorTap(
                           onTap: () => onSelect(i),
                           borderRadius: BorderRadius.circular(4),
                           child: Center(
@@ -1417,7 +1519,7 @@ class _AvatarChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return HoldDepress(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: Container(
@@ -1515,58 +1617,157 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _StatTile extends StatelessWidget {
-  const _StatTile({
+class _GlanceMetricsStrip extends StatelessWidget {
+  const _GlanceMetricsStrip({
+    required this.trainingDays,
+    required this.completedQuests,
+    required this.totalQuests,
+    required this.titleCount,
+  });
+
+  final int trainingDays;
+  final int completedQuests;
+  final int totalQuests;
+  final int titleCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 84),
+      padding: const EdgeInsets.symmetric(
+        horizontal: kSpace2,
+        vertical: kSpace3,
+      ),
+      decoration: BoxDecoration(
+        color: kCard,
+        border: Border.all(color: kBorder.withValues(alpha: 0.6)),
+        borderRadius: BorderRadius.circular(kCardRadius),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _GlanceMetricCell(
+              iconPath: 'assets/icons/control/icon_time.png',
+              label: 'TRAINING',
+              value: '$trainingDays',
+              caption: 'DAYS THIS WK',
+              semanticsLabel: 'Training, $trainingDays days this week',
+            ),
+          ),
+          const _GlanceMetricDivider(),
+          Expanded(
+            child: _GlanceMetricCell(
+              iconPath: 'assets/icons/control/icon_scroll.png',
+              label: 'QUESTS',
+              value: '$completedQuests/$totalQuests',
+              caption: 'CLEARED',
+              semanticsLabel:
+                  'Quests, $completedQuests of $totalQuests cleared',
+            ),
+          ),
+          const _GlanceMetricDivider(),
+          Expanded(
+            child: _GlanceMetricCell(
+              iconPath: 'assets/icons/control/icon_shield.png',
+              label: 'TITLES',
+              value: '$titleCount',
+              caption: 'EARNED',
+              semanticsLabel: 'Titles, $titleCount earned',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GlanceMetricDivider extends StatelessWidget {
+  const _GlanceMetricDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: kSpace1),
+      child: SizedBox(
+        width: 1,
+        height: 56,
+        child: ColoredBox(color: kBorder.withValues(alpha: 0.45)),
+      ),
+    );
+  }
+}
+
+class _GlanceMetricCell extends StatelessWidget {
+  const _GlanceMetricCell({
     required this.iconPath,
     required this.label,
     required this.value,
+    required this.caption,
+    required this.semanticsLabel,
   });
 
   final String iconPath;
   final String label;
   final String value;
+  final String caption;
+  final String semanticsLabel;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: kCard,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        children: [
-          ImageIcon(
-            AssetImage(iconPath),
-            size: 18,
-            color: const Color(0xFF00FF9C),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontFamily: 'PressStart2P',
-                    fontSize: 7,
-                    color: kMutedText,
+    return Semantics(
+      label: semanticsLabel,
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: kSpace2),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ImageIcon(AssetImage(iconPath), size: 14, color: kNeon),
+                  const SizedBox(width: kSpace1),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 7,
+                        color: kMutedText,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: kSpace2),
+              SizedBox(
+                height: 22,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: AppFonts.shareTechMono(
+                      color: kText,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: Color(0xFFE8E8FF),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: kSpace1),
+              Text(
+                caption,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 10),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1629,8 +1830,9 @@ class _WeekdayToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return HoldDepress(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         curve: Curves.easeOutCubic,
@@ -1674,7 +1876,7 @@ class _SettingsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
+      child: HoldDepress(
         onTap: onTap,
         borderRadius: BorderRadius.circular(4),
         child: Container(
@@ -1812,6 +2014,99 @@ class _SmallIconButton extends StatelessWidget {
         padding: EdgeInsets.zero,
         onPressed: onPressed,
         icon: ImageIcon(AssetImage(iconPath), color: color, size: 18),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet listing the classes a user may respec into. Vanguard appears
+/// only when [options] includes it (gated by level upstream).
+class _RespecPickerSheet extends StatelessWidget {
+  const _RespecPickerSheet({required this.options});
+
+  final List<CharacterClass> options;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(kSpace4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'CHOOSE NEW CLASS',
+              style: TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 11,
+                color: kNeon,
+              ),
+            ),
+            const SizedBox(height: kSpace3),
+            for (final cls in options) ...[
+              _RespecOption(cls: cls),
+              const SizedBox(height: kSpace2),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RespecOption extends StatelessWidget {
+  const _RespecOption({required this.cls});
+
+  final CharacterClass cls;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = cls.themeColor;
+    return HoldDepress(
+      onTap: () => Navigator.of(context).pop(cls),
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.all(kSpace3),
+        decoration: BoxDecoration(
+          color: Color.lerp(kSurface3, color, 0.08),
+          border: Border.all(color: color.withValues(alpha: 0.7)),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Row(
+          children: [
+            ClassSprite(
+              assetPath: 'assets/classes/icons/${cls.name}.png',
+              placeholderTint: color,
+              size: 44,
+              placeholderLabel: cls.displayName[0],
+            ),
+            const SizedBox(width: kSpace3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    cls.displayName,
+                    style: TextStyle(
+                      fontFamily: 'PressStart2P',
+                      fontSize: 10,
+                      color: color,
+                    ),
+                  ),
+                  const SizedBox(height: kSpace1),
+                  Text(
+                    focusMusclesLabel(cls),
+                    style: AppFonts.shareTechMono(
+                      fontSize: 11,
+                      color: kMutedText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

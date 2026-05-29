@@ -4,7 +4,7 @@ import 'package:workout_track/widgets/stat_card.dart';
 import 'package:workout_track/widgets/stat_radar.dart';
 
 void main() {
-  testWidgets('StatRadar zero state omits LCK axis and shows training hint', (
+  testWidgets('StatRadar zero state shows the STR/AGI/END triangle only', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -26,15 +26,16 @@ void main() {
 
     expect(find.text('Train to shape your build'), findsOneWidget);
     expect(find.text('STR'), findsOneWidget);
-    expect(find.text('END'), findsOneWidget);
-    expect(find.text('DEF'), findsOneWidget);
-    expect(find.text('VIT'), findsOneWidget);
     expect(find.text('AGI'), findsOneWidget);
+    expect(find.text('END'), findsOneWidget);
+    // DEF and VIT are off the radar now; LCK never was.
+    expect(find.text('DEF'), findsNothing);
+    expect(find.text('VIT'), findsNothing);
     expect(find.text('LCK'), findsNothing);
   });
 
   testWidgets(
-    'StatCard shows compact view by default and expands detail rows',
+    'StatCard shows VIT bar, no LCK row, and expands STR/AGI/END detail',
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -56,22 +57,28 @@ void main() {
         ),
       );
 
-      expect(find.text('NEXT: STR -> [C] AT 200'), findsOneWidget);
+      // New ladder: lowest visible stat (10) targets C at 100.
+      expect(find.text('NEXT: STR -> [C] AT 100'), findsOneWidget);
       expect(find.text('Train to shape your build'), findsNothing);
-      expect(find.text('\u25C6\u25C6\u25C7\u25C7'), findsOneWidget);
-      expect(find.text('[D]'), findsNothing);
+      // LCK is no longer a stat row here (it's a buff badge by the XP bar).
+      expect(find.text('LCK'), findsNothing);
+      expect(find.text('◆◆◇◇'), findsNothing);
+      // VIT bar is always visible below the radar.
+      expect(find.text('VIT'), findsOneWidget);
       expect(find.text('[ SHOW DETAIL ]'), findsOneWidget);
 
       await tester.tap(find.text('[ SHOW DETAIL ]'));
       await tester.pumpAndSettle();
 
       expect(find.text('[ HIDE DETAIL ]'), findsOneWidget);
-      expect(find.text('[D]'), findsNWidgets(5));
-      expect(find.text('10'), findsNWidgets(5));
+      // Detail rows: STR/AGI/END (3) + the always-on VIT bar = 4 [D] grades.
+      expect(find.text('[D]'), findsNWidgets(4));
+      // DEF never renders.
+      expect(find.text('DEF'), findsNothing);
     },
   );
 
-  testWidgets('StatCard next milestone targets the lowest training stat', (
+  testWidgets('StatCard next milestone targets the lowest visible stat', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -87,7 +94,8 @@ void main() {
       ),
     );
 
-    expect(find.text('NEXT: AGI -> [C] AT 200'), findsOneWidget);
+    // AGI is lowest among visible STR/AGI/END/VIT (DEF excluded) → C at 100.
+    expect(find.text('NEXT: AGI -> [C] AT 100'), findsOneWidget);
   });
 
   testWidgets('StatCard can show one-time END history note', (tester) async {
@@ -123,11 +131,11 @@ void main() {
             width: 620,
             child: StatCard(
               stats: {
-                'STR': 800,
-                'END': 800,
-                'DEF': 800,
-                'VIT': 800,
-                'AGI': 800,
+                'STR': 900,
+                'END': 900,
+                'DEF': 900,
+                'VIT': 900,
+                'AGI': 900,
                 'LCK': 0,
               },
             ),
@@ -136,6 +144,7 @@ void main() {
       ),
     );
 
+    // All visible stats at S (>=900) → HOLD.
     expect(find.text('NEXT: HOLD [S]'), findsOneWidget);
 
     expect(find.text('?'), findsOneWidget);
@@ -146,12 +155,14 @@ void main() {
     expect(find.text('STAT BOARD'), findsOneWidget);
     expect(
       find.text(
-        'STR / DEF / VIT / AGI grow from logged workout volume. END grows from logged reps.',
+        'STR / AGI / VIT grow from logged workout volume. END grows from logged reps.',
       ),
       findsOneWidget,
     );
     expect(
-      find.text('LCK comes from your current streak and multiplies XP.'),
+      find.text(
+        'LCK is a buff beside your XP bar — your streak multiplies XP.',
+      ),
       findsOneWidget,
     );
   });

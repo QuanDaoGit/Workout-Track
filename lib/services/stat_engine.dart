@@ -19,6 +19,7 @@ class StatEngine {
       _catalogOverride = catalog;
 
   static const combatStatsKey = 'combat_stats';
+  static const calibrationSeedKey = 'calibration_seed_volumes_v1';
   static const _sessionsKey = 'workout_sessions';
   static const _peaksKey = 'combat_stat_peaks';
   static const _lastDeltaKey = 'combat_stat_last_delta';
@@ -40,13 +41,14 @@ class StatEngine {
     final prefs = await SharedPreferences.getInstance();
     final sessions = await _loadCompletedSessions(prefs);
     final catalog = await _loadCatalog();
+    final seed = _decodeSeed(prefs.getString(calibrationSeedKey));
 
-    final computed = _statsForSessions(sessions, catalog);
+    final computed = _statsForSessions(sessions, catalog, seed);
     final latestSession = sessions.isEmpty ? null : sessions.last;
     final previousSessions = latestSession == null
         ? const <WorkoutSession>[]
         : sessions.where((session) => session.id != latestSession.id).toList();
-    final previous = _statsForSessions(previousSessions, catalog);
+    final previous = _statsForSessions(previousSessions, catalog, seed);
     final delta = latestSession == null
         ? <String, int>{}
         : _deltaForLatestSession(
@@ -72,21 +74,29 @@ class StatEngine {
     return computed;
   }
 
+  // Widening D/C/B/A/S grade ladder (no F). Small early gaps, large late gaps,
+  // so new lifters promote fast and veterans grind for S. All grades reachable
+  // under the 1000 stat cap (S at 900 leaves headroom). Tunable.
+  static const rankThresholdC = 100;
+  static const rankThresholdB = 300;
+  static const rankThresholdA = 600;
+  static const rankThresholdS = 900;
+
   /// Returns rank letter for a given stat value.
   String getRank(int statValue) {
-    if (statValue >= 800) return 'S';
-    if (statValue >= 600) return 'A';
-    if (statValue >= 400) return 'B';
-    if (statValue >= 200) return 'C';
+    if (statValue >= rankThresholdS) return 'S';
+    if (statValue >= rankThresholdA) return 'A';
+    if (statValue >= rankThresholdB) return 'B';
+    if (statValue >= rankThresholdC) return 'C';
     return 'D';
   }
 
   /// Returns rank color for a given stat value.
   Color getRankColor(int statValue) {
-    if (statValue >= 800) return const Color(0xFF00FF9C);
-    if (statValue >= 600) return const Color(0xFFFFD700);
-    if (statValue >= 400) return const Color(0xFF00BFFF);
-    if (statValue >= 200) return Colors.white;
+    if (statValue >= rankThresholdS) return const Color(0xFF00FF9C);
+    if (statValue >= rankThresholdA) return const Color(0xFFFFD700);
+    if (statValue >= rankThresholdB) return const Color(0xFF00BFFF);
+    if (statValue >= rankThresholdC) return Colors.white;
     return const Color(0xFF6B6B8A);
   }
 
@@ -212,6 +222,10 @@ class StatEngine {
       ..sort((a, b) => a.date.compareTo(b.date));
   }
 
+  /// Public catalog loader (exerciseId -> primary muscle). Reused by
+  /// calibration so its exercise->stat mapping matches the engine exactly.
+  Future<Map<String, String>> loadCatalog() => _loadCatalog();
+
   Future<Map<String, String>> _loadCatalog() async {
     if (_catalogOverride != null) return _catalogOverride;
     // Built-in exercises: use raw JSON to get primaryMuscles field
@@ -238,8 +252,9 @@ class StatEngine {
 
   Map<String, int> _statsForSessions(
     List<WorkoutSession> sessions,
-    Map<String, String> catalog,
-  ) {
+    Map<String, String> catalog, [
+    Map<String, double> seed = const {},
+  ]) {
     final volumes = {for (final stat in _kgVolumeStats) stat: 0.0};
     var endurance = 0.0;
     for (final session in sessions) {
@@ -257,6 +272,17 @@ class StatEngine {
           volumes[classBonusStat] =
               (volumes[classBonusStat] ?? 0) + (volume * 0.2);
         }
+      }
+    }
+
+    // Calibration seed volume (from the onboarding calibration workout) is
+    // expressed in the same kg-volume currency, so it composes with training
+    // and survives every recompute. Constant across before/after, so it does
+    // not leak into per-session deltas.
+    for (final stat in _kgVolumeStats) {
+      final s = seed[stat];
+      if (s != null && s > 0) {
+        volumes[stat] = (volumes[stat] ?? 0) + s;
       }
     }
 
@@ -331,6 +357,10 @@ class StatEngine {
       CharacterClass.bruiser => 'STR',
       CharacterClass.assassin => 'AGI',
       CharacterClass.tank => 'VIT',
+      // Balanced: the +20% bonus lands on whatever stat the trained muscle
+      // already feeds (bonus on every focus, not one). The §7 #4 "80% rate"
+      // refinement is deferred — this keeps a single shared 0.2 multiplier.
+      CharacterClass.vanguard => statForPrimaryMuscle(primaryMuscle),
     };
   }
 
@@ -354,7 +384,11 @@ class StatEngine {
     };
   }
 
-  String? _statForPrimaryMuscle(String muscle) {
+  String? _statForPrimaryMuscle(String muscle) => statForPrimaryMuscle(muscle);
+
+  /// Maps a primary muscle name to the kg-volume combat stat it feeds, or null
+  /// if the muscle does not contribute to a volume stat.
+  static String? statForPrimaryMuscle(String muscle) {
     return switch (muscle.toLowerCase()) {
       'chest' || 'triceps' || 'forearms' => 'STR',
       'lats' ||
@@ -390,6 +424,27 @@ class StatEngine {
 
   int _statFromVolume(double volume) {
     return min(1000, (100 * log(volume / 500 + 1)).floor());
+  }
+
+  /// Inverse of [_statFromVolume]: the kg volume that yields [targetStat]
+  /// (above the baseline of 10). Used to size calibration seeds in the same
+  /// currency the engine consumes. Clamped to non-negative.
+  static double volumeForStat(int targetStat) {
+    final above = targetStat - baseOutputStatValue;
+    if (above <= 0) return 0;
+    // +0.5 lands mid-band so the engine's floor() yields exactly [targetStat]
+    // rather than one below it.
+    return 500 * (exp((above + 0.5) / 100) - 1);
+  }
+
+  Map<String, double> _decodeSeed(String? raw) {
+    if (raw == null || raw.isEmpty) return const {};
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return {
+      for (final entry in decoded.entries)
+        if (_kgVolumeStats.contains(entry.key))
+          entry.key: (entry.value as num).toDouble(),
+    };
   }
 
   int _withOutputBaseline(int value) {

@@ -7,15 +7,25 @@ import '../services/class_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/class_sprite.dart';
+import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/type_agree_dialog.dart';
 import 'class_reveal_page.dart';
 
 /// Page displaying the three class options for the player to choose from.
 class ClassSelectPage extends StatefulWidget {
-  const ClassSelectPage({super.key, this.isFirstSelection = true});
+  const ClassSelectPage({
+    super.key,
+    this.isFirstSelection = true,
+    this.onSelectedInFlow,
+  });
 
   final bool isFirstSelection;
+
+  /// When set (onboarding flow), the chosen class is persisted and handed back
+  /// to the flow via this callback instead of pushing the reveal here — the
+  /// flow shows the reveal later, after the pledge and generating beat.
+  final void Function(CharacterClass cls)? onSelectedInFlow;
 
   @override
   State<ClassSelectPage> createState() => _ClassSelectPageState();
@@ -38,9 +48,16 @@ class _ClassSelectPageState extends State<ClassSelectPage> {
     }
 
     if (!mounted) return;
+    if (widget.onSelectedInFlow != null) {
+      widget.onSelectedInFlow!(cls);
+      return;
+    }
     Navigator.pushReplacement(
       context,
-      arcadeRoute((_) => ClassRevealPage(characterClass: cls)),
+      arcadeRoute(
+        (_) => ClassRevealPage(characterClass: cls),
+        motion: ArcadeRouteMotion.reveal,
+      ),
     );
   }
 
@@ -70,14 +87,17 @@ class _ClassSelectPageState extends State<ClassSelectPage> {
                 style: AppFonts.shareTechMono(fontSize: 13, color: kMutedText),
               ),
               const SizedBox(height: kSpace5),
-              for (final cls in CharacterClass.values) ...[
-                _ClassCard(
-                  characterClass: cls,
-                  isSelected: _selected == cls,
-                  onTap: () => setState(() => _selected = cls),
-                ),
-                const SizedBox(height: kSpace3),
-              ],
+              // Vanguard is unlocked only via respec at L10 — never offered on
+              // the class-select screen.
+              for (final cls in CharacterClass.values)
+                if (cls != CharacterClass.vanguard) ...[
+                  _ClassCard(
+                    characterClass: cls,
+                    isSelected: _selected == cls,
+                    onTap: () => setState(() => _selected = cls),
+                  ),
+                  const SizedBox(height: kSpace3),
+                ],
               const Spacer(),
               if (_selected != null)
                 PixelButton(
@@ -122,8 +142,9 @@ class _ClassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = characterClass.themeColor;
 
-    return GestureDetector(
+    return HoldDepress(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(kSpace4),

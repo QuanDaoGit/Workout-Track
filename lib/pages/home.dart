@@ -28,7 +28,9 @@ import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
 import '../widgets/active_session_found_dialog.dart';
+import '../widgets/lck_buff_badge.dart';
 import '../widgets/loot_avatar_frame.dart';
+import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
 import '../widgets/pulse_color_text.dart';
@@ -100,6 +102,7 @@ class HomePageState extends State<HomePage> {
   bool _showXPGain = false;
   int _xpGainAmount = 0;
   double _lckMultiplier = 1.0;
+  int _lck = 0;
   bool _showLevelUp = false;
   int _levelUpShakeTrigger = 0;
   int _missionFlashTrigger = 0;
@@ -179,9 +182,8 @@ class HomePageState extends State<HomePage> {
     if (!mounted) return;
 
     final completed = all.where((s) => !s.isPartial).toList();
-    final lckMultiplier = XpService.lckXpMultiplier(
-      XpService.lckForSessions(completed, now: DateTime.now()),
-    );
+    final lck = XpService.lckForSessions(completed, now: DateTime.now());
+    final lckMultiplier = XpService.lckXpMultiplier(lck);
     final partial = all.where((s) => s.isOngoing).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     final endedEarlyToday =
@@ -293,6 +295,7 @@ class HomePageState extends State<HomePage> {
       _programDay = programDay;
       _programCompletedToday = programCompletedToday;
       _lckMultiplier = lckMultiplier;
+      _lck = lck;
       _loading = false;
     });
   }
@@ -565,6 +568,7 @@ class HomePageState extends State<HomePage> {
           isProgramWorkout: isProgramWorkout,
           advanceProgramRestDayOnCompletion: isProgramRestWorkout,
         ),
+        motion: ArcadeRouteMotion.flow,
       ),
     ).then((_) => _onReturnFromWorkout());
   }
@@ -651,6 +655,7 @@ class HomePageState extends State<HomePage> {
           isProgramWorkout: isProgramWorkout,
           advanceProgramRestDayOnCompletion: advanceProgramRestDayOnCompletion,
         ),
+        motion: ArcadeRouteMotion.flow,
       ),
     ).then((_) => _onReturnFromWorkout());
   }
@@ -678,6 +683,7 @@ class HomePageState extends State<HomePage> {
         (_) => StartWorkoutPage(
           advanceProgramRestDayOnCompletion: advanceProgramRestDayOnCompletion,
         ),
+        motion: ArcadeRouteMotion.flow,
       ),
     ).then((_) => _onReturnFromWorkout());
   }
@@ -939,7 +945,7 @@ class HomePageState extends State<HomePage> {
                     ),
                     if (_lckMultiplier > 1.0) ...[
                       const SizedBox(width: 8),
-                      _LckMultiplierBadge(multiplier: _lckMultiplier),
+                      LckBuffBadge(multiplier: _lckMultiplier, lck: _lck),
                     ],
                   ],
                 ),
@@ -1747,32 +1753,6 @@ class _MissionRewardChip extends StatelessWidget {
   }
 }
 
-class _LckMultiplierBadge extends StatelessWidget {
-  const _LckMultiplierBadge({required this.multiplier});
-
-  final double multiplier;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = 'x${XpService.multiplierLabel(multiplier)}';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: kAmber.withValues(alpha: 0.12),
-        border: Border.all(color: kAmber),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: PulseColorText(
-        label,
-        style: const TextStyle(fontFamily: 'PressStart2P', fontSize: 7),
-        colorA: kAmber,
-        colorB: Colors.white,
-        periodMs: 1000,
-      ),
-    );
-  }
-}
-
 class _PressableCard extends StatefulWidget {
   const _PressableCard({required this.child, required this.onLongPress});
 
@@ -1784,20 +1764,15 @@ class _PressableCard extends StatefulWidget {
 }
 
 class _PressableCardState extends State<_PressableCard> {
-  bool _pressing = false;
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return HoldDepress(
       onLongPress: widget.onLongPress,
-      onTapDown: (_) => setState(() => _pressing = true),
-      onTapUp: (_) => setState(() => _pressing = false),
-      onTapCancel: () => setState(() => _pressing = false),
+      borderRadius: BorderRadius.circular(4),
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: _pressing ? kNeon : kBorder, width: 1),
+          border: Border.all(color: kBorder, width: 1),
         ),
         child: widget.child,
       ),

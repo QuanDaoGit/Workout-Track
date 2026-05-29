@@ -11,7 +11,9 @@ class StatRadar extends StatelessWidget {
 
   final Map<String, int> stats;
 
-  static const _labels = ['STR', 'END', 'DEF', 'VIT', 'AGI'];
+  // Triangle: STR / AGI / END only. DEF retired from visible UI; VIT renders as
+  // a separate horizontal bar in the stat card.
+  static const _labels = ['STR', 'AGI', 'END'];
   static const _maxStatValue = 1000.0;
   static const _activationThreshold = 10;
 
@@ -62,8 +64,6 @@ class StatRadar extends StatelessWidget {
                 RadarEntry(value: _maxStatValue),
                 RadarEntry(value: _maxStatValue),
                 RadarEntry(value: _maxStatValue),
-                RadarEntry(value: _maxStatValue),
-                RadarEntry(value: _maxStatValue),
               ],
               fillColor: Colors.transparent,
               borderColor: Colors.transparent,
@@ -99,25 +99,19 @@ class _EmptyStatRadar extends StatelessWidget {
           const Positioned.fill(
             child: CustomPaint(painter: _EmptyRadarPainter()),
           ),
+          // Triangle apex (up) = STR, bottom-right = AGI, bottom-left = END.
           const Positioned(
             top: 0,
             left: 0,
             right: 0,
             child: _RadarAxisLabel('STR'),
           ),
-          const Positioned(right: 40, top: 42, child: _RadarAxisLabel('END')),
           const Positioned(
-            right: 50,
-            bottom: 18,
-            child: _RadarAxisLabel('DEF'),
+            right: 36,
+            bottom: 30,
+            child: _RadarAxisLabel('AGI'),
           ),
-          const Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: _RadarAxisLabel('VIT'),
-          ),
-          const Positioned(left: 50, bottom: 18, child: _RadarAxisLabel('AGI')),
+          const Positioned(left: 36, bottom: 30, child: _RadarAxisLabel('END')),
           Center(
             child: Text(
               'Train to shape your build',

@@ -3,6 +3,7 @@ import '../../theme/app_fonts.dart';
 
 import '../../data/muscle_groups.dart';
 import '../../models/workout_models.dart';
+import '../../services/calibration_service.dart';
 import '../../services/calorie_service.dart';
 import '../../services/class_service.dart';
 import '../../services/loot_service.dart';
@@ -12,10 +13,12 @@ import '../../services/workout_storage_service.dart';
 import '../../services/xp_boost_service.dart';
 import '../../services/xp_service.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/arcade_route.dart';
 import '../../widgets/pulse_color_text.dart';
 import '../../widgets/screen_shake.dart';
 import '../../widgets/strobe_flash.dart';
 import '../../widgets/typewriter_text.dart';
+import '../onboarding/rank_assessed_page.dart';
 
 class WorkoutSummaryPage extends StatefulWidget {
   const WorkoutSummaryPage({
@@ -36,6 +39,7 @@ class WorkoutSummaryPage extends StatefulWidget {
     this.resumeFromSession,
     this.isProgramWorkout = false,
     this.advanceProgramRestDayOnCompletion = false,
+    this.isCalibration = false,
   });
 
   final String muscleGroup;
@@ -55,6 +59,10 @@ class WorkoutSummaryPage extends StatefulWidget {
   final bool isProgramWorkout;
   final bool advanceProgramRestDayOnCompletion;
 
+  /// Onboarding calibration run — record calibration after save and route to
+  /// the rank reveal instead of returning home with the normal stat delta.
+  final bool isCalibration;
+
   @override
   State<WorkoutSummaryPage> createState() => _WorkoutSummaryPageState();
 }
@@ -70,6 +78,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   int _potionBonusXP = 0;
   Map<String, int> _statDelta = {};
   Map<String, int> _combatStats = {};
+  Map<String, int> _calibratedStats = {};
 
   List<String> get _targetMuscleGroups {
     final normalized = normalizeTargetMuscleGroups(widget.targetMuscleGroups);
@@ -168,6 +177,12 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       );
       await WorkoutStorageService().saveSession(awardedSession);
       final engine = StatEngine();
+      if (widget.isCalibration) {
+        // Convert this real workout into a calibration seed, then recompute so
+        // the reveal shows the seeded ranks.
+        await CalibrationService().recordCalibrationWorkout(awardedSession);
+        _calibratedStats = await engine.calculateAllStats();
+      }
       _statDelta = await engine.getLastSessionDelta();
       if (_statDelta.isNotEmpty) {
         await WorkoutStorageService().annotateSessionStatDelta(
@@ -195,6 +210,18 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         _saving = false;
         _saved = true;
       });
+    }
+
+    // Calibration run: show rank reveal, then pop this summary so the awaiting
+    // ActiveWorkoutPage can pop and let OnboardingFlowPage enter the main app.
+    if (mounted && widget.isCalibration && !widget.isAbandoned) {
+      await Navigator.of(context).push<void>(
+        arcadeRoute(
+          (_) => RankAssessedPage(stats: _calibratedStats),
+          motion: ArcadeRouteMotion.reveal,
+        ),
+      );
+      if (mounted) Navigator.of(context).pop();
     }
   }
 

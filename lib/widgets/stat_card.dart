@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
 import '../services/stat_engine.dart';
-import '../services/xp_service.dart';
 import '../theme/tokens.dart';
+import 'motion/phosphor_tap.dart';
 import 'segmented_progress_bar.dart';
 import 'stat_radar.dart';
 
@@ -12,6 +12,16 @@ const double _statVisualValueGap = 10;
 const double _statValueWidth = 42;
 const double _statValueRankGap = 8;
 const double _statRankWidth = 34;
+
+/// DEF is retired from visible UI but keeps accumulating in the engine for
+/// possible future revival (the spec's "feature flag", local-app form).
+const bool kDefVisible = false;
+
+/// Stats shown on the radar triangle (STR/AGI/END), in detail rows.
+const List<String> _radarStats = ['STR', 'AGI', 'END'];
+
+/// Visible volume stats for grade targeting: radar trio + VIT (shown as a bar).
+const List<String> _visibleStats = ['STR', 'AGI', 'END', 'VIT'];
 
 class StatCard extends StatefulWidget {
   const StatCard({
@@ -37,33 +47,28 @@ class _StatCardState extends State<StatCard> {
     return (value / 100).ceil().clamp(0, 10);
   }
 
-  int _luckDiamonds(int value) {
-    return XpService.lckDiamondCount(value);
-  }
-
   String _nextGradeLabel() {
-    final values = {
-      for (final stat in StatEngine.volumeStats) stat: _value(stat),
-    };
-    if (values.values.every((value) => value >= 800)) {
+    // Operate over visible stats only (STR/AGI/END/VIT); DEF/LCK excluded.
+    final values = {for (final stat in _visibleStats) stat: _value(stat)};
+    if (values.values.every((value) => value >= StatEngine.rankThresholdS)) {
       return 'NEXT: HOLD [S]';
     }
 
-    var targetStat = StatEngine.volumeStats.first;
-    for (final stat in StatEngine.volumeStats.skip(1)) {
+    var targetStat = _visibleStats.first;
+    for (final stat in _visibleStats.skip(1)) {
       if ((values[stat] ?? 0) < (values[targetStat] ?? 0)) {
         targetStat = stat;
       }
     }
 
     final value = values[targetStat] ?? 0;
-    final next = value < 200
-        ? ('C', 200)
-        : value < 400
-        ? ('B', 400)
-        : value < 600
-        ? ('A', 600)
-        : ('S', 800);
+    final next = value < StatEngine.rankThresholdC
+        ? ('C', StatEngine.rankThresholdC)
+        : value < StatEngine.rankThresholdB
+        ? ('B', StatEngine.rankThresholdB)
+        : value < StatEngine.rankThresholdA
+        ? ('A', StatEngine.rankThresholdA)
+        : ('S', StatEngine.rankThresholdS);
     return 'NEXT: $targetStat -> [${next.$1}] AT ${next.$2}';
   }
 
@@ -90,13 +95,14 @@ class _StatCardState extends State<StatCard> {
           children: [
             _InfoLine(
               text:
-                  'STR / DEF / VIT / AGI grow from logged workout volume. END grows from logged reps.',
+                  'STR / AGI / VIT grow from logged workout volume. END grows from logged reps.',
             ),
             const SizedBox(height: 8),
-            _InfoLine(text: 'Grades: D < 200, C 200, B 400, A 600, S 800.'),
+            _InfoLine(text: 'Grades: D, C 100, B 300, A 600, S 900.'),
             const SizedBox(height: 8),
             _InfoLine(
-              text: 'LCK comes from your current streak and multiplies XP.',
+              text:
+                  'LCK is a buff beside your XP bar — your streak multiplies XP.',
             ),
           ],
         ),
@@ -175,7 +181,10 @@ class _StatCardState extends State<StatCard> {
             ),
           ],
           const SizedBox(height: 12),
-          _LuckRow(value: _value('LCK'), filled: _luckDiamonds(_value('LCK'))),
+          // VIT sits below the radar as its own bar (capability stat, not on
+          // the triangle). LCK is no longer a stat here — it's a buff badge
+          // beside the XP bar.
+          _StatRow(stat: 'VIT', value: _value('VIT'), segments: _segments),
           const SizedBox(height: 10),
           _DetailToggle(
             visible: _detailVisible,
@@ -189,13 +198,13 @@ class _StatCardState extends State<StatCard> {
                     padding: const EdgeInsets.only(top: 12),
                     child: Column(
                       children: [
-                        for (final stat in StatEngine.volumeStats) ...[
+                        for (final stat in _radarStats) ...[
                           _StatRow(
                             stat: stat,
                             value: _value(stat),
                             segments: _segments,
                           ),
-                          if (stat != StatEngine.volumeStats.last)
+                          if (stat != _radarStats.last)
                             const SizedBox(height: 9),
                         ],
                       ],
@@ -216,7 +225,7 @@ class _StatsInfoButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return PhosphorTap(
       onTap: onPressed,
       borderRadius: BorderRadius.circular(4),
       child: Container(
@@ -263,7 +272,7 @@ class _DetailToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return PhosphorTap(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: Padding(
@@ -324,43 +333,6 @@ class _StatRow extends StatelessWidget {
           rank: rank,
           rankColor: rankColor,
         ),
-      ],
-    );
-  }
-}
-
-class _LuckRow extends StatelessWidget {
-  const _LuckRow({required this.value, required this.filled});
-
-  final int value;
-  final int filled;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const SizedBox(
-          width: _statLabelWidth,
-          child: Text(
-            'LCK',
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 8,
-              color: kText,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            List.generate(4, (i) => i < filled ? '\u25C6' : '\u25C7').join(),
-            style: const TextStyle(
-              color: kNeon,
-              fontSize: 14,
-              letterSpacing: 3,
-            ),
-          ),
-        ),
-        _StatTrailing(value: value, valueColor: kNeon),
       ],
     );
   }

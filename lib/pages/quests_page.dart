@@ -187,10 +187,7 @@ class _RewardsBar extends StatelessWidget {
               children: [
                 Text(
                   xpLabel,
-                  style: const TextStyle(
-                    color: kMutedText,
-                    fontSize: 11,
-                  ),
+                  style: const TextStyle(color: kMutedText, fontSize: 11),
                 ),
                 Text(
                   '$claimableCount rewards ready',
@@ -247,10 +244,7 @@ class _QuestSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: const TextStyle(color: kMutedText, fontSize: 11),
-        ),
+        Text(subtitle, style: const TextStyle(color: kMutedText, fontSize: 11)),
         if (header != null) ...[const SizedBox(height: 12), header!],
         const SizedBox(height: 12),
         for (final quest in quests)
@@ -279,9 +273,7 @@ class _QuestCard extends StatelessWidget {
           children: [
             ImageIcon(
               AssetImage(_iconPath()),
-              color: quest.completed
-                  ? const Color(0xFF00FF9C)
-                  : kMutedText,
+              color: quest.completed ? const Color(0xFF00FF9C) : kMutedText,
               size: 20,
             ),
             const SizedBox(width: 12),
@@ -299,10 +291,7 @@ class _QuestCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     quest.description,
-                    style: const TextStyle(
-                      color: kMutedText,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: kMutedText, fontSize: 12),
                   ),
                   if (quest.rewardTitle != null) ...[
                     const SizedBox(height: 6),
@@ -318,10 +307,7 @@ class _QuestCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       quest.progressLabel!,
-                      style: const TextStyle(
-                        color: kMutedText,
-                        fontSize: 10,
-                      ),
+                      style: const TextStyle(color: kMutedText, fontSize: 10),
                     ),
                   ],
                 ],
@@ -406,9 +392,7 @@ class _SegmentedProgressBar extends StatelessWidget {
             child: Container(
               height: 10,
               decoration: BoxDecoration(
-                color: i < completed
-                    ? const Color(0xFF00FF9C)
-                    : kBorder,
+                color: i < completed ? const Color(0xFF00FF9C) : kBorder,
                 borderRadius: BorderRadius.circular(4),
               ),
             ),

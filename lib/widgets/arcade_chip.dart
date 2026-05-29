@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
+import 'motion/hold_depress.dart';
 
 /// Drop-in replacement for ChoiceChip with arcade-style selection feedback.
 /// Border + text color swap is instant. When the chip becomes selected,
@@ -75,9 +76,9 @@ class _ArcadeChipState extends State<ArcadeChip> {
         : widget.unselectedTextColor;
     final bg = kCard;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return HoldDepress(
       onTap: widget.onTap,
+      borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(

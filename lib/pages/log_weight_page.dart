@@ -6,6 +6,7 @@ import '../services/body_metrics_service.dart';
 import '../services/xp_boost_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
+import '../widgets/motion/arcade_text_field.dart';
 import '../widgets/pixel_button.dart';
 import 'log_weight_reward_page.dart';
 
@@ -72,6 +73,7 @@ class _LogWeightPageState extends State<LogWeightPage> {
       arcadeRoute(
         (_) =>
             LogWeightRewardPage(weightKg: kg, bonusPotionGranted: bonusGranted),
+        motion: ArcadeRouteMotion.reveal,
       ),
     );
   }
@@ -90,7 +92,7 @@ class _LogWeightPageState extends State<LogWeightPage> {
         child: Column(
           children: [
             const Spacer(),
-            TextField(
+            ArcadeTextField(
               controller: _controller,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
@@ -99,31 +101,19 @@ class _LogWeightPageState extends State<LogWeightPage> {
               textAlign: TextAlign.center,
               onChanged: (_) => setState(() {}),
               style: AppFonts.shareTechMono(color: kText, fontSize: 24),
-              decoration: InputDecoration(
-                hintText: '0.0',
-                hintStyle: AppFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 24,
-                ),
-                suffixText: 'kg',
-                suffixStyle: AppFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 14,
-                ),
-                filled: true,
-                fillColor: kCard,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 16,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: const BorderSide(color: kBorder),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: const BorderSide(color: kNeon),
-                ),
+              hintText: '0.0',
+              hintStyle: AppFonts.shareTechMono(
+                color: kMutedText,
+                fontSize: 24,
+              ),
+              suffixText: 'kg',
+              suffixStyle: AppFonts.shareTechMono(
+                color: kMutedText,
+                fontSize: 14,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 13,
               ),
             ),
             const SizedBox(height: 12),
@@ -134,6 +124,7 @@ class _LogWeightPageState extends State<LogWeightPage> {
             const Spacer(),
             PixelButton(
               label: 'CONFIRM',
+              powerOn: true,
               onPressed: _isValid && !_saving ? _confirm : null,
               isLoading: _saving,
             ),

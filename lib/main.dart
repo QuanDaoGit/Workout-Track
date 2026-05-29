@@ -2,25 +2,14 @@ import 'package:flutter/material.dart';
 import 'theme/app_fonts.dart';
 import 'theme/tokens.dart';
 
+import 'pages/onboarding/onboarding_flow_page.dart';
 import 'pages/root_page.dart';
 import 'services/class_migration_service.dart';
 import 'services/migration_service.dart';
+import 'services/onboarding_service.dart';
 import 'services/stat_engine.dart';
-
-class _ScanlinePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0x0AFFFFFF)
-      ..strokeWidth = 1;
-    for (double y = 0; y < size.height; y += 4) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
+import 'widgets/motion/ambient_drift.dart';
+import 'widgets/pixel_loader.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +20,26 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
+/// Decides the first screen on launch: the onboarding flow for new users, or
+/// the main app for everyone else. Completion navigates forward explicitly, so
+/// this gate only runs once per launch.
+class _AppGate extends StatelessWidget {
+  const _AppGate();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: OnboardingService().isComplete(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(body: Center(child: PixelLoader(size: 32)));
+        }
+        return snapshot.data! ? const RootPage() : const OnboardingFlowPage();
+      },
+    );
+  }
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -38,7 +47,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: const RootPage(),
+      home: const _AppGate(),
       builder: (context, child) => DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -50,11 +59,7 @@ class MyApp extends StatelessWidget {
         child: Stack(
           children: [
             child!,
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(painter: _ScanlinePainter()),
-              ),
-            ),
+            Positioned.fill(child: IgnorePointer(child: AmbientDrift())),
           ],
         ),
       ),

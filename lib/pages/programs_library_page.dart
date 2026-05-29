@@ -6,6 +6,7 @@ import '../models/program_models.dart';
 import '../services/program_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
+import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_button.dart';
 import 'program_detail_page.dart';
 
@@ -228,7 +229,7 @@ class _ProgramCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tierColor = programTierColor(program.tier);
-    return InkWell(
+    return HoldDepress(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: Container(

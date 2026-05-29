@@ -8,6 +8,7 @@ import '../../services/progression_settings_service.dart';
 import '../../services/progressive_overload_service.dart';
 import '../../services/rest_timer_service.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/motion/arcade_text_field.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/plate_calculator_sheet.dart';
 import '../../widgets/rest_timer_bar.dart';
@@ -142,26 +143,6 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('plate_calc_seen', true);
   }
-
-  InputDecoration _fieldDeco(String hint) => InputDecoration(
-    hintText: hint,
-    hintStyle: const TextStyle(color: kMutedText),
-    filled: true,
-    fillColor: kCard,
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(4),
-      borderSide: const BorderSide(color: kBorder),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(4),
-      borderSide: const BorderSide(color: kBorder),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(4),
-      borderSide: const BorderSide(color: kNeon),
-    ),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-  );
 
   void _scrollToRow(int index) {
     final key = _rowKeys[index];
@@ -509,54 +490,53 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                       ),
                     ),
                     Expanded(
-                      child: TextField(
+                      child: ArcadeTextField(
                         controller: row.weight,
-                        decoration: _fieldDeco(weightHint).copyWith(
-                          suffixIcon: Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: TooltipTheme(
-                              data: TooltipTheme.of(context).copyWith(
-                                decoration: BoxDecoration(
-                                  color: kCard,
-                                  border: Border.all(color: kCyan),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                textStyle: AppFonts.shareTechMono(
-                                  color: kText,
-                                  fontSize: 12,
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                waitDuration: const Duration(milliseconds: 400),
-                                showDuration: const Duration(seconds: 2),
+                        hintText: weightHint,
+                        suffixIcon: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: TooltipTheme(
+                            data: TooltipTheme.of(context).copyWith(
+                              decoration: BoxDecoration(
+                                color: kCard,
+                                border: Border.all(color: kCyan),
+                                borderRadius: BorderRadius.circular(4),
                               ),
-                              child: IconButton(
-                                tooltip: 'Plate calculator',
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(
-                                  minWidth: 28,
-                                  minHeight: 28,
-                                ),
-                                icon: const Icon(
-                                  Icons.calculate_sharp,
-                                  size: 16,
-                                  color: kCyan,
-                                ),
-                                onPressed: () async {
-                                  await _markPlateCalcSeen();
-                                  if (!mounted) return;
-                                  final entered = double.tryParse(
-                                    row.weight.text,
-                                  );
-                                  final fallback = prevSet?.weight;
-                                  PlateCalculatorSheet.show(
-                                    context,
-                                    initialTargetKg: entered ?? fallback,
-                                  );
-                                },
+                              textStyle: AppFonts.shareTechMono(
+                                color: kText,
+                                fontSize: 12,
                               ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              waitDuration: const Duration(milliseconds: 400),
+                              showDuration: const Duration(seconds: 2),
+                            ),
+                            child: IconButton(
+                              tooltip: 'Plate calculator',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
+                              icon: const Icon(
+                                Icons.calculate_sharp,
+                                size: 16,
+                                color: kCyan,
+                              ),
+                              onPressed: () async {
+                                await _markPlateCalcSeen();
+                                if (!mounted) return;
+                                final entered = double.tryParse(
+                                  row.weight.text,
+                                );
+                                final fallback = prevSet?.weight;
+                                PlateCalculatorSheet.show(
+                                  context,
+                                  initialTargetKg: entered ?? fallback,
+                                );
+                              },
                             ),
                           ),
                         ),
@@ -565,6 +545,12 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                         ),
                         style: fieldStyle,
                         enabled: !isLocked,
+                        height: 48,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 10,
+                        ),
+                        enableEcho: false,
                         onTap: () {
                           _interactedRows.add(index);
                           _scrollToRow(index);
@@ -576,12 +562,18 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                     ),
                     const SizedBox(width: kSpace2),
                     Expanded(
-                      child: TextField(
+                      child: ArcadeTextField(
                         controller: row.reps,
-                        decoration: _fieldDeco(repsHint),
+                        hintText: repsHint,
                         keyboardType: TextInputType.number,
                         style: fieldStyle,
                         enabled: !isLocked,
+                        height: 48,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 10,
+                        ),
+                        enableEcho: false,
                         onTap: () {
                           _interactedRows.add(index);
                           _scrollToRow(index);

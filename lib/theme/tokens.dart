@@ -17,6 +17,10 @@ const kMutedText = Color(0xFF9494B8);
 const kDim = Color(0xFF555577);
 
 // Accent colors — officially part of the palette as of this UI polish pass.
+/// Level-up / reward signal. Used wherever the app celebrates progression:
+/// bench scene "+1 LV", Screen 3 "LEVELS YOU UP" slam, RANK UP! callouts,
+/// the onboarding handoff iris. kNeon is the brand / tap-target color; kAmber
+/// is reserved for "you just leveled up."
 const kAmber = Color(0xFFFFD700);
 const kAmberDark = Color(0xFFFFA500);
 const kCyan = Color(0xFF00BFFF);
@@ -44,5 +48,14 @@ const kMotionPop = Duration(milliseconds: 220);
 const Curve kMotionCurve = Curves.easeOutCubic;
 
 // Focused neon bloom for emissive depth on dark surfaces.
-List<BoxShadow> neonGlow({Color color = kNeon, double opacity = 0.22, double blur = 16}) =>
-    [BoxShadow(color: color.withValues(alpha: opacity), blurRadius: blur, spreadRadius: -2)];
+List<BoxShadow> neonGlow({
+  Color color = kNeon,
+  double opacity = 0.22,
+  double blur = 16,
+}) => [
+  BoxShadow(
+    color: color.withValues(alpha: opacity),
+    blurRadius: blur,
+    spreadRadius: -2,
+  ),
+];

@@ -4,6 +4,7 @@ import '../theme/app_fonts.dart';
 import '../models/body_metrics_models.dart';
 import '../services/body_metrics_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_loader.dart';
 
 class BodyMetricsHistoryPage extends StatefulWidget {
@@ -118,8 +119,9 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
               itemBuilder: (_, i) {
                 final entry = _entries[i];
                 final arrow = _directionArrow(i);
-                return GestureDetector(
+                return HoldDepress(
                   onLongPress: () => _confirmDelete(entry),
+                  borderRadius: BorderRadius.circular(4),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,

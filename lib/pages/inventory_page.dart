@@ -5,6 +5,7 @@ import '../data/loot_registry.dart';
 import '../models/loot_item.dart';
 import '../services/loot_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_button.dart';
 
 class InventoryPage extends StatefulWidget {
@@ -266,7 +267,7 @@ class _LootGridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return HoldDepress(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
       child: Container(
@@ -377,7 +378,7 @@ class _TitleLootRow extends StatelessWidget {
     final hint = item.unlockRule?.displayHint ?? item.rarity.label;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
+      child: HoldDepress(
         onTap: onTap,
         borderRadius: BorderRadius.circular(4),
         child: Container(

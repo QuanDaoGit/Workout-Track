@@ -18,10 +18,14 @@ import '../services/workout_storage_service.dart';
 import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/arcade_chip.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/calendar_day_marker.dart';
 import '../widgets/exercise_card.dart';
+import '../widgets/motion/arcade_text_field.dart';
+import '../widgets/motion/hold_depress.dart';
+import '../widgets/motion/phosphor_tap.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
 import 'Workout session/session_detail.dart';
@@ -224,9 +228,13 @@ Future<void> _recordSubTabView(String name) async {
 }
 
 void _openStartWorkout(BuildContext context, {VoidCallback? onReturn}) {
-  Navigator.push(context, arcadeRoute((_) => const StartWorkoutPage())).then((
-    _,
-  ) {
+  Navigator.push(
+    context,
+    arcadeRoute(
+      (_) => const StartWorkoutPage(),
+      motion: ArcadeRouteMotion.flow,
+    ),
+  ).then((_) {
     if (onReturn != null) onReturn();
   });
 }
@@ -522,7 +530,7 @@ class _SubTabSegment extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: InkWell(
+      child: PhosphorTap(
         onTap: onTap,
         borderRadius: BorderRadius.circular(4),
         child: Center(
@@ -804,8 +812,9 @@ class _CalendarCell extends StatelessWidget {
               const Color(0xFF00FF9C)
         : null;
 
-    return GestureDetector(
+    return HoldDepress(
       onTap: () => onSelectDay(normalized),
+      borderRadius: BorderRadius.circular(4),
       child: Container(
         decoration: BoxDecoration(
           color: isSelected
@@ -888,8 +897,9 @@ class _SessionListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mins = session.actualDurationSeconds ~/ 60;
-    return GestureDetector(
+    return HoldDepress(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: IntrinsicHeight(
@@ -1472,8 +1482,9 @@ class _StatsTabState extends State<_StatsTab> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              GestureDetector(
+              PhosphorTap(
                 onTap: () => setState(() => _showRecords = !_showRecords),
+                borderRadius: BorderRadius.circular(4),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1803,44 +1814,29 @@ class _ExercisesTabState extends State<_ExercisesTab>
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-          child: TextField(
+          child: ArcadeTextField(
             controller: _searchController,
             onChanged: (value) => setState(() => _query = value.trim()),
             style: AppFonts.shareTechMono(
               color: const Color(0xFFE8E8FF),
               fontSize: 14,
             ),
-            decoration: InputDecoration(
-              hintText: 'Search exercises',
-              hintStyle: AppFonts.shareTechMono(
-                color: kMutedText,
-                fontSize: 13,
-              ),
-              prefixIcon: const Icon(Icons.search_sharp, color: kMutedText),
-              suffixIcon: _query.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Clear search',
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() => _query = '');
-                      },
-                      icon: const Icon(Icons.close_sharp, color: kMutedText),
-                    ),
-              filled: true,
-              fillColor: kCard,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 12,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: kBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: Color(0xFF00FF9C)),
-              ),
+            hintText: 'Search exercises',
+            hintStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
+            prefixIcon: const Icon(Icons.search_sharp, color: kMutedText),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Clear search',
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _query = '');
+                    },
+                    icon: const Icon(Icons.close_sharp, color: kMutedText),
+                  ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
             ),
           ),
         ),
@@ -1861,14 +1857,10 @@ class _ExercisesTabState extends State<_ExercisesTab>
               }
               final group = _groups[i];
               final selected = group == _selectedGroup;
-              return ChoiceChip(
-                label: Text(group),
+              return ArcadeChip(
+                label: group,
                 selected: selected,
-                labelStyle: TextStyle(
-                  color: selected ? kBg : kMutedText,
-                  fontSize: 11,
-                ),
-                onSelected: (_) => setState(() => _selectedGroup = group),
+                onTap: () => setState(() => _selectedGroup = group),
               );
             },
           ),
@@ -1967,8 +1959,9 @@ class _FavChip extends StatelessWidget {
     const red = Color(0xFFFF2D55);
     const dark = kBg;
     final fg = selected ? dark : red;
-    return GestureDetector(
+    return HoldDepress(
       onTap: onSelected,
+      borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(

@@ -8,8 +8,10 @@ import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
+import '../widgets/motion/hold_depress.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/workout_summary.dart';
+import 'guild_page.dart';
 import 'home.dart';
 import 'profile_page.dart';
 import 'quests_page.dart';
@@ -33,6 +35,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   final _homeKey = GlobalKey<HomePageState>();
   final _workoutKey = GlobalKey<WorkoutPageState>();
   final _questsKey = GlobalKey<QuestsPageState>();
+  final _guildKey = GlobalKey<GuildPageState>();
   final _profileKey = GlobalKey<ProfilePageState>();
 
   @override
@@ -73,7 +76,8 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     if (index == 0) _homeKey.currentState?.reload();
     if (index == 1) _workoutKey.currentState?.reload();
     if (index == 2) _questsKey.currentState?.reload();
-    if (index == 3) _profileKey.currentState?.reload();
+    if (index == 3) _guildKey.currentState?.reload();
+    if (index == 4) _profileKey.currentState?.reload();
     _loadOngoingSession();
     setState(() => _currentIndex = index);
   }
@@ -82,6 +86,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     _homeKey.currentState?.reload();
     _workoutKey.currentState?.reload();
     _questsKey.currentState?.reload();
+    _guildKey.currentState?.reload();
     _profileKey.currentState?.reload();
     _loadOngoingSession();
   }
@@ -129,6 +134,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
               'Saved workout automatically ended after midnight. Time-only XP awarded.',
           resumeFromSession: session,
         ),
+        motion: ArcadeRouteMotion.reveal,
       ),
     );
     if (!mounted) return;
@@ -159,6 +165,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
           exercises: exercises,
           resumeFromSession: session,
         ),
+        motion: ArcadeRouteMotion.flow,
       ),
     ).then((_) {
       _loadOngoingSession();
@@ -174,10 +181,11 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     HomePage(
       key: _homeKey,
       onViewQuests: () => _selectTab(2),
-      onViewProfile: () => _selectTab(3),
+      onViewProfile: () => _selectTab(4),
     ),
     WorkoutPage(key: _workoutKey),
     QuestsPage(key: _questsKey, onQuestChanged: _reloadQuestAwarePages),
+    GuildPage(key: _guildKey),
     ProfilePage(key: _profileKey, onProfileChanged: _reloadQuestAwarePages),
   ];
 
@@ -214,6 +222,11 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
           BottomNavigationBarItem(
             icon: ImageIcon(AssetImage('assets/icons/control/icon_scroll.png')),
             label: 'Quests',
+          ),
+          // No guild pixel asset yet — sharp Material icon per icon rules.
+          BottomNavigationBarItem(
+            icon: Icon(Icons.shield_sharp),
+            label: 'Guild',
           ),
           BottomNavigationBarItem(
             icon: ImageIcon(
@@ -263,8 +276,9 @@ class _ActiveWorkoutDock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: kBg,
-      child: GestureDetector(
+      child: HoldDepress(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(0),
         child: Container(
           decoration: const BoxDecoration(
             color: kCard,

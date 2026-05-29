@@ -28,14 +28,8 @@ class ArcadeProgressBar extends StatefulWidget {
 
 class _ArcadeProgressBarState extends State<ArcadeProgressBar>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _flashController = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 420),
-  );
-  late final Animation<double> _flashOpacity = TweenSequence<double>([
-    TweenSequenceItem(tween: Tween(begin: 0.0, end: 0.32), weight: 35),
-    TweenSequenceItem(tween: Tween(begin: 0.32, end: 0.0), weight: 65),
-  ]).animate(CurvedAnimation(parent: _flashController, curve: Curves.easeOut));
+  late final AnimationController _flashController;
+  late final Animation<double> _flashOpacity;
 
   double _previousValue = 0;
 
@@ -44,6 +38,16 @@ class _ArcadeProgressBarState extends State<ArcadeProgressBar>
   @override
   void initState() {
     super.initState();
+    _flashController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    _flashOpacity = TweenSequence<double>(
+      [
+        TweenSequenceItem(tween: Tween(begin: 0.0, end: 0.32), weight: 35),
+        TweenSequenceItem(tween: Tween(begin: 0.32, end: 0.0), weight: 65),
+      ],
+    ).animate(CurvedAnimation(parent: _flashController, curve: Curves.easeOut));
     _previousValue = _clampedValue;
   }
 

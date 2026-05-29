@@ -524,18 +524,22 @@ void main() {
     expect(delta['LCK'], 1);
   });
 
-  test('returns rank letters and colors', () {
+  test('returns rank letters and colors on the widening ladder', () {
     final engine = StatEngine(catalog: catalog);
 
-    expect(engine.getRank(199), 'D');
-    expect(engine.getRank(200), 'C');
-    expect(engine.getRank(400), 'B');
+    // Ladder: D <100, C 100, B 300, A 600, S 900.
+    expect(engine.getRank(99), 'D');
+    expect(engine.getRank(100), 'C');
+    expect(engine.getRank(299), 'C');
+    expect(engine.getRank(300), 'B');
     expect(engine.getRank(600), 'A');
-    expect(engine.getRank(800), 'S');
-    expect(engine.getRankColor(100), const Color(0xFF6B6B8A));
-    expect(engine.getRankColor(450), const Color(0xFF00BFFF));
-    expect(engine.getRankColor(650), const Color(0xFFFFD700));
-    expect(engine.getRankColor(900), const Color(0xFF00FF9C));
+    expect(engine.getRank(899), 'A');
+    expect(engine.getRank(900), 'S');
+    expect(engine.getRankColor(50), const Color(0xFF6B6B8A)); // D muted
+    expect(engine.getRankColor(150), Colors.white); // C
+    expect(engine.getRankColor(400), const Color(0xFF00BFFF)); // B cyan
+    expect(engine.getRankColor(650), const Color(0xFFFFD700)); // A amber
+    expect(engine.getRankColor(950), const Color(0xFF00FF9C)); // S neon
   });
 
   test('legacy cached zero stats with no sessions read as baseline', () async {

@@ -393,15 +393,11 @@ class _BouncingFavoriteIconState extends State<_BouncingFavoriteIcon>
                 ? 'assets/icons/control/icon_heart.png'
                 : 'assets/icons/control/icon_receptacle.png',
           ),
-          color: widget.isFavorite
-              ? const Color(0xFFFF2D55)
-              : kMutedText,
+          color: widget.isFavorite ? const Color(0xFFFF2D55) : kMutedText,
           size: 24,
         ),
       ),
-      style: IconButton.styleFrom(
-        backgroundColor: kBg.withValues(alpha: 0.7),
-      ),
+      style: IconButton.styleFrom(backgroundColor: kBg.withValues(alpha: 0.7)),
     );
   }
 }

@@ -93,7 +93,10 @@ class _BodyMetricsChartPageState extends State<BodyMetricsChartPage> {
           onPressed: () async {
             await Navigator.push(
               context,
-              arcadeRoute((_) => const BodyMetricsHistoryPage()),
+              arcadeRoute(
+                (_) => const BodyMetricsHistoryPage(),
+                motion: ArcadeRouteMotion.fade,
+              ),
             );
             _load();
           },

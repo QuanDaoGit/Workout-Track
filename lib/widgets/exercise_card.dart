@@ -58,129 +58,131 @@ class ExerciseCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
-          children: [
-            // Thumbnail
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(4),
-                bottomLeft: Radius.circular(4),
-              ),
-              child: SizedBox(
-                width: 60,
-                height: 80,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (isCustom)
-                      const ColoredBox(
-                        color: kBg,
-                        child: Center(
-                          child: ImageIcon(
-                            AssetImage('assets/icons/control/icon_hammer.png'),
-                            color: Color(0xFF00FF9C),
-                            size: 24,
+            children: [
+              // Thumbnail
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(4),
+                  bottomLeft: Radius.circular(4),
+                ),
+                child: SizedBox(
+                  width: 60,
+                  height: 80,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (isCustom)
+                        const ColoredBox(
+                          color: kBg,
+                          child: Center(
+                            child: ImageIcon(
+                              AssetImage(
+                                'assets/icons/control/icon_hammer.png',
+                              ),
+                              color: Color(0xFF00FF9C),
+                              size: 24,
+                            ),
+                          ),
+                        )
+                      else if (exercise.imageAssetPath.isEmpty)
+                        const _NoPhotoPlaceholder()
+                      else
+                        ArcadeImageFilter(
+                          borderRadius: BorderRadius.zero,
+                          child: Image.asset(
+                            exercise.imageAssetPath,
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.low,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const _NoPhotoPlaceholder(),
                           ),
                         ),
-                      )
-                    else if (exercise.imageAssetPath.isEmpty)
-                      const _NoPhotoPlaceholder()
-                    else
-                      ArcadeImageFilter(
-                        borderRadius: BorderRadius.zero,
-                        child: Image.asset(
-                          exercise.imageAssetPath,
-                          fit: BoxFit.cover,
-                          filterQuality: FilterQuality.low,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const _NoPhotoPlaceholder(),
-                        ),
-                      ),
-                    Container(
-                      color: kBg.withValues(alpha: 0.4),
+                      Container(color: kBg.withValues(alpha: 0.4)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Name + level badge
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      exercise.name,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        LevelBadge(exercise: exercise),
+                        if (isCustom) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: const Color(0xFF00BFFF),
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'CUSTOM',
+                              style: TextStyle(
+                                fontFamily: 'PressStart2P',
+                                fontSize: 7,
+                                color: Color(0xFF00BFFF),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            // Name + level badge
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    exercise.name,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+              // Info icon (picker only)
+              if (showInfoIcon)
+                IconButton(
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  icon: const ImageIcon(
+                    AssetImage('assets/icons/control/icon_expand.png'),
+                    color: kMutedText,
+                    size: 20,
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      LevelBadge(exercise: exercise),
-                      if (isCustom) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: const Color(0xFF00BFFF)),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'CUSTOM',
-                            style: TextStyle(
-                              fontFamily: 'PressStart2P',
-                              fontSize: 7,
-                              color: Color(0xFF00BFFF),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                  onPressed: onInfoPressed,
+                ),
+              // Arrow (library only)
+              if (showArrow)
+                const Padding(
+                  padding: EdgeInsets.only(right: 4),
+                  child: ImageIcon(
+                    AssetImage('assets/icons/control/icon_next.png'),
+                    color: kMutedText,
+                    size: 16,
                   ),
-                ],
-              ),
-            ),
-            // Info icon (picker only)
-            if (showInfoIcon)
-              IconButton(
-                constraints: const BoxConstraints(),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                icon: const ImageIcon(
-                  AssetImage('assets/icons/control/icon_expand.png'),
-                  color: kMutedText,
-                  size: 20,
                 ),
-                onPressed: onInfoPressed,
-              ),
-            // Arrow (library only)
-            if (showArrow)
-              const Padding(
-                padding: EdgeInsets.only(right: 4),
-                child: ImageIcon(
-                  AssetImage('assets/icons/control/icon_next.png'),
-                  color: kMutedText,
-                  size: 16,
+              // Favorite icon
+              if (showFavorite)
+                Padding(
+                  padding: EdgeInsets.only(right: showCheckbox ? 0 : 8),
+                  child: _BouncingHeartIcon(
+                    isFavorite: isFavorite,
+                    onToggle: onFavoriteToggle,
+                  ),
                 ),
-              ),
-            // Favorite icon
-            if (showFavorite)
-              Padding(
-                padding: EdgeInsets.only(right: showCheckbox ? 0 : 8),
-                child: _BouncingHeartIcon(
-                  isFavorite: isFavorite,
-                  onToggle: onFavoriteToggle,
-                ),
-              ),
-            // Checkbox — display-only; the whole card toggles via ArcadeTap.
-            if (showCheckbox) _SelectionCheckbox(selected: isSelected),
-          ],
+              // Checkbox — display-only; the whole card toggles via ArcadeTap.
+              if (showCheckbox) _SelectionCheckbox(selected: isSelected),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -235,10 +237,7 @@ class _SelectionCheckboxState extends State<_SelectionCheckbox>
         height: 24,
         decoration: BoxDecoration(
           color: selected ? kNeon : Colors.transparent,
-          border: Border.all(
-            color: selected ? kNeon : kBorder,
-            width: 1.5,
-          ),
+          border: Border.all(color: selected ? kNeon : kBorder, width: 1.5),
           borderRadius: BorderRadius.circular(4),
         ),
         child: selected
@@ -327,9 +326,7 @@ class _BouncingHeartIconState extends State<_BouncingHeartIcon>
                 ? 'assets/icons/control/icon_heart.png'
                 : 'assets/icons/control/icon_receptacle.png',
           ),
-          color: widget.isFavorite
-              ? const Color(0xFFFF2D55)
-              : kMutedText,
+          color: widget.isFavorite ? const Color(0xFFFF2D55) : kMutedText,
           size: 20,
         ),
       ),

@@ -34,6 +34,7 @@ class ActiveWorkoutPage extends StatefulWidget {
     this.resumeFromSession,
     this.isProgramWorkout = false,
     this.advanceProgramRestDayOnCompletion = false,
+    this.isCalibration = false,
   });
 
   final String muscleGroup;
@@ -44,6 +45,10 @@ class ActiveWorkoutPage extends StatefulWidget {
   final WorkoutSession? resumeFromSession;
   final bool isProgramWorkout;
   final bool advanceProgramRestDayOnCompletion;
+
+  /// Onboarding calibration run. Summary and rank reveal are awaited
+  /// sequentially so the onboarding flow resumes only after they unwind.
+  final bool isCalibration;
 
   @override
   State<ActiveWorkoutPage> createState() => _ActiveWorkoutPageState();
@@ -188,6 +193,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           initialSets: _loggedSets[exercise.id] ?? const [],
           restSeconds: widget.restSeconds,
         ),
+        motion: ArcadeRouteMotion.flow,
       ),
     );
     if (!mounted) return;
@@ -268,7 +274,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         ),
   ];
 
-  void _goToSummary() {
+  Future<void> _goToSummary() async {
     _updateElapsed();
     if (_totalLoggedSets == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -277,26 +283,33 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       return;
     }
     _timer?.cancel();
-    Navigator.push(
-      context,
-      arcadeRoute(
-        (_) => WorkoutSummaryPage(
-          muscleGroup: widget.muscleGroup,
-          targetMuscleGroups: _targetMuscleGroups,
-          durationMinutes: widget.durationMinutes,
-          elapsedSeconds: _elapsedSeconds,
-          exerciseLogs: _buildExerciseLogs(),
-          selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
-          sessionId: _sessionId,
-          isPartial: false,
-          startedAt: _sessionStartTime,
-          resumeFromSession: widget.resumeFromSession,
-          isProgramWorkout: widget.isProgramWorkout,
-          advanceProgramRestDayOnCompletion:
-              widget.advanceProgramRestDayOnCompletion,
-        ),
+    final summary = arcadeRoute(
+      (_) => WorkoutSummaryPage(
+        muscleGroup: widget.muscleGroup,
+        targetMuscleGroups: _targetMuscleGroups,
+        durationMinutes: widget.durationMinutes,
+        elapsedSeconds: _elapsedSeconds,
+        exerciseLogs: _buildExerciseLogs(),
+        selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
+        sessionId: _sessionId,
+        isPartial: false,
+        startedAt: _sessionStartTime,
+        resumeFromSession: widget.resumeFromSession,
+        isProgramWorkout: widget.isProgramWorkout,
+        advanceProgramRestDayOnCompletion:
+            widget.advanceProgramRestDayOnCompletion,
+        isCalibration: widget.isCalibration,
       ),
+      motion: ArcadeRouteMotion.reveal,
     );
+    if (widget.isCalibration) {
+      // Keep calibration navigation sequential so OnboardingFlowPage only
+      // continues after Summary -> Rank reveal fully unwinds.
+      await Navigator.push(context, summary);
+      if (mounted) Navigator.of(context).pop();
+    } else {
+      Navigator.push(context, summary);
+    }
   }
 
   Future<void> _savePartialAndQuit() async {
@@ -403,6 +416,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           advanceProgramRestDayOnCompletion:
               widget.advanceProgramRestDayOnCompletion,
         ),
+        motion: ArcadeRouteMotion.reveal,
       ),
     );
   }
@@ -721,7 +735,8 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
 
               PixelButton(
                 label: 'Finish Workout',
-                onPressed: _allDone ? _goToSummary : null,
+                powerOn: true,
+                onPressed: _allDone ? () => _goToSummary() : null,
               ),
             ],
           ),

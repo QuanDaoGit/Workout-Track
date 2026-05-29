@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
 import '../theme/tokens.dart';
+import 'motion/arcade_text_field.dart';
 import 'pixel_button.dart';
 
 /// A confirmation dialog requiring the user to type "AGREE" to proceed.
@@ -69,30 +70,14 @@ class _TypeAgreeDialogState extends State<TypeAgreeDialog> {
             style: AppFonts.shareTechMono(fontSize: 12, color: kMutedText),
           ),
           const SizedBox(height: kSpace2),
-          TextField(
+          ArcadeTextField(
             controller: _controller,
             autofocus: true,
             style: AppFonts.shareTechMono(fontSize: 14, color: kText),
-            decoration: InputDecoration(
-              hintText: 'AGREE',
-              hintStyle: AppFonts.shareTechMono(
-                fontSize: 14,
-                color: kMutedText.withValues(alpha: 0.4),
-              ),
-              filled: true,
-              fillColor: kBg,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: kBorder),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: kBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: kAmber),
-              ),
+            hintText: 'AGREE',
+            hintStyle: AppFonts.shareTechMono(
+              fontSize: 14,
+              color: kMutedText.withValues(alpha: 0.4),
             ),
           ),
         ],
@@ -108,6 +93,7 @@ class _TypeAgreeDialogState extends State<TypeAgreeDialog> {
         PixelButton(
           label: 'CONFIRM',
           color: _isMatch ? kDanger : kMutedText,
+          powerOn: true,
           onPressed: _isMatch ? () => Navigator.pop(context, true) : null,
         ),
       ],

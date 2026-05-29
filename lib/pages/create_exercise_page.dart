@@ -6,6 +6,7 @@ import '../models/workout_models.dart';
 import '../services/custom_exercise_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_chip.dart';
+import '../widgets/motion/arcade_text_field.dart';
 import '../widgets/pixel_button.dart';
 
 /// Muscle groups available for custom exercises — same canonical 7-bucket set
@@ -126,33 +127,14 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
             ).textTheme.headlineSmall?.copyWith(fontSize: 10),
           ),
           const SizedBox(height: 8),
-          TextField(
+          ArcadeTextField(
             controller: _nameController,
             maxLength: 40,
             onChanged: (_) => setState(() => _errorText = null),
             style: AppFonts.shareTechMono(color: kText, fontSize: 14),
-            decoration: InputDecoration(
-              counterText: '',
-              hintText: 'exercise name',
-              hintStyle: AppFonts.shareTechMono(
-                color: kMutedText,
-                fontSize: 13,
-              ),
-              filled: true,
-              fillColor: kCard,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 12,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: kBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: kNeon),
-              ),
-            ),
+            hintText: 'exercise name',
+            hintStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
+            counterText: '',
           ),
           if (_errorText != null) ...[
             const SizedBox(height: 4),
@@ -226,30 +208,16 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
             style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
           const SizedBox(height: 8),
-          TextField(
+          ArcadeTextField(
             controller: _noteController,
             maxLength: 200,
+            height: null,
             maxLines: 3,
+            counterText: null,
             style: AppFonts.shareTechMono(color: kText, fontSize: 14),
-            decoration: InputDecoration(
-              counterStyle: AppFonts.shareTechMono(
-                color: kMutedText,
-                fontSize: 10,
-              ),
-              filled: true,
-              fillColor: kCard,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 12,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: kBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(4),
-                borderSide: const BorderSide(color: kNeon),
-              ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
             ),
           ),
 
@@ -258,6 +226,7 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
           // SAVE
           PixelButton(
             label: widget.isEditing ? 'SAVE' : 'SAVE',
+            powerOn: true,
             onPressed: _isValid && !_saving ? _save : null,
             isLoading: _saving,
           ),

@@ -4,6 +4,7 @@ import '../theme/app_fonts.dart';
 
 import '../services/plate_calculator.dart';
 import '../theme/tokens.dart';
+import 'motion/arcade_text_field.dart';
 
 String _fmtKg(double v) {
   if (v == v.roundToDouble()) return v.toInt().toString();
@@ -192,7 +193,7 @@ class _NumberField extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        TextField(
+        ArcadeTextField(
           controller: controller,
           onChanged: onChanged,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -200,31 +201,11 @@ class _NumberField extends StatelessWidget {
             FilteringTextInputFormatter.allow(RegExp(r'[0-9\.,]')),
           ],
           style: AppFonts.shareTechMono(color: kText, fontSize: 18),
-          decoration: InputDecoration(
-            isDense: true,
-            filled: true,
-            fillColor: kBg,
-            suffixText: suffix,
-            suffixStyle: AppFonts.shareTechMono(
-              color: kMutedText,
-              fontSize: 12,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 12,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: const BorderSide(color: kBorder),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: const BorderSide(color: kBorder),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: const BorderSide(color: kNeon),
-            ),
+          suffixText: suffix,
+          suffixStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
           ),
         ),
       ],

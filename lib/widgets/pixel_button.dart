@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
+import 'motion/power_on.dart';
 import 'pixel_loader.dart';
 
 class PixelButton extends StatefulWidget {
@@ -12,6 +13,11 @@ class PixelButton extends StatefulWidget {
   final Color? color;
   final bool fullWidth;
   final double minHeight;
+  final double fontSize;
+  final Color? disabledColor;
+  final Color? disabledLabelColor;
+  final Color? disabledBorderColor;
+  final bool powerOn;
 
   /// Secondary style: filled blue-grey (`kBorderVariant`) with a white label,
   /// no glow. Use for dismiss/secondary actions (CLOSE, CANCEL). Neon is
@@ -27,6 +33,11 @@ class PixelButton extends StatefulWidget {
     this.fullWidth = true,
     this.minHeight = kButtonHeight,
     this.secondary = false,
+    this.fontSize = 10,
+    this.disabledColor,
+    this.disabledLabelColor,
+    this.disabledBorderColor,
+    this.powerOn = false,
   });
 
   @override
@@ -88,12 +99,28 @@ class _PixelButtonState extends State<PixelButton> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.powerOn) {
+      return PowerOn(
+        enabled: _enabled,
+        builder: (context, power) => _buildButton(context, power),
+      );
+    }
+    return _buildButton(context, _enabled ? 1.0 : 0.0);
+  }
+
+  Widget _buildButton(BuildContext context, double power) {
     final secondary = widget.secondary;
     final fill = widget.color ?? (secondary ? kBorderVariant : kNeon);
-    const disabledFill = kBorderDark;
-    const disabledFg = kDim;
+    final disabledFill = widget.disabledColor ?? kBorderDark;
+    final disabledFg = widget.disabledLabelColor ?? kDim;
     // Secondary = white label on blue-grey; primary = dark label on neon.
     final fg = secondary ? kText : kBg;
+    final effectiveFill = _enabled && widget.powerOn
+        ? Color.lerp(disabledFill, fill, power)!
+        : (_enabled ? fill : disabledFill);
+    final effectiveFg = _enabled && widget.powerOn
+        ? Color.lerp(disabledFg, fg, power)!
+        : (_enabled ? fg : disabledFg);
     final shadow = _darken(fill);
 
     final width = widget.fullWidth ? double.infinity : null;
@@ -103,25 +130,28 @@ class _PixelButtonState extends State<PixelButton> {
     final translateY = (_enabled && _pressed) ? 2.0 : 0.0;
 
     final content = widget.isLoading
-        ? PixelLoader(size: 16, color: fg)
+        ? PixelLoader(size: 16, color: effectiveFg)
         : Text(
             widget.label,
             style: TextStyle(
               fontFamily: 'PressStart2P',
-              fontSize: 10,
-              color: _enabled ? fg : disabledFg,
+              fontSize: widget.fontSize,
+              color: effectiveFg,
             ),
           );
 
     final decoration = BoxDecoration(
-      color: _enabled ? fill : disabledFill,
+      color: effectiveFill,
       borderRadius: BorderRadius.circular(4),
-      border: Border(
-        bottom: BorderSide(
-          color: _enabled ? shadow : Colors.transparent,
-          width: borderBottom,
-        ),
-      ),
+      // Drop the border entirely when disabled — Flutter asserts on
+      // hairline borders (width: 0) combined with non-zero borderRadius.
+      border: _enabled
+          ? Border(
+              bottom: BorderSide(color: shadow, width: borderBottom),
+            )
+          : widget.disabledBorderColor == null
+          ? null
+          : Border.all(color: widget.disabledBorderColor!),
       // Neon glow only for bright primary fills — never secondary/muted.
       boxShadow: (_enabled && !secondary && _isGlowableFill(fill))
           ? neonGlow(color: fill)

@@ -7,6 +7,7 @@ import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/calendar_day_marker.dart';
+import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_loader.dart';
 import 'Workout session/session_detail.dart';
 
@@ -169,8 +170,9 @@ class _CalendarPageState extends State<CalendarPage> {
       borderRadius: BorderRadius.circular(4),
     );
 
-    return GestureDetector(
+    return HoldDepress(
       onTap: () => setState(() => _selectedDay = day),
+      borderRadius: BorderRadius.circular(4),
       child: Container(
         decoration: decoration,
         child: Column(
@@ -357,13 +359,14 @@ class _CalendarPageState extends State<CalendarPage> {
                       for (final session in selectedSessions)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
-                          child: GestureDetector(
+                          child: HoldDepress(
                             onTap: () => Navigator.push(
                               context,
                               arcadeRoute(
                                 (_) => SessionDetailPage(session: session),
                               ),
                             ),
+                            borderRadius: BorderRadius.circular(4),
                             child: Card(
                               clipBehavior: Clip.antiAlias,
                               child: IntrinsicHeight(
