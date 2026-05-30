@@ -8,6 +8,7 @@ import 'package:workout_track/models/user_profile_sex.dart';
 import 'package:workout_track/pages/onboarding/avatar_select_screen.dart';
 import 'package:workout_track/pages/onboarding/calibration_quiz_page.dart';
 import 'package:workout_track/pages/onboarding/class_reveal_screen.dart';
+import 'package:workout_track/pages/onboarding/start_gate_screen.dart';
 import 'package:workout_track/services/body_goal_service.dart';
 import 'package:workout_track/services/calibration_service.dart';
 import 'package:workout_track/services/class_service.dart';
@@ -221,10 +222,10 @@ void main() {
       await tester.tap(find.text('I AM NOVA'));
       await tester.pumpAndSettle();
 
-      expect(
-        find.textContaining('selectedAvatarId: avatar_05'),
-        findsOneWidget,
-      );
+      // The selected avatar is restored on Avatar, persists through Name
+      // commit, and reaches Start Gate as part of the Character payload.
+      expect(find.byType(StartGateScreen), findsOneWidget);
+      expect(find.text('Nova'), findsOneWidget);
     });
   });
 
@@ -280,7 +281,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.chevron_left_sharp));
       await tester.pumpAndSettle();
 
-      expect(find.text('CALIBRATE'), findsOneWidget);
+      expect(find.text('DIAL IT IN'), findsOneWidget);
       expect(find.text('90'), findsOneWidget);
     },
   );
@@ -307,12 +308,13 @@ Future<void> _pumpReveal(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: _ReducedMotion(
-        enabled: reducedMotion,
-        child: ClassRevealScreen(
-          result: result,
-          onClassConfirmed: onClassConfirmed ?? (_, _) async {},
-        ),
+      // Propagate reduced-motion to pushed routes (Avatar/Name/StartGate).
+      builder: reducedMotion
+          ? (context, child) => _ReducedMotion(child: child ?? const SizedBox.shrink())
+          : null,
+      home: ClassRevealScreen(
+        result: result,
+        onClassConfirmed: onClassConfirmed ?? (_, _) async {},
       ),
     ),
   );
@@ -337,15 +339,14 @@ Future<void> _persistLikeOnboarding(
 }
 
 class _ReducedMotion extends StatelessWidget {
-  const _ReducedMotion({required this.child, this.enabled = true});
+  const _ReducedMotion({required this.child});
 
   final Widget child;
-  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     return MediaQuery(
-      data: MediaQuery.of(context).copyWith(disableAnimations: enabled),
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
       child: child,
     );
   }

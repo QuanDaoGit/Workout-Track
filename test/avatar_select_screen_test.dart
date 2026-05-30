@@ -53,6 +53,23 @@ void main() {
     expect(find.byType(ImageIcon), findsOneWidget);
   });
 
+  testWidgets('selecting an avatar shows the class preview label', (
+    tester,
+  ) async {
+    await _pumpAvatarScreen(tester);
+
+    // Nothing chosen yet → preview prompts the user.
+    expect(find.text('PICK ONE'), findsOneWidget);
+    expect(find.text('ASSASSIN'), findsNothing);
+
+    await tester.tap(find.bySemanticsLabel('Avatar 3 of eight'));
+    await tester.pumpAndSettle();
+
+    // Preview now names the class derived earlier (draft class = assassin).
+    expect(find.text('ASSASSIN'), findsOneWidget);
+    expect(find.text('PICK ONE'), findsNothing);
+  });
+
   testWidgets('commit pushes NameScreen with selected avatar in draft', (
     tester,
   ) async {

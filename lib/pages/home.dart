@@ -31,6 +31,7 @@ import '../widgets/active_session_found_dialog.dart';
 import '../widgets/lck_buff_badge.dart';
 import '../widgets/loot_avatar_frame.dart';
 import '../widgets/motion/hold_depress.dart';
+import '../widgets/motion/phosphor_tap.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
 import '../widgets/pulse_color_text.dart';
@@ -90,6 +91,7 @@ class HomePageState extends State<HomePage> {
   int _weeklyQuestTotal = 5;
   WorkoutSession? _lastWorkout;
   WorkoutSession? _completedWorkoutToday;
+  bool _isNewUser = false;
   String? _suggestedMuscle;
   String? _selectedTitle;
   int? _suggestedMissionRewardXP;
@@ -280,6 +282,8 @@ class HomePageState extends State<HomePage> {
       _weeklyQuestCompleted = questSummary.weeklyCompleted;
       _weeklyQuestTotal = questSummary.weeklyTotal;
       _lastWorkout = lastCompleted;
+      // Home only renders post-onboarding, so no completed sessions == new user.
+      _isNewUser = completed.isEmpty;
       _completedWorkoutToday = completedToday.isEmpty
           ? null
           : completedToday.first;
@@ -1138,6 +1142,13 @@ class HomePageState extends State<HomePage> {
       return _buildEndedEarlyMissionPanel();
     }
 
+    // New user (onboarded, no completed workouts) → FIRST QUEST stays the
+    // featured mission until the first workout lands. An in-progress session
+    // still falls through to CONTINUE below.
+    if (session == null && _isNewUser) {
+      return _buildFirstQuestMissionPanel();
+    }
+
     if (session == null && _programProgress != null && _programDay != null) {
       final completedSnapshot = _programCompletedToday;
       if (completedSnapshot != null &&
@@ -1252,6 +1263,39 @@ class HomePageState extends State<HomePage> {
       child: GestureDetector(
         onLongPress: () => _confirmDelete(session),
         child: panel,
+      ),
+    );
+  }
+
+  Widget _buildFirstQuestMissionPanel() {
+    final card = _missionCard(
+      accent: kNeon,
+      trailing: const _MissionRewardChip(label: '+1 XP'),
+      meta: 'WEEKLY QUEST',
+      title: 'FIRST QUEST',
+      detail: 'Log your first workout to begin.',
+      middle: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          '0 / 1',
+          style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
+        ),
+      ),
+    );
+
+    return Semantics(
+      button: true,
+      label: "Today's mission, First Quest, "
+          'Log your first workout to begin, plus one XP, '
+          'zero of one complete, tap to start workout',
+      child: PhosphorTap(
+        onTap: _startWorkout,
+        borderRadius: BorderRadius.circular(kCardRadius),
+        child: HoldDepress(
+          onTap: _startWorkout,
+          borderRadius: BorderRadius.circular(kCardRadius),
+          child: card,
+        ),
       ),
     );
   }
@@ -1558,7 +1602,7 @@ class HomePageState extends State<HomePage> {
         ? 'Start your first run today'
         : _lastWorkoutSubtitle(session);
 
-    return _homeCard(
+    final card = _homeCard(
       background: kCard,
       backgroundAlpha: 0.78,
       borderColor: kBorder,
@@ -1604,6 +1648,22 @@ class HomePageState extends State<HomePage> {
             ),
           ),
         ],
+      ),
+    );
+
+    // No completed workouts yet → make the whole card a Start Workout entry.
+    if (session != null) return card;
+    return Semantics(
+      button: true,
+      label: 'No completed workouts yet, tap to start your first workout',
+      child: PhosphorTap(
+        onTap: _startWorkout,
+        borderRadius: BorderRadius.circular(kCardRadius),
+        child: HoldDepress(
+          onTap: _startWorkout,
+          borderRadius: BorderRadius.circular(kCardRadius),
+          child: card,
+        ),
       ),
     );
   }

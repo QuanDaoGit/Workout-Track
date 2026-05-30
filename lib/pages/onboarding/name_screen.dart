@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/character.dart';
 import '../../models/character_draft.dart';
 import '../../services/character_service.dart';
+import '../../services/profile_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_route.dart';
@@ -11,6 +12,7 @@ import '../../widgets/motion/phosphor_tap.dart';
 import '../../widgets/motion/power_on.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/screen_shake.dart';
+import 'avatar_select_screen.dart';
 import 'start_gate_screen.dart';
 
 typedef CharacterCreatedCallback = Future<void> Function(Character character);
@@ -129,6 +131,16 @@ class _NameScreenState extends State<NameScreen>
 
     setState(() => _committing = true);
     await CharacterService().createCharacterAndCompleteOnboarding(character);
+    // Mirror identity into ProfileService so Home/Profile (which read the
+    // profile store, not the Character blob) show the real name + avatar.
+    final avatarPath = onboardingAvatarOptions
+        .firstWhere(
+          (o) => o.id == selectedAvatarId,
+          orElse: () => onboardingAvatarOptions.first,
+        )
+        .assetPath;
+    await ProfileService().saveDisplayName(character.characterName);
+    await ProfileService().saveAvatarPath(avatarPath);
     await widget.onCharacterCreated(character);
     if (!mounted) return;
     await Navigator.of(

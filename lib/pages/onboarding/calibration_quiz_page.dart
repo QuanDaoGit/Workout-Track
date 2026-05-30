@@ -44,6 +44,10 @@ class CalibrationQuizPage extends StatefulWidget {
 class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
   int _step = 0; // 0=Q1, 1=Q2, 2=Q3, 3=Q4
 
+  // Steps whose entrance has already played — used to suppress the
+  // typewriter + wipe-in when navigating back to an already-seen question.
+  final Set<int> _seenSteps = {};
+
   // Accumulated answers.
   BodyGoal? _goal;
   TrainingFreq? _freq;
@@ -59,10 +63,11 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
     if (answer is BodyGoal) _goal = answer;
     if (answer is TrainingFreq) _freq = answer;
     if (answer is Experience) _exp = answer;
-    // 150 ms hold so the selection visibly registers before the screen swaps.
+    // 280 ms hold so the selection animation (120 ms) completes and the
+    // choice visibly "lands" before the screen swaps.
     final reducedMotion = MediaQuery.of(context).disableAnimations;
     if (!reducedMotion) {
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await Future<void>.delayed(const Duration(milliseconds: 280));
     }
     if (!mounted) return;
     setState(() => _step = currentStep + 1);
@@ -115,12 +120,15 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
   }
 
   Widget _buildCurrentQuestion() {
+    // Set.add returns true only the first time this step is viewed.
+    final firstView = _seenSteps.add(_step);
     return switch (_step) {
       0 => _GoalQuestion(
         key: const ValueKey('quiz-q1'),
         step: _step,
         progressCells: _progressCells,
         selected: _goal,
+        animate: firstView,
         onBack: _goBack,
         onSelect: (g) => _advanceFrom(0, g),
       ),
@@ -129,6 +137,7 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
         step: _step,
         progressCells: _progressCells,
         selected: _freq,
+        animate: firstView,
         onBack: _goBack,
         onSelect: (f) => _advanceFrom(1, f),
       ),
@@ -137,6 +146,7 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
         step: _step,
         progressCells: _progressCells,
         selected: _exp,
+        animate: firstView,
         onBack: _goBack,
         onSelect: (e) => _advanceFrom(2, e),
       ),
@@ -145,6 +155,7 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
         progressCells: _progressCells,
         initialBodyWeightKg: _bodyWeightKg,
         initialSex: _sex,
+        animate: firstView,
         onBack: _goBack,
         onContinue: _finish,
       ),
@@ -163,6 +174,7 @@ class _QuestionScaffold extends StatelessWidget {
     required this.body,
     required this.onBack,
     this.subtitle,
+    this.animatePrompt = true,
   });
 
   final int progressCells;
@@ -170,6 +182,7 @@ class _QuestionScaffold extends StatelessWidget {
   final Widget body;
   final VoidCallback onBack;
   final String? subtitle;
+  final bool animatePrompt;
 
   @override
   Widget build(BuildContext context) {
@@ -230,7 +243,7 @@ class _QuestionScaffold extends StatelessWidget {
             children: [
               Semantics(
                 header: true,
-                child: reducedMotion
+                child: (reducedMotion || !animatePrompt)
                     ? Text(
                         prompt,
                         textAlign: TextAlign.center,
@@ -292,6 +305,8 @@ class _OptionCard extends StatelessWidget {
     required this.isSelected,
     required this.hasAnySelection,
     required this.onTap,
+    this.accentColor,
+    this.accentLabel,
   });
 
   final String title;
@@ -299,13 +314,16 @@ class _OptionCard extends StatelessWidget {
   final bool isSelected;
   final bool hasAnySelection;
   final VoidCallback onTap;
+  final Color? accentColor;
+  final String? accentLabel;
 
   @override
   Widget build(BuildContext context) {
     final reducedMotion = MediaQuery.of(context).disableAnimations;
     final dimmed = hasAnySelection && !isSelected;
-    final borderColor = isSelected ? kNeon : kBorder;
-    final titleColor = isSelected ? kNeon : kText;
+    final accent = accentColor ?? kNeon;
+    final borderColor = isSelected ? accent : kBorder;
+    final titleColor = isSelected ? accent : kText;
     final duration = reducedMotion
         ? Duration.zero
         : const Duration(milliseconds: 120);
@@ -335,15 +353,42 @@ class _OptionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedDefaultTextStyle(
-                  duration: duration,
-                  style: TextStyle(
-                    fontFamily: 'PressStart2P',
-                    fontSize: 11,
-                    color: titleColor,
-                    height: 1.2,
-                  ),
-                  child: Text(title),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AnimatedDefaultTextStyle(
+                        duration: duration,
+                        style: TextStyle(
+                          fontFamily: 'PressStart2P',
+                          fontSize: 11,
+                          color: titleColor,
+                          height: 1.2,
+                        ),
+                        child: Text(title),
+                      ),
+                    ),
+                    if (accentLabel != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: accent),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          accentLabel!,
+                          style: TextStyle(
+                            fontFamily: 'PressStart2P',
+                            fontSize: 7,
+                            color: accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -435,6 +480,7 @@ class _GoalQuestion extends StatelessWidget {
     required this.step,
     required this.progressCells,
     required this.selected,
+    required this.animate,
     required this.onBack,
     required this.onSelect,
   });
@@ -442,6 +488,7 @@ class _GoalQuestion extends StatelessWidget {
   final int step;
   final int progressCells;
   final BodyGoal? selected;
+  final bool animate;
   final VoidCallback onBack;
   final ValueChanged<BodyGoal> onSelect;
 
@@ -450,27 +497,36 @@ class _GoalQuestion extends StatelessWidget {
     return _QuestionScaffold(
       progressCells: progressCells,
       prompt: "WHAT'S THE GOAL?",
+      subtitle: 'this sets your class.',
+      animatePrompt: animate,
       onBack: onBack,
       body: _OptionList(
         hasAnySelection: selected != null,
+        animate: animate,
         options: [
           _OptionDef(
             title: 'GET LEANER',
             subtext: 'drop fat. keep strength.',
             isSelected: selected == BodyGoal.cut,
             onTap: () => onSelect(BodyGoal.cut),
+            accentColor: deriveClass(BodyGoal.cut).themeColor,
+            accentLabel: deriveClass(BodyGoal.cut).displayName,
           ),
           _OptionDef(
             title: 'STAY + STRENGTHEN',
             subtext: 'hold weight. add strength.',
             isSelected: selected == BodyGoal.recomp,
             onTap: () => onSelect(BodyGoal.recomp),
+            accentColor: deriveClass(BodyGoal.recomp).themeColor,
+            accentLabel: deriveClass(BodyGoal.recomp).displayName,
           ),
           _OptionDef(
             title: 'GET BIGGER',
             subtext: 'add size. accept the gain.',
             isSelected: selected == BodyGoal.bulk,
             onTap: () => onSelect(BodyGoal.bulk),
+            accentColor: deriveClass(BodyGoal.bulk).themeColor,
+            accentLabel: deriveClass(BodyGoal.bulk).displayName,
           ),
         ],
       ),
@@ -488,6 +544,7 @@ class _FreqQuestion extends StatelessWidget {
     required this.step,
     required this.progressCells,
     required this.selected,
+    required this.animate,
     required this.onBack,
     required this.onSelect,
   });
@@ -495,6 +552,7 @@ class _FreqQuestion extends StatelessWidget {
   final int step;
   final int progressCells;
   final TrainingFreq? selected;
+  final bool animate;
   final VoidCallback onBack;
   final ValueChanged<TrainingFreq> onSelect;
 
@@ -503,9 +561,11 @@ class _FreqQuestion extends StatelessWidget {
     return _QuestionScaffold(
       progressCells: progressCells,
       prompt: 'HOW OFTEN?',
+      animatePrompt: animate,
       onBack: onBack,
       body: _OptionList(
         hasAnySelection: selected != null,
+        animate: animate,
         options: [
           _OptionDef(
             title: '2–3 DAYS',
@@ -541,6 +601,7 @@ class _ExperienceQuestion extends StatelessWidget {
     required this.step,
     required this.progressCells,
     required this.selected,
+    required this.animate,
     required this.onBack,
     required this.onSelect,
   });
@@ -548,6 +609,7 @@ class _ExperienceQuestion extends StatelessWidget {
   final int step;
   final int progressCells;
   final Experience? selected;
+  final bool animate;
   final VoidCallback onBack;
   final ValueChanged<Experience> onSelect;
 
@@ -556,9 +618,11 @@ class _ExperienceQuestion extends StatelessWidget {
     return _QuestionScaffold(
       progressCells: progressCells,
       prompt: 'YOUR LEVEL?',
+      animatePrompt: animate,
       onBack: onBack,
       body: _OptionList(
         hasAnySelection: selected != null,
+        animate: animate,
         options: [
           _OptionDef(
             title: 'NOVICE',
@@ -596,38 +660,62 @@ class _OptionDef {
     required this.subtext,
     required this.isSelected,
     required this.onTap,
+    this.accentColor,
+    this.accentLabel,
   });
   final String title;
   final String subtext;
   final bool isSelected;
   final VoidCallback onTap;
+
+  /// When set, this card carries a class identity: the selected border/title
+  /// use [accentColor] instead of neon, and an [accentLabel] tag is shown.
+  final Color? accentColor;
+  final String? accentLabel;
 }
 
 class _OptionList extends StatelessWidget {
-  const _OptionList({required this.hasAnySelection, required this.options});
+  const _OptionList({
+    required this.hasAnySelection,
+    required this.options,
+    this.animate = true,
+  });
 
   final bool hasAnySelection;
   final List<_OptionDef> options;
+  final bool animate;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          for (var i = 0; i < options.length; i++) ...[
-            _WipeIn(
-              delay: Duration(milliseconds: i * 80),
-              child: _OptionCard(
-                title: options[i].title,
-                subtext: options[i].subtext,
-                isSelected: options[i].isSelected,
-                hasAnySelection: hasAnySelection,
-                onTap: options[i].onTap,
-              ),
-            ),
-            if (i != options.length - 1) const SizedBox(height: 12),
-          ],
-        ],
+    final children = <Widget>[];
+    for (var i = 0; i < options.length; i++) {
+      final card = _OptionCard(
+        title: options[i].title,
+        subtext: options[i].subtext,
+        isSelected: options[i].isSelected,
+        hasAnySelection: hasAnySelection,
+        onTap: options[i].onTap,
+        accentColor: options[i].accentColor,
+        accentLabel: options[i].accentLabel,
+      );
+      children.add(
+        animate
+            ? _WipeIn(delay: Duration(milliseconds: i * 80), child: card)
+            : card,
+      );
+      if (i != options.length - 1) children.add(const SizedBox(height: 12));
+    }
+    // Center the cards in the available space (kills the top-heavy void) while
+    // still scrolling if the list is taller than the viewport (Q3 has four).
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: children,
+          ),
+        ),
       ),
     );
   }
@@ -643,6 +731,7 @@ class _CalibrationQuestion extends StatefulWidget {
     required this.progressCells,
     required this.initialBodyWeightKg,
     required this.initialSex,
+    required this.animate,
     required this.onBack,
     required this.onContinue,
   });
@@ -650,6 +739,7 @@ class _CalibrationQuestion extends StatefulWidget {
   final int progressCells;
   final double? initialBodyWeightKg;
   final UserProfileSex initialSex;
+  final bool animate;
   final VoidCallback onBack;
   final FutureOr<void> Function({
     double? bodyWeightKg,
@@ -683,16 +773,13 @@ class _CalibrationQuestionState extends State<_CalibrationQuestion> {
     widget.onContinue(bodyWeightKg: _validBodyWeight, sex: _sex);
   }
 
-  void _skip() {
-    widget.onContinue(bodyWeightKg: null, sex: _sex);
-  }
-
   @override
   Widget build(BuildContext context) {
     return _QuestionScaffold(
       progressCells: widget.progressCells,
-      prompt: 'CALIBRATE',
-      subtitle: 'your weight tunes the numbers. skip if you like.',
+      prompt: 'DIAL IT IN',
+      subtitle: 'optional — your weight fine-tunes the numbers.',
+      animatePrompt: widget.animate,
       onBack: widget.onBack,
       body: ListView(
         children: [
@@ -733,17 +820,7 @@ class _CalibrationQuestionState extends State<_CalibrationQuestion> {
           PixelButton(
             label: 'CONTINUE',
             powerOn: true,
-            onPressed: _validBodyWeight == null ? null : _submit,
-          ),
-          const SizedBox(height: 12),
-          Center(
-            child: TextButton(
-              onPressed: _skip,
-              child: Text(
-                'skip — calibrate later',
-                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
-              ),
-            ),
+            onPressed: _submit,
           ),
         ],
       ),

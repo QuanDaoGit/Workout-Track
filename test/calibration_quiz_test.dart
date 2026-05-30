@@ -96,6 +96,19 @@ void main() {
       expect(find.text('1/5'), findsNothing);
     });
 
+    testWidgets('Q1 goal cards reveal their class and consequence', (
+      tester,
+    ) async {
+      await _openQuiz(tester, reducedMotion: true);
+
+      // Each goal advertises the class it derives.
+      expect(find.text('ASSASSIN'), findsOneWidget); // cut
+      expect(find.text('BRUISER'), findsOneWidget); // recomp
+      expect(find.text('TANK'), findsOneWidget); // bulk
+      // And the prompt now tells the user this choice matters.
+      expect(find.text('this sets your class.'), findsOneWidget);
+    });
+
     testWidgets('Q1 tap advances to Q2', (tester) async {
       await _openQuiz(tester, reducedMotion: true);
 
@@ -124,7 +137,7 @@ void main() {
       // pump(Duration) instead of pumpAndSettle past this point because
       // TextField focus starts the cursor blink, which keeps pumpAndSettle
       // spinning indefinitely.
-      expect(find.text('CALIBRATE'), findsOneWidget);
+      expect(find.text('DIAL IT IN'), findsOneWidget);
       await tester.enterText(find.byType(TextField), '78');
       await tester.pump(const Duration(milliseconds: 50));
       await tester.tap(find.text('Male'));
@@ -143,7 +156,7 @@ void main() {
     });
 
     testWidgets(
-      'Q4 CONTINUE disabled with empty bodyweight; skip still works',
+      'Q4 CONTINUE with empty bodyweight continues with null weight',
       (tester) async {
         final obs = await _openQuiz(tester, reducedMotion: true);
 
@@ -154,15 +167,10 @@ void main() {
         await tester.tap(find.text('NOVICE'));
         await tester.pumpAndSettle();
 
-        // CONTINUE with empty field — no-op (still on Q4, not popped).
-        // pump(Duration) on Q4 because the TextField may start cursor blink
-        // even without focus once mounted in some flows.
+        // CONTINUE is always enabled now. Empty field => continue with null
+        // bodyweight and the default sex. pump(Duration) instead of
+        // pumpAndSettle because the TextField cursor blink never settles.
         await tester.tap(find.text('CONTINUE'));
-        await tester.pump(const Duration(milliseconds: 100));
-        expect(obs.resolved, isFalse);
-
-        // Skip — pops with null bodyweight and the default sex.
-        await tester.tap(find.text('skip — calibrate later'));
         await tester.pump(const Duration(milliseconds: 400));
 
         expect(obs.resolved, isTrue);
@@ -197,6 +205,28 @@ void main() {
       // The previously-selected card is rendered; the surrounding dimmed
       // siblings prove the "selected" state was restored.
       expect(find.text('GET LEANER'), findsOneWidget);
+    });
+
+    testWidgets('returning to a question shows its prompt instantly', (
+      tester,
+    ) async {
+      // Animations ON (reducedMotion defaults to false).
+      await _openQuiz(tester);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('GET LEANER'));
+      // The auto-advance hold is a bare Future.delayed; pumpAndSettle alone
+      // won't flush it (nothing schedules frames during the wait), so drive
+      // the clock past the hold before settling the Q2 entrance animation.
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(find.text('HOW OFTEN?'), findsOneWidget);
+
+      await tester.tap(find.bySemanticsLabel('Back'));
+      // Single frame only — if the prompt re-typed, one frame would show a
+      // partial string and this exact-text match would fail.
+      await tester.pump();
+      expect(find.text("WHAT'S THE GOAL?"), findsOneWidget);
     });
   });
 }

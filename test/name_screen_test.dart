@@ -99,7 +99,11 @@ void main() {
     expect(await OnboardingService().isComplete(), isTrue);
     expect((await CharacterService().loadActiveCharacter())?.name, 'Nova');
     expect(find.byType(StartGateScreen), findsOneWidget);
-    expect(find.textContaining('name: Nova'), findsOneWidget);
+    // Reduced-motion path lands directly on the sustained state: prompt
+    // visible, both buttons rendered.
+    expect(find.text('READY TO TRAIN?'), findsOneWidget);
+    expect(find.text('START WORKOUT'), findsOneWidget);
+    expect(find.text('EXPLORE FIRST'), findsOneWidget);
   });
 
   testWidgets('button tap commits when valid', (tester) async {
@@ -116,7 +120,9 @@ void main() {
 
     expect(created?.characterName, 'Kai');
     expect(find.byType(StartGateScreen), findsOneWidget);
-    expect(find.textContaining('selectedAvatarId: avatar_04'), findsOneWidget);
+    expect(find.text('Kai'), findsOneWidget);
+    expect(find.text('RECRUIT'), findsOneWidget);
+    expect(find.text('LV.1'), findsOneWidget);
   });
 
   testWidgets('back returns to avatar screen and typed name is discarded', (
@@ -160,12 +166,14 @@ Future<void> _pumpNameScreen(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: MediaQuery(
+      // Propagate disableAnimations to pushed routes too (e.g. StartGate).
+      builder: (context, child) => MediaQuery(
         data: const MediaQueryData(disableAnimations: true),
-        child: NameScreen(
-          draft: _baseDraft.copyWith(selectedAvatarId: 'avatar_04'),
-          onCharacterCreated: onCharacterCreated ?? (_) async {},
-        ),
+        child: child!,
+      ),
+      home: NameScreen(
+        draft: _baseDraft.copyWith(selectedAvatarId: 'avatar_04'),
+        onCharacterCreated: onCharacterCreated ?? (_) async {},
       ),
     ),
   );

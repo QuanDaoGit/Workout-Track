@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../models/character_class.dart';
 import '../../models/character_draft.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_route.dart';
@@ -135,6 +136,14 @@ class _AvatarSelectScreenState extends State<AvatarSelectScreen>
               promptDoneMs + 100,
               _rowRevealMs,
             );
+            final accentColor = widget.draft.calibration.clazz.themeColor;
+            final clazz = widget.draft.calibration.clazz;
+            final selectedOption = _selectedAvatarId == null
+                ? null
+                : onboardingAvatarOptions.firstWhere(
+                    (o) => o.id == _selectedAvatarId,
+                    orElse: () => onboardingAvatarOptions.first,
+                  );
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -156,7 +165,46 @@ class _AvatarSelectScreenState extends State<AvatarSelectScreen>
                     ),
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: kCard,
+                          border: Border.all(
+                            color: selectedOption != null ? accentColor : kBorder,
+                            width: selectedOption != null ? 2 : 1,
+                          ),
+                          borderRadius: BorderRadius.circular(kCardRadius),
+                        ),
+                        clipBehavior: Clip.hardEdge,
+                        child: selectedOption == null
+                            ? null
+                            : Image.asset(
+                                selectedOption.assetPath,
+                                fit: BoxFit.cover,
+                                filterQuality: FilterQuality.none,
+                              ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        selectedOption == null ? 'PICK ONE' : clazz.displayName,
+                        style: TextStyle(
+                          fontFamily: 'PressStart2P',
+                          fontSize: 10,
+                          color: selectedOption == null
+                              ? kMutedText
+                              : accentColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
                 Center(
                   child: SizedBox(
                     width: 356,
@@ -169,6 +217,7 @@ class _AvatarSelectScreenState extends State<AvatarSelectScreen>
                             startIndex: 0,
                             selectedAvatarId: _selectedAvatarId,
                             onSelect: _selectAvatar,
+                            accentColor: accentColor,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -179,6 +228,7 @@ class _AvatarSelectScreenState extends State<AvatarSelectScreen>
                             startIndex: 4,
                             selectedAvatarId: _selectedAvatarId,
                             onSelect: _selectAvatar,
+                            accentColor: accentColor,
                           ),
                         ),
                       ],
@@ -282,12 +332,14 @@ class _AvatarRow extends StatelessWidget {
     required this.startIndex,
     required this.selectedAvatarId,
     required this.onSelect,
+    required this.accentColor,
   });
 
   final List<AvatarOption> options;
   final int startIndex;
   final String? selectedAvatarId;
   final void Function(AvatarOption option, int index) onSelect;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -300,6 +352,7 @@ class _AvatarRow extends StatelessWidget {
             index: startIndex + i,
             selected: selectedAvatarId == options[i].id,
             onTap: () => onSelect(options[i], startIndex + i),
+            accentColor: accentColor,
           ),
           if (i != options.length - 1) const SizedBox(width: 12),
         ],
@@ -314,12 +367,14 @@ class _AvatarTile extends StatelessWidget {
     required this.index,
     required this.selected,
     required this.onTap,
+    required this.accentColor,
   });
 
   final AvatarOption option;
   final int index;
   final bool selected;
   final VoidCallback onTap;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -339,7 +394,7 @@ class _AvatarTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: kCard,
             border: Border.all(
-              color: selected ? kNeon : kBorder,
+              color: selected ? accentColor : kBorder,
               width: selected ? 2 : 1,
             ),
             borderRadius: BorderRadius.circular(kCardRadius),
@@ -354,13 +409,13 @@ class _AvatarTile extends StatelessWidget {
                 filterQuality: FilterQuality.none,
               ),
               if (selected)
-                const Positioned(
+                Positioned(
                   right: 4,
                   top: 4,
                   child: ImageIcon(
-                    AssetImage('assets/icons/control/icon_star.png'),
+                    const AssetImage('assets/icons/control/icon_star.png'),
                     size: 8,
-                    color: kNeon,
+                    color: accentColor,
                   ),
                 ),
             ],
