@@ -169,10 +169,12 @@ void main() {
       catalog: catalog,
     ).calculateAllStats();
 
-    expect(stats['STR'], 10 + _statFromVolume(1200));
+    // Legs now feed STR, so the tank's squat (1000 vol + 200 class bonus) lands
+    // in STR alongside the bruiser's bench (1000 + 200) → 2400 STR volume.
+    expect(stats['STR'], 10 + _statFromVolume(2400));
     expect(stats['AGI'], 10 + _statFromVolume(1200));
-    expect(stats['VIT'], 10 + _statFromVolume(1200));
     expect(stats['END'], 40);
+    // VIT is the recovery meter now (not volume) — covered by its own tests.
   });
 
   test('ignores partial and abandoned sessions', () async {
@@ -376,7 +378,8 @@ void main() {
 
       expect(decayed['STR'], 720);
       expect(decayed['DEF'], 500);
-      expect(decayed['VIT'], 90);
+      // VIT is the recovery meter now — excluded from decay, so it's untouched.
+      expect(decayed['VIT'], 100);
       expect(decayed['END'], 90);
       expect(decayed['LCK'], 0);
     },

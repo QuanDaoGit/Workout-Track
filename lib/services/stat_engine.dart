@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/class_definitions.dart';
 import '../data/muscle_groups.dart';
 import '../models/character_class.dart';
+import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import 'exercise_catalog_service.dart';
 import 'rest_service.dart';
@@ -30,8 +31,14 @@ class StatEngine {
   static const outputStats = ['STR', 'DEF', 'VIT', 'AGI', 'END'];
   static const stats = ['STR', 'DEF', 'VIT', 'AGI', 'END', 'LCK'];
   static const volumeStats = outputStats;
-  static const _kgVolumeStats = ['STR', 'DEF', 'VIT', 'AGI'];
+  // VIT is no longer volume-derived (it's the recovery meter), so it's out of
+  // the kg-volume set and the decay set. END decays; VIT/LCK do not.
+  static const _kgVolumeStats = ['STR', 'DEF', 'AGI'];
+  static const _decayableStats = ['STR', 'DEF', 'AGI', 'END'];
   static const baseOutputStatValue = 10;
+
+  /// Trailing window for the VIT recovery-balance meter.
+  static const _vitalityWindowDays = 14;
 
   final DateTime Function() _nowProvider;
   final Map<String, String>? _catalogOverride;
@@ -57,6 +64,10 @@ class StatEngine {
             latestSession: latestSession,
             catalog: catalog,
           );
+
+    // VIT is the recovery meter — recomputed fresh from rest/training balance,
+    // not from this session's volume. Inject it into the persisted snapshot.
+    computed['VIT'] = await _computeVitality(sessions);
 
     final peaks = _mergePeaks(
       _decodeStats(prefs.getString(_peaksKey)),
@@ -124,7 +135,11 @@ class StatEngine {
       await prefs.setString(combatStatsKey, jsonEncode(baseline));
       return baseline;
     }
-    return _decodeStats(stored);
+    // VIT is a live recovery meter — always refresh it on read so it reflects
+    // today's rest/training balance even between workout saves.
+    final decoded = _decodeStats(stored);
+    decoded['VIT'] = await _computeVitality(sessions);
+    return decoded;
   }
 
   static double endurancePointsForSet(SetEntry set) {
@@ -194,7 +209,7 @@ class StatEngine {
     }
 
     final peaks = _decodeStats(prefs.getString(_peaksKey));
-    for (final stat in volumeStats) {
+    for (final stat in _decayableStats) {
       final peak = peaks[stat] ?? current[stat] ?? 0;
       final floorValue = (peak * 0.5).floor();
       var value = current[stat] ?? 0;
@@ -339,6 +354,70 @@ class StatEngine {
     );
   }
 
+  Future<int> _computeVitality(List<WorkoutSession> sessions) async {
+    final restService = RestService(nowProvider: _nowProvider);
+    final state = await restService.loadState(now: _nowProvider());
+    return vitalityFromState(state, sessions, restService);
+  }
+
+  /// VIT = a rolling recovery-balance meter over the last [_vitalityWindowDays]
+  /// days (0–100, floor [baseOutputStatValue]). Rewards completing scheduled
+  /// training AND resting on rest days; mildly dings training on rest days
+  /// (overtraining); scales down by how much of the scheduled training you
+  /// actually did, so inactivity collapses it toward the floor. Public for
+  /// tests.
+  int vitalityFromState(
+    RestState state,
+    List<WorkoutSession> sessions,
+    RestService restService,
+  ) {
+    final now = _dateOnly(_nowProvider());
+    var sumCredit = 0.0;
+    var considered = 0;
+    var scheduledTraining = 0;
+    var completedScheduled = 0;
+    for (var i = 0; i < _vitalityWindowDays; i++) {
+      final day = now.subtract(Duration(days: i));
+      final info = restService.dayInfoForState(
+        day: day,
+        sessions: sessions,
+        state: state,
+        now: now,
+      );
+      if (info.isScheduledTrainingDay) scheduledTraining++;
+      switch (info.kind) {
+        case RestDayKind.workoutComplete:
+          if (info.isScheduledTrainingDay) {
+            completedScheduled++;
+            sumCredit += 1.0;
+          } else {
+            sumCredit += 0.7; // trained on a rest day — mild overtraining
+          }
+          considered++;
+        case RestDayKind.plannedRest:
+          sumCredit += 1.0; // productive recovery
+          considered++;
+        case RestDayKind.protectedMiss:
+          sumCredit += 0.5; // shielded — neutral
+          considered++;
+        case RestDayKind.unplannedMiss:
+          considered++; // detraining — zero credit
+        case RestDayKind.trainingDay:
+        case RestDayKind.abandonedOnly:
+          break; // today, no verdict yet
+      }
+    }
+    if (considered == 0) return baseOutputStatValue;
+    final raw = 100.0 * sumCredit / considered;
+    final activityFactor = scheduledTraining == 0
+        ? 1.0
+        : min(1.0, completedScheduled / scheduledTraining);
+    return (raw * activityFactor)
+        .round()
+        .clamp(baseOutputStatValue, 100)
+        .toInt();
+  }
+
   String _primaryForLog(
     ExerciseLog log,
     WorkoutSession session,
@@ -356,7 +435,9 @@ class StatEngine {
     return switch (cls) {
       CharacterClass.bruiser => 'STR',
       CharacterClass.assassin => 'AGI',
-      CharacterClass.tank => 'VIT',
+      // Tank focuses Legs, which now feed STR (was VIT before the recovery
+      // redesign), so the Tank bonus follows legs into STR.
+      CharacterClass.tank => 'STR',
       // Balanced: the +20% bonus lands on whatever stat the trained muscle
       // already feeds (bonus on every focus, not one). The §7 #4 "80% rate"
       // refinement is deferred — this keeps a single shared 0.2 multiplier.
@@ -390,19 +471,23 @@ class StatEngine {
   /// if the muscle does not contribute to a volume stat.
   static String? statForPrimaryMuscle(String muscle) {
     return switch (muscle.toLowerCase()) {
-      'chest' || 'triceps' || 'forearms' => 'STR',
+      // Legs join the pressing muscles under STR (squat/deadlift = raw force).
+      // VIT is no longer fed by any muscle — it's the recovery meter.
+      'chest' ||
+      'triceps' ||
+      'forearms' ||
+      'quadriceps' ||
+      'hamstrings' ||
+      'glutes' ||
+      'calves' ||
+      'adductors' ||
+      'abductors' => 'STR',
       'lats' ||
       'middle back' ||
       'lower back' ||
       'biceps' ||
       'traps' ||
       'neck' => 'DEF',
-      'quadriceps' ||
-      'hamstrings' ||
-      'glutes' ||
-      'calves' ||
-      'adductors' ||
-      'abductors' => 'VIT',
       'shoulders' || 'abdominals' => 'AGI',
       _ => null,
     };

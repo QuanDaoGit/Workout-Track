@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
 import '../services/stat_engine.dart';
+import '../services/xp_service.dart';
 import '../theme/tokens.dart';
 import 'motion/phosphor_tap.dart';
 import 'segmented_progress_bar.dart';
@@ -17,11 +18,12 @@ const double _statRankWidth = 34;
 /// possible future revival (the spec's "feature flag", local-app form).
 const bool kDefVisible = false;
 
-/// Stats shown on the radar triangle (STR/AGI/END), in detail rows.
+/// Capability stats — radar triangle + graded D→S detail rows. VIT (recovery)
+/// and LCK (consistency) are different categories, shown as their own rows.
 const List<String> _radarStats = ['STR', 'AGI', 'END'];
 
-/// Visible volume stats for grade targeting: radar trio + VIT (shown as a bar).
-const List<String> _visibleStats = ['STR', 'AGI', 'END', 'VIT'];
+/// Stats used for "NEXT grade" targeting — the graded capability trio only.
+const List<String> _visibleStats = ['STR', 'AGI', 'END'];
 
 class StatCard extends StatefulWidget {
   const StatCard({
@@ -48,7 +50,7 @@ class _StatCardState extends State<StatCard> {
   }
 
   String _nextGradeLabel() {
-    // Operate over visible stats only (STR/AGI/END/VIT); DEF/LCK excluded.
+    // Operate over the graded capability trio only (STR/AGI/END).
     final values = {for (final stat in _visibleStats) stat: _value(stat)};
     if (values.values.every((value) => value >= StatEngine.rankThresholdS)) {
       return 'NEXT: HOLD [S]';
@@ -95,14 +97,21 @@ class _StatCardState extends State<StatCard> {
           children: [
             _InfoLine(
               text:
-                  'STR / AGI / VIT grow from logged workout volume. END grows from logged reps.',
+                  'STR / AGI / END are capability — they grow from logged training '
+                  '(volume and reps) and rank D->S (C 100, B 300, A 600, S 900).',
             ),
-            const SizedBox(height: 8),
-            _InfoLine(text: 'Grades: D, C 100, B 300, A 600, S 900.'),
             const SizedBox(height: 8),
             _InfoLine(
               text:
-                  'LCK is a buff beside your XP bar — your streak multiplies XP.',
+                  'VIT is recovery — your train/rest balance over the last 2 weeks. '
+                  'Rest on your rest days to raise it; it falls if you stop training '
+                  'or never rest.',
+            ),
+            const SizedBox(height: 8),
+            _InfoLine(
+              text:
+                  'LCK is consistency — your training streak. Each of the 4 diamonds '
+                  'is an XP-multiplier tier (up to x3), also shown beside the XP bar.',
             ),
           ],
         ),
@@ -181,10 +190,14 @@ class _StatCardState extends State<StatCard> {
             ),
           ],
           const SizedBox(height: 12),
-          // VIT sits below the radar as its own bar (capability stat, not on
-          // the triangle). LCK is no longer a stat here — it's a buff badge
-          // beside the XP bar.
-          _StatRow(stat: 'VIT', value: _value('VIT'), segments: _segments),
+          // Recovery and Consistency are different categories from the
+          // capability triangle — their own rows, not graded D->S.
+          _RecoveryRow(value: _value('VIT')),
+          const SizedBox(height: 9),
+          _LuckRow(
+            value: _value('LCK'),
+            filled: XpService.lckDiamondCount(_value('LCK')),
+          ),
           const SizedBox(height: 10),
           _DetailToggle(
             visible: _detailVisible,
@@ -333,6 +346,109 @@ class _StatRow extends StatelessWidget {
           rank: rank,
           rankColor: rankColor,
         ),
+      ],
+    );
+  }
+}
+
+/// VIT recovery meter — a 0–100 balance gauge, not a graded capability stat.
+/// Cyan to read as a different category from the neon capability rows.
+class _RecoveryRow extends StatelessWidget {
+  const _RecoveryRow({required this.value});
+
+  final int value; // 0–100
+
+  @override
+  Widget build(BuildContext context) {
+    final lit = (value / 10).round().clamp(0, 10);
+    return Row(
+      children: [
+        const SizedBox(
+          width: _statLabelWidth,
+          child: Text(
+            'VIT',
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 8,
+              color: kText,
+            ),
+          ),
+        ),
+        Expanded(
+          child: SegmentedProgressBar(
+            totalCells: 10,
+            litCells: lit,
+            height: 8,
+            litColor: kCyan,
+            litBorderColor: kCyan,
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(width: _statVisualValueGap),
+            SizedBox(
+              width: _statValueWidth,
+              child: Text(
+                '$value',
+                textAlign: TextAlign.right,
+                style: AppFonts.shareTechMono(
+                  color: kCyan,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: _statValueRankGap),
+            SizedBox(
+              width: _statRankWidth,
+              child: Text(
+                'REC',
+                textAlign: TextAlign.right,
+                style: AppFonts.shareTechMono(color: kCyan, fontSize: 9),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// LCK consistency — the 4-diamond row where each filled diamond is an
+/// XP-multiplier tier (25/50/75/100 streak → x1.5 / x2 / x2.5 / x3).
+class _LuckRow extends StatelessWidget {
+  const _LuckRow({required this.value, required this.filled});
+
+  final int value; // streak (LCK)
+  final int filled; // diamonds 0–4
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const SizedBox(
+          width: _statLabelWidth,
+          child: Text(
+            'LCK',
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 8,
+              color: kText,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            List.generate(4, (i) => i < filled ? '◆' : '◇').join(),
+            style: const TextStyle(
+              color: kAmber,
+              fontSize: 14,
+              letterSpacing: 3,
+            ),
+          ),
+        ),
+        _StatTrailing(value: value, valueColor: kAmber),
       ],
     );
   }

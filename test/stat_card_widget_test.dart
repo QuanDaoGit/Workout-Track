@@ -35,7 +35,7 @@ void main() {
   });
 
   testWidgets(
-    'StatCard shows VIT bar, no LCK row, and expands STR/AGI/END detail',
+    'StatCard shows VIT recovery meter + LCK diamonds, expands STR/AGI/END',
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -57,22 +57,24 @@ void main() {
         ),
       );
 
-      // New ladder: lowest visible stat (10) targets C at 100.
+      // New ladder: lowest visible capability stat (10) targets C at 100.
       expect(find.text('NEXT: STR -> [C] AT 100'), findsOneWidget);
       expect(find.text('Train to shape your build'), findsNothing);
-      // LCK is no longer a stat row here (it's a buff badge by the XP bar).
-      expect(find.text('LCK'), findsNothing);
-      expect(find.text('◆◆◇◇'), findsNothing);
-      // VIT bar is always visible below the radar.
+      // VIT recovery meter (a 'REC' gauge, not a graded stat).
       expect(find.text('VIT'), findsOneWidget);
+      expect(find.text('REC'), findsOneWidget);
+      // LCK consistency row is back: 4 diamonds, 2 filled at streak 50.
+      expect(find.text('LCK'), findsOneWidget);
+      expect(find.text('◆◆◇◇'), findsOneWidget);
       expect(find.text('[ SHOW DETAIL ]'), findsOneWidget);
 
       await tester.tap(find.text('[ SHOW DETAIL ]'));
       await tester.pumpAndSettle();
 
       expect(find.text('[ HIDE DETAIL ]'), findsOneWidget);
-      // Detail rows: STR/AGI/END (3) + the always-on VIT bar = 4 [D] grades.
-      expect(find.text('[D]'), findsNWidgets(4));
+      // Detail rows are the capability trio STR/AGI/END → 3 [D] grades.
+      // VIT (recovery meter) and LCK (diamonds) carry no letter grade.
+      expect(find.text('[D]'), findsNWidgets(3));
       // DEF never renders.
       expect(find.text('DEF'), findsNothing);
     },
@@ -153,17 +155,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('STAT BOARD'), findsOneWidget);
+    // Three categories explained.
     expect(
-      find.text(
-        'STR / AGI / VIT grow from logged workout volume. END grows from logged reps.',
-      ),
+      find.textContaining('STR / AGI / END are capability'),
       findsOneWidget,
     );
-    expect(
-      find.text(
-        'LCK is a buff beside your XP bar — your streak multiplies XP.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.textContaining('VIT is recovery'), findsOneWidget);
+    expect(find.textContaining('LCK is consistency'), findsOneWidget);
+    expect(find.textContaining('XP-multiplier tier'), findsOneWidget);
   });
 }

@@ -157,9 +157,10 @@ void main() {
       );
       await svc.recordCalibrationWorkout(calibration, catalog: catalog);
 
-      // A later, unrelated normal session (legs only).
+      // A later, unrelated normal session that trains a DIFFERENT stat than the
+      // seeded STR — back/row feeds DEF (legs now feed STR, so use row here).
       final later = _session(day2, [
-        _log('squat', weight: 100, reps: 5),
+        _log('row', weight: 100, reps: 5),
       ], id: 'later');
       await _seedSessions([calibration, later]);
 
@@ -169,10 +170,10 @@ void main() {
 
       // Calibrated STR survives the recompute (not erased by the new session).
       expect(stats['STR'], 650);
-      // The new session touched VIT, not STR; the constant seed never appears
+      // The new session touched DEF, not STR; the constant seed never appears
       // as a per-session delta.
       expect(delta.containsKey('STR'), isFalse);
-      expect(delta['VIT'], greaterThan(0));
+      expect(delta['DEF'], greaterThan(0));
     },
   );
 }
