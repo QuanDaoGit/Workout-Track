@@ -45,6 +45,29 @@ void main() {
     });
   });
 
+  test(
+    'getStoredStats preserves a calibration seed when no sessions are logged yet',
+    () async {
+      // A freshly-onboarded, quiz-seeded user has a seed but zero completed
+      // workouts. Reading stats repeatedly must NOT wipe the seed to baseline.
+      final now = DateTime(2026, 5, 14, 10);
+      final engine = StatEngine(nowProvider: () => now, catalog: catalog);
+      final prefs = await SharedPreferences.getInstance();
+      final vol = StatEngine.volumeForStat(650); // advanced → rank A
+      await prefs.setString(
+        StatEngine.calibrationSeedKey,
+        jsonEncode({'STR': vol}),
+      );
+
+      final first = await engine.getStoredStats();
+      expect(engine.getRank(first['STR']!), 'A');
+
+      // Second read with still-no-sessions must stay seeded, not reset to D.
+      final second = await engine.getStoredStats();
+      expect(engine.getRank(second['STR']!), 'A');
+    },
+  );
+
   test('calculates weighted and bodyweight volume with cap', () async {
     final now = DateTime(2026, 5, 14, 10);
     await _seedSessions([

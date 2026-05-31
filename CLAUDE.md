@@ -2,10 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Workspace Map
+
+The project root wraps the whole product, not just the app code. Each non-code folder has its own
+`CLAUDE.md` (agent brief) + `README.md` — **read a folder's `CLAUDE.md` before working in it.**
+
+| Folder | Purpose |
+|--------|---------|
+| `lib/` `test/` `android/` `ios/` `assets/` … | The Flutter app (code). Architecture is documented below. |
+| `docs/` | Product source of truth — `PRD.md`, `PRODUCT.md`, specs/plans, decisions. |
+| `design/` | Visual identity, UX guidelines, screenshots. Theme *code* truth stays in `lib/theme/tokens.dart`. |
+| `marketing/` | Positioning, copy, campaigns, marketing assets. |
+| `app-management/` | Roadmap, releases/changelog, store listing, support. |
+| `statistics/` | Analytics, metrics, observability planning (no data yet — pre-launch). |
+| `research/` | User + competitive research. |
+| `ops/` | Build, release, environment, CI mechanics. |
+
 ## Working Rules
 
 **Before starting any task:**
-- Read PRD.md for scope and intent.
+- Read docs/PRD.md for scope and intent.
 - Ask clarifying questions until 95% confident. Do not make any assumptions.
 
 **After every major step:**
@@ -18,7 +34,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Always:**
 - One change at a time. Never rewrite whole files unless explicitly asked.
 - State after each change: what changed, which file, what to test.
-- Never build features outside PRD.md without asking first.
+- Never build features outside docs/PRD.md without asking first.
 
 ---
 
@@ -29,6 +45,7 @@ flutter pub get          # Install/update dependencies
 flutter run              # Run on connected device/emulator
 flutter analyze          # Lint (zero issues is the bar)
 flutter test             # Run tests
+flutter test test/stat_engine_test.dart  # Run a single test file
 flutter build apk        # Build Android APK
 ```
 
@@ -38,45 +55,87 @@ After changing `pubspec.yaml` (assets, fonts, dependencies), always run `flutter
 
 ## Architecture
 
-Flutter app. Pages in `lib/pages/`, services in `lib/services/`, models in `lib/models/`.
+RPG-gamified workout tracker. Flutter app, Android-only. All persistence uses `SharedPreferences` with JSON serialization (no SQLite in practice, despite drift being a dependency).
 
-**Full navigation flow:**
-1. `main.dart` — bootstraps `MaterialApp` with the full M3 dark arcade theme (neon green `0xFF00FF9C`, dark bg `0xFF0D0D1A`). Theme is the source of truth for all colors, fonts, shapes.
-2. `pages/home.dart` — static home with "Start Workout" → pushes `StartWorkoutPage`.
-3. `pages/start_workout.dart` — muscle group selection, workout time (`CupertinoPicker`), and exercise picker sheet.
-   - `showExercisePicker()` opens a `showModalBottomSheet` containing `_ExercisePickerSheet`.
-   - `_ExercisePickerSheetState` owns `selectedExerciseIds` (multi-select `Set<String>`) and `favoriteExerciseIds`. Renders a `ListView` of `_ExerciseCard` widgets.
-   - `_ExerciseCard` — fixed-height card with `Stack`: background image, dark overlay, top-right selection indicator (neon circle+check when selected, outlined circle when not), bottom-right favorite `IconButton`.
-   - `_SelectionBar` — sticky footer; "Continue" → `AlertDialog` → "Start Workout" pushes `ActiveWorkoutPage` and pops both dialog and sheet.
-4. `pages/active_workout.dart` — live workout session. Runs a `Timer` for elapsed time. Tracks per-exercise `_ExerciseStatus` (notStarted/inProgress/done). Tapping an exercise pushes `ExerciseSessionPage` and awaits returned `List<SetEntry>`. "End Early" dialog offers "Save & Quit" (partial save → pop to root) or "End Session" (push summary). "Finish Workout" button enabled only when all exercises are done.
-5. `pages/exercise_session.dart` — per-exercise set logging. Manages a list of `_SetRow` (weight + reps `TextEditingController` pairs). "Finish Exercise" validates all fields and pops `List<SetEntry>` back to `ActiveWorkoutPage`.
-6. `pages/workout_summary.dart` — post-workout summary. Displays time, total sets, exercise count, estimated kcal. Shows per-exercise calorie breakdown. `PopScope(canPop: false)` prevents back navigation. "Save & Exit" persists a `WorkoutSession` via `WorkoutStorageService` then pops to root.
+### Directory layout
 
-**Models (`lib/models/workout_models.dart`):**
-- `Exercise` — id, name, level, images; helpers: `imageAssetPath`, `levelLabel`, `levelRank`.
-- `SetEntry` — weight (double, kg) + reps (int); JSON serializable.
-- `ExerciseLog` — exerciseId, exerciseName, sets; computes `totalVolume`.
-- `WorkoutSession` — full record of a completed or partial session; JSON serializable for `shared_preferences` storage.
+- `lib/pages/` — screens. Workout session pages live in `lib/pages/Workout session/` (note the space). Onboarding screens in `lib/pages/onboarding/`.
+- `lib/services/` — business logic. Each service owns its own SharedPreferences key(s). Services are instantiated ad-hoc (no DI container), often with injectable `nowProvider`/`catalogOverride` for testability.
+- `lib/models/` — data classes. All JSON-serializable with `fromJson`/`toJson`.
+- `lib/data/` — static constants and registries: `curated_exercises.dart` (per-muscle-group exercise ID allow-lists), `class_definitions.dart` (class→muscle mapping), `loot_registry.dart` (all loot items), `muscle_groups.dart` (7-bucket canonical taxonomy), `programs_library.dart`, `strength_standards.dart`.
+- `lib/theme/` — `tokens.dart` (single source of truth for palette, spacing, motion constants), `app_fonts.dart` (local `ShareTechMono` font helper).
+- `lib/widgets/` — reusable arcade-themed components. `widgets/motion/` has micro-interaction wrappers (hold-depress, phosphor-tap, ambient-drift, etc.).
 
-**Services:**
-- `services/favorite_service.dart` — persists favorite exercise IDs to `shared_preferences` as a sorted string list.
-- `services/workout_storage_service.dart` — appends/reads `WorkoutSession` objects as a JSON list under key `workout_sessions` in `shared_preferences`.
-- `services/calorie_service.dart` — MET-based calorie estimation (`estimateCalories`) and per-exercise calorie split proportional to volume (`exerciseCalories`). Assumes 70 kg body weight; MET values: Legs 6.0, Chest/Back 5.0, Arms 4.0.
+### App boot sequence (`main.dart`)
 
-**Exercise data:**
-- `assets/exercises.json` is loaded once via `_loadExerciseCatalog()` and memoized in `exerciseCatalogFuture` on `_StartWorkoutPageState`.
-- Each exercise has `id`, `name`, `level` (`beginner`/`intermediate`/`expert`), and `images` (filenames under `assets/exercises/exercises/<ExerciseName>/`).
-- Exercises shown in the picker are filtered to a hard-coded curated list per muscle group (`curatedExerciseIdsByMuscleGroup` map on `_StartWorkoutPageState`).
+1. `MigrationService.runOnce()` — cleans dead SharedPreferences keys from removed features.
+2. `StatEngine().applyDecayIfNeeded()` — daily stat decay for inactivity.
+3. `ClassMigrationService().migrateIfNeeded()` — auto-assigns class for existing users.
+4. `_AppGate` — checks `OnboardingService().isComplete()`: routes to `OnboardingFlowPage` or `RootPage`.
+
+### Navigation structure
+
+`RootPage` is a 5-tab bottom navigation shell: **Home**, **Workout** (history/calendar), **Quests**, **Guild**, **Profile**. Each tab has a `GlobalKey` for refresh-on-return.
+
+**Workout session flow** (all in `lib/pages/Workout session/`):
+1. `StartWorkoutPage` — muscle group chips, time picker, exercise picker bottom sheet (multi-select with favorites).
+2. `ActiveWorkoutPage` — live timer, per-exercise status tracking, rest timer. Tapping exercise pushes `ExerciseSessionPage`, awaits `List<SetEntry>`. All-done enables "Finish Workout".
+3. `ExerciseSessionPage` — set logging (weight + reps). "Finish Exercise" validates and pops data back.
+4. `WorkoutSummaryPage` — post-workout XP awards, stats, calorie breakdown. `PopScope(canPop: false)`. "Save & Exit" persists via `WorkoutStorageService` then pops to root.
+
+**Onboarding flow** (`lib/pages/onboarding/`): multi-screen cinematic sequence — cold open → problem → solution → calibration quiz → avatar select → name → class reveal → generating → rank assessed → start gate. Completes by pushing `RootPage(openWorkoutStarterOnLaunch: true)`.
+
+### Core gamification systems
+
+| System | Service | Key concepts |
+|--------|---------|-------------|
+| XP & Levels | `XpService` | Session XP from volume/time/sets. Threshold-based leveling. LCK stat multiplier. |
+| Combat Stats | `StatEngine` | 6 stats (STR/DEF/VIT/AGI/END/LCK). Volume-derived for STR/DEF/AGI. VIT = recovery meter. END = endurance. LCK = streak-based. Daily decay for inactivity. Calibration seed from onboarding quiz. |
+| Classes | `ClassService`, `class_definitions.dart` | 4 classes: Assassin (Shoulders+Core), Bruiser (Chest+Back+Arms), Tank (Legs), Vanguard (all, unlocks at L10). Each has a theme color and associated body goal. |
+| Quests | `QuestService` | Weekly/side quests with XP rewards. Computed from workout sessions + class context. |
+| Loot & Inventory | `LootService`, `loot_registry.dart` | Avatar frames and themes. Rarity tiers. Equip/unequip. Boss-exclusive items excluded from random drops. |
+| Guild | `GuildService` | Local single-player simulation with NPC members. Deterministic per ISO week. Forge Nods social signal. |
+| Body Metrics | `BodyMetricsService`, `BodyGoalService` | Opt-in weight tracking (body-neutral by design). 7-day cadence. XP Boost Potions on weight log. |
+| Progressive Overload | `ProgressiveOverloadService` | Suggests weight/rep targets based on history. Kind-aware (compound/isolation/bodyweight). |
+| Rest & Recovery | `RestService`, `RestTimerService` | Shield charges, recovery XP, rest day protection. VIT stat integration. |
+| Programs | `ProgramService`, `programs_library.dart` | Structured workout programs with scheduled sessions. |
+| Character | `CharacterService` | Avatar, name, class. Created during onboarding. |
+
+### Exercise data pipeline
+
+1. `assets/exercises.json` — ~800 exercises with `id`, `name`, `level`, `images`, `primaryMuscles`.
+2. `ExerciseCatalogService` — merges built-in (cached) + custom exercises. Single access point.
+3. `data/curated_exercises.dart` — `curatedExerciseIdsByMuscleGroup` map filters the picker to a curated subset per muscle group.
+4. `data/muscle_groups.dart` — canonical 7-bucket taxonomy (Chest/Back/Shoulders/Arms/Legs/Core/Full Body). `muscleGroupForDetailed()` maps raw muscle names from JSON → buckets.
+5. Exercise images: `assets/exercises/exercises/<ExerciseName>/0.jpg`, `1.jpg`, etc.
+
+### Persistence pattern
+
+All state in `SharedPreferences` as JSON strings. Key services and their storage keys:
+- `workout_sessions` — `WorkoutStorageService` (completed/ongoing sessions)
+- `combat_stats` — `StatEngine` (cached stat values)
+- `quest_state_v1` — `QuestService`
+- `rest_state_v1` — `RestService`
+- `guild_v1` / `guild_members_v1` — `GuildService`
+- `loot_inventory` / `equipped_loot` — `LootService`
+- `active_character_v1` — `CharacterService`
+
+`WorkoutStorageService.changes` is a broadcast `StreamController<void>` that notifies listeners when sessions are written — `RootPage` subscribes to refresh quest-aware tabs.
 
 ---
 
 ## Theme Conventions
 
+- All palette constants live in `lib/theme/tokens.dart` — import `tokens.dart`, never hard-code hex values.
+- Key tokens: `kBg` (`0xFF11111F`), `kCard` (`0xFF1C1C34`), `kBorder` (`0xFF36365E`), `kNeon` (`0xFF00FF9C`), `kText` (`0xFFE8E8FF`), `kMutedText` (`0xFF9494B8`), `kAmber` (`0xFFFFD700`), `kCyan` (`0xFF00BFFF`), `kDanger` (`0xFFFF2D55`).
+- Spacing scale: `kSpace1`–`kSpace5` (4/8/12/16/24). Layout: `kCardRadius` = 4, `kButtonHeight` = 48, `kPrimaryCardBorderWidth` = 1.2.
+- Motion: `kMotionFast` (120ms), `kMotionBase` (180ms), `kMotionPop` (220ms), `kMotionCurve` = `easeOutCubic`.
+- `neonGlow()` helper for box shadows.
 - Use `FilledButton` (not `ElevatedButton`) everywhere — the theme styles it neon green with dark text.
-- `ChoiceChip` selected state needs a manual `labelStyle` with `color: Color(0xFF0D0D1A)` — M3 chip theme can't express different label colors for selected vs unselected natively.
-- Hard-coded palette constants: bg `0xFF0D0D1A`, card `0xFF1A1A2E`, border `0xFF2A2A4A`, neon `0xFF00FF9C`, muted text `0xFF6B6B8A`.
-- Card/button border-radius is 4px throughout.
-- Fonts: PressStart2P (headings — `headlineSmall`, `titleLarge`, AppBar), Gotham (body — everything else), `GoogleFonts.shareTechMono` for monospaced timer/counter displays.
+- `ChoiceChip` selected state needs a manual `labelStyle` with `color: kBg` — M3 chip theme can't express different label colors for selected vs unselected natively.
+- Card/button border-radius is 4px (`kCardRadius`) throughout.
+- Fonts: PressStart2P (headings — `headlineSmall`, `titleLarge`, AppBar), Gotham (body — everything else), `AppFonts.shareTechMono()` for monospaced timer/counter displays (local font, not GoogleFonts).
+- Class-specific theme colors: Assassin `0xFF4DE5FF` (cyan), Bruiser `0xFFFFD700` (gold), Tank `0xFFFF2D55` (red), Vanguard `0xFFB14DFF` (violet).
 
 ## Icon Rules
 - NEVER use default Material icons (Icons.xxx)

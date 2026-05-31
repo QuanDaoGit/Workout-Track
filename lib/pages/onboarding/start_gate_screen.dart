@@ -14,7 +14,6 @@ import '../../widgets/pixel_button.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/strobe_flash.dart';
 import '../../widgets/typewriter_text.dart';
-import '../Workout session/start_workout.dart';
 import '../root_page.dart';
 import 'avatar_select_screen.dart';
 
@@ -122,9 +121,13 @@ class _StartGateScreenState extends State<StartGateScreen> {
   }
 
   void _startWorkout() {
+    // Establish the app shell as the navigation root, then open the workout
+    // starter on top of it (RootPage does the push on launch). This mirrors the
+    // in-app Home → Start Workout path, so ending a workout early returns to
+    // Home — not the orphaned exercise picker (which had no shell beneath it).
     Navigator.of(context).pushAndRemoveUntil(
       arcadeRoute(
-        (_) => const StartWorkoutPage(),
+        (_) => const RootPage(openWorkoutStarterOnLaunch: true),
         motion: ArcadeRouteMotion.flow,
       ),
       (route) => false,

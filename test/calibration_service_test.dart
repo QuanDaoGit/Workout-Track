@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/data/strength_standards.dart';
+import 'package:workout_track/models/calibration_quiz_models.dart';
 import 'package:workout_track/models/user_profile_sex.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/services/calibration_service.dart';
@@ -176,6 +177,44 @@ void main() {
       expect(delta['DEF'], greaterThan(0));
     },
   );
+
+  group('seedFromQuiz (quiz-derived starting stats)', () {
+    test('seeds the volume capability stats and freezes calibration', () async {
+      final now = DateTime(2026, 5, 14, 10);
+      final svc = service(now);
+
+      await svc.seedFromQuiz(exp: Experience.advanced);
+
+      final seed = await svc.seedVolumes();
+      expect(seed['STR'], greaterThan(0));
+      expect(seed['DEF'], greaterThan(0));
+      expect(seed['AGI'], greaterThan(0));
+
+      // The visible capability stats land on the experience tier's rank.
+      final stats = await engine(now).calculateAllStats();
+      expect(engine(now).getRank(stats['STR']!), 'A'); // advanced → 650 → A
+      expect(engine(now).getRank(stats['AGI']!), 'A');
+
+      // Calibration is frozen so later workouts never re-seed.
+      expect(await svc.isComplete(), isTrue);
+    });
+
+    test('maps each experience level to its starting rank', () async {
+      final now = DateTime(2026, 5, 14, 10);
+
+      Future<String> strRankFor(Experience exp) async {
+        SharedPreferences.setMockInitialValues({});
+        await service(now).seedFromQuiz(exp: exp);
+        final stats = await engine(now).calculateAllStats();
+        return engine(now).getRank(stats['STR']!);
+      }
+
+      expect(await strRankFor(Experience.novice), 'D'); // untrained 50
+      expect(await strRankFor(Experience.beginner), 'C'); // 120
+      expect(await strRankFor(Experience.intermediate), 'B'); // 420
+      expect(await strRankFor(Experience.advanced), 'A'); // 650
+    });
+  });
 }
 
 Future<void> _seedSessions(List<WorkoutSession> sessions) async {

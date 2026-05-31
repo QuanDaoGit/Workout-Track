@@ -10,6 +10,7 @@ import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/motion/hold_depress.dart';
 import 'Workout session/active_workout.dart';
+import 'Workout session/start_workout.dart';
 import 'Workout session/workout_summary.dart';
 import 'guild_page.dart';
 import 'home.dart';
@@ -18,7 +19,13 @@ import 'quests_page.dart';
 import 'workout_page.dart';
 
 class RootPage extends StatefulWidget {
-  const RootPage({super.key});
+  const RootPage({super.key, this.openWorkoutStarterOnLaunch = false});
+
+  /// When true (onboarding "START WORKOUT" finale), open [StartWorkoutPage] on
+  /// top of the shell right after first paint. This keeps RootPage as the
+  /// navigation root so every workout exit — which funnels through
+  /// `popUntil((r) => r.isFirst)` — returns to Home, not the exercise picker.
+  final bool openWorkoutStarterOnLaunch;
 
   @override
   State<RootPage> createState() => _RootPageState();
@@ -55,6 +62,22 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showExpiredPausedSummaryIfNeeded();
     });
+    if (widget.openWorkoutStarterOnLaunch) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          arcadeRoute(
+            (_) => const StartWorkoutPage(),
+            motion: ArcadeRouteMotion.flow,
+          ),
+        ).then((_) {
+          if (!mounted) return;
+          _loadOngoingSession();
+          _reloadQuestAwarePages();
+        });
+      });
+    }
   }
 
   @override

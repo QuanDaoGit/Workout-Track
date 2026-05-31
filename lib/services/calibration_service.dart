@@ -183,6 +183,36 @@ class CalibrationService {
     return newSeed;
   }
 
+  /// Seeds starting capability stats from the calibration quiz's self-reported
+  /// [Experience] (Q3), replacing the old "calibration run" workout assessment.
+  /// The seed is written in the same kg-volume currency [StatEngine] consumes
+  /// (STR/DEF/AGI — END is rep-band derived and VIT is the recovery meter, so
+  /// neither is volume-seedable), then calibration is frozen so later workouts
+  /// never re-seed. Elite/S is intentionally unreachable here: a top rank is
+  /// earned through training, not self-reported.
+  Future<void> seedFromQuiz({required Experience exp}) async {
+    final tier = _tierForExperience(exp);
+    final volume = StatEngine.volumeForStat(
+      StrengthStandards.targetStatForTier(tier),
+    );
+    final seed = <String, double>{
+      'STR': volume,
+      'DEF': volume,
+      'AGI': volume,
+    };
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_seedKey, jsonEncode(seed));
+    await prefs.setInt(_sessionCountKey, calibrationSessionTarget);
+    await prefs.setBool(_completeKey, true);
+  }
+
+  static StrengthTier _tierForExperience(Experience exp) => switch (exp) {
+    Experience.novice => StrengthTier.untrained,
+    Experience.beginner => StrengthTier.beginner,
+    Experience.intermediate => StrengthTier.intermediate,
+    Experience.advanced => StrengthTier.advanced,
+  };
+
   Future<Map<String, double>> seedVolumes() async {
     final prefs = await SharedPreferences.getInstance();
     return _decodeDoubleMap(prefs.getString(_seedKey));

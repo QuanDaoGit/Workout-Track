@@ -23,8 +23,10 @@ enum TrainingFreq {
   }
 }
 
-/// Self-reported training experience captured by Q3. Tunes starting loads /
-/// suggested weights downstream — never grants stats directly.
+/// Self-reported training experience captured by Q3. Seeds the character's
+/// starting capability stats at class-confirm time via
+/// [CalibrationService.seedFromQuiz] (novice→D, beginner→C, intermediate→B,
+/// advanced→A; S is earned, not self-reported).
 enum Experience {
   novice,
   beginner,

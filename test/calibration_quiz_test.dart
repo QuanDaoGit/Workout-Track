@@ -96,15 +96,13 @@ void main() {
       expect(find.text('1/5'), findsNothing);
     });
 
-    testWidgets('Q1 goal cards reveal their class and consequence', (
-      tester,
-    ) async {
+    testWidgets('Q1 goal cards keep derived classes hidden', (tester) async {
       await _openQuiz(tester, reducedMotion: true);
 
-      // Each goal advertises the class it derives.
-      expect(find.text('ASSASSIN'), findsOneWidget); // cut
-      expect(find.text('BRUISER'), findsOneWidget); // recomp
-      expect(find.text('TANK'), findsOneWidget); // bulk
+      // The class mapping is revealed later in ClassRevealScreen, not Q1.
+      expect(find.text('ASSASSIN'), findsNothing);
+      expect(find.text('BRUISER'), findsNothing);
+      expect(find.text('TANK'), findsNothing);
       // And the prompt now tells the user this choice matters.
       expect(find.text('this sets your class.'), findsOneWidget);
     });

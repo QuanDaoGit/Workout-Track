@@ -305,8 +305,6 @@ class _OptionCard extends StatelessWidget {
     required this.isSelected,
     required this.hasAnySelection,
     required this.onTap,
-    this.accentColor,
-    this.accentLabel,
   });
 
   final String title;
@@ -314,14 +312,12 @@ class _OptionCard extends StatelessWidget {
   final bool isSelected;
   final bool hasAnySelection;
   final VoidCallback onTap;
-  final Color? accentColor;
-  final String? accentLabel;
 
   @override
   Widget build(BuildContext context) {
     final reducedMotion = MediaQuery.of(context).disableAnimations;
     final dimmed = hasAnySelection && !isSelected;
-    final accent = accentColor ?? kNeon;
+    const accent = kNeon;
     final borderColor = isSelected ? accent : kBorder;
     final titleColor = isSelected ? accent : kText;
     final duration = reducedMotion
@@ -353,42 +349,15 @@ class _OptionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: AnimatedDefaultTextStyle(
-                        duration: duration,
-                        style: TextStyle(
-                          fontFamily: 'PressStart2P',
-                          fontSize: 11,
-                          color: titleColor,
-                          height: 1.2,
-                        ),
-                        child: Text(title),
-                      ),
-                    ),
-                    if (accentLabel != null) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: accent),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          accentLabel!,
-                          style: TextStyle(
-                            fontFamily: 'PressStart2P',
-                            fontSize: 7,
-                            color: accent,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+                AnimatedDefaultTextStyle(
+                  duration: duration,
+                  style: TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 11,
+                    color: titleColor,
+                    height: 1.2,
+                  ),
+                  child: Text(title),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -509,24 +478,18 @@ class _GoalQuestion extends StatelessWidget {
             subtext: 'drop fat. keep strength.',
             isSelected: selected == BodyGoal.cut,
             onTap: () => onSelect(BodyGoal.cut),
-            accentColor: deriveClass(BodyGoal.cut).themeColor,
-            accentLabel: deriveClass(BodyGoal.cut).displayName,
           ),
           _OptionDef(
             title: 'STAY + STRENGTHEN',
             subtext: 'hold weight. add strength.',
             isSelected: selected == BodyGoal.recomp,
             onTap: () => onSelect(BodyGoal.recomp),
-            accentColor: deriveClass(BodyGoal.recomp).themeColor,
-            accentLabel: deriveClass(BodyGoal.recomp).displayName,
           ),
           _OptionDef(
             title: 'GET BIGGER',
             subtext: 'add size. accept the gain.',
             isSelected: selected == BodyGoal.bulk,
             onTap: () => onSelect(BodyGoal.bulk),
-            accentColor: deriveClass(BodyGoal.bulk).themeColor,
-            accentLabel: deriveClass(BodyGoal.bulk).displayName,
           ),
         ],
       ),
@@ -660,18 +623,11 @@ class _OptionDef {
     required this.subtext,
     required this.isSelected,
     required this.onTap,
-    this.accentColor,
-    this.accentLabel,
   });
   final String title;
   final String subtext;
   final bool isSelected;
   final VoidCallback onTap;
-
-  /// When set, this card carries a class identity: the selected border/title
-  /// use [accentColor] instead of neon, and an [accentLabel] tag is shown.
-  final Color? accentColor;
-  final String? accentLabel;
 }
 
 class _OptionList extends StatelessWidget {
@@ -695,12 +651,13 @@ class _OptionList extends StatelessWidget {
         isSelected: options[i].isSelected,
         hasAnySelection: hasAnySelection,
         onTap: options[i].onTap,
-        accentColor: options[i].accentColor,
-        accentLabel: options[i].accentLabel,
       );
       children.add(
         animate
-            ? _WipeIn(delay: Duration(milliseconds: i * 80), child: card)
+            ? _WipeIn(
+                delay: Duration(milliseconds: i * 80),
+                child: card,
+              )
             : card,
       );
       if (i != options.length - 1) children.add(const SizedBox(height: 12));
@@ -817,11 +774,7 @@ class _CalibrationQuestionState extends State<_CalibrationQuestion> {
             ],
           ),
           const SizedBox(height: 32),
-          PixelButton(
-            label: 'CONTINUE',
-            powerOn: true,
-            onPressed: _submit,
-          ),
+          PixelButton(label: 'CONTINUE', powerOn: true, onPressed: _submit),
         ],
       ),
     );

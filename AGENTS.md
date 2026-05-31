@@ -1,11 +1,13 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+Guidance for Codex (and other coding agents) working in this repository. The detailed
+**architecture and theme truth lives in [CLAUDE.md](CLAUDE.md) and [docs/](docs/)** — this file
+holds the working rules and points to the canonical sources, so the two never drift apart again.
 
 ## Working Rules
 
 **Before starting any task:**
-- Read PRD.md for scope and intent.
+- Read [docs/PRD.md](docs/PRD.md) for scope and intent.
 - Ask clarifying questions until 95% confident. Do not make any assumptions.
 
 **After every major step:**
@@ -18,7 +20,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 **Always:**
 - One change at a time. Never rewrite whole files unless explicitly asked.
 - State after each change: what changed, which file, what to test.
-- Never build features outside PRD.md without asking first.
+- Never build features outside [docs/PRD.md](docs/PRD.md) without asking first.
 
 ---
 
@@ -32,63 +34,47 @@ flutter test             # Run tests
 flutter build apk        # Build Android APK
 ```
 
-After changing `pubspec.yaml` (assets, fonts, dependencies), always run `flutter pub get` and do a **full restart** — hot-reload won't pick up asset/font changes.
+After changing `pubspec.yaml` (assets, fonts, dependencies), run `flutter pub get` and do a
+**full restart** — hot-reload won't pick up asset/font changes.
 
 ---
 
-## Architecture
+## Canonical sources (link, do not duplicate)
 
-Flutter app. Pages in `lib/pages/`, services in `lib/services/`, models in `lib/models/`.
+| You need… | Read |
+|---|---|
+| Architecture, services, persistence, app boot sequence | [CLAUDE.md](CLAUDE.md) |
+| Theme tokens, icon rules, motion | [CLAUDE.md](CLAUDE.md) "Theme Conventions" + `lib/theme/tokens.dart` |
+| Product scope & intent | [docs/PRD.md](docs/PRD.md) |
+| Product/mechanics rationale (stats, classes, overload) | [docs/PRODUCT.md](docs/PRODUCT.md) |
+| Design / UX / brand rules | [design/](design/) |
+| Build & release mechanics | [ops/](ops/) |
 
-**Full navigation flow:**
-1. `main.dart` — bootstraps `MaterialApp` with the full M3 dark arcade theme (neon green `0xFF00FF9C`, dark bg `0xFF0D0D1A`). Theme is the source of truth for all colors, fonts, shapes.
-2. `pages/home.dart` — static home with "Start Workout" → pushes `StartWorkoutPage`.
-3. `pages/start_workout.dart` — muscle group selection, workout time (`CupertinoPicker`), and exercise picker sheet.
-   - `showExercisePicker()` opens a `showModalBottomSheet` containing `_ExercisePickerSheet`.
-   - `_ExercisePickerSheetState` owns `selectedExerciseIds` (multi-select `Set<String>`) and `favoriteExerciseIds`. Renders a `ListView` of `_ExerciseCard` widgets.
-   - `_ExerciseCard` — fixed-height card with `Stack`: background image, dark overlay, top-right selection indicator (neon circle+check when selected, outlined circle when not), bottom-right favorite `IconButton`.
-   - `_SelectionBar` — sticky footer; "Continue" → `AlertDialog` → "Start Workout" pushes `ActiveWorkoutPage` and pops both dialog and sheet.
-4. `pages/active_workout.dart` — live workout session. Runs a `Timer` for elapsed time. Tracks per-exercise `_ExerciseStatus` (notStarted/inProgress/done). Tapping an exercise pushes `ExerciseSessionPage` and awaits returned `List<SetEntry>`. "End Early" dialog offers "Save & Quit" (partial save → pop to root) or "End Session" (push summary). "Finish Workout" button enabled only when all exercises are done.
-5. `pages/exercise_session.dart` — per-exercise set logging. Manages a list of `_SetRow` (weight + reps `TextEditingController` pairs). "Finish Exercise" validates all fields and pops `List<SetEntry>` back to `ActiveWorkoutPage`.
-6. `pages/workout_summary.dart` — post-workout summary. Displays time, total sets, exercise count, estimated kcal. Shows per-exercise calorie breakdown. `PopScope(canPop: false)` prevents back navigation. "Save & Exit" persists a `WorkoutSession` via `WorkoutStorageService` then pops to root.
-
-**Models (`lib/models/workout_models.dart`):**
-- `Exercise` — id, name, level, images; helpers: `imageAssetPath`, `levelLabel`, `levelRank`.
-- `SetEntry` — weight (double, kg) + reps (int); JSON serializable.
-- `ExerciseLog` — exerciseId, exerciseName, sets; computes `totalVolume`.
-- `WorkoutSession` — full record of a completed or partial session; JSON serializable for `shared_preferences` storage.
-
-**Services:**
-- `services/favorite_service.dart` — persists favorite exercise IDs to `shared_preferences` as a sorted string list.
-- `services/workout_storage_service.dart` — appends/reads `WorkoutSession` objects as a JSON list under key `workout_sessions` in `shared_preferences`.
-- `services/calorie_service.dart` — MET-based calorie estimation (`estimateCalories`) and per-exercise calorie split proportional to volume (`exerciseCalories`). Assumes 70 kg body weight; MET values: Legs 6.0, Chest/Back 5.0, Arms 4.0.
-
-**Exercise data:**
-- `assets/exercises.json` is loaded once via `_loadExerciseCatalog()` and memoized in `exerciseCatalogFuture` on `_StartWorkoutPageState`.
-- Each exercise has `id`, `name`, `level` (`beginner`/`intermediate`/`expert`), and `images` (filenames under `assets/exercises/exercises/<ExerciseName>/`).
-- Exercises shown in the picker are filtered to a hard-coded curated list per muscle group (`curatedExerciseIdsByMuscleGroup` map on `_StartWorkoutPageState`).
+> History note: earlier versions of this file inlined an architecture + palette snapshot that went
+> stale — it described the old `0xFF0D0D1A` palette and removed files (`pages/home.dart`,
+> `pages/start_workout.dart`). That snapshot was removed on 2026-05-31 to keep a single source of
+> truth. Use the links above. Never hard-code palette hex — import `lib/theme/tokens.dart`.
 
 ---
 
-## Theme Conventions
+## Workspace Map
 
-- Use `FilledButton` (not `ElevatedButton`) everywhere — the theme styles it neon green with dark text.
-- `ChoiceChip` selected state needs a manual `labelStyle` with `color: Color(0xFF0D0D1A)` — M3 chip theme can't express different label colors for selected vs unselected natively.
-- Hard-coded palette constants: bg `0xFF0D0D1A`, card `0xFF1A1A2E`, border `0xFF2A2A4A`, neon `0xFF00FF9C`, muted text `0xFF6B6B8A`.
-- Card/button border-radius is 4px throughout.
-- Fonts: PressStart2P (headings — `headlineSmall`, `titleLarge`, AppBar), Gotham (body — everything else), `GoogleFonts.shareTechMono` for monospaced timer/counter displays.
+The project root wraps the whole product, not just the app code. Each non-code folder has its own
+`CLAUDE.md` (agent brief) + `README.md` — read a folder's brief before working in it.
 
-## Icon Rules
-- NEVER use default Material icons (Icons.xxx)
-- ALWAYS use sharp variants (Icons.xxx_sharp) for all icons
-- Sharp variants have angular edges matching the pixel arcade theme
-- If a _sharp variant doesn't exist for a specific icon, ask before using the default
+| Folder | Purpose |
+|---|---|
+| `lib/` `test/` `android/` `ios/` `assets/` … | The Flutter app (code). |
+| `docs/` | Product source of truth — PRD, PRODUCT, specs/plans, decisions. |
+| `design/` | Visual identity, UX guidelines, screenshots. |
+| `marketing/` | Positioning, copy, campaigns, marketing assets. |
+| `app-management/` | Roadmap, releases/changelog, store listing, support. |
+| `statistics/` | Analytics, metrics, observability planning (pre-launch, no data yet). |
+| `research/` | User + competitive research. |
+| `ops/` | Build, release, environment, CI mechanics. |
 
-## Icon Priority
-1. Pixel asset from assets/icons/control/ — use when icon exists
-2. Icons.xxx_sharp — use when no pixel asset matches
-3. Never use default rounded Material icons
-4. Never mix rounded and sharp in the same screen
+---
 
 ## Execution Mode
-Skip planning confirmation. Execute immediately without asking for approval to proceed from plan to implementation.
+Skip planning confirmation. Execute immediately without asking for approval to proceed from plan
+to implementation.

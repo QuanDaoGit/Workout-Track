@@ -90,6 +90,10 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
       freq: result.freq,
       exp: result.exp,
     );
+    // Seed starting capability stats from the quiz's self-reported experience
+    // (replaces the old calibration-run workout assessment). Written now, before
+    // the user reaches Home, so the stat board shows seeded ranks immediately.
+    await CalibrationService().seedFromQuiz(exp: result.exp);
     await CalibrationService().markClassConfirmed(at: classConfirmedAt);
   }
 

@@ -131,9 +131,11 @@ class StatEngine {
     if (stored == null) return calculateAllStats();
     final sessions = await _loadCompletedSessions(prefs);
     if (sessions.isEmpty) {
-      final baseline = _emptyStats();
-      await prefs.setString(combatStatsKey, jsonEncode(baseline));
-      return baseline;
+      // No completed workouts yet — recompute instead of blindly writing
+      // baseline. calculateAllStats applies any calibration seed (so a quiz-
+      // seeded user keeps their starting ranks) and persists a clean baseline
+      // when there is no seed. Writing _emptyStats() here would wipe the seed.
+      return calculateAllStats();
     }
     // VIT is a live recovery meter — always refresh it on read so it reflects
     // today's rest/training balance even between workout saves.

@@ -262,7 +262,6 @@ class _BenchPressPainter extends CustomPainter {
     _rect(canvas, 40, headY - 1, 6, 1, kNeon);
     _rect(canvas, 46, headY, 1, 5, kNeon);
     _rect(canvas, 44, headY + 1, 1, 1, kText);
-    _rect(canvas, 44, headY + 3, 1, 1, const Color(0xFF111118));
   }
 
   void _drawArmAndBar(Canvas canvas, _Pose pose, double flash, double strain) {

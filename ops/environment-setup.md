@@ -1,0 +1,30 @@
+# Environment Setup — Ironbit
+
+> Seed document. Keep these steps runnable; update when the toolchain changes.
+
+## Prerequisites
+- Flutter SDK (matching [pubspec.yaml](../pubspec.yaml) `environment: sdk` constraint).
+- Android toolchain (Android Studio / SDK) — the app is **Android-first**.
+- A device or emulator.
+
+## First-time setup
+```bash
+flutter doctor          # resolve any reported issues first
+flutter pub get         # install dependencies
+flutter test            # confirm the suite is green
+```
+
+## Run the app
+```bash
+flutter run             # on a connected device/emulator
+```
+
+## After changing pubspec.yaml (assets / fonts / dependencies)
+```bash
+flutter pub get
+# then do a FULL restart — hot-reload won't pick up asset/font changes
+```
+
+## Notes
+- Persistence is `SharedPreferences` only (no DB to provision).
+- No backend, no API keys, no `.env` — the app is fully offline.

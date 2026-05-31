@@ -1,0 +1,362 @@
+# Ironbit — Self-Contained App Briefing
+
+> **Purpose.** This document explains how Ironbit *works under the hood* for someone who can
+> **see the app's screenshots but has no access to the code**. Paste or upload it into a Claude
+> chat alongside the screenshots so the assistant can reason about mechanics, product, and design
+> — not just what the screens look like.
+>
+> Everything here is explained inline (no code links). Numbers and formulas are the *actual*
+> shipped behavior as of 2026-05-31. The app is pre-launch; there is no live user data.
+
+---
+
+## 1. The soul
+
+Ironbit is a **strength-training tracker with an RPG character-growth layer wrapped around it.**
+You log real workouts (sets, reps, weight). Those logs are the *only* fuel for a pixel-arcade
+character who gains combat stats, levels, ranks, classes, quests, and cosmetic loot.
+
+**The soul rule (the one principle everything bends to):**
+
+> *Real workout data is the only input to character growth. Every feature must translate training
+> into RPG language, or be cut.*
+
+Four design commitments follow from that rule:
+
+1. **Earned, not granted.** Stats come from logged volume and consistency. There are no
+   tap-to-claim freebies, no RNG loot rolls, no pay-to-win. If the app shows you got stronger, you
+   actually trained for it.
+2. **Honest.** Progress is *derived* from your real history and recomputed deterministically — not
+   stored as inflatable counters. You can't fake a streak or buy a stat.
+3. **Body-neutral.** No weight-loss promises, no before/after shaming, no red/green "good/bad"
+   framing on bodyweight or metrics. Bodyweight tracking is **opt-in and off by default.**
+4. **Yours and offline.** No account, no cloud, no tracking, no ads, no in-app purchases. All data
+   lives on the device. It works on a plane.
+
+**What Ironbit is deliberately NOT** (don't propose these — they violate the soul):
+accounts/login, cloud sync, social feed / friends / PvP / leaderboards, AI coaching, calorie or
+nutrition tracking as a feature, Apple Health / Google Fit integration, push notifications, ads,
+or IAP. Platform is **Android-first** (iOS later).
+
+---
+
+## 2. The core loop
+
+```
+   ┌──────────────────────────────────────────────────────┐
+   │                                                        │
+   │   TRAIN  ──►  LOG the session  ──►  STATS recompute    │
+   │  (real gym)    (sets/reps/kg)      (from ALL history)  │
+   │     ▲                                     │            │
+   │     │                                     ▼            │
+   │  motivation  ◄── LEVEL · RANK · CLASS · QUESTS · LOOT  │
+   │                                                        │
+   └──────────────────────────────────────────────────────┘
+```
+
+The hook is the feedback: a finished workout immediately shows **+X STR, +Y DEF**, XP gained, level
+progress, and any newly unlocked cosmetic. Consistency (training streak) multiplies rewards.
+
+---
+
+## 3. System map — how the pieces interact
+
+**The data spine.** There is one source of truth: a list of **`WorkoutSession`** records stored
+locally. *Almost nothing is a stored counter.* Stats, XP, level, ranks, streaks, quest progress,
+loot eligibility, and the guild signal are all **recomputed from that session history** on demand.
+This is what makes the app deterministic and "honest" — wipe a session and everything downstream
+adjusts.
+
+| System | Reads from | Produces |
+|---|---|---|
+| **Stat Engine** | session history (+ onboarding seed, rest state) | the 6 combat stats + per-stat ranks + last-session delta |
+| **XP / Levels** | session history (+ streak multiplier) | total XP, level, level title |
+| **Classes** | the class stored *on each session* at save time | a +20% volume bonus to that class's stat |
+| **Quests** | session history + class focus | auto-evaluated daily/weekly objectives, claimable XP |
+| **Loot** | stats + session count (milestones) | deterministic cosmetic unlocks (frames/themes) |
+| **Guild** | the ISO week + local simulation | a social-feel signal (NPC members), single-player |
+| **Rest / Recovery** | session history + rest state | shields, recovery XP, and VIT's inputs |
+| **Progressive Overload** | per-exercise history | next-session weight/rep suggestion |
+| **Body Metrics** (opt-in) | user-logged bodyweight | line chart + XP-boost potions (body-neutral) |
+
+---
+
+## 4. Character stats — the math (the heart of it)
+
+There are **6 stats**. Five are "output stats" that start at a baseline of **10**; **LCK** starts
+at **0**. All stats cap at **1000**.
+
+| Stat | Name | What it represents | How it's produced |
+|---|---|---|---|
+| **STR** | Strength | Pressing & leg power | logged **volume** on pressing/leg muscles |
+| **DEF** | Defense | Pulling/back resilience | logged **volume** on pulling/back muscles |
+| **AGI** | Agility | Shoulders & core | logged **volume** on shoulders/core |
+| **END** | Endurance | Work capacity | logged **reps** (rep-band weighted) |
+| **VIT** | Vitality | Recovery balance | a rolling **14-day rest/training meter** (not volume) |
+| **LCK** | Luck | Consistency | current **training streak**, drives an XP multiplier |
+
+### 4.1 Volume, and which muscle feeds which stat
+
+For each logged set, **volume = reps × load**, where `load` = the weight in kg, or **40 kg** if the
+exercise is bodyweight / has no entered weight. A session's contribution to a stat is the sum of
+volume across all sets whose exercise's **primary muscle** maps to that stat:
+
+- **STR** ← chest, triceps, forearms, **quadriceps, hamstrings, glutes, calves, adductors,
+  abductors** (pressing muscles *and* all leg muscles — squats/deadlifts read as raw force).
+- **DEF** ← lats, middle back, lower back, biceps, traps, neck (the pulling/posterior chain).
+- **AGI** ← shoulders, abdominals.
+- **VIT** ← *nothing* (it's the recovery meter, see 4.4).
+
+### 4.2 The volume → stat curve (diminishing returns)
+
+A stat's value from accumulated volume `V` (in kg) is:
+
+```
+stat = 10 + floor( 100 × ln( V / 500 + 1 ) )      (capped at 1000)
+```
+
+It's **logarithmic** — early training moves the needle fast; veterans grind for small gains.
+Worked examples:
+
+| Total volume on that stat | Resulting stat |
+|---|---|
+| 0 kg | 10 (baseline) |
+| 500 kg | ~79 |
+| 1,000 kg | ~119 |
+| 5,000 kg | ~249 |
+
+### 4.3 END — endurance from reps
+
+END rewards reps, weighted by rep range (higher reps = more endurance). Per set:
+
+```
+endurance points = reps × (0.5 if reps ≤ 7 ;  1.0 if 8–14 ;  1.5 if reps ≥ 15)
+END = 10 + floor( sum of endurance points across all sets )      (capped 1000)
+```
+
+END is class-neutral (no class bonus) and is backfilled from existing history because reps are
+real logged data.
+
+### 4.4 VIT — the recovery meter (the unusual one)
+
+VIT is **not** earned from lifting. It's a **0–100 rolling balance over the last 14 days** (floor
+10), measuring whether you're recovering well. Each of the last 14 days earns credit:
+
+- Completed a **scheduled** training day → **1.0**
+- Trained on a **rest** day → **0.7** (mild overtraining ding)
+- A **planned rest** day → **1.0** (productive recovery)
+- A **shielded/protected** missed day → **0.5** (neutral)
+- An **unplanned** missed day → **0** (detraining)
+
+`raw = 100 × (sum of credit) / (days counted)`, then scaled by how much of your *scheduled*
+training you actually completed, clamped to 10–100. It refreshes live every time stats are read, so
+it reflects "today," not just your last save. High VIT = well-recovered and consistent; collapsing
+VIT = either skipping or overtraining.
+
+### 4.5 LCK — consistency as luck, and the XP multiplier
+
+```
+LCK = current consecutive-day training streak, capped at 100
+diamonds = floor(LCK / 25), capped at 4
+XP multiplier = 1.0 + 0.5 × diamonds
+```
+
+| LCK | Diamonds | XP multiplier |
+|---|---|---|
+| 0–24 | 0 | 1.0× |
+| 25–49 | 1 | 1.5× |
+| 50–74 | 2 | 2.0× |
+| 75–99 | 3 | 2.5× |
+| 100 | 4 | 3.0× |
+
+"The consistent lifter is the lucky one." The multiplier is applied to workout XP at award time.
+
+### 4.6 Ranks, baseline, cap
+
+Each stat shows a letter rank: **D** (<100), **C** (≥100), **B** (≥300), **A** (≥600), **S** (≥900);
+all stats cap at 1000 (so S leaves headroom). New lifters promote fast; S is a long grind.
+
+### 4.7 Decay (anti-detraining, but forgiving)
+
+Inactivity erodes the *workout-output* stats (**STR, DEF, AGI, END**) — but only after
+**unprotected** missed training days pile up (the first missed day is grace; rest-day "shields"
+protect further). Each decay unit multiplies the stat by **0.9 (−10%)**, **floored at 50% of that
+stat's all-time peak**, so you never fall below half your best. **VIT and LCK do not decay this
+way** (VIT is already a live meter; LCK is the live streak). Planned rest never causes decay.
+
+### 4.8 Calibration — where starting stats come from
+
+So a brand-new character isn't all-10s, onboarding includes a calibration step. The quiz asks
+self-reported **experience** (novice / beginner / intermediate / advanced), maps it to a strength
+tier → a target stat → a **seed volume** in the same kg-volume currency the engine uses, applied
+equally to **STR/DEF/AGI**. The seed is added *before* the log curve, so it composes with real
+training and is never erased by a recompute. It only ratchets upward and then **freezes** (later
+workouts can't re-seed). Top rank (S) is intentionally **unreachable from self-report** — it must be
+earned by training. (A variant computes the seed from an actual logged "calibration run" using an
+Epley 1-rep-max estimate per stat, tiered against strength standards, over up to 3 sessions.)
+
+---
+
+## 5. XP & leveling
+
+**Session XP (a completed workout):**
+
+```
+XP = 50 (base) + 5 × (total sets logged) + 1 × (minutes elapsed)
+```
+
+- A **partial** (saved early, still ongoing) session earns **50%** of that.
+- An **abandoned** session earns `min(minutes elapsed, target minutes)`.
+- Then the **LCK multiplier** (§4.5) and any active **XP-boost potions** (§7) apply on top.
+
+**Levels are quantized** — only specific levels exist, gated by cumulative XP:
+
+| Total XP | Level | Title |
+|---|---|---|
+| 0 | 1 | Recruit |
+| 50 | 2 | Recruit |
+| 200 | 3 | Recruit |
+| 500 | 5 | Squire |
+| 1,500 | 10 | Knight |
+| 3,000 | 15 | Knight |
+| 5,000 | 20 | Champion |
+| 10,000 | 30 | Legend |
+
+Titles by level band: **Recruit** (<5), **Squire** (5–9), **Knight** (10–19), **Champion** (20–29),
+**Legend** (30+).
+
+---
+
+## 6. Classes
+
+Four classes give a **session-time mechanical bonus**: **+20% effective volume** to one stat, but
+only for the class's focus muscles. The class active when a workout is *saved* is stored on that
+session, so switching classes later never rewrites old growth.
+
+| Class | Focus muscles | Bonus | Theme color |
+|---|---|---|---|
+| **Bruiser** | Chest + Back + Arms | +20% → **STR** | gold |
+| **Assassin** | Shoulders + Core | +20% → **AGI** | cyan |
+| **Tank** | Legs | +20% → **STR** (legs feed STR) | red |
+| **Vanguard** | All-round | +20% → whatever stat the trained muscle feeds | violet |
+
+**Vanguard unlocks at level 10** (the balanced end-game class). Switching class is a destructive
+action (resets ultimate progress) and requires explicit type-to-confirm. END never gets a class
+bonus.
+
+---
+
+## 7. Supporting systems (brief but complete)
+
+- **Quests.** Auto-evaluated from workout history + class focus — *never* manual "Done" buttons for
+  unverifiable tasks. Daily quests are fixed checks (show up, train your class focus, hit a daily
+  volume floor); you may *claim* completed rewards. Quest XP is a base value, balanced assuming up
+  to 3.0× from LCK.
+- **Loot & inventory.** Cosmetic only (avatar frames, themes). Unlocks are **deterministic
+  milestones** keyed to stats/session count — **no RNG, no loot boxes, no pay-to-win.** Class
+  frames are earned through progression, not random drops.
+- **Guild.** A **local single-player simulation** with NPC members, deterministic per ISO week. It
+  delivers the *social feel* (a "Forge Nods" signal) without any real networking, account, or
+  multiplayer — consistent with offline/no-account.
+- **Rest & recovery.** Shield charges protect streaks/stats on missed days; planned rest days are
+  protected and even productive (they feed VIT). Generates automatic recovery XP (not multiplied by
+  LCK).
+- **Programs.** Optional structured plans (e.g. PPL, Full Body 3×, Upper/Lower) that schedule a
+  muscle group per day and track progress, replacing manual muscle-group selection.
+- **Progressive overload.** Suggests the next session's weight/reps per exercise using
+  linear-progression rules: **+2.5 kg** when the top set hit its rep target, **repeat** if missed by
+  1–3 reps, **−2.5 kg** if missed by 4+ (deload), **repeat** if 21+ days since last (detrained),
+  **+1 rep** for bodyweight. Rep targets by exercise kind: compound 8, isolation 12, bodyweight 15.
+  The suggestion pre-fills set 1 in a muted color ("the app's guess"); it never auto-commits.
+- **Body metrics (opt-in, body-neutral).** Logging bodyweight (7-day cadence) is off by default.
+  No red/green arrows. Logging can grant **XP-boost potions** (consumed on the next workout save,
+  multiplier capped at 5.0×) — rewarding the *act of tracking*, not any particular number.
+- **Calories.** A rough MET-based **estimate** shown on the workout summary only. Not a tracked
+  feature, not a goal, never framed as good/bad.
+
+---
+
+## 8. Onboarding (the first-run cinematic)
+
+A multi-screen cinematic sequence sets up the character and seeds stats:
+
+```
+cold open → problem → solution → calibration quiz → avatar select → name
+          → class reveal → generating → rank assessed → start gate → (Home)
+```
+
+The **calibration quiz** captures experience (→ seed stats, §4.8), training frequency, sex, and
+optional bodyweight (for relative-strength tiers). The class reveal assigns a starting class from
+the answers. After this runs once, the app always opens to the main shell.
+
+---
+
+## 9. Data & persistence
+
+- **Everything is local**, stored as JSON in the device's key–value store (`SharedPreferences`).
+  No database server, no API, no network calls, no keys.
+- The **completed `WorkoutSession` list** is the master record; combat stats, XP, last-session
+  delta, and stat peaks are cached snapshots but are *recomputed from history* when needed.
+- A session carries: date, target muscle group, duration (target + actual), the exercises logged
+  (each with its sets of weight×reps), the **class at save time**, and the awarded XP snapshot.
+- On every app launch the boot sequence runs: data migrations → END backfill → **stat decay check**
+  → class auto-assignment for legacy users → onboarding gate (new user → onboarding, else → Home).
+
+---
+
+## 10. Navigation & screen map (use this to read the screenshots)
+
+The app is a **5-tab bottom-navigation shell**:
+
+| Tab | What it shows / which systems surface |
+|---|---|
+| **Home** | Character avatar/frame, level + title, the 6 stat bars with ranks, last-session deltas, today's mission/quest nudge, class. |
+| **Workout** | History (list + calendar) of past sessions; tap a day → session detail. |
+| **Quests** | Daily/weekly auto-evaluated objectives with claimable XP. |
+| **Guild** | The local guild simulation — NPC members, weekly social signal. |
+| **Profile** | Avatar/name/class, full stat card, inventory/loot, settings (incl. opt-in body metrics, progressive-overload toggle), progress charts. |
+
+**The workout-logging flow** (its own stack, launched from Home/Workout):
+
+```
+Start Workout (pick muscle group → duration → pick exercises)
+   → Active Workout (live timer; tap an exercise to log it; rest timer)
+      → Exercise Session (log each set: weight + reps; "Finish Exercise")
+   → (all exercises done) → Finish Workout
+      → Workout Summary (XP awarded, stat deltas, calorie estimate; "Save & Exit")
+```
+
+The summary is the payoff screen: it's where **+X STR / +Y DEF**, XP, level progress, and any new
+loot appear. Saving writes the `WorkoutSession`, which is what makes every downstream system update.
+
+---
+
+## 11. Design language (so visual critique stays on-brand)
+
+- **Pixel arcade, dark-mode only.** Neon-on-near-black, sharp 4px corners, retro-game feel.
+- **Palette:** background `#11111F`, card `#1C1C34`, borders `#36365E`, primary neon green
+  `#00FF9C`, text `#E8E8FF`, muted text `#9494B8`, amber `#FFD700`, cyan `#00BFFF`, danger red
+  `#FF2D55`. Class colors: Assassin cyan `#4DE5FF`, Bruiser gold `#FFD700`, Tank red `#FF2D55`,
+  Vanguard violet `#B14DFF`.
+- **Type:** PressStart2P for headings, Gotham for body, a monospaced font for timers/counters.
+- **Icons:** sharp/angular only (no rounded icons), to match the pixel theme; pixel-art control
+  icons where available.
+- **Motion:** quick, tactile micro-interactions (button depress, phosphor flash, ambient drift)
+  with short durations (~120–220ms).
+- **Body-neutral mandate (again):** directional change uses *muted* indicators only — never
+  red/green good-vs-bad on bodyweight or deltas; the *absence* of a bonus is just absence, never
+  framed as failure.
+
+---
+
+## 12. Cheat-sheet (one-screen recap)
+
+- **6 stats**, baseline 10 (LCK 0), cap 1000, ranks D→S.
+- **STR/DEF/AGI** = `10 + floor(100·ln(volume/500 + 1))`; volume = reps × (weight or 40).
+- **END** = reps, weighted 0.5 / 1.0 / 1.5 by rep band (≤7 / 8–14 / ≥15).
+- **VIT** = 14-day recovery-balance meter (rest + completed training good; overtraining/skips bad).
+- **LCK** = streak (cap 100) → XP multiplier up to **3.0×**.
+- **Session XP** = 50 + 5×sets + 1×minute, ×LCK ×potions.
+- **Classes** = +20% volume to one stat for focus muscles; Vanguard unlocks at L10.
+- **Everything derives from the local `WorkoutSession` history.** No cloud, no account, no RNG, no
+  pay-to-win. Earned, honest, body-neutral, offline.
