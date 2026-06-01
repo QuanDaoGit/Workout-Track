@@ -194,6 +194,7 @@ class WorkoutSession {
     this.baseXP,
     this.lckMultiplier,
     this.potionMultiplier,
+    this.lootBonusXP,
     this.awardedXP,
     this.classAtSave,
     this.statDelta = const {},
@@ -218,6 +219,7 @@ class WorkoutSession {
   final int? baseXP;
   final double? lckMultiplier;
   final double? potionMultiplier;
+  final int? lootBonusXP;
   final int? awardedXP;
   final String? classAtSave;
   final Map<String, int> statDelta;
@@ -260,6 +262,7 @@ class WorkoutSession {
     if (baseXP != null) 'baseXP': baseXP,
     if (lckMultiplier != null) 'lckMultiplier': lckMultiplier,
     if (potionMultiplier != null) 'potionMultiplier': potionMultiplier,
+    if (lootBonusXP != null) 'lootBonusXP': lootBonusXP,
     if (awardedXP != null) 'awardedXP': awardedXP,
     if (classAtSave != null) 'classAtSave': classAtSave,
     if (statDelta.isNotEmpty) 'statDelta': statDelta,
@@ -302,6 +305,7 @@ class WorkoutSession {
       baseXP: (j['baseXP'] as num?)?.toInt(),
       lckMultiplier: (j['lckMultiplier'] as num?)?.toDouble(),
       potionMultiplier: (j['potionMultiplier'] as num?)?.toDouble(),
+      lootBonusXP: (j['lootBonusXP'] as num?)?.toInt(),
       awardedXP: (j['awardedXP'] as num?)?.toInt(),
       classAtSave: j['classAtSave'] as String?,
       statDelta: _decodeStatDelta(j['statDelta']),

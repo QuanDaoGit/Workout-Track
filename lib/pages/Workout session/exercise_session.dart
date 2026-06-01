@@ -49,7 +49,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   List<SetEntry>? _previousSets;
   final Set<int> _lockedSets = {};
   bool _plateCalcSeen = true;
-  bool _progressionEnabled = true;
+  bool _progressionEnabled = false;
   OverloadSuggestion? _set1Suggestion;
   final Set<int> _prefilledRows = {};
 
@@ -91,27 +91,22 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       _previousSets = service.getLastSessionSets(widget.exercise.id);
       _set1Suggestion = suggestion;
     });
-    _maybePrefillSet1();
   }
 
   Future<void> _loadProgressionSetting() async {
     final enabled = await ProgressionSettingsService().isEnabled();
     if (!mounted) return;
     setState(() => _progressionEnabled = enabled);
-    _maybePrefillSet1();
   }
 
-  /// Pre-fills Set 1's controllers with the suggested weight + reps when
-  /// progression is enabled, the suggestion is loaded, and the row is empty.
-  /// Idempotent; safe to call from either loader.
-  void _maybePrefillSet1() {
+  /// Applies the suggested weight + reps only after an explicit TRY tap.
+  void _applySuggestionToSet1() {
     if (!_progressionEnabled) return;
     final suggestion = _set1Suggestion;
     if (suggestion == null) return;
     if (_rows.isEmpty) return;
     if (_lockedSets.contains(0)) return;
     final row = _rows[0];
-    if (row.weight.text.isNotEmpty || row.reps.text.isNotEmpty) return;
     final weight = suggestion.weight;
     final reps = suggestion.reps;
     if (weight == null || reps == null) return;
@@ -478,7 +473,10 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                     !isLocked)
                   Padding(
                     padding: const EdgeInsets.only(left: 32, bottom: 4),
-                    child: _TryLine(suggestion: _set1Suggestion!),
+                    child: _TryLine(
+                      suggestion: _set1Suggestion!,
+                      onTap: _applySuggestionToSet1,
+                    ),
                   ),
                 Row(
                   children: [
@@ -664,9 +662,10 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
 }
 
 class _TryLine extends StatelessWidget {
-  const _TryLine({required this.suggestion});
+  const _TryLine({required this.suggestion, required this.onTap});
 
   final OverloadSuggestion suggestion;
+  final VoidCallback onTap;
 
   String _fmtWeight(double w) =>
       w == w.roundToDouble() ? w.toInt().toString() : w.toString();
@@ -704,12 +703,23 @@ class _TryLine extends StatelessWidget {
         : w == 0
         ? '${r ?? 0} reps'
         : '${_fmtWeight(w)} kg × ${r ?? 0}';
-    return Text(
-      'TRY: $core${_suffix()}',
-      style: AppFonts.shareTechMono(
-        fontSize: 11,
-        color: _color(),
-        letterSpacing: 0.8,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          border: Border.all(color: _color().withValues(alpha: 0.6)),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          'TRY: $core${_suffix()}',
+          style: AppFonts.shareTechMono(
+            fontSize: 11,
+            color: _color(),
+            letterSpacing: 0.8,
+          ),
+        ),
       ),
     );
   }

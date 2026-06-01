@@ -8,7 +8,7 @@ file layout) lives in the root [CLAUDE.md](../CLAUDE.md); this folder holds prod
 | File / folder | What it is |
 |---|---|
 | [PRD.md](PRD.md) | Product requirements — scope, intent, shipped features, out-of-scope. The "read this first" doc. |
-| [PRODUCT.md](PRODUCT.md) | Product/design rationale — the soul rule, muscle taxonomy, stat/XP math, class bonuses, overload logic. |
+| [PRODUCT.md](PRODUCT.md) | Product/design rationale — the long-term hook doctrine, muscle taxonomy, stat/XP math, class bonuses, overload logic. |
 | [superpowers/plans/](superpowers/plans/) | Reconciled feature specs & implementation plans (dated, archival once shipped). |
 | `decisions/` | Architecture & product decision records (ADRs). Empty until the first decision is logged. |
 

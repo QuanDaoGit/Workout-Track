@@ -15,6 +15,8 @@ prepare the store listing, release process, and support scaffolding before the f
 
 ## Key facts to respect
 - **Android-first**, offline, no account (see [../docs/PRD.md](../docs/PRD.md)).
+- Store/support language should reinforce the long-term hooks: identity attachment, ritual return,
+  collection desire, competence growth, and recovery protection.
 - Versioning lives in [pubspec.yaml](../pubspec.yaml) (`version: x.y.z+build`). A release entry here
   must match the `pubspec.yaml` version it describes.
 - Build/signing/CI mechanics are **engineering ops** — see [../ops/](../ops/), don't duplicate them here.

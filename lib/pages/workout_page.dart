@@ -975,6 +975,18 @@ class _MuscleData {
   final DateTime? lastTrained;
 }
 
+class _ExerciseTrend {
+  const _ExerciseTrend({
+    required this.name,
+    required this.loads,
+    required this.plateau,
+  });
+
+  final String name;
+  final List<double> loads;
+  final bool plateau;
+}
+
 class _StatsTab extends StatefulWidget {
   const _StatsTab({required this.reloadToken});
 
@@ -1216,6 +1228,48 @@ class _StatsTabState extends State<_StatsTab> {
     return sorted.take(5).toList();
   }
 
+  List<_ExerciseTrend> _buildExerciseTrends() {
+    final byExercise = <String, List<({DateTime date, double load})>>{};
+    final names = <String, String>{};
+    for (final session in _sessions.where((s) => !s.isPartial)) {
+      for (final log in session.exercises) {
+        final weightedSets = log.sets.where((set) => set.weight > 0).toList();
+        if (weightedSets.isEmpty) continue;
+        final topLoad = weightedSets.fold<double>(
+          0,
+          (best, set) => max(best, set.weight),
+        );
+        byExercise.putIfAbsent(log.exerciseId, () => []).add((
+          date: session.date,
+          load: topLoad,
+        ));
+        names[log.exerciseId] = log.exerciseName;
+      }
+    }
+
+    final trends = <_ExerciseTrend>[];
+    for (final entry in byExercise.entries) {
+      if (entry.value.length < 5) continue;
+      final points = entry.value.toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+      final recent = points.length > 3
+          ? points.sublist(points.length - 3)
+          : points;
+      final plateau =
+          recent.length >= 3 &&
+          recent.every((point) => point.load == recent.first.load);
+      trends.add(
+        _ExerciseTrend(
+          name: names[entry.key] ?? entry.key,
+          loads: [for (final point in points.take(10)) point.load],
+          plateau: plateau,
+        ),
+      );
+    }
+    trends.sort((a, b) => b.loads.length.compareTo(a.loads.length));
+    return trends.take(3).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -1275,6 +1329,7 @@ class _StatsTabState extends State<_StatsTab> {
 
     // Personal bests
     final pbs = _buildPersonalBests();
+    final exerciseTrends = _buildExerciseTrends();
 
     // Max bar height for chart
     final maxBarY = weekData.fold(0.0, (m, d) => max(m, d.$1));
@@ -1341,6 +1396,21 @@ class _StatsTabState extends State<_StatsTab> {
               ),
             ),
           ),
+
+          const SizedBox(height: 24),
+          Text('LOAD TRENDS', style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 12),
+          if (exerciseTrends.isEmpty)
+            Text(
+              'Log 5 weighted sets on an exercise to unlock load trends.',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else
+            for (final trend in exerciseTrends)
+              Padding(
+                padding: const EdgeInsets.only(bottom: kSpace3),
+                child: _ExerciseTrendCard(trend: trend),
+              ),
 
           const SizedBox(height: 24),
           const Divider(color: kBorder),
@@ -1580,6 +1650,78 @@ class _StatsTabState extends State<_StatsTab> {
           ),
 
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExerciseTrendCard extends StatelessWidget {
+  const _ExerciseTrendCard({required this.trend});
+
+  final _ExerciseTrend trend;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxLoad = trend.loads.fold<double>(0, max);
+    final minLoad = trend.loads.fold<double>(maxLoad, min);
+    final range = max(1.0, maxLoad - minLoad);
+    return Container(
+      padding: const EdgeInsets.all(kSpace3),
+      decoration: BoxDecoration(
+        color: kSurface2,
+        border: Border.all(color: trend.plateau ? kAmber : kBorder),
+        borderRadius: BorderRadius.circular(kCardRadius),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  trend.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppFonts.shareTechMono(
+                    color: kText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (trend.plateau)
+                Text(
+                  'PLATEAU',
+                  style: AppFonts.shareTechMono(color: kAmber, fontSize: 11),
+                ),
+            ],
+          ),
+          const SizedBox(height: kSpace2),
+          SizedBox(
+            height: 80,
+            child: LineChart(
+              LineChartData(
+                minY: minLoad - range * 0.1,
+                maxY: maxLoad + range * 0.1,
+                gridData: const FlGridData(show: false),
+                borderData: FlBorderData(show: false),
+                titlesData: const FlTitlesData(show: false),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: [
+                      for (var i = 0; i < trend.loads.length; i++)
+                        FlSpot(i.toDouble(), trend.loads[i]),
+                    ],
+                    isCurved: false,
+                    barWidth: 2,
+                    color: trend.plateau ? kAmber : kNeon,
+                    dotData: const FlDotData(show: false),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

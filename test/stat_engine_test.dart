@@ -18,7 +18,11 @@ void main() {
     'triceps': 'triceps',
     'curl': 'biceps',
     'row': 'lats',
+    'press': 'shoulders',
+    'lateral': 'shoulders',
     'squat': 'quadriceps',
+    'rdl': 'hamstrings',
+    'calf': 'calves',
     'crunch': 'abdominals',
   };
 
@@ -87,12 +91,12 @@ void main() {
     final expected = _statFromVolume(5800);
 
     expect(stats['STR'], 10 + expected);
-    expect(stats['END'], 80);
+    expect(stats['END'], 10 + _statFromEndurance(70));
 
     await _seedSessions([
       _session(
         date: now,
-        logs: [_log('bench', weight: 1000000, reps: 20, sets: 1)],
+        logs: [_log('bench', weight: 1000000, reps: 20, sets: 20000)],
       ),
     ]);
     final capped = await StatEngine(
@@ -125,13 +129,10 @@ void main() {
       StatEngine.endurancePointsForSet(const SetEntry(weight: 50, reps: 5)),
       2.5,
     );
-    expect(stats['END'], 45);
+    expect(stats['END'], 10 + _statFromEndurance(35));
 
     await _seedSessions([
-      _session(
-        date: now,
-        logs: [_log('bench', weight: 50, reps: 20, sets: 100)],
-      ),
+      _session(date: now, logs: [_log('bench', weight: 50, reps: 3000000)]),
     ]);
 
     final capped = await StatEngine(
@@ -159,7 +160,7 @@ void main() {
         catalog: catalog,
       ).calculateAllStats();
 
-      expect(stats['STR'], 10);
+      expect(stats['STR'], greaterThan(10));
       expect(stats['DEF'], greaterThan(10));
     },
   );
@@ -192,13 +193,96 @@ void main() {
       catalog: catalog,
     ).calculateAllStats();
 
-    // Legs now feed STR, so the tank's squat (1000 vol + 200 class bonus) lands
-    // in STR alongside the bruiser's bench (1000 + 200) → 2400 STR volume.
-    expect(stats['STR'], 10 + _statFromVolume(2400));
-    expect(stats['AGI'], 10 + _statFromVolume(1200));
-    expect(stats['END'], 40);
+    // Class focus now pushes visible radar identity:
+    // bruiser -> STR, assassin -> AGI, tank -> END.
+    expect(stats['STR'], 10 + _statFromVolume(1500));
+    expect(stats['AGI'], 10 + _statFromVolume(1390));
+    expect(stats['END'], 10 + _statFromEndurance(73));
     // VIT is the recovery meter now (not volume) — covered by its own tests.
   });
+
+  test(
+    'class-typical training produces distinct readable radar shapes',
+    () async {
+      final now = DateTime(2026, 5, 14, 10);
+      final cases = {
+        'assassin': (
+          expectedTop: 'AGI',
+          sessions: _classTypicalSessions(
+            now: now,
+            classAtSave: 'assassin',
+            logs: [
+              _log('press', weight: 30, reps: 10, sets: 3),
+              _log('lateral', weight: 10, reps: 15, sets: 3),
+              _log('crunch', weight: 0, reps: 15, sets: 3),
+            ],
+          ),
+        ),
+        'bruiser': (
+          expectedTop: 'STR',
+          sessions: _classTypicalSessions(
+            now: now,
+            classAtSave: 'bruiser',
+            logs: [
+              _log('bench', weight: 80, reps: 8, sets: 3),
+              _log('row', weight: 70, reps: 10, sets: 3),
+              _log('curl', weight: 25, reps: 12, sets: 3),
+              _log('triceps', weight: 25, reps: 12, sets: 3),
+            ],
+          ),
+        ),
+        'tank': (
+          expectedTop: 'END',
+          sessions: _classTypicalSessions(
+            now: now,
+            classAtSave: 'tank',
+            logs: [
+              _log('squat', weight: 100, reps: 8, sets: 3),
+              _log('rdl', weight: 80, reps: 10, sets: 3),
+              _log('calf', weight: 60, reps: 15, sets: 3),
+            ],
+          ),
+        ),
+      };
+
+      for (final entry in cases.entries) {
+        SharedPreferences.setMockInitialValues({});
+        await _seedSessions(entry.value.sessions);
+
+        final stats = await StatEngine(
+          nowProvider: () => now.add(const Duration(days: 19)),
+          catalog: catalog,
+        ).calculateAllStats();
+
+        const visible = ['STR', 'AGI', 'END'];
+        final top = visible.reduce((a, b) => stats[a]! >= stats[b]! ? a : b);
+        final gradeIndexes = [
+          for (final stat in visible) _gradeIndex(stats[stat] ?? 0),
+        ];
+
+        expect(top, entry.value.expectedTop, reason: entry.key);
+        final sortedValues = [for (final stat in visible) stats[stat] ?? 0]
+          ..sort((a, b) => b.compareTo(a));
+        expect(
+          sortedValues.first - sortedValues[1],
+          greaterThanOrEqualTo(80),
+          reason: '${entry.key} should be guessable in a 5-second radar read',
+        );
+        expect(
+          gradeIndexes.reduce(max) - gradeIndexes.reduce(min),
+          lessThanOrEqualTo(2),
+          reason: entry.key,
+        );
+        expect(
+          visible.every(
+            (stat) => (stats[stat] ?? 0) >= StatEngine.rankThresholdC,
+          ),
+          isTrue,
+          reason: entry.key,
+        );
+      }
+    },
+  );
 
   test('ignores partial and abandoned sessions', () async {
     final now = DateTime(2026, 5, 14, 10);
@@ -539,14 +623,22 @@ void main() {
       jsonDecode(prefs.getString(StatEngine.combatStatsKey)!),
       containsPair('STR', stats['STR']),
     );
-    // Two consecutive-day sessions: STR grew with the new volume, LCK grew
-    // with the streak (1 → 2). Both deltas should be present.
-    expect(delta.keys, containsAll(['STR', 'END', 'LCK']));
+    // Two consecutive-day sessions: visible capability stats grew with the new
+    // set, and LCK grew with the streak (1 -> 2).
+    expect(delta.keys, containsAll(['STR', 'AGI', 'END', 'LCK']));
     expect(
       delta['STR'],
       stats['STR']! - (StatEngine.baseOutputStatValue + _statFromVolume(250)),
     );
-    expect(delta['END'], 3);
+    expect(
+      delta['AGI'],
+      stats['AGI']! - (StatEngine.baseOutputStatValue + _statFromVolume(30)),
+    );
+    expect(
+      delta['END'],
+      stats['END']! -
+          (StatEngine.baseOutputStatValue + _statFromEndurance(2.5)),
+    );
     expect(delta['LCK'], 1);
   });
 
@@ -622,6 +714,22 @@ ExerciseLog _log(String id, {double weight = 50, int reps = 5, int sets = 1}) {
   );
 }
 
+List<WorkoutSession> _classTypicalSessions({
+  required DateTime now,
+  required String classAtSave,
+  required List<ExerciseLog> logs,
+}) {
+  return [
+    for (var i = 0; i < 20; i++)
+      _session(
+        date: now.add(Duration(days: i)),
+        id: '$classAtSave-$i',
+        classAtSave: classAtSave,
+        logs: logs,
+      ),
+  ];
+}
+
 List<WorkoutSession> _streakSessions({
   required DateTime now,
   required int days,
@@ -638,4 +746,16 @@ List<WorkoutSession> _streakSessions({
 
 int _statFromVolume(double volume) {
   return min(1000, (100 * log(volume / 500 + 1)).floor());
+}
+
+int _statFromEndurance(double endurancePoints) {
+  return min(1000, (100 * log(endurancePoints / 150 + 1)).floor());
+}
+
+int _gradeIndex(int value) {
+  if (value >= StatEngine.rankThresholdS) return 4;
+  if (value >= StatEngine.rankThresholdA) return 3;
+  if (value >= StatEngine.rankThresholdB) return 2;
+  if (value >= StatEngine.rankThresholdC) return 1;
+  return 0;
 }

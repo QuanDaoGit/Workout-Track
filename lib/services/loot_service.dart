@@ -6,6 +6,7 @@ import '../data/loot_registry.dart';
 import '../data/muscle_groups.dart';
 import '../models/loot_item.dart';
 import '../models/loot_unlock_rule.dart';
+import '../models/milestone_models.dart';
 import '../models/workout_models.dart';
 import 'exercise_catalog_service.dart';
 
@@ -173,10 +174,13 @@ class LootService {
           if (key == null) return false;
           return (stats[key] ?? 0) >= rule.threshold;
         case UnlockKind.anyStatThreshold:
-          return stats.values.any((value) => value >= rule.threshold);
+          return MilestoneSnapshot.growthStats.any(
+            (stat) => (stats[stat] ?? 0) >= rule.threshold,
+          );
         case UnlockKind.allStatsAbove:
-          if (stats.isEmpty) return false;
-          return stats.values.every((value) => value >= rule.threshold);
+          return MilestoneSnapshot.growthStats.every(
+            (stat) => (stats[stat] ?? 0) >= rule.threshold,
+          );
       }
     }
 

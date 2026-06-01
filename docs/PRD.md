@@ -6,14 +6,17 @@
 
 ## Purpose
 Solo gym-goer logs and tracks workout sessions from their phone, and every logged lift
-feeds an RPG character-growth layer. No account. No cloud. Works offline, always.
+feeds an RPG character-growth layer they become attached to. No account. No cloud. Works offline,
+always.
 
-**Soul rule (from [PRODUCT.md](PRODUCT.md)):** real workout data is the only input to
-character growth. Every feature must translate training into RPG language, or be cut.
+**Soul doctrine (from [PRODUCT.md](PRODUCT.md)):** every logged workout should make the user's
+character feel harder to abandon. Real training is the fuel; identity, streak, rank, loot, and
+ritual are the psychological engine.
 
 ## Target User
-Single user. Gym-goer, beginner to early-intermediate. Tracks personal progress over time
-and is motivated by visible, earned progression.
+Single user. Gym-goer, beginner to early-intermediate. Tracks personal progress over time and is
+motivated by visible, earned progression, identity attachment, rank aspiration, collection desire,
+and a repeatable training ritual.
 
 ## Platform
 Android first. iOS later.
@@ -35,12 +38,14 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 - [x] Workout history (list + calendar) and per-exercise detail.
 
 ### Character growth (the RPG layer)
-- [x] **6 combat stats** — STR, DEF, VIT, AGI, **END**, LCK (note: 6, not the original 5).
-  - STR/DEF/VIT/AGI are derived from logged exercise volume by primary muscle.
-  - END is class-neutral and grows from logged reps (rep-range weighting).
+- [x] **Readable character stats** — visible radar stats are STR, AGI, and END; VIT is a recovery meter; LCK is the streak/XP multiplier.
+  - STR and AGI are derived from weighted logged exercise volume by primary muscle.
+  - END grows from logged reps with rep-range and muscle weighting; Tank focus pushes END.
+  - VIT is a 10-100 recovery/training-balance meter.
   - LCK equals the current training streak (capped at 100) and drives an award-time XP multiplier.
-- [x] Stats start at 10 (LCK at 0); daily decay only after consecutive inactivity, never on planned rest.
-- [x] Stat card on Profile (pixel bars); stat delta shown after each completed session.
+  - DEF is hidden legacy compatibility storage only, not a visible stat.
+- [x] Workout-output stats start at 10 (LCK at 0); daily decay only after consecutive inactivity, never on planned rest.
+- [x] Stat card on Profile (radar + detail rows); stat delta shown after each completed session.
 - [x] Calibration quiz during onboarding seeds an initial stat baseline.
 
 ### Classes
@@ -51,7 +56,8 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 ### Supporting systems
 - [x] XP & levels (`XpService`), threshold leveling, LCK multiplier.
 - [x] Quests (`QuestService`) — auto-evaluated from workout history; no manual-confirm quests.
-- [x] Loot & inventory (`LootService`) — deterministic milestone unlocks (avatar frames/themes), no RNG, no pay-to-win.
+- [x] Loot & inventory (`LootService`) — deterministic milestone unlocks (avatar frames/themes)
+      that create collection pull without paid shortcuts.
 - [x] Guild (`GuildService`) — local single-player simulation with NPC members, deterministic per ISO week.
 - [x] Body metrics (`BodyMetricsService`) — opt-in, body-neutral weight tracking on a 7-day cadence.
 - [x] Progressive overload (`ProgressiveOverloadService`) — plate-true ±2.5 kg suggestions, kind-aware.

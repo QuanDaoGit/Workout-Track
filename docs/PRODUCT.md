@@ -1,16 +1,25 @@
-"Workout Tracker is a strength-training app with an RPG visualization layer. Real workout data is the only input to character growth. Every feature must translate training into RPG language, or be cut."
+Ironbit is a strength-training app where every logged workout should make the user's character feel
+harder to abandon. Real training is the fuel; identity, streak, rank, loot, and ritual are the
+psychological engine.
+
+The fantasy works because it is anchored to the user's own effort. Progress should feel sticky
+because it is earned, visible, cumulative, and personally named. Every feature should strengthen
+one of the long-term hooks: identity attachment, competence growth, collection desire, ritual
+return, rank aspiration, or recovery protection.
 
 ## Muscle taxonomy
 
 The canonical muscle-group list is **`Chest, Back, Shoulders, Arms, Legs, Core, Full Body`**: seven Title-Case strings. Defined in [lib/data/muscle_groups.dart](../lib/data/muscle_groups.dart). Every UI surface (Start Workout chips, Create Exercise picker, Exercises filter, muscle-balance chart, calorie MET map, class focus mappings) references this single list. `WorkoutSession.muscleGroup` and `Exercise.muscleGroup` are normalized to the canonical form at read-time via `normalizeMuscleGroup(raw)`; no DB rewrite needed.
 
-Detailed muscles in `assets/exercises.json` (chest, lats, biceps, quadriceps, etc.) are mapped to one of the seven canonical buckets via `muscleGroupForDetailed(detailed)`. The detailed-muscle to character-stat mapping (for example, `lats` to `DEF`, `biceps` to `DEF`, `chest` to `STR`) stays in `StatEngine`: it operates on detailed muscles, not buckets, to preserve granularity.
+Detailed muscles in `assets/exercises.json` (chest, lats, biceps, quadriceps, etc.) are mapped to one of the seven canonical buckets via `muscleGroupForDetailed(detailed)`. The detailed-muscle to character-stat weighting stays in `StatEngine`: it operates on detailed muscles, not buckets, to preserve granularity. The visible radar uses `STR / AGI / END`; `DEF` remains only as a hidden legacy accumulator for old local snapshots.
 
 Adding or removing a bucket requires updating: the `canonicalMuscleGroups` list, the `_detailedToBucket` map, `curated_exercises.dart`, `class_definitions.dart` `musclesForClass`, `StatEngine._fallbackPrimary`, `workout_page.dart` `_muscles` + `_muscleColors`, and `CalorieService._metByMuscleGroup`.
 
 ## Character stats and XP
 
-STR, DEF, VIT, AGI, and END are cumulative workout-output stats. They start at 10 so a new character has a visible baseline; LCK starts at 0 because it is streak-derived. STR/DEF/VIT/AGI are derived from logged exercise volume by primary muscle. END is class-neutral and grows from logged reps:
+The visible stat board has three build-shape stats plus two status meters. `STR / AGI / END` are cumulative workout-output stats and start at 10 so a new character has a visible baseline. `VIT` is a 10-100 recovery-balance meter. `LCK` starts at 0 because it is streak-derived. `DEF` is hidden legacy storage only and should not appear in product copy or UI.
+
+STR and AGI grow from weighted logged kg-volume by primary muscle. END grows from logged reps, weighted by rep range and muscle:
 
 - 1-7 reps: each rep counts 0.5x toward END
 - 8-14 reps: each rep counts 1.0x toward END
@@ -34,13 +43,17 @@ Class choice has a session-time mechanical bonus. The class active when the work
 
 - Bruiser: +20% STR effective volume from chest, back, and arms training.
 - Assassin: +20% AGI effective volume from shoulders and core training.
-- Tank: +20% VIT effective volume from legs training.
+- Tank: +20% END effective rep growth from legs training.
 
-The bonus uses actual logged exercise primary-muscle attribution, not only the selected workout target. END has no class bonus.
+The bonus uses actual logged exercise primary-muscle attribution, not only the selected workout target. Tank is END-led so leg training reads as durability/work capacity instead of making every lower-body user look like a Bruiser.
 
-## Quest ethics
+## Quest and ritual design
 
-Manual-confirm quests are deliberately not used. Quest progress must be derivable from workout history or other real app data. Daily quests are fixed auto-evaluated training checks: show up, train class focus, and hit the daily volume floor. Users may still claim completed rewards, but there is no "Done" button for unverifiable tasks.
+Quests exist to make the return ritual concrete: open the app, see a mission, train, then watch the
+character ledger move. Quest progress must be derivable from workout history or other real app data
+so the user trusts that the fantasy is attached to real effort. Daily quests are fixed
+auto-evaluated training checks: show up, train class focus, and hit the daily volume floor. Users
+may still claim completed rewards, but there is no "Done" button for unverifiable tasks.
 
 ## Progressive overload guidance
 

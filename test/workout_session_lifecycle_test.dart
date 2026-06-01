@@ -23,6 +23,7 @@ void main() {
       ..remove('baseXP')
       ..remove('lckMultiplier')
       ..remove('potionMultiplier')
+      ..remove('lootBonusXP')
       ..remove('awardedXP')
       ..remove('classAtSave')
       ..remove('statDelta');
@@ -34,6 +35,7 @@ void main() {
     expect(parsed.isPausedForResume, isFalse);
     expect(parsed.isAbandoned, isFalse);
     expect(parsed.baseXP, isNull);
+    expect(parsed.lootBonusXP, isNull);
     expect(parsed.awardedXP, isNull);
     expect(parsed.classAtSave, isNull);
     expect(parsed.statDelta, isEmpty);
@@ -94,6 +96,7 @@ void main() {
       baseXP: 80,
       lckMultiplier: 2.0,
       potionMultiplier: 1.5,
+      lootBonusXP: 25,
       awardedXP: 240,
       classAtSave: 'bruiser',
     );
@@ -103,6 +106,7 @@ void main() {
     expect(parsed.baseXP, 80);
     expect(parsed.lckMultiplier, 2.0);
     expect(parsed.potionMultiplier, 1.5);
+    expect(parsed.lootBonusXP, 25);
     expect(parsed.awardedXP, 240);
     expect(parsed.classAtSave, 'bruiser');
     expect(XpService.calculateBaseSessionXP(parsed), 80);
@@ -400,6 +404,7 @@ WorkoutSession _session({
   int? baseXP,
   double? lckMultiplier,
   double? potionMultiplier,
+  int? lootBonusXP,
   int? awardedXP,
   String? classAtSave,
   Map<String, int> statDelta = const {},
@@ -431,6 +436,7 @@ WorkoutSession _session({
     baseXP: baseXP,
     lckMultiplier: lckMultiplier,
     potionMultiplier: potionMultiplier,
+    lootBonusXP: lootBonusXP,
     awardedXP: awardedXP,
     classAtSave: classAtSave,
     statDelta: statDelta,

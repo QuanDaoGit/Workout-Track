@@ -1,3 +1,4 @@
+import 'milestone_models.dart';
 import '../services/stat_engine.dart';
 import '../services/xp_service.dart';
 
@@ -10,6 +11,7 @@ enum HeroKind {
   levelUp,
   diamondMilestone,
   lootUnlock,
+  titleUnlock,
   statGain,
   recovery,
 }
@@ -40,6 +42,7 @@ class FinishHero {
     this.fromRank,
     this.toRank,
     this.lootId,
+    this.title,
   });
 
   final HeroKind kind;
@@ -58,6 +61,9 @@ class FinishHero {
   /// Loot id for [HeroKind.lootUnlock].
   final String? lootId;
 
+  /// Title name for [HeroKind.titleUnlock] (e.g. "Squire").
+  final String? title;
+
   FinishHero copyWith({FinishTier? tier}) => FinishHero(
     kind: kind,
     tier: tier ?? this.tier,
@@ -66,6 +72,7 @@ class FinishHero {
     fromRank: fromRank,
     toRank: toRank,
     lootId: lootId,
+    title: title,
   );
 }
 
@@ -94,6 +101,7 @@ class FinishResult {
     required this.totalSets,
     required this.exerciseCount,
     required this.estimatedCalories,
+    this.milestoneEvents = const [],
   });
 
   final FinishCompletion completion;
@@ -115,6 +123,7 @@ class FinishResult {
   final int totalSets;
   final int exerciseCount;
   final int estimatedCalories;
+  final List<MilestoneEvent> milestoneEvents;
 
   int get levelBefore => XpService.getLevel(oldTotalXP);
   int get levelAfter => XpService.getLevel(newTotalXP);
@@ -122,6 +131,15 @@ class FinishResult {
   int get diamondsAfter => XpService.lckDiamondCount(lckAfter);
   bool get leveledUp => levelAfter > levelBefore;
   bool get crossedDiamond => diamondsAfter > diamondsBefore;
+
+  /// The newly-earned title name when a level-up crosses a title threshold
+  /// (5/10/20/30), else null. Titles come from [XpService.getRank].
+  String? get newTitle {
+    if (!leveledUp) return null;
+    final before = XpService.getRank(levelBefore);
+    final after = XpService.getRank(levelAfter);
+    return before == after ? null : after;
+  }
 }
 
 /// Pure hero/tier selection per the design's priority ladder. No IO — depends
@@ -129,31 +147,65 @@ class FinishResult {
 /// unit-testable in isolation.
 FinishSelection selectHero(FinishResult r) {
   final engine = StatEngine();
+  final milestoneEvents = r.milestoneEvents;
 
   // 1. Rank promotion among the visible capability stats (best after-rank wins).
   FinishHero? rankPromo;
-  for (final stat in kHeroStatCandidates) {
-    final delta = r.statDelta[stat] ?? 0;
-    if (delta <= 0) continue;
-    final after = r.afterStats[stat] ?? 0;
-    final before = after - delta;
-    final fromRank = engine.getRank(before);
-    final toRank = engine.getRank(after);
-    if (fromRank == toRank) continue;
-    if (rankPromo == null || after > (r.afterStats[rankPromo.stat] ?? 0)) {
-      rankPromo = FinishHero(
-        kind: HeroKind.rankPromotion,
-        tier: FinishTier.tier3,
-        stat: stat,
-        amount: delta,
-        fromRank: fromRank,
-        toRank: toRank,
-      );
+  var rankPromoAfterValue = 0;
+  final rankEvents = milestoneEvents
+      .where(
+        (event) =>
+            event.kind == MilestoneKind.rankPromotion &&
+            event.stat != null &&
+            kHeroStatCandidates.contains(event.stat),
+      )
+      .toList();
+  if (rankEvents.isNotEmpty) {
+    for (final event in rankEvents) {
+      if (rankPromo == null || event.valueAfter > rankPromoAfterValue) {
+        rankPromoAfterValue = event.valueAfter;
+        rankPromo = FinishHero(
+          kind: HeroKind.rankPromotion,
+          tier: FinishTier.tier3,
+          stat: event.stat,
+          amount: event.valueAfter - event.valueBefore,
+          fromRank: event.fromRank,
+          toRank: event.toRank,
+        );
+      }
+    }
+  } else {
+    for (final stat in kHeroStatCandidates) {
+      final delta = r.statDelta[stat] ?? 0;
+      if (delta <= 0) continue;
+      final after = r.afterStats[stat] ?? 0;
+      final before = after - delta;
+      final fromRank = engine.getRank(before);
+      final toRank = engine.getRank(after);
+      if (fromRank == toRank) continue;
+      if (rankPromo == null || after > (r.afterStats[rankPromo.stat] ?? 0)) {
+        rankPromoAfterValue = after;
+        rankPromo = FinishHero(
+          kind: HeroKind.rankPromotion,
+          tier: FinishTier.tier3,
+          stat: stat,
+          amount: delta,
+          fromRank: fromRank,
+          toRank: toRank,
+        );
+      }
     }
   }
 
   // 2. Level-up.
-  final levelUp = r.leveledUp
+  final levelEvent = _firstEvent(milestoneEvents, MilestoneKind.levelUp);
+  final levelUp = levelEvent != null
+      ? FinishHero(
+          kind: HeroKind.levelUp,
+          tier: FinishTier.tier3,
+          amount: levelEvent.valueAfter,
+        )
+      : r.leveledUp
       ? FinishHero(
           kind: HeroKind.levelUp,
           tier: FinishTier.tier3,
@@ -162,7 +214,17 @@ FinishSelection selectHero(FinishResult r) {
       : null;
 
   // 3. Streak / diamond milestone.
-  final diamond = r.crossedDiamond
+  final diamondEvent = _firstEvent(
+    milestoneEvents,
+    MilestoneKind.diamondMilestone,
+  );
+  final diamond = diamondEvent != null
+      ? FinishHero(
+          kind: HeroKind.diamondMilestone,
+          tier: FinishTier.tier3,
+          amount: diamondEvent.valueAfter,
+        )
+      : r.crossedDiamond
       ? FinishHero(
           kind: HeroKind.diamondMilestone,
           tier: FinishTier.tier3,
@@ -171,7 +233,14 @@ FinishSelection selectHero(FinishResult r) {
       : null;
 
   // 4. Loot unlock.
-  final loot = r.lootUnlocked.isNotEmpty
+  final lootEvent = _firstEvent(milestoneEvents, MilestoneKind.lootUnlock);
+  final loot = lootEvent != null
+      ? FinishHero(
+          kind: HeroKind.lootUnlock,
+          tier: FinishTier.tier2,
+          lootId: lootEvent.lootId,
+        )
+      : r.lootUnlocked.isNotEmpty
       ? FinishHero(
           kind: HeroKind.lootUnlock,
           tier: FinishTier.tier2,
@@ -214,13 +283,33 @@ FinishSelection selectHero(FinishResult r) {
   List<FinishHero> secondary;
   if (ladder.isNotEmpty) {
     hero = ladder.first;
-    secondary = ladder.skip(1).toList();
+    // Level-up is never a secondary chip — the XP meter always shows the level
+    // (big when level-up is the hero, small `LV n` otherwise), so an `LV n` chip
+    // would just duplicate it. Keeps the single-peak hierarchy honest.
+    secondary = ladder
+        .skip(1)
+        .where((h) => h.kind != HeroKind.levelUp)
+        .toList();
   } else if (statGain != null) {
     hero = statGain;
-    secondary = const [];
+    secondary = [];
   } else {
     hero = const FinishHero(kind: HeroKind.recovery, tier: FinishTier.tier1);
-    secondary = const [];
+    secondary = [];
+  }
+
+  // A newly-earned title is a secondary chip (same hierarchy as loot), shown
+  // only when a level-up actually crossed a title threshold.
+  final title = r.newTitle;
+  if (title != null) {
+    secondary = [
+      ...secondary,
+      FinishHero(
+        kind: HeroKind.titleUnlock,
+        tier: FinishTier.tier2,
+        title: title,
+      ),
+    ];
   }
 
   // Muted tone for partial/abandoned: never a reserved Tier-3 celebration.
@@ -232,4 +321,11 @@ FinishSelection selectHero(FinishResult r) {
   }
 
   return FinishSelection(hero: hero, secondaryBadges: secondary);
+}
+
+MilestoneEvent? _firstEvent(List<MilestoneEvent> events, MilestoneKind kind) {
+  for (final event in events) {
+    if (event.kind == kind) return event;
+  }
+  return null;
 }

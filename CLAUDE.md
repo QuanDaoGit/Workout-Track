@@ -90,16 +90,29 @@ RPG-gamified workout tracker. Flutter app, Android-only. All persistence uses `S
 | System | Service | Key concepts |
 |--------|---------|-------------|
 | XP & Levels | `XpService` | Session XP from volume/time/sets. Threshold-based leveling. LCK stat multiplier. |
-| Combat Stats | `StatEngine` | 6 stats (STR/DEF/VIT/AGI/END/LCK). Volume-derived for STR/DEF/AGI. VIT = recovery meter. END = endurance. LCK = streak-based. Daily decay for inactivity. Calibration seed from onboarding quiz. |
+| Combat Stats | `StatEngine` | Visible radar stats are STR/AGI/END. VIT = recovery meter. LCK = streak-based XP multiplier. DEF is hidden legacy storage only. Daily decay for inactivity. Calibration seed from onboarding quiz. |
 | Classes | `ClassService`, `class_definitions.dart` | 4 classes: Assassin (Shoulders+Core), Bruiser (Chest+Back+Arms), Tank (Legs), Vanguard (all, unlocks at L10). Each has a theme color and associated body goal. |
 | Quests | `QuestService` | Weekly/side quests with XP rewards. Computed from workout sessions + class context. |
-| Loot & Inventory | `LootService`, `loot_registry.dart` | Avatar frames and themes. Rarity tiers. Equip/unequip. Boss-exclusive items excluded from random drops. |
+| Loot & Inventory | `LootService`, `loot_registry.dart` | Avatar frames and themes. Rarity tiers. Equip/unequip. Deterministic milestone unlocks for collection pull. |
 | Guild | `GuildService` | Local single-player simulation with NPC members. Deterministic per ISO week. Forge Nods social signal. |
 | Body Metrics | `BodyMetricsService`, `BodyGoalService` | Opt-in weight tracking (body-neutral by design). 7-day cadence. XP Boost Potions on weight log. |
 | Progressive Overload | `ProgressiveOverloadService` | Suggests weight/rep targets based on history. Kind-aware (compound/isolation/bodyweight). |
 | Rest & Recovery | `RestService`, `RestTimerService` | Shield charges, recovery XP, rest day protection. VIT stat integration. |
 | Programs | `ProgramService`, `programs_library.dart` | Structured workout programs with scheduled sessions. |
 | Character | `CharacterService` | Avatar, name, class. Created during onboarding. |
+
+### Product doctrine
+
+Every logged workout should make the user's character feel harder to abandon. Real training is the
+fuel; identity, streak, rank, loot, and ritual are the psychological engine. When adding or changing
+features, prefer surfaces that strengthen one of the long-term hooks:
+
+- **Identity attachment:** avatar, name, class, rank, title, frame.
+- **Competence growth:** stats, grades, XP, suggested loads, visible deltas.
+- **Collection desire:** deterministic frames, themes, titles, future cosmetic horizons.
+- **Ritual return:** home mission, workout summary, weekly cadence, LCK, guild signal.
+- **Recovery protection:** rest days, shields, VIT, and decay rules that make the build worth
+  preserving.
 
 ### Exercise data pipeline
 
@@ -179,7 +192,7 @@ Skip planning confirmation. Execute immediately without asking for approval to p
 | 4 | Migration auto-assigns class from body goal silently (no reveal page) | Existing users shouldn't be blocked from using the app by a forced cinematic; they can change class later. |
 | 5 | Ultimate requires 2x volume snapshot (min 1000kg) to prevent instant unlock | Snapshot=0 at selection time (new user) would otherwise unlock ultimate immediately with any training. |
 | 6 | ClassSprite uses errorBuilder fallback to colored placeholder | Assets not yet available; placeholder is functional and theme-consistent without blocking development. |
-| 7 | Epic frames marked bossExclusive to exclude from normal drop pool and scrap shop | Class frames are earned through training progression, not random loot; preserves achievement value. |
+| 7 | Epic frames marked bossExclusive to keep class frames progression-bound | Preserves class-frame achievement value and long-term collection pull. |
 | 8 | Type AGREE dialog for class switching (destructive action) | Locks abilities and resets ultimate progress — irreversible enough to warrant explicit user confirmation. |
 | 9 | Pending ultimate reveal flag fires on next app open, not immediately | Workout save context is wrong moment for a long cinematic; home page load is the natural celebration point. |
 | 10 | Shadow Strike extra turn loops within same round (not new round) | Preserves round count semantics and maxRounds=20 cap; extra attacks happen within the player attack phase. |

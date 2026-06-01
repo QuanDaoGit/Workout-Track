@@ -36,6 +36,7 @@ class StatEngine {
   static const _kgVolumeStats = ['STR', 'DEF', 'AGI'];
   static const _decayableStats = ['STR', 'DEF', 'AGI', 'END'];
   static const baseOutputStatValue = 10;
+  static const _enduranceScale = 150.0;
 
   /// Trailing window for the VIT recovery-balance meter.
   static const _vitalityWindowDays = 14;
@@ -277,18 +278,26 @@ class StatEngine {
     for (final session in sessions) {
       for (final log in session.exercises) {
         final volume = _volumeForLog(log);
-        endurance += _endurancePointsForLog(log);
+        final endurancePoints = _endurancePointsForLog(log);
         final primary = _primaryForLog(log, session, catalog);
-        final stat = _statForPrimaryMuscle(primary);
-        if (stat != null) {
-          volumes[stat] = (volumes[stat] ?? 0) + volume;
-        }
+        final weights = _visibleWeightsForPrimaryMuscle(primary);
+        volumes['STR'] = (volumes['STR'] ?? 0) + volume * weights.strVolume;
+        volumes['AGI'] = (volumes['AGI'] ?? 0) + volume * weights.agiVolume;
+        // DEF is retired from visible UI. Keep legacy accumulation only so old
+        // saved stat maps and tests can still decode without changing storage.
+        volumes['DEF'] = (volumes['DEF'] ?? 0) + volume * weights.defVolume;
+        endurance += endurancePoints * weights.endurancePoints;
 
         final classBonusStat = _classBonusStatForLog(session, primary);
         if (classBonusStat != null) {
           volumes[classBonusStat] =
               (volumes[classBonusStat] ?? 0) + (volume * 0.2);
         }
+        endurance += _classBonusEnduranceForLog(
+          session,
+          primary,
+          endurancePoints,
+        );
       }
     }
 
@@ -306,7 +315,7 @@ class StatEngine {
     return {
       for (final stat in _kgVolumeStats)
         stat: _withOutputBaseline(_statFromVolume(volumes[stat] ?? 0)),
-      'END': _withOutputBaseline(endurance.floor()),
+      'END': _withOutputBaseline(_statFromEndurance(endurance)),
       'LCK': _luckForSessions(sessions, catalog),
     };
   }
@@ -334,12 +343,20 @@ class StatEngine {
   ) {
     final touched = <String>{};
     for (final log in session.exercises) {
-      if (_endurancePointsForLog(log) > 0) touched.add('END');
       final primary = _primaryForLog(log, session, catalog);
-      final stat = _statForPrimaryMuscle(primary);
-      if (stat != null) touched.add(stat);
+      final weights = _visibleWeightsForPrimaryMuscle(primary);
+      if (weights.strVolume > 0) touched.add('STR');
+      if (weights.agiVolume > 0) touched.add('AGI');
+      if (weights.defVolume > 0) touched.add('DEF');
+      final endurancePoints = _endurancePointsForLog(log);
+      if (weights.endurancePoints > 0 && endurancePoints > 0) {
+        touched.add('END');
+      }
       final classBonusStat = _classBonusStatForLog(session, primary);
       if (classBonusStat != null) touched.add(classBonusStat);
+      if (_classBonusEnduranceForLog(session, primary, endurancePoints) > 0) {
+        touched.add('END');
+      }
     }
     return touched;
   }
@@ -437,13 +454,32 @@ class StatEngine {
     return switch (cls) {
       CharacterClass.bruiser => 'STR',
       CharacterClass.assassin => 'AGI',
-      // Tank focuses Legs, which now feed STR (was VIT before the recovery
-      // redesign), so the Tank bonus follows legs into STR.
-      CharacterClass.tank => 'STR',
+      // Tank's visible radar identity is durability/work-capacity, so its
+      // focus bonus is applied in END currency below.
+      CharacterClass.tank => null,
       // Balanced: the +20% bonus lands on whatever stat the trained muscle
       // already feeds (bonus on every focus, not one). The §7 #4 "80% rate"
       // refinement is deferred — this keeps a single shared 0.2 multiplier.
       CharacterClass.vanguard => statForPrimaryMuscle(primaryMuscle),
+    };
+  }
+
+  double _classBonusEnduranceForLog(
+    WorkoutSession session,
+    String primaryMuscle,
+    double endurancePoints,
+  ) {
+    final cls = _classFromStoredName(session.classAtSave);
+    if (cls == null || endurancePoints <= 0) return 0;
+    final bucket = muscleGroupForDetailed(primaryMuscle);
+    if (bucket == null || !musclesForClass(cls).contains(bucket)) return 0;
+    return switch (cls) {
+      CharacterClass.tank => endurancePoints * 0.2,
+      CharacterClass.vanguard =>
+        _visibleWeightsForPrimaryMuscle(primaryMuscle).endurancePoints > 1.5
+            ? endurancePoints * 0.2
+            : 0,
+      CharacterClass.assassin || CharacterClass.bruiser => 0,
     };
   }
 
@@ -467,13 +503,56 @@ class StatEngine {
     };
   }
 
-  String? _statForPrimaryMuscle(String muscle) => statForPrimaryMuscle(muscle);
+  _StatWeights _visibleWeightsForPrimaryMuscle(String muscle) {
+    return switch (muscle.toLowerCase()) {
+      // Pressing and arms are the clearest STR signal. They still give light
+      // AGI support and normal rep-based END so the radar does not go dead.
+      'chest' || 'triceps' || 'forearms' => const _StatWeights(
+        strVolume: 1.0,
+        agiVolume: 0.12,
+        endurancePoints: 1.0,
+      ),
+      // Pulling used to disappear into hidden DEF. It now visibly supports STR
+      // while preserving the legacy DEF accumulator for compatibility.
+      'lats' ||
+      'middle back' ||
+      'lower back' ||
+      'biceps' ||
+      'traps' ||
+      'neck' => const _StatWeights(
+        strVolume: 0.8,
+        agiVolume: 0.12,
+        defVolume: 1.0,
+        endurancePoints: 1.0,
+      ),
+      // Legs should read as durability/work-capacity for Tank. Heavy lower-body
+      // work still moves STR, but END is the dominant visible axis.
+      'quadriceps' ||
+      'hamstrings' ||
+      'glutes' ||
+      'calves' ||
+      'adductors' ||
+      'abductors' => const _StatWeights(
+        strVolume: 0.10,
+        agiVolume: 0.07,
+        endurancePoints: 5.0,
+      ),
+      // Shoulders/core are the AGI signal: control, bracing, precision.
+      'shoulders' || 'abdominals' => const _StatWeights(
+        strVolume: 0.20,
+        agiVolume: 1.0,
+        endurancePoints: 1.1,
+      ),
+      _ => const _StatWeights(),
+    };
+  }
 
-  /// Maps a primary muscle name to the kg-volume combat stat it feeds, or null
-  /// if the muscle does not contribute to a volume stat.
+  /// Legacy kg-volume mapping used by calibration seed and Vanguard's fallback
+  /// bonus path. Visible radar shaping uses [_visibleWeightsForPrimaryMuscle].
   static String? statForPrimaryMuscle(String muscle) {
     return switch (muscle.toLowerCase()) {
-      // Legs join the pressing muscles under STR (squat/deadlift = raw force).
+      // Legs still have a legacy STR volume bucket here for compatibility.
+      // The visible Tank silhouette is END-led through weighted reps above.
       // VIT is no longer fed by any muscle — it's the recovery meter.
       'chest' ||
       'triceps' ||
@@ -511,6 +590,13 @@ class StatEngine {
 
   int _statFromVolume(double volume) {
     return min(1000, (100 * log(volume / 500 + 1)).floor());
+  }
+
+  int _statFromEndurance(double endurancePoints) {
+    return min(
+      1000,
+      (100 * log(endurancePoints / _enduranceScale + 1)).floor(),
+    );
   }
 
   /// Inverse of [_statFromVolume]: the kg volume that yields [targetStat]
@@ -572,4 +658,18 @@ class StatEngine {
 
   DateTime _dateOnly(DateTime date) =>
       DateTime(date.year, date.month, date.day);
+}
+
+class _StatWeights {
+  const _StatWeights({
+    this.strVolume = 0,
+    this.agiVolume = 0,
+    this.defVolume = 0,
+    this.endurancePoints = 0,
+  });
+
+  final double strVolume;
+  final double agiVolume;
+  final double defVolume;
+  final double endurancePoints;
 }

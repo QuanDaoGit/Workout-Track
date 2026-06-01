@@ -4,6 +4,8 @@
 
 ## Now (pre-launch hardening)
 - [ ] Finalize onboarding flow polish (in progress — see `lib/pages/onboarding/`).
+- [ ] Tighten long-term hook surfaces: identity attachment, ritual return, collection pull, and
+      recovery protection.
 - [ ] Store listing draft (`store-listing/`) + first marketing copy ([../marketing/](../marketing/)).
 - [ ] Define launch instrumentation plan ([../statistics/instrumentation-plan.md](../statistics/instrumentation-plan.md)).
 - [ ] Release process dry-run ([../ops/build-release.md](../ops/build-release.md)).

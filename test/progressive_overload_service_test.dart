@@ -31,6 +31,10 @@ ExerciseLog _log(String exerciseId, List<SetEntry> sets) {
 
 SetEntry _set(double weight, int reps) => SetEntry(weight: weight, reps: reps);
 
+List<SetEntry> _sets(double weight, List<int> reps) => [
+  for (final r in reps) _set(weight, r),
+];
+
 Exercise _exercise(String id, {String? mechanic, String? equipment}) {
   return Exercise(
     id: id,
@@ -97,7 +101,7 @@ void main() {
         _session(
           date: DateTime(2025, 1, 1),
           exercises: [
-            _log('bench', [_set(80, 8)]),
+            _log('bench', _sets(80, [8, 8, 8, 8, 8])),
           ],
         ),
       ]);
@@ -116,7 +120,7 @@ void main() {
         _session(
           date: DateTime(2025, 1, 1),
           exercises: [
-            _log('bench', [_set(80, 7)]),
+            _log('bench', _sets(80, [8, 8, 8, 8, 7])),
           ],
         ),
       ]);
@@ -134,7 +138,7 @@ void main() {
         _session(
           date: DateTime(2025, 1, 1),
           exercises: [
-            _log('bench', [_set(80, 3)]),
+            _log('bench', _sets(80, [3, 3, 3, 3, 3])),
           ],
         ),
       ]);
@@ -142,7 +146,7 @@ void main() {
         _exercise('bench', mechanic: 'compound'),
         now: DateTime(2025, 1, 5),
       );
-      expect(s!.weight, 77.5);
+      expect(s!.weight, 76);
       expect(s.reps, 8);
       expect(s.reason, OverloadReason.deload);
     });
@@ -152,7 +156,7 @@ void main() {
         _session(
           date: DateTime(2025, 1, 1),
           exercises: [
-            _log('bench', [_set(80, 8)]),
+            _log('bench', _sets(80, [8, 8, 8, 8, 8])),
           ],
         ),
       ]);
@@ -160,7 +164,7 @@ void main() {
         _exercise('bench', mechanic: 'compound'),
         now: DateTime(2025, 1, 30),
       );
-      expect(s!.weight, 80);
+      expect(s!.weight, 76);
       expect(s.reps, 8);
       expect(s.reason, OverloadReason.detrained);
     });
@@ -171,7 +175,7 @@ void main() {
         _session(
           date: DateTime(2025, 1, 1),
           exercises: [
-            _log('bench', [_set(80, 8), _set(80, 6)]),
+            _log('bench', _sets(80, [8, 8, 8, 8, 8])),
           ],
         ),
       ]);
@@ -190,7 +194,7 @@ void main() {
         _session(
           date: DateTime(2025, 1, 1),
           exercises: [
-            _log('curl', [_set(20, 12)]),
+            _log('curl', _sets(20, [12, 12, 12, 12, 12])),
           ],
         ),
       ]);
@@ -208,7 +212,7 @@ void main() {
         _session(
           date: DateTime(2025, 1, 1),
           exercises: [
-            _log('curl', [_set(20, 11)]),
+            _log('curl', _sets(20, [12, 12, 12, 12, 11])),
           ],
         ),
       ]);
@@ -228,7 +232,7 @@ void main() {
         _session(
           date: DateTime(2025, 1, 1),
           exercises: [
-            _log('pullup', [_set(0, 15)]),
+            _log('pullup', _sets(0, [15, 15, 15, 15, 15])),
           ],
         ),
       ]);
@@ -246,7 +250,7 @@ void main() {
         _session(
           date: DateTime(2025, 1, 1),
           exercises: [
-            _log('pullup', [_set(0, 10)]),
+            _log('pullup', _sets(0, [10, 10, 10, 10, 10])),
           ],
         ),
       ]);

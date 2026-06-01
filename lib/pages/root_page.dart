@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/workout_models.dart';
 import '../services/exercise_catalog_service.dart';
+import '../services/loot_drop_service.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_progress_bar.dart';
@@ -37,6 +38,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   WorkoutSession? _ongoingSession;
   bool _loadingOngoing = false;
   bool _showingExpiredPausedSummary = false;
+  bool _hasUnviewedLootDrops = false;
   StreamSubscription<void>? _storageSubscription;
 
   final _homeKey = GlobalKey<HomePageState>();
@@ -50,6 +52,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadOngoingSession();
+    _loadLootBadge();
     _dockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_ongoingSession != null && mounted) setState(() {});
       _loadOngoingSession();
@@ -103,6 +106,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     if (index == 4) _profileKey.currentState?.reload();
     _loadOngoingSession();
     setState(() => _currentIndex = index);
+    _loadLootBadge();
   }
 
   void _reloadQuestAwarePages() {
@@ -112,6 +116,15 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     _guildKey.currentState?.reload();
     _profileKey.currentState?.reload();
     _loadOngoingSession();
+    _loadLootBadge();
+  }
+
+  Future<void> _loadLootBadge() async {
+    final hasUnviewed = await LootDropService().hasUnviewedDrops();
+    if (!mounted) return;
+    if (_hasUnviewedLootDrops != hasUnviewed) {
+      setState(() => _hasUnviewedLootDrops = hasUnviewed);
+    }
   }
 
   Future<void> _loadOngoingSession() async {
@@ -233,32 +246,66 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
         currentIndex: _currentIndex,
         type: BottomNavigationBarType.fixed,
         onTap: _selectTab,
-        items: const [
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: ImageIcon(AssetImage('assets/icons/control/icon_map.png')),
             label: 'Home',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: ImageIcon(AssetImage('assets/icons/control/icon_sword.png')),
             label: 'Workout',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: ImageIcon(AssetImage('assets/icons/control/icon_scroll.png')),
             label: 'Quests',
           ),
           // No guild pixel asset yet — sharp Material icon per icon rules.
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.shield_sharp),
             label: 'Guild',
           ),
           BottomNavigationBarItem(
-            icon: ImageIcon(
-              AssetImage('assets/icons/control/icon_character.png'),
+            icon: _LootBadgeIcon(
+              showBadge: _hasUnviewedLootDrops,
+              child: const ImageIcon(
+                AssetImage('assets/icons/control/icon_character.png'),
+              ),
             ),
             label: 'Profile',
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LootBadgeIcon extends StatelessWidget {
+  const _LootBadgeIcon({required this.child, required this.showBadge});
+
+  final Widget child;
+  final bool showBadge;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        child,
+        if (showBadge)
+          Positioned(
+            right: -4,
+            top: -4,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: kAmber,
+                border: Border.all(color: kBg),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

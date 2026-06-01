@@ -46,7 +46,7 @@ After changing `pubspec.yaml` (assets, fonts, dependencies), run `flutter pub ge
 | Architecture, services, persistence, app boot sequence | [CLAUDE.md](CLAUDE.md) |
 | Theme tokens, icon rules, motion | [CLAUDE.md](CLAUDE.md) "Theme Conventions" + `lib/theme/tokens.dart` |
 | Product scope & intent | [docs/PRD.md](docs/PRD.md) |
-| Product/mechanics rationale (stats, classes, overload) | [docs/PRODUCT.md](docs/PRODUCT.md) |
+| Product doctrine + mechanics rationale (long-term hooks, stats, classes, overload) | [docs/PRODUCT.md](docs/PRODUCT.md) |
 | Design / UX / brand rules | [design/](design/) |
 | Build & release mechanics | [ops/](ops/) |
 

@@ -17,10 +17,11 @@ assumption-mapping (no users yet); post-launch: real interviews, usability tests
    `[assumption]`, or `[risk]`. Pre-launch, most things are assumptions — say so.
 2. **Tie research to a decision.** A finding is only useful if it changes a roadmap or design call.
    Link findings to [../docs/PRD.md](../docs/PRD.md) or [../app-management/roadmap.md](../app-management/roadmap.md).
-3. **Respect the product's spine.** The soul rule ("real workout data is the only input") and the
-   body-neutral mandate are product principles, not open questions — research informs *how*, not *whether*.
-4. **Competitive lens:** Ironbit's wedge is *earned, honest progression + offline/private + arcade
-   identity*. Evaluate competitors against that, not on feature count.
+3. **Respect the product's spine.** The soul doctrine is long-term attachment through real
+   training: identity, competence, collection, ritual return, and recovery protection. The
+   body-neutral mandate remains a product principle, not an open question.
+4. **Competitive lens:** Ironbit's wedge is *earned character attachment + offline/private +
+   arcade identity*. Evaluate competitors against that, not on feature count.
 
 ## Do NOT
 - Invent user quotes or data. Pre-launch there are no users — mark gaps as gaps.

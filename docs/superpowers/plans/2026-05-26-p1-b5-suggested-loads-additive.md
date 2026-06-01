@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add the two genuinely-new, soul-rule-aligned pieces of B5 on top of the **already-shipped** progression engine: a 0.9×1RM safety cap on suggestions, and a per-exercise progression chart with a plateau cue in the Trends surface.
+**Goal:** Add the two genuinely-new, hook-aligned pieces of B5 on top of the **already-shipped** progression engine: a 0.9×1RM safety cap on suggestions, and a per-exercise progression chart with a plateau cue in the Trends surface.
 
 **Architecture:** `ProgressiveOverloadService` (`lib/services/progressive_overload_service.dart`) already implements `suggestNext` (plate-true ±2.5 kg / repeat / deload / detrained branches), `epley1RM`, rep-targets-by-kind, PR detection, and deltas. The "Suggested loads" toggle (`ProgressionSettingsService`) already exists and **defaults ON** (per PRODUCT.md). Per the reconciled spec we therefore **reject** the prompt's ×0.95 math (produces non-loadable weights) and its default-OFF + opt-in-prompt flow (contradicts PRODUCT.md). We add only: (1) the 0.9×1RM cap inside `suggestNext`, (2) a per-exercise Trends chart. The suggestion never auto-fills the field (already true — user taps the TRY pill).
 

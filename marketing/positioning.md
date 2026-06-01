@@ -3,28 +3,29 @@
 > Seed document. Refine as the launch story firms up.
 
 ## One-liner
-A workout tracker where every rep levels up a real RPG character — built only from your actual
-training, fully offline, no account.
+A workout tracker where every rep builds a real RPG character you want to keep coming back to —
+fully offline, no account.
 
 ## Target user
-Solo gym-goers, beginner to early-intermediate, who stay consistent better when progress is
-*visible and earned*. Plays/played games; likes pixel/arcade aesthetics.
+Solo gym-goers, beginner to early-intermediate, who stay consistent better when progress is visible,
+earned, named, and attached to an identity. Plays/played games; likes pixel/arcade aesthetics.
 
 ## The core promise
-Real workout data is the only input to character growth. No fake streaks, no dopamine farming,
-no pay-to-win — you earn your stats by training.
+Every logged workout should make your character feel harder to abandon. Real training fuels the
+fantasy; identity, streak, rank, loot, and ritual make the progress stick.
 
 ## Differentiators (all true today)
-- **Earned progression, not vanity metrics** — 6 combat stats (STR/DEF/VIT/AGI/END/LCK) derived
-  from logged volume and reps.
+- **Earned identity, not vanity metrics** — readable build stats (STR/AGI/END), recovery, streak,
+  class, rank, title, and loot derived from logged training.
 - **Offline & private** — local-only storage, no account, no cloud, no tracking, no ads, no IAP.
 - **Body-neutral by design** — no weight-shaming, no good/bad framing.
 - **Pixel-arcade identity** — a distinct, cohesive visual world (see [../design/](../design/)).
 
 ## Messaging pillars
-1. *Train → Level up* (the RPG hook).
-2. *Honest progress* (real data only).
-3. *Yours, private, offline*.
+1. *Train → become harder to abandon* (identity hook).
+2. *Every rep has a receipt* (competence hook).
+3. *Complete the build* (collection/rank hook).
+4. *Yours, private, offline* (trust anchor).
 
 ## Channels to consider (pre-launch)
 Play Store / ASO, short-form video (gameplay-style stat-up moments), indie-game & fitness

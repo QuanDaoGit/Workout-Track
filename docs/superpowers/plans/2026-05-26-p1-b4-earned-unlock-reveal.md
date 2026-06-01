@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give workouts the satisfying "you got something" moment the original B4 wanted — but **earned, not RNG.** When a real-training milestone unlocks a loot item on workout save, play a post-session reveal/celebration, add a Loot Feed of recent unlocks, and flag unviewed unlocks on the Profile tab.
+**Goal:** Give workouts the satisfying "you got something" moment the original B4 wanted through **earned deterministic milestones.** When a real-training milestone unlocks a loot item on workout save, play a post-session reveal/celebration, add a Loot Feed of recent unlocks, and flag unviewed unlocks on the Profile tab.
 
-**Architecture (why this is small + soul-rule-clean):** The original B4 (RNG drops, pity timer, fragments, scrap, server roll) is **rejected** — it violates PRODUCT.md's soul rule ("real workout data is the only input") and re-introduces the scrap/battle economy `migration_service` is actively purging. The shipped loot system is already fully deterministic: `LootService.evaluateUnlocks({stats, sessions})` walks `lootRegistry`, grants newly-eligible milestone unlocks, and **returns the newly-granted IDs "for caller-side surfacing."** `workout_summary.dart:195` already calls it on save **but discards the return.** So the reveal is: capture that return → surface it. No new economy, no RNG, no PRNG.
+**Architecture (why this is small + core-loop-aligned):** The original B4 (random drops, pity timer, fragments, scrap, server roll) is **rejected for this shipped plan** because it dilutes the training-to-character loop and re-introduces the scrap/battle economy `migration_service` is actively purging. The shipped loot system is already fully deterministic: `LootService.evaluateUnlocks({stats, sessions})` walks `lootRegistry`, grants newly-eligible milestone unlocks, and **returns the newly-granted IDs "for caller-side surfacing."** `workout_summary.dart:195` already calls it on save **but discards the return.** So the reveal is: capture that return → surface it. No new economy, no PRNG.
 
 **Tech Stack:** Flutter / Dart. Reuse `LootItem`/`LootRarity {common, uncommon, rare, epic}` (`lib/models/loot_item.dart`), `lootItemById` (`lib/data/loot_registry.dart`), the `ArcadeRouteMotion.reveal` + `StrobeFlash` reveal idioms, and `shared_preferences` for state. Tests via `flutter test`; lint baseline ~8, add zero new.
 
@@ -116,7 +116,7 @@ Color rarityColor(LootRarity r) => switch (r) {
 };
 
 /// Post-session celebration for items unlocked by hitting a real training
-/// milestone. Earned, never RNG. One card per unlocked item.
+/// milestone. Earned through a deterministic rule. One card per unlocked item.
 class EarnedUnlockReveal extends StatelessWidget {
   const EarnedUnlockReveal({
     super.key,
@@ -210,7 +210,7 @@ Run: `flutter test test/earned_unlock_reveal_test.dart test/workout_summary_unlo
 Run: `flutter analyze` (zero new).
 ```bash
 git add lib/widgets/earned_unlock_reveal.dart "lib/pages/Workout session/workout_summary.dart" test/earned_unlock_reveal_test.dart test/workout_summary_unlock_capture_test.dart
-git commit -m "feat(loot): earned-unlock reveal on workout save (deterministic, no RNG)
+git commit -m "feat(loot): earned-unlock reveal on workout save
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -346,10 +346,10 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ---
 
 ## Out of scope (rejected per reconciled spec)
-RNG drop roll, base probability table, LCK rarity shift, pity timer, 2-hour cooldown, fragments + auto-assemble, scrap, server-side / signed PRNG, "legendary" tier (the enum's top tier is `epic`). All conflict with the soul rule and the removed scrap/battle economy.
+Random drop roll, base probability table, LCK rarity shift, pity timer, 2-hour cooldown, fragments + auto-assemble, scrap, server-side / signed PRNG, "legendary" tier (the enum's top tier is `epic`). These were intentionally left out of this deterministic milestone pass because they would shift attention away from the clean training-to-character loop and the removed scrap/battle economy.
 
 ## Self-Review
-- **Spec coverage:** capture unlocks (T1) ✓; 3-stage-style reveal, skippable/instant under reduce-motion, tier-colored (T2) ✓; Loot Feed + unviewed badge (T3) ✓; optional new milestones (T4) ✓; all RNG mechanics excluded + documented ✓.
+- **Spec coverage:** capture unlocks (T1) ✓; 3-stage-style reveal, skippable/instant under reduce-motion, tier-colored (T2) ✓; Loot Feed + unviewed badge (T3) ✓; optional new milestones (T4) ✓; probabilistic mechanics excluded + documented ✓.
 - **Placeholder scan:** `<profile-tab-host-file>` in T3 Step 6 is a locate-target (the bottom-nav host, likely `root_page.dart`); T3 Step 5 is locate-then-edit because the exact badge insertion depends on the nav structure. The service (T3 Step 3) and reveal widget (T2 Step 3) are complete code.
 - **Type consistency:** `EarnedUnlockReveal({items: List<LootItem>, reduceMotion: bool})` matches tests + the summary render. `LootFeedService.recordUnlocks(List<String>)` / `recentEntries()→List<LootFeedEntry>` / `hasUnviewed()` / `markAllViewed()` match tests and the T1 capture call. `LootRarity` switch covers all four real values (common/uncommon/rare/epic) — exhaustive, no "legendary".
 - **StrobeFlash API:** `trigger`/`color`/`opacity`/`toggles`/`toggleMs`/`borderRadius` match the shipped widget; `toggles: 0` under reduce-motion = no flash.

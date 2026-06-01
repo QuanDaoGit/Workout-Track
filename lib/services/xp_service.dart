@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../models/workout_models.dart';
+import '../models/xp_reward_models.dart';
 import 'workout_metric_service.dart';
 
 class XpProgress {
@@ -72,6 +73,53 @@ class XpService {
     return _completedSessionXP(session, session.actualDurationSeconds);
   }
 
+  static SessionRewardEligibility rewardEligibility(WorkoutSession session) {
+    if (session.isAbandoned) {
+      return const SessionRewardEligibility(
+        eligible: false,
+        reason: 'Session ended early.',
+      );
+    }
+    if (session.isOngoing || session.isPartial) {
+      return const SessionRewardEligibility(
+        eligible: false,
+        reason: 'Finish the session to earn XP.',
+      );
+    }
+
+    final durationEligible = session.actualDurationSeconds >= 15 * 60;
+    final volumeEligible = _totalVolume(session) >= 200;
+    final exerciseEligible =
+        session.exercises.where((log) => log.sets.isNotEmpty).length >= 3;
+    if (durationEligible || volumeEligible || exerciseEligible) {
+      return const SessionRewardEligibility(
+        eligible: true,
+        reason: 'Workout qualifies for rewards.',
+      );
+    }
+    return const SessionRewardEligibility(
+      eligible: false,
+      reason: 'Log 15 min, 200 kg, or 3 exercises to earn XP.',
+    );
+  }
+
+  static SessionXpBreakdown buildBreakdown({
+    required WorkoutSession session,
+    required int baseXP,
+    required double lckMultiplier,
+    required double potionMultiplier,
+    int lootBonusXP = 0,
+  }) {
+    final eligibility = rewardEligibility(session);
+    return SessionXpBreakdown(
+      eligibility: eligibility,
+      baseXP: eligibility.eligible ? baseXP : 0,
+      lckMultiplier: eligibility.eligible ? lckMultiplier : 1.0,
+      potionMultiplier: eligibility.eligible ? potionMultiplier : 1.0,
+      lootBonusXP: eligibility.eligible ? lootBonusXP : 0,
+    );
+  }
+
   static int lckForSessions(List<WorkoutSession> sessions, {DateTime? now}) =>
       min(WorkoutMetricService.currentStreak(sessions, now: now), 100);
 
@@ -90,6 +138,9 @@ class XpService {
     xp += elapsedSeconds ~/ 60;
     return xp;
   }
+
+  static double _totalVolume(WorkoutSession session) =>
+      session.exercises.fold(0, (sum, log) => sum + log.totalVolume);
 
   static int _partialPerformanceXP(WorkoutSession session, int elapsedSeconds) {
     if (session.exercises.isEmpty && elapsedSeconds <= 0) return 0;

@@ -17,8 +17,8 @@ Pre-launch: the job is to build the launch story, not run live campaigns (no dat
 - **Tone:** matches the product — arcade, earned-progression, a little playful, never hype-y or
   body-shaming. The product is **body-neutral** (see [PRODUCT.md](../docs/PRODUCT.md)); marketing
   must be too. No "burn fat fast", no before/after shaming, no weight-loss promises.
-- **The hook:** "every rep levels up a real character." Real training is the only input — lean on
-  that honesty as the differentiator vs. dopamine-farming fitness apps.
+- **The hook:** every logged workout makes your character harder to abandon. Lean on identity,
+  rank, loot, ritual return, and the fact that the fantasy is fed by real training.
 - **Claims:** only claim what the app does. It is offline, no-account, no-tracking, no IAP — these
   are genuine selling points; use them. Don't claim social, AI coaching, or sync (out of scope).
 

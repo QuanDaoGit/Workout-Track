@@ -25,21 +25,21 @@ class LootUnlockRule {
   String get displayHint {
     switch (kind) {
       case UnlockKind.sessions:
-        return 'COMPLETE ${threshold.toInt()} SESSIONS';
+        return 'Earned through completed training sessions.';
       case UnlockKind.lifetimeVolume:
-        return 'LIFT ${threshold.toInt()} KG LIFETIME';
+        return 'Earned through lifetime training volume.';
       case UnlockKind.lifetimeReps:
-        return 'LOG ${threshold.toInt()} REPS LIFETIME';
+        return 'Earned through lifetime logged reps.';
       case UnlockKind.muscleSessions:
-        return 'COMPLETE ${threshold.toInt()} ${(muscleGroup ?? '').toUpperCase()} SESSIONS';
+        return 'Earned by returning to ${muscleGroup ?? 'this focus'}.';
       case UnlockKind.muscleVolume:
-        return 'LIFT ${threshold.toInt()} KG ${(muscleGroup ?? '').toUpperCase()}';
+        return 'Earned by building ${muscleGroup ?? 'focused'} volume.';
       case UnlockKind.statThreshold:
-        return 'REACH $statKey ${threshold.toInt()}';
+        return 'Earned as your ${statKey ?? 'stat'} rank climbs.';
       case UnlockKind.anyStatThreshold:
-        return 'ANY STAT ${threshold.toInt()}';
+        return 'Earned as one combat stat climbs.';
       case UnlockKind.allStatsAbove:
-        return 'ALL STATS ABOVE ${threshold.toInt()}';
+        return 'Earned by raising your combat stats together.';
     }
   }
 }

@@ -7,6 +7,9 @@
 Pixel arcade, **dark mode only**. Neon-on-near-black. Sharp 4px corners, monospaced counters,
 PressStart2P headings. The feel: a retro RPG/arcade cabinet, earned and a little gritty — not glossy.
 
+The visual identity should build attachment. The user is not just tracking sets; they are returning
+to a character, a rank, a frame, a title, and a ritual that remembers their effort.
+
 ## Palette (tokens)
 | Token | Hex | Use |
 |---|---|---|
@@ -33,6 +36,14 @@ Vanguard `0xFFB14DFF` (violet).
 - Radius 4px (`kCardRadius`). Primary card border `1.2` (`kPrimaryCardBorderWidth`).
 - Motion: `kMotionFast` 120ms, `kMotionBase` 180ms, `kMotionPop` 220ms, curve `easeOutCubic`.
 - `neonGlow()` for accent box shadows.
+
+## Psychological hooks
+- **Identity:** avatar, class color, title, rank, and frame should be visible whenever they can make
+  the user feel ownership.
+- **Competence:** stats, grades, XP, and load suggestions should make progress concrete, not vague.
+- **Collection:** loot should feel like a character sheet filling in over months.
+- **Ritual:** daily mission, summary beats, and LCK should make return visits feel expected.
+- **Protection:** recovery and rest should feel like preserving the build.
 
 ## Body-neutral mandate
 No red/green good-bad framing on bodyweight or deltas. Directional change is shown with muted

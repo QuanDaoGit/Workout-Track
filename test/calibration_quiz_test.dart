@@ -107,6 +107,19 @@ void main() {
       expect(find.text('this sets your class.'), findsOneWidget);
     });
 
+    testWidgets('Q1 goal cards stretch to the content width', (tester) async {
+      await _openQuiz(tester, reducedMotion: true);
+
+      final card = find
+          .ancestor(
+            of: find.text('GET LEANER'),
+            matching: find.byType(AnimatedContainer),
+          )
+          .first;
+
+      expect(tester.getSize(card).width, greaterThan(700));
+    });
+
     testWidgets('Q1 tap advances to Q2', (tester) async {
       await _openQuiz(tester, reducedMotion: true);
 

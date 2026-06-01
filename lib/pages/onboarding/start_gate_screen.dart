@@ -263,8 +263,7 @@ class _StartGateScreenState extends State<StartGateScreen> {
     bool reduceMotion,
   ) {
     return Semantics(
-      label:
-          'Character: ${character.characterName}, Recruit, Level 1',
+      label: 'Character: ${character.characterName}, Recruit, Level 1',
       container: true,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 180),

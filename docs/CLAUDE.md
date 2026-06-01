@@ -9,7 +9,7 @@ without reading code.
 
 ## What lives here
 - `PRD.md` — requirements, scope, shipped vs out-of-scope. Update when scope changes or a feature ships.
-- `PRODUCT.md` — the soul rule and the *mechanics* rationale (stat math, class bonuses, overload). Update when mechanics change.
+- `PRODUCT.md` — the soul doctrine and the *mechanics* rationale (stat math, class bonuses, overload). Update when mechanics change.
 - `superpowers/plans/` — dated feature specs (frozen once shipped; do not rewrite history).
 - `decisions/` — ADRs.
 
@@ -18,8 +18,10 @@ without reading code.
    (`lib/services/`, `lib/theme/tokens.dart`). These docs went stale once already — keep them honest.
 2. **Don't duplicate the root CLAUDE.md.** Architecture, tokens, and file layout are *its* job.
    Link to it; don't restate it.
-3. **Respect the soul rule.** "Real workout data is the only input to character growth." Any spec
-   that adds RNG, manual-confirm quests, or non-training inputs contradicts PRODUCT.md — flag it.
+3. **Respect the soul doctrine.** Every logged workout should make the user's character feel harder
+   to abandon. Specs should strengthen identity attachment, competence growth, collection desire,
+   ritual return, rank aspiration, or recovery protection while keeping the real-training trust
+   anchor intact.
 4. **Keep PRD current-state accurate.** It is the "read first" doc per the root working rules.
    The 6th stat (END), classes, guild, onboarding, loot, programs, body metrics are all *shipped*.
 

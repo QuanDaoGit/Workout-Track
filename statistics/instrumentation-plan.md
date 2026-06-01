@@ -27,9 +27,16 @@ crash log the user can share) is defensible and high-value. Keep it a distinct d
 - **P1 Friction:** onboarding step drop-off, workout-save failures.
 - **P2 Performance:** screen TTI for heavy screens (exercise picker, summary), jank on lists.
 
-## Privacy guardrails (non-negotiable if any data is collected)
+## Trust anchors (if any data is collected)
 - Opt-in, off by default. No PII, no bodyweight values, no exercise content off-device.
 - Disclose in store listing + in-app. Provide a kill switch.
+
+## Hook-health priorities
+- Identity attachment: class confirmed, avatar selected, name committed, profile returns.
+- Ritual return: D1/D7/D30 return, sessions/week, home mission completion.
+- Competence growth: first stat delta seen, level-up seen, suggested-load usage.
+- Collection desire: inventory opens, unlock viewed, title/frame equipped.
+- Recovery protection: planned rest viewed, shield used, VIT recovered.
 
 ## Next action
 Get the user's decision on posture (A/B/C) and on crash reporting, then record it as an ADR in

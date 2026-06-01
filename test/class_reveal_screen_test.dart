@@ -310,7 +310,8 @@ Future<void> _pumpReveal(
     MaterialApp(
       // Propagate reduced-motion to pushed routes (Avatar/Name/StartGate).
       builder: reducedMotion
-          ? (context, child) => _ReducedMotion(child: child ?? const SizedBox.shrink())
+          ? (context, child) =>
+                _ReducedMotion(child: child ?? const SizedBox.shrink())
           : null,
       home: ClassRevealScreen(
         result: result,

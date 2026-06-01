@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:workout_track/models/finish_result.dart';
+import 'package:workout_track/models/milestone_models.dart';
 
 /// Unit tests for the pure hero/tier ladder (§5.2 / §5.3 of the design brief).
 void main() {
@@ -12,6 +13,7 @@ void main() {
     int lckBefore = 0,
     int lckAfter = 0,
     List<String> lootUnlocked = const [],
+    List<MilestoneEvent> milestoneEvents = const [],
   }) => FinishResult(
     completion: completion,
     earnedXP: 50,
@@ -26,6 +28,7 @@ void main() {
     totalSets: 6,
     exerciseCount: 3,
     estimatedCalories: 120,
+    milestoneEvents: milestoneEvents,
   );
 
   test('rank promotion is the top hero at Tier 3', () {
@@ -68,8 +71,14 @@ void main() {
     expect(sel.hero.tier, FinishTier.tier3);
     expect(sel.hero.amount, 1); // new diamond count
     // Loot demotes to a secondary badge — never a second big beat.
-    expect(sel.secondaryBadges.map((b) => b.kind), contains(HeroKind.lootUnlock));
-    expect(sel.secondaryBadges.every((b) => b.tier != FinishTier.tier3), isTrue);
+    expect(
+      sel.secondaryBadges.map((b) => b.kind),
+      contains(HeroKind.lootUnlock),
+    );
+    expect(
+      sel.secondaryBadges.every((b) => b.tier != FinishTier.tier3),
+      isTrue,
+    );
   });
 
   test('loot unlock wins over an ordinary gain, at Tier 2', () {
@@ -85,9 +94,32 @@ void main() {
     expect(sel.hero.lootId, 'frame_x');
   });
 
+  test('milestone events can drive a valley loot hero', () {
+    final sel = selectHero(
+      result(
+        statDelta: {'STR': 2},
+        afterStats: {'STR': 430},
+        milestoneEvents: const [
+          MilestoneEvent(
+            kind: MilestoneKind.lootUnlock,
+            label: 'NEON FRAME',
+            lootId: 'frame_neon',
+          ),
+        ],
+      ),
+    );
+
+    expect(sel.hero.kind, HeroKind.lootUnlock);
+    expect(sel.hero.tier, FinishTier.tier2);
+    expect(sel.hero.lootId, 'frame_neon');
+  });
+
   test('largest gain is the default hero; Tier 2 only above the threshold', () {
     final big = selectHero(
-      result(statDelta: {'STR': 12, 'AGI': 4}, afterStats: {'STR': 200, 'AGI': 60}),
+      result(
+        statDelta: {'STR': 12, 'AGI': 4},
+        afterStats: {'STR': 200, 'AGI': 60},
+      ),
     );
     expect(big.hero.kind, HeroKind.statGain);
     expect(big.hero.stat, 'STR');
@@ -113,17 +145,29 @@ void main() {
   });
 
   test('a higher hero demotes other fired events to secondary badges', () {
-    // Rank promo (hero) + level-up (secondary).
+    // Rank promo (hero) + loot (secondary). A co-occurring level-up is NOT a
+    // secondary chip — the XP meter owns the level display (strict single-peak),
+    // so it never duplicates as `LV n`.
     final sel = selectHero(
       result(
         oldTotalXP: 40,
-        newTotalXP: 60,
+        newTotalXP: 60, // a level-up that loses the ladder to the rank-up
         statDelta: {'STR': 10},
         afterStats: {'STR': 100},
+        lootUnlocked: ['frame_x'],
       ),
     );
     expect(sel.hero.kind, HeroKind.rankPromotion);
-    expect(sel.secondaryBadges.map((b) => b.kind), contains(HeroKind.levelUp));
+    // Loot demotes to a secondary badge.
+    expect(
+      sel.secondaryBadges.map((b) => b.kind),
+      contains(HeroKind.lootUnlock),
+    );
+    // Level-up is shown by the meter, never as a chip.
+    expect(
+      sel.secondaryBadges.map((b) => b.kind),
+      isNot(contains(HeroKind.levelUp)),
+    );
     // The default largest-gain (5) is NOT also shown as a badge.
     expect(
       sel.secondaryBadges.map((b) => b.kind),
@@ -153,5 +197,33 @@ void main() {
       result(completion: FinishCompletion.abandoned),
     );
     expect(abandoned.hero.tier, FinishTier.tier1);
+  });
+
+  test('a real title cross adds a title chip to the secondary badges', () {
+    // Level 3 (Recruit) -> level 5 (Squire) crosses a title threshold.
+    final sel = selectHero(
+      result(
+        oldTotalXP: 200,
+        newTotalXP: 500,
+        statDelta: {'STR': 3},
+        afterStats: {'STR': 50},
+      ),
+    );
+    expect(sel.hero.kind, HeroKind.levelUp);
+    final titles = sel.secondaryBadges.where(
+      (b) => b.kind == HeroKind.titleUnlock,
+    );
+    expect(titles.length, 1);
+    expect(titles.first.title, 'Squire');
+  });
+
+  test('a level-up with no title change adds no title chip', () {
+    // Level 1 -> 2: still Recruit, no new title.
+    final sel = selectHero(result(oldTotalXP: 0, newTotalXP: 65));
+    expect(sel.hero.kind, HeroKind.levelUp);
+    expect(
+      sel.secondaryBadges.any((b) => b.kind == HeroKind.titleUnlock),
+      isFalse,
+    );
   });
 }

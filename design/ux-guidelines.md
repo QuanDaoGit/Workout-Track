@@ -20,6 +20,15 @@
 Use the token durations/curve (`kMotionFast/Base/Pop`, `easeOutCubic`). Micro-interactions should
 feel tactile (depress on hold, phosphor flash on tap) but never block input.
 
+## Long-term hooks
+- Use identity surfaces generously: avatar, class, rank, title, and equipped frame should appear
+  wherever they reinforce ownership.
+- Make effort visible quickly after training: stat deltas, XP, progress bars, grade changes, and
+  unlock receipts should be easy to scan.
+- Reward pacing should suggest a future self without turning into a checklist countdown. Horizon
+  copy should create pull, not pressure.
+- Recovery UX should frame planned rest as protecting the character and preserving the ritual.
+
 ## Interaction patterns worth preserving
 - Suggested loads pre-fill Set 1 in `kMutedText` ("the app's guess"); tapping brightens to `kText`.
   Logging Set 1 copies its values into empty subsequent rows.
@@ -30,4 +39,5 @@ feel tactile (depress on hold, phosphor flash on tap) but never block input.
 1. Theme coherence — only `tokens.dart` colors/fonts/radii.
 2. Icons — sharp/pixel only, consistent within the screen.
 3. Body-neutral — no good/bad color framing on metrics.
-4. Capture a screenshot into `screenshots/` for the record.
+4. Hook clarity — the screen should support identity, competence, collection, ritual, or recovery.
+5. Capture a screenshot into `screenshots/` for the record.

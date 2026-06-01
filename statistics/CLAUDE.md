@@ -10,8 +10,8 @@ So instrumentation is a **product decision, not just wiring**: any measurement m
 privacy promise. Resolve that tension *before* adding SDKs.
 
 ## Purpose
-Define *what to measure and how to measure it without betraying the privacy promise*, then (once
-decided) hold dashboards, reports, and the metrics glossary. No real data exists yet.
+Define *what to measure and how to measure hook health without weakening the offline trust anchor*,
+then (once decided) hold dashboards, reports, and the metrics glossary. No real data exists yet.
 
 ## What lives here
 - `instrumentation-plan.md` — the observability/analytics plan and the privacy decision. **Read first.**
@@ -25,8 +25,9 @@ decided) hold dashboards, reports, and the metrics glossary. No real data exists
 2. **Crash reporting ≠ analytics.** Symbolicated crash capture (e.g. local logs or an opt-in
    reporter) can be justified even under a strict privacy posture — treat it separately.
 3. **Define the metric before you measure it.** New KPI → add it to `metrics-glossary.md` first.
-4. **Tie metrics to the funnel that matters:** onboarding completion → first workout → week-1
-   retention → habit (3+ sessions/week). These are the survival metrics for this app.
+4. **Tie metrics to the hooks that matter:** onboarding completion → first workout → week-1 return
+   → habit → character attachment → collection engagement. These are the survival metrics for this
+   app.
 
 ## Do NOT
 - Wire any third-party analytics/crash SDK without the privacy decision being recorded here and

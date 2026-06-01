@@ -195,11 +195,7 @@ class CalibrationService {
     final volume = StatEngine.volumeForStat(
       StrengthStandards.targetStatForTier(tier),
     );
-    final seed = <String, double>{
-      'STR': volume,
-      'DEF': volume,
-      'AGI': volume,
-    };
+    final seed = <String, double>{'STR': volume, 'DEF': volume, 'AGI': volume};
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_seedKey, jsonEncode(seed));
     await prefs.setInt(_sessionCountKey, calibrationSessionTarget);

@@ -10,8 +10,8 @@ class ProgressiveOverloadService {
     : _sessions = List.of(sessions)..sort((a, b) => b.date.compareTo(a.date));
 
   static const double _weightIncrement = 2.5;
-  static const int _detrainedThresholdDays = 21;
-  static const int _deloadMissThreshold = 3;
+  static const int _minimumSetsForSuggestion = 5;
+  static const int _returnFromBreakDays = 14;
 
   static const Map<ExerciseKind, int> _repTargetByKind = {
     ExerciseKind.compound: 8,
@@ -38,34 +38,21 @@ class ProgressiveOverloadService {
     return null;
   }
 
-  /// Most recent session date that contains [exerciseId], or null.
-  DateTime? _lastSessionDate(String exerciseId) {
+  Future<ExerciseProgressionSnapshot?> snapshotFor(Exercise exercise) async {
+    final matches = <({WorkoutSession session, ExerciseLog log})>[];
+    var totalSets = 0;
     for (final session in _sessions) {
+      if (session.isPartial || session.isAbandoned) continue;
       for (final log in session.exercises) {
-        if (log.exerciseId == exerciseId && log.sets.isNotEmpty) {
-          return session.date;
-        }
+        if (log.exerciseId != exercise.id || log.sets.isEmpty) continue;
+        matches.add((session: session, log: log));
+        totalSets += log.sets.length;
       }
     }
-    return null;
-  }
+    if (matches.isEmpty) return null;
 
-  /// Linear-progression suggestion for the upcoming Set 1 of [exercise].
-  /// Returns null when there is no history.
-  ///
-  /// Algorithm:
-  ///   - Bodyweight: +1 rep if target reps hit, else repeat reps.
-  ///   - Weighted, gap > 21d: repeat weight (detrained).
-  ///   - Weighted, missed by 4+: weight − 2.5 kg (deload).
-  ///   - Weighted, met target: weight + 2.5 kg.
-  ///   - Weighted, missed by 1–3: repeat weight at target reps.
-  Future<OverloadSuggestion?> suggestNext(
-    Exercise exercise, {
-    DateTime? now,
-  }) async {
-    final lastSets = getLastSessionSets(exercise.id);
-    if (lastSets == null) return null;
-
+    final latest = matches.first;
+    final lastSets = latest.log.sets;
     final topSet = _topSet(lastSets);
     if (topSet == null) return null;
 
@@ -76,57 +63,108 @@ class ProgressiveOverloadService {
       observedSets: lastSets,
     );
     final targetReps = _repTargetByKind[kind] ?? 8;
+    return ExerciseProgressionSnapshot(
+      exerciseId: exercise.id,
+      totalSetsLogged: totalSets,
+      lastSessionAt: latest.session.date,
+      lastSets: List<SetEntry>.from(lastSets),
+      topSet: topSet,
+      targetReps: targetReps,
+      isBodyweight: kind == ExerciseKind.bodyweight,
+      estimatedOneRepMax: getPersonalBest(exercise.id),
+    );
+  }
 
-    if (kind == ExerciseKind.bodyweight) {
-      if (topSet.reps >= targetReps) {
+  /// Trust-gated progression suggestion for the upcoming Set 1 of [exercise].
+  /// Returns null before 5 logged sets so the UI does not guess too early.
+  Future<OverloadSuggestion?> suggestNext(
+    Exercise exercise, {
+    DateTime? now,
+  }) async {
+    final snapshot = await snapshotFor(exercise);
+    if (snapshot == null ||
+        snapshot.totalSetsLogged < _minimumSetsForSuggestion) {
+      return null;
+    }
+
+    if (snapshot.isBodyweight) {
+      if (_metTarget(snapshot)) {
         return OverloadSuggestion(
-          weight: topSet.weight,
-          reps: topSet.reps + 1,
+          weight: snapshot.topSet.weight,
+          reps: snapshot.topSet.reps + 1,
           reason: OverloadReason.weightIncrease,
+          confidenceHigh: true,
+          setsLogged: snapshot.totalSetsLogged,
         );
       }
       return OverloadSuggestion(
-        weight: topSet.weight,
-        reps: targetReps,
+        weight: snapshot.topSet.weight,
+        reps: snapshot.targetReps,
         reason: OverloadReason.repTarget,
+        confidenceHigh: true,
+        setsLogged: snapshot.totalSetsLogged,
       );
     }
 
-    final lastDate = _lastSessionDate(exercise.id);
     final reference = now ?? DateTime.now();
-    if (lastDate != null &&
-        reference.difference(lastDate).inDays > _detrainedThresholdDays) {
+    if (reference.difference(snapshot.lastSessionAt).inDays >=
+        _returnFromBreakDays) {
       return OverloadSuggestion(
-        weight: topSet.weight,
-        reps: targetReps,
+        weight: _roundToNearestHalf(snapshot.topSet.weight * 0.95),
+        reps: snapshot.targetReps,
         reason: OverloadReason.detrained,
+        confidenceHigh: true,
+        setsLogged: snapshot.totalSetsLogged,
       );
     }
 
-    if (topSet.reps < targetReps - _deloadMissThreshold) {
-      final next = (topSet.weight - _weightIncrement)
-          .clamp(0, double.infinity)
-          .toDouble();
+    final targetTotal = snapshot.targetReps * snapshot.lastSets.length;
+    final actualTotal = snapshot.lastSets.fold<int>(
+      0,
+      (sum, set) => sum + set.reps,
+    );
+    final shortfall = targetTotal - actualTotal;
+
+    if (shortfall > (snapshot.targetReps * 0.25).ceil()) {
+      final next = _capAtOneRepMax(
+        _roundToNearestHalf(snapshot.topSet.weight * 0.95),
+        snapshot.estimatedOneRepMax,
+      );
       return OverloadSuggestion(
         weight: next,
-        reps: targetReps,
+        reps: snapshot.targetReps,
         reason: OverloadReason.deload,
+        confidenceHigh: true,
+        setsLogged: snapshot.totalSetsLogged,
       );
     }
 
-    if (topSet.reps >= targetReps) {
+    if (shortfall <= 0) {
+      final next = _capAtOneRepMax(
+        snapshot.topSet.weight + _weightIncrement,
+        snapshot.estimatedOneRepMax,
+      );
       return OverloadSuggestion(
-        weight: topSet.weight + _weightIncrement,
-        reps: targetReps,
+        weight: _roundToNearestHalf(next),
+        reps: snapshot.targetReps,
         reason: OverloadReason.weightIncrease,
+        confidenceHigh: true,
+        setsLogged: snapshot.totalSetsLogged,
       );
     }
 
     return OverloadSuggestion(
-      weight: topSet.weight,
-      reps: targetReps,
+      weight: snapshot.topSet.weight,
+      reps: snapshot.targetReps,
       reason: OverloadReason.repTarget,
+      confidenceHigh: true,
+      setsLogged: snapshot.totalSetsLogged,
     );
+  }
+
+  bool _metTarget(ExerciseProgressionSnapshot snapshot) {
+    if (snapshot.lastSets.isEmpty) return false;
+    return snapshot.lastSets.every((set) => set.reps >= snapshot.targetReps);
   }
 
   /// Heaviest top set: max by `(weight, reps)`. Bodyweight sets pick max reps.
@@ -141,6 +179,13 @@ class ProgressiveOverloadService {
     }
     return best;
   }
+
+  double _capAtOneRepMax(double weight, double estimatedOneRepMax) {
+    if (estimatedOneRepMax <= 0) return weight;
+    return weight.clamp(0, estimatedOneRepMax * 0.9).toDouble();
+  }
+
+  double _roundToNearestHalf(double weight) => (weight * 2).round() / 2;
 
   /// Highest estimated 1RM (Epley) ever logged for [exerciseId].
   double getPersonalBest(String exerciseId) {

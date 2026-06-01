@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
 import '../data/loot_registry.dart';
+import '../models/loot_drop.dart';
 import '../models/loot_item.dart';
+import '../services/loot_drop_service.dart';
 import '../services/loot_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/motion/hold_depress.dart';
@@ -17,8 +19,11 @@ class InventoryPage extends StatefulWidget {
 
 class _InventoryPageState extends State<InventoryPage> {
   final LootService _lootService = LootService();
+  final LootDropService _dropService = LootDropService();
   Set<String> _ownedIds = {};
   Map<LootCategory, LootItem> _equipped = {};
+  List<LootDrop> _recentDrops = [];
+  Map<String, int> _fragments = {};
   bool _loading = true;
 
   @override
@@ -30,10 +35,15 @@ class _InventoryPageState extends State<InventoryPage> {
   Future<void> _load() async {
     final inventory = await _lootService.getInventory();
     final equipped = await _lootService.getEquippedLoot();
+    final recentDrops = await _dropService.recentDrops();
+    final fragments = await _dropService.fragmentCounts();
+    await _dropService.markAllViewed();
     if (!mounted) return;
     setState(() {
       _ownedIds = inventory.map((item) => item.id).toSet();
       _equipped = equipped;
+      _recentDrops = recentDrops;
+      _fragments = fragments;
       _loading = false;
     });
   }
@@ -147,6 +157,12 @@ class _InventoryPageState extends State<InventoryPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _LootFeedStrip(drops: _recentDrops),
+                  if (_fragments.isNotEmpty) ...[
+                    const SizedBox(height: kSpace4),
+                    _FragmentStrip(fragments: _fragments),
+                  ],
+                  const SizedBox(height: kSpace5),
                   _buildVisualSection(LootCategory.avatarFrame),
                   _buildTitleSection(),
                   _buildVisualSection(LootCategory.homeTheme),
@@ -248,6 +264,106 @@ class _CategoryHeader extends StatelessWidget {
         fontSize: 8,
         color: kMutedText,
       ),
+    );
+  }
+}
+
+class _LootFeedStrip extends StatelessWidget {
+  const _LootFeedStrip({required this.drops});
+
+  final List<LootDrop> drops;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(kSpace3),
+      decoration: BoxDecoration(
+        color: kSurface2,
+        border: Border.all(color: kBorder),
+        borderRadius: BorderRadius.circular(kCardRadius),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'LOOT FEED',
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 9,
+              color: kNeon,
+            ),
+          ),
+          const SizedBox(height: kSpace2),
+          if (drops.isEmpty)
+            Text(
+              'Cache drops appear after eligible workouts.',
+              style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+            )
+          else
+            for (final drop in drops)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  _dropLabel(drop),
+                  style: AppFonts.shareTechMono(
+                    color: kMutedText,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
+  String _dropLabel(LootDrop drop) {
+    final tier = drop.tier.name.toUpperCase();
+    switch (drop.contentKind) {
+      case LootDropContentKind.xpBonus:
+        return '$tier CACHE   +${drop.xpBonus} XP';
+      case LootDropContentKind.frameFragment:
+        final item = lootItemById(drop.itemId ?? '');
+        final name = item?.name ?? 'Frame';
+        final assembled = drop.assembledItemId != null ? ' assembled' : '';
+        return '$tier CACHE   $name fragment$assembled';
+      case LootDropContentKind.fullItem:
+        final item = lootItemById(drop.itemId ?? '');
+        return '$tier CACHE   ${item?.name ?? 'New loot'}';
+    }
+  }
+}
+
+class _FragmentStrip extends StatelessWidget {
+  const _FragmentStrip({required this.fragments});
+
+  final Map<String, int> fragments;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = fragments.entries.where((entry) => entry.value > 0).toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    return Wrap(
+      spacing: kSpace2,
+      runSpacing: kSpace2,
+      children: [
+        for (final entry in entries)
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: kSpace2,
+              vertical: 6,
+            ),
+            decoration: BoxDecoration(
+              border: Border.all(color: kBorder),
+              borderRadius: BorderRadius.circular(kCardRadius),
+            ),
+            child: Text(
+              '${lootItemById(entry.key)?.name ?? 'Frame'} ${entry.value}/4',
+              style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
+            ),
+          ),
+      ],
     );
   }
 }

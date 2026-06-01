@@ -85,7 +85,7 @@ void main() {
     final stored =
         jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
             as Map<String, dynamic>;
-    expect(stored['END'], 32);
+    expect(stored['END'], 23);
     expect(prefs.getBool('migration_v2_end_stat_done'), isTrue);
     expect(prefs.getBool(StatEngine.endBackfillNoticeKey), isTrue);
 

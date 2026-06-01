@@ -176,7 +176,9 @@ class _AvatarSelectScreenState extends State<AvatarSelectScreen>
                         decoration: BoxDecoration(
                           color: kCard,
                           border: Border.all(
-                            color: selectedOption != null ? accentColor : kBorder,
+                            color: selectedOption != null
+                                ? accentColor
+                                : kBorder,
                             width: selectedOption != null ? 2 : 1,
                           ),
                           borderRadius: BorderRadius.circular(kCardRadius),

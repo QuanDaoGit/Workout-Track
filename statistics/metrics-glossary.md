@@ -15,6 +15,11 @@
 - **Active day** — a day with at least one saved workout *or* a recovery/rest action.
 - **Sessions/week** — count of saved `WorkoutSession`s in an ISO week.
 - **Habit** — 3+ sessions/week for 2+ consecutive weeks (the streak/LCK sweet spot).
+- **Character attachment** — returning to Profile/Inventory after onboarding, equipping title/frame,
+  or revisiting the character sheet outside a workout flow.
+- **Ritual return** — opening Home and completing the day's mission loop after at least one prior
+  saved workout.
+- **Collection engagement** — viewing newly unlocked loot or changing equipped cosmetics.
 
 ## Retention
 - **D1 / D7 / D30 return** — opened the app on day 1/7/30 after install.
@@ -26,4 +31,4 @@
 
 ## Notes
 - Bodyweight, exercise content, and stat values are **never** metric inputs that leave the device
-  (privacy guardrail — see `instrumentation-plan.md`).
+  (trust anchor — see `instrumentation-plan.md`).

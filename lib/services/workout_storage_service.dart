@@ -273,6 +273,7 @@ WorkoutSession _withStatDelta(
     baseXP: session.baseXP,
     lckMultiplier: session.lckMultiplier,
     potionMultiplier: session.potionMultiplier,
+    lootBonusXP: session.lootBonusXP,
     awardedXP: session.awardedXP,
     classAtSave: session.classAtSave,
     statDelta: Map<String, int>.from(statDelta),

@@ -18,6 +18,7 @@ import '../services/profile_service.dart';
 import '../services/program_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
+import '../services/stat_engine.dart';
 import '../services/workout_defaults_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_boost_service.dart';
@@ -28,6 +29,7 @@ import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
 import '../widgets/active_session_found_dialog.dart';
+import '../widgets/last_session_tag.dart';
 import '../widgets/lck_buff_badge.dart';
 import '../widgets/loot_avatar_frame.dart';
 import '../widgets/motion/hold_depress.dart';
@@ -103,6 +105,10 @@ class HomePageState extends State<HomePage> {
   int? _preWorkoutLevel;
   bool _showXPGain = false;
   int _xpGainAmount = 0;
+  // The "changed Home" closing beat — last session's visible stat gains.
+  bool _showLastSessionDelta = false;
+  Map<String, int> _lastSessionDelta = const {};
+  Map<String, int> _lastSessionStats = const {};
   double _lckMultiplier = 1.0;
   int _lck = 0;
   bool _showLevelUp = false;
@@ -734,6 +740,27 @@ class HomePageState extends State<HomePage> {
       _xpGainAmount = xpDelta;
     });
 
+    // The "changed Home" closing beat: surface the session's visible stat gains.
+    final delta = await StatEngine().getLastSessionDelta();
+    final stats = await StatEngine().getStoredStats();
+    if (!mounted) return;
+    final hasVisibleGain = const [
+      'STR',
+      'AGI',
+      'END',
+    ].any((stat) => (delta[stat] ?? 0) > 0);
+    if (hasVisibleGain) {
+      setState(() {
+        _showLastSessionDelta = true;
+        _lastSessionDelta = delta;
+        _lastSessionStats = stats;
+      });
+      Future.delayed(const Duration(milliseconds: 5000), () {
+        if (!mounted) return;
+        setState(() => _showLastSessionDelta = false);
+      });
+    }
+
     // Step 2: Level up (after 600ms, if level changed)
     if (_level > oldLevel) {
       Future.delayed(const Duration(milliseconds: 600), () {
@@ -1285,7 +1312,8 @@ class HomePageState extends State<HomePage> {
 
     return Semantics(
       button: true,
-      label: "Today's mission, First Quest, "
+      label:
+          "Today's mission, First Quest, "
           'Log your first workout to begin, plus one XP, '
           'zero of one complete, tap to start workout',
       child: PhosphorTap(
@@ -1730,6 +1758,13 @@ class HomePageState extends State<HomePage> {
               _buildSecondaryOngoingSessions(),
               const SizedBox(height: kSectionGap),
               _buildCharacterBar(),
+              if (_showLastSessionDelta) ...[
+                const SizedBox(height: kSpace2),
+                LastSessionTag(
+                  delta: _lastSessionDelta,
+                  stats: _lastSessionStats,
+                ),
+              ],
               const SizedBox(height: kSectionGap),
               _buildLastWorkoutStat(),
               const SizedBox(height: kSectionGap),
