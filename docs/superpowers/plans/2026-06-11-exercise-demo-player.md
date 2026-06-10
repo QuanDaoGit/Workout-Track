@@ -1,8 +1,7 @@
 # Exercise Demo Player — proper video playback, hide/unhide, fullscreen fixes
 
-**Status:** Design approved in chat; on approval this spec is saved to
-`docs/superpowers/specs/2026-06-11-exercise-demo-player-design.md`, committed, self-reviewed,
-user-review-gated, then handed to superpowers:writing-plans.
+**Status:** Spec approved (design + plan reviewed in chat, 2026-06-11) — implementation in
+progress in the same session.
 
 ## Context
 
