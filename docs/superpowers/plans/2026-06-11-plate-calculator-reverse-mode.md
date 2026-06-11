@@ -80,3 +80,16 @@ The single launch site awaits the result; non-null → write
 
 `flutter analyze` zero issues; `flutter test` full suite green; on-device: build a stack in
 reverse mode, remove via bar tap, USE WEIGHT fills the weight field in the active unit.
+
+## Amendments (on-device review, 2026-06-11)
+
+1. The breakdown line under the reverse-mode total (`bar 45 + (25 + 10 + 5) x 2`) was removed —
+   the big number stands alone.
+2. The reverse-mode bar is the same mirrored two-side barbell as the forward mode (left stack +
+   sleeve + right stack), not a single per-side stack. `_BarbellView` grew `onTapPlate` and
+   `showWhenEmpty` params; the separate removable-stack widget was deleted.
+3. The bar (with sleeve) is always visible in reverse mode, even with zero plates; the
+   "Tap plates above to load the bar." placeholder was dropped.
+4. The forward mode gained an `APPLY` button — disabled until the target parses, pops the sheet
+   with the typed target in canonical kg so the call site fills the weight field (same return
+   path as USE WEIGHT).
