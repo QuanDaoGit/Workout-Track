@@ -3,29 +3,37 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../models/calibration_quiz_models.dart';
+import '../../models/character_draft.dart';
+import '../../models/resolve_models.dart';
 import '../../services/body_goal_service.dart';
 import '../../services/calibration_service.dart';
 import '../../services/class_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_route.dart';
+import 'calibration_loading_page.dart';
 import 'calibration_quiz_page.dart';
 import 'class_reveal_screen.dart';
 import 'cold_open_page.dart';
 import 'problem_question_page.dart';
+import 'program_loading_page.dart';
+import 'program_selection_page.dart';
 import 'solution_page.dart';
+import 'welcome_landing_page.dart';
 
-enum _Step { coldOpen, problem, solution }
+enum _Step { welcome, coldOpen, problem, solution }
 
-enum _OnboardingTransition { none, wipe, ripple, handoff }
+enum _OnboardingTransition { none, wipe, ripple, handoff, boot }
 
 const _onboardingTransitionLayerKey = ValueKey('onboarding_transition_layer');
 const _onboardingCrtWipeLineKey = ValueKey('onboarding_crt_wipe_line');
 const _onboardingAmberRippleKey = ValueKey('onboarding_amber_ripple');
 const _onboardingHandoffKey = ValueKey('onboarding_handoff_iris');
+const _onboardingBootKey = ValueKey('onboarding_boot_powercycle');
 
 /// First-run flow controller for the intro and calibration quiz handoff.
-/// The quiz route stays alive while the class reveal is pushed above it, so
-/// reveal back-navigation restores Q4 with answers intact.
+/// Completing the quiz pushes the (unskippable) calibration loader, which does
+/// the real persistence work and then hands off to the class reveal on tap —
+/// the calibration is the point of no return after the quiz.
 class OnboardingFlowPage extends StatefulWidget {
   const OnboardingFlowPage({super.key});
 
@@ -35,7 +43,7 @@ class OnboardingFlowPage extends StatefulWidget {
 
 class _OnboardingFlowPageState extends State<OnboardingFlowPage>
     with TickerProviderStateMixin {
-  _Step _step = _Step.coldOpen;
+  _Step _step = _Step.welcome;
   // Rotated whenever the user backs out of the quiz so the SolutionView
   // rebuilds with a fresh State and its internal `_handed` guard resets,
   // letting the CTA be re-pressed.
@@ -43,64 +51,194 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   _OnboardingTransition _transition = _OnboardingTransition.none;
   Offset _rippleOrigin = Offset.zero;
 
-  late final AnimationController _transitionController = AnimationController(
-    vsync: this,
-  );
+  late final AnimationController _transitionController;
 
-  /// Push the 4-question Calibration Quiz. In onboarding, completion pushes the
-  /// class reveal over Q4 instead of popping the quiz result immediately.
+  // Accumulated across the two quiz segments + the reveal.
+  PreClassAnswers? _preClass;
+  DateTime _classConfirmedAt = DateTime.now();
+  // Identity beats stashed from segment A so they can be folded into the draft
+  // alongside segment B's obstacle answer. Multi-select.
+  Set<TrainingWhy> _trainingWhy = {};
+  Set<WinningVision> _winningVision = {};
+
+  // ── Segment A — goal + weight/sex (before the class) ─────────────────────
+  /// Push the pre-class quiz segment. Completion runs the calibration loader
+  /// (which persists in the background) and then the class reveal.
   Future<void> _runQuiz() async {
-    final result = await Navigator.of(context).push<CalibrationResult>(
+    await Navigator.of(context).push<void>(
       arcadeRoute(
-        (_) => CalibrationQuizPage(onResult: _openClassReveal),
+        (_) => CalibrationQuizPage(
+          questions: const [
+            QuizQuestion.trainingWhy,
+            QuizQuestion.goal,
+            QuizQuestion.weightSex,
+            QuizQuestion.winningVision,
+          ],
+          progressBaseCells: 0, // first segment — the vow is question 1 of 7
+          onExit: _onPreClassExit,
+          onComplete: _onPreClassComplete,
+        ),
         motion: ArcadeRouteMotion.flow,
       ),
     );
-    if (!mounted) return;
-    if (result == null) {
-      // User backed out — stay on Solution but reset its handed guard.
-      setState(() => _solutionKey = UniqueKey());
-      return;
-    }
   }
 
-  Future<void> _openClassReveal(CalibrationResult result) async {
-    await Navigator.of(context).push<void>(
+  void _onPreClassExit() {
+    // Backed out of the first question — return to Solution, reset its guard.
+    Navigator.of(context).pop();
+    setState(() => _solutionKey = UniqueKey());
+  }
+
+  void _onPreClassComplete(QuizAnswers answers) {
+    final pre = PreClassAnswers(
+      goal: answers.goal!,
+      bodyWeightKg: answers.bodyWeightKg,
+      heightCm: answers.heightCm,
+      sex: answers.sex,
+    );
+    _preClass = pre;
+    // Stash the segment-A identity beats for the final draft.
+    _trainingWhy = answers.trainingWhy;
+    _winningVision = answers.winningVision;
+    // Replace the quiz segment — the loader/reveal are the point of no return.
+    Navigator.of(context).pushReplacement(
       arcadeRoute(
-        (_) => ClassRevealScreen(
-          result: result,
-          onClassConfirmed: _persistClassConfirmation,
+        (_) => CalibrationLoadingPage(
+          answers: pre,
+          onCalibrated: (at) => _persistPreClass(pre, at),
+          onReveal: (at) {
+            _classConfirmedAt = at;
+            Navigator.of(context).pushReplacement(
+              arcadeRoute(
+                (_) => ClassRevealScreen(
+                  answers: pre,
+                  onConfirmed: _onClassConfirmed,
+                ),
+                motion: ArcadeRouteMotion.reveal,
+              ),
+            );
+          },
         ),
-        motion: ArcadeRouteMotion.reveal,
+        motion: ArcadeRouteMotion.flow,
       ),
     );
   }
 
-  Future<void> _persistClassConfirmation(
-    CalibrationResult result,
-    DateTime classConfirmedAt,
-  ) async {
-    await BodyGoalService().setGoal(result.goal);
-    await ClassService().selectClass(result.clazz);
+  Future<void> _persistPreClass(PreClassAnswers pre, DateTime at) async {
+    await BodyGoalService().setGoal(pre.goal);
+    await ClassService().selectClass(pre.clazz);
     await CalibrationService().saveCalibrationInputs(
-      bodyweightKg: result.bodyWeightKg,
-      sex: result.sex,
+      bodyweightKg: pre.bodyWeightKg,
+      heightCm: pre.heightCm,
+      sex: pre.sex,
+    );
+    await CalibrationService().markClassConfirmed(at: at);
+  }
+
+  // ── Segment B — experience + frequency (after the class) ─────────────────
+  void _onClassConfirmed() {
+    // Replace (not push) the class reveal: the calibration is the point of no
+    // return, so the reveal must leave the stack. Pushing it left a spent
+    // reveal beneath the rest of the flow — backing into it hit a dead CTA.
+    Navigator.of(context).pushReplacement(
+      arcadeRoute(
+        (_) => CalibrationQuizPage(
+          questions: const [
+            QuizQuestion.experience,
+            QuizQuestion.frequency,
+            QuizQuestion.obstacle,
+          ],
+          progressBaseCells: 4, // vow + goal + weight/sex + vision already done
+          onComplete: _onOtherQuestionsComplete,
+          // No onExit — the calibration is the point of no return.
+        ),
+        motion: ArcadeRouteMotion.flow,
+      ),
+    );
+  }
+
+  Future<void> _onOtherQuestionsComplete(QuizAnswers answers) async {
+    final pre = _preClass!;
+    final result = CalibrationResult(
+      goal: pre.goal,
+      freq: answers.freq!,
+      exp: answers.exp!,
+      bodyWeightKg: pre.bodyWeightKg,
+      heightCm: pre.heightCm,
+      sex: pre.sex,
+      clazz: pre.clazz,
     );
     await CalibrationService().saveTrainingPreferences(
-      freq: result.freq,
-      exp: result.exp,
+      freq: answers.freq!,
+      exp: answers.exp!,
     );
-    // Seed starting capability stats from the quiz's self-reported experience
-    // (replaces the old calibration-run workout assessment). Written now, before
-    // the user reaches Home, so the stat board shows seeded ranks immediately.
-    await CalibrationService().seedFromQuiz(exp: result.exp);
-    await CalibrationService().markClassConfirmed(at: classConfirmedAt);
+    if (!mounted) return;
+    final draft = CharacterDraft(
+      calibration: result,
+      classConfirmedAt: _classConfirmedAt,
+      winningVision: _winningVision,
+      obstacle: answers.obstacle,
+      trainingWhy: _trainingWhy,
+    );
+    // Replace Quiz B (don't push over it): the program build is the point of no
+    // return, so the spent quiz must leave the stack — otherwise backing out of
+    // program selection lands on the completed quiz with a dead CONTINUE.
+    await Navigator.of(context).pushReplacement(
+      arcadeRoute(
+        (_) => ProgramLoadingPage(
+          result: result,
+          onComplete: () async {
+            if (!mounted) return;
+            await Navigator.of(context).pushReplacement(
+              arcadeRoute(
+                (_) => ProgramSelectionPage(draft: draft),
+                motion: ArcadeRouteMotion.flow,
+              ),
+            );
+          },
+        ),
+        motion: ArcadeRouteMotion.fade,
+      ),
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Eagerly created so dispose() always has an initialized controller — a lazy
+    // init during dispose (e.g. a reduced-motion run that never animated a
+    // transition) would look up an inherited widget at an unsafe time.
+    _transitionController = AnimationController(vsync: this);
   }
 
   @override
   void dispose() {
     _transitionController.dispose();
     super.dispose();
+  }
+
+  // The landing screen hands off to the cold open with a CRT "boot the cabinet"
+  // power-cycle: the welcome's logo zoom/bloom continues into a power-down to a
+  // scanline, a black hold (the cold open mounts here, dark), then a power-on
+  // bloom that the cold open's own entrance rides in on (wordmark first).
+  Future<void> _runWelcomeToColdOpen() async {
+    if (MediaQuery.of(context).disableAnimations) {
+      setState(() => _step = _Step.coldOpen);
+      return;
+    }
+    setState(() => _transition = _OnboardingTransition.boot);
+    _transitionController
+      ..duration = const Duration(milliseconds: 1000)
+      ..value = 0;
+    // Power-down to the black hold (~0.45), then mount the cold open behind it.
+    await _transitionController.animateTo(0.45);
+    if (!mounted) return;
+    setState(() => _step = _Step.coldOpen);
+    // Power-on bloom reveals the (entrance-animating) cold open, then clear.
+    await _transitionController.forward();
+    if (!mounted) return;
+    setState(() => _transition = _OnboardingTransition.none);
+    _transitionController.value = 0;
   }
 
   Future<void> _runWelcomeToProblem() async {
@@ -178,6 +316,7 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
 
   Widget _buildCurrentStep() {
     return switch (_step) {
+      _Step.welcome => WelcomeLandingView(onGetStarted: _runWelcomeToColdOpen),
       _Step.coldOpen => ColdOpenView(onContinue: _runWelcomeToProblem),
       _Step.problem => ProblemQuestionView(onContinue: _runProblemToSolution),
       _Step.solution => SolutionView(
@@ -221,6 +360,13 @@ class _OnboardingTransitionLayer extends StatelessWidget {
             _OnboardingTransition.handoff => CustomPaint(
               key: _onboardingHandoffKey,
               painter: _HandoffTransitionPainter(progress: t),
+            ),
+            // Boot reads the raw value — its painter owns the per-phase easing.
+            _OnboardingTransition.boot => CustomPaint(
+              key: _onboardingBootKey,
+              painter: _BootTransitionPainter(
+                progress: animation.value.clamp(0.0, 1.0).toDouble(),
+              ),
             ),
             _OnboardingTransition.none => const SizedBox.shrink(),
           };
@@ -377,6 +523,93 @@ class _HandoffTransitionPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _HandoffTransitionPainter oldDelegate) =>
+      progress != oldDelegate.progress;
+}
+
+/// "Boot the cabinet" CRT power-cycle: white hold → vertical collapse to a
+/// scanline → black hold → power-on bloom (a slit opens vertically, revealing
+/// the cold open beneath). Single forward pass — no strobe. Driven by the raw
+/// controller value so the phase windows below line up.
+class _BootTransitionPainter extends CustomPainter {
+  const _BootTransitionPainter({required this.progress});
+
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = progress;
+    final h = size.height;
+    final w = size.width;
+    final center = h / 2;
+
+    double bandHalf;
+    var opening = false; // band reveals the cold open beneath
+    var fillBright = 1.0; // brightness of the lit band (pre power-on)
+    if (p < 0.18) {
+      bandHalf = h / 2; // white hold — full bright
+    } else if (p < 0.40) {
+      final c = ((p - 0.18) / 0.22).clamp(0.0, 1.0).toDouble();
+      bandHalf = _lerp(h / 2, 2, Curves.easeIn.transform(c)); // collapse
+    } else if (p < 0.50) {
+      bandHalf = 2;
+      fillBright = _lerp(
+        1,
+        0.15,
+        ((p - 0.40) / 0.10).clamp(0.0, 1.0).toDouble(),
+      ); // dim to a faint line
+    } else if (p < 0.80) {
+      final o = ((p - 0.50) / 0.30).clamp(0.0, 1.0).toDouble();
+      bandHalf = _lerp(2, h / 2, Curves.easeOut.transform(o)); // power-on
+      opening = true;
+    } else {
+      bandHalf = h / 2;
+      opening = true; // fully open — overlay is empty
+    }
+
+    final top = (center - bandHalf).clamp(0.0, h).toDouble();
+    final bot = (center + bandHalf).clamp(0.0, h).toDouble();
+
+    // kBg shutters above + below the band (hide whatever is beneath).
+    final bg = Paint()..color = kBg;
+    if (top > 0) canvas.drawRect(Rect.fromLTRB(0, 0, w, top), bg);
+    if (bot < h) canvas.drawRect(Rect.fromLTRB(0, bot, w, h), bg);
+
+    if (!opening) {
+      // Bright band: white during the hold, lerping to neon as it collapses.
+      final color = Color.lerp(
+        Colors.white,
+        kNeon,
+        ((p - 0.18) / 0.22).clamp(0.0, 1.0).toDouble(),
+      )!;
+      canvas.drawRect(
+        Rect.fromLTRB(0, top, w, bot),
+        Paint()..color = color.withValues(alpha: fillBright),
+      );
+    } else {
+      // Power-on: the band is transparent (cold open shows through); glow its
+      // opening edges and fade a scanline boost as it clears.
+      final edgeAlpha =
+          ((1 - ((p - 0.50) / 0.30).clamp(0.0, 1.0)) * 0.9).toDouble();
+      if (edgeAlpha > 0 && bandHalf < h / 2) {
+        final edge = Paint()
+          ..color = kNeon.withValues(alpha: edgeAlpha)
+          ..strokeWidth = 3
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+        canvas.drawLine(Offset(0, top), Offset(w, top), edge);
+        canvas.drawLine(Offset(0, bot), Offset(w, bot), edge);
+      }
+      _drawScanBoost(
+        canvas,
+        size,
+        ((1 - (p - 0.50) / 0.30).clamp(0.0, 1.0) * 0.6).toDouble(),
+      );
+    }
+  }
+
+  double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+  @override
+  bool shouldRepaint(covariant _BootTransitionPainter oldDelegate) =>
       progress != oldDelegate.progress;
 }
 

@@ -24,9 +24,14 @@ class CalibrationService {
   final StatEngine _statEngine;
 
   static const _seedKey = StatEngine.calibrationSeedKey;
-  static const _sessionCountKey = 'calibration_session_count_v1';
-  static const _completeKey = 'calibration_complete_v1';
+  static const calibrationSessionCountKey = 'calibration_session_count_v1';
+  static const calibrationCompleteKey = 'calibration_complete_v1';
+  static const calibrationSeedSourceKey = 'calibration_seed_source_v1';
+  static const workoutSeedSource = 'workout';
+  static const _sessionCountKey = calibrationSessionCountKey;
+  static const _completeKey = calibrationCompleteKey;
   static const _bodyweightKey = 'calibration_bodyweight_kg_v1';
+  static const _heightKey = 'calibration_height_cm_v1';
   static const _sexKey = 'calibration_sex_v1';
   static const _freqKey = 'calibration_freq_v1';
   static const _experienceKey = 'calibration_experience_v1';
@@ -39,6 +44,7 @@ class CalibrationService {
 
   Future<void> saveCalibrationInputs({
     double? bodyweightKg,
+    double? heightCm,
     required UserProfileSex sex,
   }) async {
     final prefs = await SharedPreferences.getInstance();
@@ -48,11 +54,29 @@ class CalibrationService {
       await prefs.remove(_bodyweightKey);
     }
     await prefs.setString(_sexKey, sex.name);
+    await saveHeightCm(heightCm);
   }
 
   Future<double?> bodyweightKg() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getDouble(_bodyweightKey);
+  }
+
+  /// Body height in canonical centimetres. Profile info only — no stat
+  /// calculation consumes it yet. Stored here so all one-time onboarding inputs
+  /// share a persistence home. Pass null/<=0 to clear.
+  Future<void> saveHeightCm(double? heightCm) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (heightCm != null && heightCm > 0) {
+      await prefs.setDouble(_heightKey, heightCm);
+    } else {
+      await prefs.remove(_heightKey);
+    }
+  }
+
+  Future<double?> heightCm() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_heightKey);
   }
 
   Future<UserProfileSex> sex() async {
@@ -145,7 +169,12 @@ class CalibrationService {
     final bw = prefs.getDouble(_bodyweightKey);
     final sx = UserProfileSex.fromName(prefs.getString(_sexKey));
 
-    // Best 1RM and actual logged volume per stat for this session.
+    // Best 1RM and actual logged volume per stat for this session. The actual
+    // volume is expressed in the engine's intensity-credit currency (v3) so
+    // the top-up below subtracts exactly what the engine will add for this
+    // session, landing the displayed stat on the tier target.
+    final sessionBodyweight =
+        session.bodyweightKgAtSave ?? bw ?? StatEngine.fallbackBodyweightKg;
     final best1RmPerStat = <String, double>{};
     final actualVolumePerStat = <String, double>{};
     for (final log in session.exercises) {
@@ -155,7 +184,8 @@ class CalibrationService {
       final oneRm = bestOneRmForLog(log);
       if (oneRm > (best1RmPerStat[stat] ?? 0)) best1RmPerStat[stat] = oneRm;
       actualVolumePerStat[stat] =
-          (actualVolumePerStat[stat] ?? 0) + log.totalVolume;
+          (actualVolumePerStat[stat] ?? 0) +
+          StatEngine.intensityCreditForLog(log, bodyweightKg: sessionBodyweight);
     }
 
     final newSeed = Map<String, double>.from(existingSeed);
@@ -177,37 +207,31 @@ class CalibrationService {
     final count = (prefs.getInt(_sessionCountKey) ?? 0) + 1;
     await prefs.setString(_seedKey, jsonEncode(newSeed));
     await prefs.setInt(_sessionCountKey, count);
+    if (newSeed.isNotEmpty) {
+      await prefs.setString(calibrationSeedSourceKey, workoutSeedSource);
+    }
     if (count >= calibrationSessionTarget) {
       await prefs.setBool(_completeKey, true);
     }
     return newSeed;
   }
 
-  /// Seeds starting capability stats from the calibration quiz's self-reported
-  /// [Experience] (Q3), replacing the old "calibration run" workout assessment.
-  /// The seed is written in the same kg-volume currency [StatEngine] consumes
-  /// (STR/DEF/AGI — END is rep-band derived and VIT is the recovery meter, so
-  /// neither is volume-seedable), then calibration is frozen so later workouts
-  /// never re-seed. Elite/S is intentionally unreachable here: a top rank is
-  /// earned through training, not self-reported.
-  Future<void> seedFromQuiz({required Experience exp}) async {
-    final tier = _tierForExperience(exp);
-    final volume = StatEngine.volumeForStat(
-      StrengthStandards.targetStatForTier(tier),
-    );
-    final seed = <String, double>{'STR': volume, 'DEF': volume, 'AGI': volume};
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_seedKey, jsonEncode(seed));
-    await prefs.setInt(_sessionCountKey, calibrationSessionTarget);
-    await prefs.setBool(_completeKey, true);
+  /// Calibrates from an early real workout — measured 1RM → tier → seed — when
+  /// calibration is still open and this is within the first
+  /// [calibrationSessionTarget] completed sessions. No-op otherwise, so existing
+  /// users with training history are never retroactively seeded (which would
+  /// inflate stats they already earned). This drives onboarding calibration off
+  /// the user's first real workouts instead of a forced in-onboarding run —
+  /// accurate (measured, not self-reported) and friction-free.
+  Future<void> maybeCalibrateEarlyWorkout(
+    WorkoutSession session, {
+    required int completedSessionCount,
+    Map<String, String>? catalog,
+  }) async {
+    if (completedSessionCount > calibrationSessionTarget) return;
+    if (await isComplete()) return;
+    await recordCalibrationWorkout(session, catalog: catalog);
   }
-
-  static StrengthTier _tierForExperience(Experience exp) => switch (exp) {
-    Experience.novice => StrengthTier.untrained,
-    Experience.beginner => StrengthTier.beginner,
-    Experience.intermediate => StrengthTier.intermediate,
-    Experience.advanced => StrengthTier.advanced,
-  };
 
   Future<Map<String, double>> seedVolumes() async {
     final prefs = await SharedPreferences.getInstance();

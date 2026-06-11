@@ -70,9 +70,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      host(
-        const XpLevelMeter(oldTotalXP: 0, newTotalXP: 65, prominent: false),
-      ),
+      host(const XpLevelMeter(oldTotalXP: 0, newTotalXP: 65, prominent: false)),
     );
     // Drive the climb to completion in steps. pumpAndSettle can't drain the
     // meter's bare 240ms post-level-up Future.delayed in non-prominent mode (no

@@ -1,23 +1,27 @@
 import 'dart:async';
+import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
-import '../data/curated_exercises.dart';
 import '../data/muscle_groups.dart';
 import '../data/programs_library.dart';
 import '../models/loot_item.dart';
 import '../models/program_models.dart';
 import '../models/profile_models.dart';
 import '../models/rest_models.dart';
+import '../models/shadow_models.dart';
 import '../models/workout_models.dart';
 import '../services/calorie_service.dart';
 import '../services/exercise_catalog_service.dart';
+import '../services/gem_service.dart';
 import '../services/loot_service.dart';
 import '../services/profile_service.dart';
+import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
+import '../services/shadow_service.dart';
 import '../services/stat_engine.dart';
 import '../services/workout_defaults_service.dart';
 import '../services/workout_storage_service.dart';
@@ -36,8 +40,11 @@ import '../widgets/motion/hold_depress.dart';
 import '../widgets/motion/phosphor_tap.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
+import '../widgets/program_path_hud.dart';
 import '../widgets/pulse_color_text.dart';
+import '../widgets/radar_stat_icon.dart';
 import '../widgets/screen_shake.dart';
+import '../widgets/shadow/shadow_card.dart';
 import '../widgets/strobe_flash.dart';
 import '../widgets/rest_icon.dart';
 import 'Workout session/active_workout.dart';
@@ -72,11 +79,54 @@ CompletedMissionCopy completedMissionCopy(WorkoutSession? session) {
   );
 }
 
+/// What the new-user FIRST QUEST mission should do when tapped.
+class FirstQuestMissionPlan {
+  const FirstQuestMissionPlan({
+    required this.launchesProgramDay,
+    required this.detail,
+  });
+
+  /// True → launch the pre-filled program Day 1; false → the blank manual
+  /// picker (manual-path users, or the defensive rest-day-first case).
+  final bool launchesProgramDay;
+  final String detail;
+}
+
+/// Decides the FIRST QUEST mission's behavior + copy. A user who chose a program
+/// in onboarding lands on Home as a new user, where FIRST QUEST is the headline;
+/// it must launch their program's pre-filled Day 1, not a blank picker. Pure so
+/// the routing decision is unit-testable without pumping Home.
+FirstQuestMissionPlan firstQuestMissionPlan(ProgramDay? programDay) {
+  final launchesProgramDay = programDay != null && programDay.isWorkout;
+  return FirstQuestMissionPlan(
+    launchesProgramDay: launchesProgramDay,
+    detail: launchesProgramDay
+        ? 'Begin Day 1 · ${programDay.label}.'
+        : 'Log your first workout to begin.',
+  );
+}
+
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, this.onViewQuests, this.onViewProfile});
+  const HomePage({
+    super.key,
+    this.onViewQuests,
+    this.onViewProfile,
+    this.onViewWorkouts,
+    this.onOpenShop,
+    this.onViewGuild,
+  });
 
   final VoidCallback? onViewQuests;
   final VoidCallback? onViewProfile;
+
+  /// Streak/LCK metric → workout history (Workout tab).
+  final VoidCallback? onViewWorkouts;
+
+  /// Gem metric → the gem store.
+  final VoidCallback? onOpenShop;
+
+  /// Shadow callout → the Guild tab (where the Shadow arena lives).
+  final VoidCallback? onViewGuild;
 
   @override
   HomePageState createState() => HomePageState();
@@ -95,8 +145,7 @@ class HomePageState extends State<HomePage> {
   WorkoutSession? _completedWorkoutToday;
   bool _isNewUser = false;
   String? _suggestedMuscle;
-  String? _selectedTitle;
-  int? _suggestedMissionRewardXP;
+  int? _suggestedMissionRewardGems;
   RestDayInfo? _todayRestInfo;
   ProfileData _profile = ProfileData.defaults();
   MissionFinishState _missionFinishStateToday = MissionFinishState.none;
@@ -111,6 +160,8 @@ class HomePageState extends State<HomePage> {
   Map<String, int> _lastSessionStats = const {};
   double _lckMultiplier = 1.0;
   int _lck = 0;
+  int _gemBalance = 0;
+  int _vitality = 10;
   bool _showLevelUp = false;
   int _levelUpShakeTrigger = 0;
   int _missionFlashTrigger = 0;
@@ -118,6 +169,7 @@ class HomePageState extends State<HomePage> {
   ProgramProgress? _programProgress;
   ProgramDay? _programDay;
   ProgramDaySnapshot? _programCompletedToday;
+  ShadowEvaluation? _shadowEval;
   StreamSubscription<void>? _storageSubscription;
 
   @override
@@ -183,14 +235,19 @@ class HomePageState extends State<HomePage> {
     final questSummary = await QuestService().getSummary(all);
     final profile = await ProfileService().loadProfile();
     final equippedLoot = await LootService().getEquippedLoot();
+    final gemBalance = await GemService().balance();
+    final storedStats = await StatEngine().getStoredStats();
+    final vitality = storedStats['VIT'] ?? 10;
     final programCompletedToday = await programService
         .completedSnapshotForToday(now: today);
     final missionFinishState =
         await WorkoutStorageService.missionFinishStateToday();
+    final shadowEval = await ShadowService().evaluate();
     if (!mounted) return;
 
     final completed = all.where((s) => !s.isPartial).toList();
-    final lck = XpService.lckForSessions(completed, now: DateTime.now());
+    // LCK is the weekly consistency streak, refreshed inside getStoredStats.
+    final lck = storedStats['LCK'] ?? 0;
     final lckMultiplier = XpService.lckXpMultiplier(lck);
     final partial = all.where((s) => s.isOngoing).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
@@ -271,10 +328,10 @@ class HomePageState extends State<HomePage> {
       });
     }
 
-    int? suggestedMissionRewardXP;
+    int? suggestedMissionRewardGems;
     for (final quest in questSummary.dailyQuests) {
       if (quest.id == 'show_up' && !quest.claimed) {
-        suggestedMissionRewardXP = quest.rewardXP;
+        suggestedMissionRewardGems = quest.rewardGems;
         break;
       }
     }
@@ -294,8 +351,7 @@ class HomePageState extends State<HomePage> {
           ? null
           : completedToday.first;
       _suggestedMuscle = suggestedMuscle;
-      _selectedTitle = questSummary.selectedTitle;
-      _suggestedMissionRewardXP = suggestedMissionRewardXP;
+      _suggestedMissionRewardGems = suggestedMissionRewardGems;
       _todayRestInfo = todayRestInfo;
       _profile = profile;
       _missionFinishStateToday = missionFinishState;
@@ -304,8 +360,11 @@ class HomePageState extends State<HomePage> {
       _programProgress = programProgress;
       _programDay = programDay;
       _programCompletedToday = programCompletedToday;
+      _shadowEval = shadowEval;
       _lckMultiplier = lckMultiplier;
       _lck = lck;
+      _gemBalance = gemBalance;
+      _vitality = vitality;
       _loading = false;
     });
   }
@@ -381,8 +440,10 @@ class HomePageState extends State<HomePage> {
     required String title,
     String? detail,
     Widget? middle,
+    Widget? nextUp,
     String? supportText,
     Color? supportColor,
+    String? supportIconPath,
     String? primaryLabel,
     VoidCallback? onPrimary,
     String? secondaryLabel,
@@ -434,13 +495,17 @@ class HomePageState extends State<HomePage> {
             ),
           ],
           if (middle != null) ...[const SizedBox(height: kSpace4), middle],
+          if (nextUp != null) ...[const SizedBox(height: kSpace3), nextUp],
           if (supportText != null && supportText.isNotEmpty) ...[
             const SizedBox(height: kSpace4),
             Row(
               children: [
                 ImageIcon(
-                  const AssetImage('assets/icons/control/icon_star.png'),
-                  size: 14,
+                  AssetImage(
+                    supportIconPath ??
+                        'assets/icons/control/ui/icon_mission_star.png',
+                  ),
+                  size: 16,
                   color: supportColor ?? kAmber,
                 ),
                 const SizedBox(width: kSpace2),
@@ -563,6 +628,9 @@ class HomePageState extends State<HomePage> {
     );
     final isProgramRestWorkout = await programService
         .isOngoingProgramRestSession(session.id);
+    final prescriptions = await programService.prescriptionsForOngoingSession(
+      session.id,
+    );
     final restSeconds = await WorkoutDefaultsService().getRestSeconds();
     if (!mounted) return;
     Navigator.push(
@@ -577,6 +645,7 @@ class HomePageState extends State<HomePage> {
           resumeFromSession: session,
           isProgramWorkout: isProgramWorkout,
           advanceProgramRestDayOnCompletion: isProgramRestWorkout,
+          prescriptions: prescriptions,
         ),
         motion: ArcadeRouteMotion.flow,
       ),
@@ -698,17 +767,26 @@ class HomePageState extends State<HomePage> {
     ).then((_) => _onReturnFromWorkout());
   }
 
+  // Program day start: route through the pre-filled review screen (today's
+  // lifts pre-selected, focus locked) so the user can add/remove before the
+  // confirm + live session — instead of dropping straight into ActiveWorkoutPage.
+  // StartWorkoutPage owns the ongoing-session + start-confirm gates at CONTINUE.
   Future<void> _startProgramWorkout(ProgramDay day) async {
-    final targetGroups = programDayTargetMuscleGroups(day);
-    final exerciseIds = day.suggestedExerciseIds.isNotEmpty
-        ? day.suggestedExerciseIds
-        : curatedExerciseIdsForMuscleGroups(targetGroups);
-    await _launchWorkoutFromExerciseIds(
-      muscleGroup: programDayPrimaryMuscleGroup(day),
-      targetMuscleGroups: targetGroups,
-      exerciseIds: exerciseIds,
-      isProgramWorkout: true,
+    _preWorkoutXP = _totalXP;
+    _preWorkoutLevel = _level;
+    final programId = _programProgress?.programId;
+    final effective = programId == null
+        ? day
+        : await ProgramCustomizationService().effectiveDay(programId, day);
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      arcadeRoute(
+        (_) => programDayStarter(effective),
+        motion: ArcadeRouteMotion.flow,
+      ),
     );
+    await _onReturnFromWorkout();
   }
 
   Future<void> _repeatLastWorkout(WorkoutSession session) async {
@@ -883,9 +961,9 @@ class HomePageState extends State<HomePage> {
       return '+$xp XP';
     }
 
-    final xp = _suggestedMissionRewardXP;
-    if (xp == null) return null;
-    return '+$xp XP';
+    final gems = _suggestedMissionRewardGems;
+    if (gems == null) return null;
+    return '+$gems gems';
   }
 
   int _liveElapsedSeconds(WorkoutSession session) {
@@ -898,9 +976,8 @@ class HomePageState extends State<HomePage> {
     final xpProgress = XpService.progressForTotalXP(_totalXP);
     final rankColor = _rankColor();
     final titleItem = _equippedTitle;
-    final titleLabel = titleItem?.name ?? _selectedTitle ?? 'untitled';
-    final titleColor =
-        titleItem?.color ?? (_selectedTitle == null ? kMutedText : kAmber);
+    final titleLabel = titleItem?.name ?? 'untitled';
+    final titleColor = titleItem?.color ?? kMutedText;
 
     final card = _homeCard(
       background: kCard,
@@ -909,7 +986,7 @@ class HomePageState extends State<HomePage> {
       child: Row(
         children: [
           LootAvatarFrame(
-            avatarPath: _profile.avatarPath,
+            avatarSpec: _profile.avatarSpec,
             framePath: _equippedFrame?.assetPath,
             size: 64,
             borderColor: rankColor,
@@ -1176,6 +1253,12 @@ class HomePageState extends State<HomePage> {
       return _buildFirstQuestMissionPanel();
     }
 
+    if (session == null &&
+        _programProgress != null &&
+        _programProgress!.completedArc) {
+      return _buildProgramArcCompletePanel(_programProgress!);
+    }
+
     if (session == null && _programProgress != null && _programDay != null) {
       final completedSnapshot = _programCompletedToday;
       if (completedSnapshot != null &&
@@ -1295,12 +1378,23 @@ class HomePageState extends State<HomePage> {
   }
 
   Widget _buildFirstQuestMissionPanel() {
+    // Honor a program chosen in onboarding: when today is a program workout day,
+    // the first quest launches the pre-filled Day 1 (identical to every other
+    // Home program day) instead of a blank manual picker. Manual-path users (no
+    // active program) and the defensive rest-day-first case keep the blank
+    // picker — mirroring buildFirstSessionStarter's own `!day.isWorkout` guard.
+    final programDay = _programDay;
+    final plan = firstQuestMissionPlan(programDay);
+    final VoidCallback onTap = (programDay != null && programDay.isWorkout)
+        ? () => _startProgramWorkout(programDay)
+        : () => _startWorkout();
+
     final card = _missionCard(
       accent: kNeon,
       trailing: const _MissionRewardChip(label: '+1 XP'),
       meta: 'WEEKLY QUEST',
       title: 'FIRST QUEST',
-      detail: 'Log your first workout to begin.',
+      detail: plan.detail,
       middle: Align(
         alignment: Alignment.centerLeft,
         child: Text(
@@ -1314,13 +1408,13 @@ class HomePageState extends State<HomePage> {
       button: true,
       label:
           "Today's mission, First Quest, "
-          'Log your first workout to begin, plus one XP, '
+          '${plan.detail} plus one XP, '
           'zero of one complete, tap to start workout',
       child: PhosphorTap(
-        onTap: _startWorkout,
+        onTap: onTap,
         borderRadius: BorderRadius.circular(kCardRadius),
         child: HoldDepress(
-          onTap: _startWorkout,
+          onTap: onTap,
           borderRadius: BorderRadius.circular(kCardRadius),
           child: card,
         ),
@@ -1338,9 +1432,9 @@ class HomePageState extends State<HomePage> {
     return _missionCard(
       accent: kNeon,
       trailing: _MissionRewardChip(
-        label: _suggestedMissionRewardXP == null
-            ? '+5 XP'
-            : '+$_suggestedMissionRewardXP XP',
+        label: _suggestedMissionRewardGems == null
+            ? '+5 gems'
+            : '+$_suggestedMissionRewardGems gems',
       ),
       meta: 'REPEAT LAST',
       title: title,
@@ -1364,10 +1458,10 @@ class HomePageState extends State<HomePage> {
       trailing: rewardLabel == null
           ? null
           : _MissionRewardChip(label: rewardLabel),
-      meta:
-          'PROGRAM DAY  \u2022  WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}',
       title: _programMissionTitle(day),
       detail: _targetLineFromSummary(programDayFocusSummary(day)),
+      middle: _programArcMeter(progress),
+      nextUp: _programNextUp(progress, todayConsumed: false),
       primaryLabel: 'START WORKOUT',
       onPrimary: () => _startProgramWorkout(day),
       secondaryLabel: 'Manual workout',
@@ -1384,12 +1478,18 @@ class HomePageState extends State<HomePage> {
       accent: kNeon,
       borderColor: kMutedText,
       trailing: const _MissionClearedChip(),
-      meta: 'PROGRAM DAY  \u2022  WEEK $week - DAY $dayNumber',
       title: _programMissionTitle(day),
       titleColor: kMutedText,
       detail: _targetLineFromSummary(programDayFocusSummary(day)),
-      supportText: 'Mission complete. Next program day unlocks tomorrow.',
+      middle: _programProgress == null
+          ? null
+          : _programArcMeter(_programProgress!),
+      nextUp: _programProgress == null
+          ? null
+          : _programNextUp(_programProgress!, todayConsumed: true),
+      supportText: 'Session logged.',
       supportColor: kNeon,
+      supportIconPath: 'assets/icons/control/ui/icon_session_logged.png',
     );
   }
 
@@ -1399,38 +1499,121 @@ class HomePageState extends State<HomePage> {
     required RestDayInfo restInfo,
   }) {
     return _missionCard(
-      accent: kCyan,
+      accent: kNeon,
       trailing: _MissionRewardChip(label: '+${restInfo.recoveryXP} XP'),
       meta:
-          'PROGRAM REST  \u2022  WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}',
+          'RECOVERY HOLDS THE PATH  \u2022  WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}',
       title: _programMissionTitle(day),
-      detail: 'Stats protected. Recovery runs all day.',
-      middle: Row(
+      detail: 'Rest day. The path is protected.',
+      middle: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const RestIcon(
-            assetPath: RestAssets.recoveryShield,
-            fallbackAssetPath: 'assets/icons/control/icon_shield.png',
-            size: 15,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '${restInfo.shieldCharges} / ${RestService.maxShieldCharges} shields ready',
-            style: AppFonts.shareTechMono(color: kAmber, fontSize: 12),
+          _programArcMeter(progress),
+          const SizedBox(height: kSpace3),
+          Row(
+            children: [
+              const RestIcon(
+                assetPath: RestAssets.recoveryShield,
+                fallbackAssetPath: 'assets/icons/control/icon_shield.png',
+                size: 15,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${restInfo.shieldCharges} / ${RestService.maxShieldCharges} shields ready',
+                style: AppFonts.shareTechMono(color: kAmber, fontSize: 12),
+              ),
+            ],
           ),
         ],
       ),
+      nextUp: _programNextUp(progress, todayConsumed: false),
       primaryLabel: 'KEEP RESTING',
       onPrimary: () {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Recovery day in progress.')),
         );
       },
-      secondaryLabel: 'Train anyway',
+      secondaryLabel: 'TRAIN ANYWAY',
       onSecondary: () => _startWorkout(
         trainAnyway: false,
         advanceProgramRestDayOnCompletion: true,
       ),
     );
+  }
+
+  /// Goal-gradient meter for the active arc: a real progress bar + honest
+  /// `X / N • P%` count. At arc 0 it shows the endowed "PATH SET" framing with
+  /// decorative boot pips that are never counted as completed sessions.
+  Widget _programArcMeter(ProgramProgress progress) {
+    final program = programById(progress.programId);
+    if (program == null) return const SizedBox.shrink();
+    return ProgramPathHud(program: program, progress: progress, compact: true);
+  }
+
+  /// Forward `NEXT ▸ <label> · <when>` cue for the program mission cards.
+  /// [todayConsumed] is true only on the completed-today panel, where
+  /// `advanceDay` has already moved `currentDayIndex` onto the next slot.
+  Widget? _programNextUp(
+    ProgramProgress progress, {
+    required bool todayConsumed,
+  }) {
+    final program = programById(progress.programId);
+    if (program == null) return null;
+    final lookahead = nextWorkoutLookahead(
+      program,
+      progress.currentDayIndex,
+      todayConsumed: todayConsumed,
+    );
+    if (lookahead == null) return null;
+    return _NextUpPeek(
+      label: lookahead.workout.label,
+      whenText: relativeWhen(lookahead.daysAway),
+      focus: _targetLineFromSummary(programDayFocusSummary(lookahead.workout)),
+    );
+  }
+
+  /// Shown once an arc reaches its target: the next-path prompt. Granting the
+  /// title + recording the completion already happened at save time, so this is
+  /// purely the BEGIN NEXT PATH / STAY WITH THIS PROGRAM decision surface (and
+  /// the graceful fallback if the dedicated reveal was missed).
+  Widget _buildProgramArcCompletePanel(ProgramProgress progress) {
+    final program = programById(progress.programId);
+    final next = nextProgramInChain(progress.programId);
+    return _missionCard(
+      accent: kAmber,
+      trailing: const _MissionClearedChip(),
+      meta: 'PROGRAM COMPLETE',
+      title: 'PATH COMPLETE',
+      titleColor: kAmber,
+      detail: program == null
+          ? '${progress.arcSessions} sessions forged'
+          : '${program.name} • ${progress.arcSessions} sessions forged',
+      middle: program == null
+          ? ArcadeProgressBar(value: 1, fillColor: kAmber, height: 6)
+          : ProgramPathHud(program: program, progress: progress, compact: true),
+      supportText: next == null
+          ? 'Path complete. Choose how to continue.'
+          : 'Next path ready: ${next.name}',
+      supportColor: kAmber,
+      primaryLabel: 'BEGIN NEXT PATH',
+      onPrimary: _beginNextPath,
+      secondaryLabel: 'Stay with this program',
+      onSecondary: _stayWithProgram,
+    );
+  }
+
+  Future<void> _beginNextPath() async {
+    await ProgramService().beginNextPath();
+    await ProgramService().consumePendingCompletionReveal();
+    if (!mounted) return;
+    await _loadData();
+  }
+
+  Future<void> _stayWithProgram() async {
+    await ProgramService().stayWithProgram();
+    await ProgramService().consumePendingCompletionReveal();
+    if (!mounted) return;
+    await _loadData();
   }
 
   Widget _buildCompletedMissionPanel() {
@@ -1696,37 +1879,6 @@ class HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildHomeHeader() {
-    return Row(
-      children: [
-        Container(
-          width: 22,
-          height: 22,
-          decoration: BoxDecoration(
-            border: Border.all(color: kBorder),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Image.asset(
-            'assets/branding/app_logo.png',
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.low,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          'Ironbit',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: kNeon,
-            fontSize: 19,
-            height: 1.1,
-          ),
-        ),
-        const Spacer(),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -1736,41 +1888,367 @@ class HomePageState extends State<HomePage> {
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            kHomeHorizontalPadding,
-            kSpace3,
-            kHomeHorizontalPadding,
-            kSpace5 + MediaQuery.of(context).padding.bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHomeHeader(),
-              const SizedBox(height: kSectionGap),
-              StrobeFlash(
-                trigger: _missionFlashTrigger,
-                borderRadius: BorderRadius.circular(kCardRadius),
-                toggles: 2,
-                toggleMs: 16,
-                child: _buildMainMissionPanel(),
+        child: CustomScrollView(
+          slivers: [
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _HomeStatusHudSliverDelegate(
+                lck: _lck,
+                lckMultiplier: _lckMultiplier,
+                gemBalance: _gemBalance,
+                vitality: _vitality,
+                onLckTap: widget.onViewWorkouts,
+                onGemTap: widget.onOpenShop,
+                onVitTap: widget.onViewProfile,
               ),
-              _buildSecondaryOngoingSessions(),
-              const SizedBox(height: kSectionGap),
-              _buildCharacterBar(),
-              if (_showLastSessionDelta) ...[
-                const SizedBox(height: kSpace2),
-                LastSessionTag(
-                  delta: _lastSessionDelta,
-                  stats: _lastSessionStats,
+            ),
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                kHomeHorizontalPadding,
+                kSectionGap,
+                kHomeHorizontalPadding,
+                kSpace5 + MediaQuery.of(context).padding.bottom,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate.fixed([
+                  StrobeFlash(
+                    trigger: _missionFlashTrigger,
+                    borderRadius: BorderRadius.circular(kCardRadius),
+                    toggles: 2,
+                    toggleMs: 16,
+                    child: _buildMainMissionPanel(),
+                  ),
+                  _buildSecondaryOngoingSessions(),
+                  const SizedBox(height: kSectionGap),
+                  _buildCharacterBar(),
+                  if (_showLastSessionDelta) ...[
+                    const SizedBox(height: kSpace2),
+                    LastSessionTag(
+                      delta: _lastSessionDelta,
+                      stats: _lastSessionStats,
+                    ),
+                  ],
+                  if (_shadowEval != null) ...[
+                    const SizedBox(height: kSectionGap),
+                    ShadowCard(
+                      evaluation: _shadowEval!,
+                      avatarSpec: _profile.avatarSpec,
+                      onTap: widget.onViewGuild,
+                    ),
+                  ],
+                  const SizedBox(height: kSectionGap),
+                  _buildLastWorkoutStat(),
+                  const SizedBox(height: kSectionGap),
+                  _buildWeeklyQuestsCard(),
+                  const SizedBox(height: kSpace5),
+                ]),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeStatusHudSliverDelegate extends SliverPersistentHeaderDelegate {
+  const _HomeStatusHudSliverDelegate({
+    required this.lck,
+    required this.lckMultiplier,
+    required this.gemBalance,
+    required this.vitality,
+    required this.onLckTap,
+    required this.onGemTap,
+    required this.onVitTap,
+  });
+
+  static const double _maxHeight = 58;
+  static const double _minHeight = 42;
+
+  final int lck;
+  final double lckMultiplier;
+  final int gemBalance;
+  final int vitality;
+  final VoidCallback? onLckTap;
+  final VoidCallback? onGemTap;
+  final VoidCallback? onVitTap;
+
+  @override
+  double get maxExtent => _maxHeight;
+
+  @override
+  double get minExtent => _minHeight;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    final collapseT = (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0);
+    final topInset = lerpDouble(kSpace3, 0, collapseT)!;
+    final sideInset = lerpDouble(kHomeHorizontalPadding, 0, collapseT)!;
+    final innerSideInset = lerpDouble(0, kHomeHorizontalPadding, collapseT)!;
+    final ruleAlpha = collapseT <= 0.01
+        ? 0.0
+        : (0.35 + collapseT * 0.45).clamp(0.0, 1.0);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Color.lerp(Colors.transparent, kBg, collapseT),
+        border: Border(
+          bottom: BorderSide(
+            color: kBorder.withValues(alpha: ruleAlpha),
+            width: collapseT <= 0.01 ? 0 : 1,
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(sideInset, topInset, sideInset, 0),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: innerSideInset),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: HomeStatusHud(
+              lck: lck,
+              lckMultiplier: lckMultiplier,
+              gemBalance: gemBalance,
+              vitality: vitality,
+              onLckTap: onLckTap,
+              onGemTap: onGemTap,
+              onVitTap: onVitTap,
+              collapseT: collapseT,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _HomeStatusHudSliverDelegate oldDelegate) {
+    return oldDelegate.lck != lck ||
+        oldDelegate.lckMultiplier != lckMultiplier ||
+        oldDelegate.gemBalance != gemBalance ||
+        oldDelegate.vitality != vitality ||
+        oldDelegate.onLckTap != onLckTap ||
+        oldDelegate.onGemTap != onGemTap ||
+        oldDelegate.onVitTap != onVitTap;
+  }
+}
+
+class HomeStatusHud extends StatelessWidget {
+  const HomeStatusHud({
+    super.key,
+    required this.lck,
+    required this.lckMultiplier,
+    required this.gemBalance,
+    required this.vitality,
+    this.onLckTap,
+    this.onGemTap,
+    this.onVitTap,
+    this.collapseT = 0,
+  });
+
+  final int lck;
+  final double lckMultiplier;
+  final int gemBalance;
+  final int vitality;
+  final VoidCallback? onLckTap;
+  final VoidCallback? onGemTap;
+  final VoidCallback? onVitTap;
+  final double collapseT;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = collapseT.clamp(0.0, 1.0);
+    final shellAlpha = (1 - t).clamp(0.0, 1.0);
+    final borderRadius = BorderRadius.circular(lerpDouble(kCardRadius, 0, t)!);
+    final horizontalPadding = lerpDouble(12, 0, t)!;
+    final verticalPadding = lerpDouble(7, 6, t)!;
+    final brandGap = lerpDouble(16, 8, t)!;
+    // Small gap; per-metric tap padding (below) supplies most of the spacing
+    // and the ≥44px-wide hit area.
+    final metricGap = lerpDouble(4, 2, t)!;
+    final lckIconSize = lerpDouble(17, 14, t)!;
+    final gemIconSize = lerpDouble(16, 14, t)!;
+    final vitIconSize = lerpDouble(17, 14, t)!;
+    final valueFontSize = lerpDouble(9, 7.5, t)!;
+    final content = Container(
+      key: const ValueKey('home_status_hud'),
+      padding: EdgeInsets.symmetric(
+        horizontal: horizontalPadding,
+        vertical: verticalPadding,
+      ),
+      decoration: BoxDecoration(
+        color: kCard.withValues(alpha: shellAlpha),
+        border: Border.all(
+          color: kBorder.withValues(alpha: shellAlpha),
+          width: shellAlpha <= 0.01 ? 0 : 1,
+        ),
+        borderRadius: borderRadius,
+      ),
+      child: Row(
+        children: [
+          _HomeHudBrand(collapseT: t),
+          SizedBox(width: brandGap),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _HomeHudMetric(
+                      semanticLabel:
+                          'Luck multiplier ${XpService.multiplierLabel(lckMultiplier)}',
+                      icon: RadarStatIcon(
+                        key: const ValueKey('home_status_lck_icon'),
+                        assetPath: RadarStatIcons.lckForValue(lck),
+                        size: lckIconSize,
+                        semanticLabel: 'Luck streak',
+                      ),
+                      value: XpService.multiplierLabel(lckMultiplier),
+                      valueKey: const ValueKey('home_status_lck_multiplier'),
+                      valueColor: lckMultiplier > 1.0 ? kAmber : kMutedText,
+                      valueFontSize: valueFontSize,
+                      onTap: onLckTap,
+                      navHint: 'Opens your workout history',
+                    ),
+                    SizedBox(width: metricGap),
+                    _HomeHudMetric(
+                      semanticLabel: 'Gems $gemBalance',
+                      icon: Image.asset(
+                        'assets/icons/economy/icon_gem.png',
+                        key: const ValueKey('home_status_gem_icon'),
+                        width: gemIconSize,
+                        height: gemIconSize,
+                        filterQuality: FilterQuality.none,
+                        semanticLabel: 'Gems',
+                      ),
+                      value: '$gemBalance',
+                      valueKey: const ValueKey('home_status_gem_balance'),
+                      valueColor: kText,
+                      valueFontSize: valueFontSize,
+                      onTap: onGemTap,
+                      navHint: 'Opens the gem store',
+                    ),
+                    SizedBox(width: metricGap),
+                    _HomeHudMetric(
+                      semanticLabel: 'Vitality $vitality',
+                      icon: RadarStatIcon(
+                        key: const ValueKey('home_status_vit_icon'),
+                        assetPath: RadarStatIcons.vitalityForValue(vitality),
+                        size: vitIconSize,
+                        semanticLabel: 'Vitality',
+                      ),
+                      value: '$vitality',
+                      valueKey: const ValueKey('home_status_vit_value'),
+                      valueColor: kText,
+                      valueFontSize: valueFontSize,
+                      onTap: onVitTap,
+                      navHint: 'Opens your stat board',
+                    ),
+                  ],
                 ),
-              ],
-              const SizedBox(height: kSectionGap),
-              _buildLastWorkoutStat(),
-              const SizedBox(height: kSectionGap),
-              _buildWeeklyQuestsCard(),
-              const SizedBox(height: kSpace5),
-            ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // The three metrics each own their tap (see _HomeHudMetric); the bar itself
+    // is no longer a single button.
+    return content;
+  }
+}
+
+class _HomeHudBrand extends StatelessWidget {
+  const _HomeHudBrand({required this.collapseT});
+
+  final double collapseT;
+
+  @override
+  Widget build(BuildContext context) {
+    final fontSize = lerpDouble(16, 13.5, collapseT)!;
+    return Text(
+      'Ironbit',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+        color: kNeon,
+        fontSize: fontSize,
+        height: 1.1,
+      ),
+    );
+  }
+}
+
+class _HomeHudMetric extends StatelessWidget {
+  const _HomeHudMetric({
+    required this.icon,
+    required this.value,
+    required this.valueKey,
+    required this.valueColor,
+    required this.semanticLabel,
+    required this.valueFontSize,
+    this.onTap,
+    this.navHint,
+  });
+
+  final Widget icon;
+  final String value;
+  final Key valueKey;
+  final Color valueColor;
+  final String semanticLabel;
+  final double valueFontSize;
+
+  /// When set, the metric is a chrome-free nav button to its destination.
+  final VoidCallback? onTap;
+  final String? navHint;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        icon,
+        const SizedBox(width: 6),
+        Text(
+          value,
+          key: valueKey,
+          style: const TextStyle(
+            fontFamily: 'PressStart2P',
+            height: 1,
+          ).copyWith(color: valueColor, fontSize: valueFontSize),
+        ),
+      ],
+    );
+
+    if (onTap == null) {
+      return Semantics(label: semanticLabel, child: row);
+    }
+
+    // Chrome-free nav: nothing drawn at rest (no chip/border per the design) —
+    // just a widened transparent hit area plus the app's transient press
+    // feedback (PhosphorTap flash + HoldDepress) so the tap reveals itself on
+    // touch. Height is capped by the thin pinned header by design.
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      hint: navHint,
+      child: PhosphorTap(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(kCardRadius),
+        child: HoldDepress(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(kCardRadius),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: row,
           ),
         ),
       ),
@@ -1829,6 +2307,7 @@ class _MissionRewardChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isGemReward = label.toLowerCase().contains('gem');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -1836,14 +2315,94 @@ class _MissionRewardChip extends StatelessWidget {
         border: Border.all(color: kAmber),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontFamily: 'PressStart2P',
-          fontSize: 8,
-          color: kAmber,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isGemReward) ...[
+            Image.asset(
+              'assets/icons/economy/icon_gem_reward.png',
+              key: const ValueKey('home_mission_gem_reward_icon'),
+              width: 12,
+              height: 12,
+              filterQuality: FilterQuality.none,
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 8,
+              color: kAmber,
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// Compact forward cue on the program mission card: "NEXT ▸ LOWER · tomorrow".
+/// Surfaces what's next + when (relative) without leaving Home — an open-loop
+/// glance, never a guilt/appointment. Static (reduced-motion safe), no red.
+class _NextUpPeek extends StatelessWidget {
+  const _NextUpPeek({required this.label, required this.whenText, this.focus});
+
+  final String label;
+  final String whenText;
+  final String? focus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const ImageIcon(
+              AssetImage('assets/icons/control/ui/icon_next_program.png'),
+              size: 14,
+              color: kNeon,
+            ),
+            const SizedBox(width: kSpace2),
+            const Text(
+              'NEXT',
+              style: TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 8,
+                color: kNeon,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(width: kSpace2),
+            Expanded(
+              child: Text(
+                '$label · $whenText',
+                overflow: TextOverflow.ellipsis,
+                style: AppFonts.shareTechMono(
+                  color: kMutedText,
+                  fontSize: 13,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (focus != null && focus!.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(left: 20),
+            child: Text(
+              focus!,
+              style: AppFonts.shareTechMono(
+                color: kMutedText.withValues(alpha: 0.7),
+                fontSize: 11,
+                height: 1.2,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

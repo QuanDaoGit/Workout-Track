@@ -6,6 +6,7 @@ import '../data/loot_registry.dart';
 import '../models/body_goal_models.dart';
 import '../models/body_metrics_models.dart';
 import '../models/loot_item.dart';
+import '../models/unit_models.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
 
@@ -17,13 +18,17 @@ import '../models/character_class.dart';
 import '../models/class_state.dart';
 import '../services/body_goal_service.dart';
 import '../services/body_metrics_service.dart';
+import '../services/calibration_service.dart';
 import '../services/class_service.dart';
 import '../services/profile_service.dart';
 import '../services/progression_settings_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
+import '../services/sfx_service.dart';
+import '../services/sound_settings_service.dart';
 import '../services/stat_engine.dart';
 import '../services/loot_service.dart';
+import '../services/unit_settings_service.dart';
 import '../services/workout_defaults_service.dart';
 import '../services/workout_metric_service.dart';
 import '../services/workout_storage_service.dart';
@@ -40,11 +45,13 @@ import '../widgets/motion/phosphor_tap.dart';
 import '../widgets/rest_icon.dart';
 import '../widgets/class_sprite.dart';
 import '../widgets/stat_card.dart';
+import 'avatar_customizer_page.dart';
 import 'body_metrics_chart_page.dart';
 import 'body_metrics_onboarding_page.dart';
 import 'goal_selection_page.dart';
 import 'inventory_page.dart';
 import 'log_weight_page.dart';
+import 'shop_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, this.onProfileChanged});
@@ -56,16 +63,6 @@ class ProfilePage extends StatefulWidget {
 }
 
 class ProfilePageState extends State<ProfilePage> {
-  static const List<String> _avatarPaths = [
-    ProfileData.defaultAvatarPath,
-    'assets/avatar/1.png',
-    'assets/avatar/3.png',
-    'assets/avatar/4.png',
-    'assets/avatar/5.png',
-    'assets/avatar/6.png',
-    'assets/avatar/7.png',
-    'assets/avatar/8.png',
-  ];
 
   final QuestService _questService = QuestService();
   final ProfileService _profileService = ProfileService();
@@ -84,18 +81,20 @@ class ProfilePageState extends State<ProfilePage> {
   int _potionBonusXP = 0;
   bool _bodyMetricsEnabled = false;
   bool _progressionEnabled = true;
+  bool _soundEnabled = true;
   BodyGoalState? _bodyGoalState;
   WeightEntry? _lastWeightEntry;
-  bool _canLogWeight = false;
-  int _daysUntilNextLog = 0;
+  bool _canEarnReward = false;
+  int _daysUntilNextReward = 0;
   String? _activeBoostLabel;
+  double? _heightCm;
   Map<String, int> _combatStats = {
     for (final stat in StatEngine.stats) stat: 0,
   };
-  bool _showEndBackfillNotice = false;
   ProfileData _profile = ProfileData.defaults();
   Map<LootCategory, LootItem> _equippedLoot = {};
   int _ownedLootCount = 0;
+  int _ownedTitleCount = 0;
   ClassState? _classState;
   RespecStatus _respecStatus = const RespecStatus(
     RespecAvailability.available,
@@ -119,8 +118,6 @@ class ProfilePageState extends State<ProfilePage> {
     final summary = await _questService.getSummary(sessions);
     final profile = await _profileService.loadProfile();
     final combatStats = await _statEngine.getStoredStats();
-    final showEndBackfillNotice =
-        _showEndBackfillNotice || await StatEngine.consumeEndBackfillNotice();
     final restState = await _restService.refreshWeeklyShieldProgress(sessions);
     final recoveryXP = _restService.effectiveRecoveryXPForState(
       sessions: sessions,
@@ -128,6 +125,9 @@ class ProfilePageState extends State<ProfilePage> {
     );
     final equippedLoot = await _lootService.getEquippedLoot();
     final ownedLootCount = await _lootService.getOwnedCount();
+    final ownedTitleCount = (await _lootService.getInventory())
+        .where((i) => i.category == LootCategory.titleBadge && !i.isDefault)
+        .length;
     final potionBonusXP = await XpBoostService().getTotalBonusXP();
     final classService = ClassService();
     final classState = await classService.getState();
@@ -135,16 +135,18 @@ class ProfilePageState extends State<ProfilePage> {
     final metricsService = BodyMetricsService();
     final bodyMetricsEnabled = await metricsService.isEnabled();
     final progressionEnabled = await ProgressionSettingsService().isEnabled();
+    final soundEnabled = await SoundSettingsService().isEnabled();
+    final heightCm = await CalibrationService().heightCm();
     BodyGoalState? bodyGoalState;
     WeightEntry? lastWeightEntry;
-    bool canLogWeight = false;
-    int daysUntilNextLog = 0;
+    bool canEarnReward = false;
+    int daysUntilNextReward = 0;
     String? activeBoostLabel;
     if (bodyMetricsEnabled) {
       bodyGoalState = await BodyGoalService().getGoalState();
       lastWeightEntry = await metricsService.getLastEntry();
-      canLogWeight = await metricsService.canLogWeight();
-      daysUntilNextLog = await metricsService.daysUntilNextLog();
+      canEarnReward = await metricsService.canEarnReward();
+      daysUntilNextReward = await metricsService.daysUntilNextReward();
       activeBoostLabel = await XpBoostService().getActiveBoostLabel();
     }
     if (!mounted) return;
@@ -159,20 +161,22 @@ class ProfilePageState extends State<ProfilePage> {
       _restState = restState;
       _recoveryXP = recoveryXP;
       _combatStats = combatStats;
-      _showEndBackfillNotice = showEndBackfillNotice;
       _profile = profile;
       _equippedLoot = equippedLoot;
       _ownedLootCount = ownedLootCount;
+      _ownedTitleCount = ownedTitleCount;
       _potionBonusXP = potionBonusXP;
       _classState = classState;
       _respecStatus = respecStatus;
       _bodyMetricsEnabled = bodyMetricsEnabled;
       _progressionEnabled = progressionEnabled;
+      _soundEnabled = soundEnabled;
       _bodyGoalState = bodyGoalState;
       _lastWeightEntry = lastWeightEntry;
-      _canLogWeight = canLogWeight;
-      _daysUntilNextLog = daysUntilNextLog;
+      _canEarnReward = canEarnReward;
+      _daysUntilNextReward = daysUntilNextReward;
       _activeBoostLabel = activeBoostLabel;
+      _heightCm = heightCm;
       _loading = false;
     });
   }
@@ -190,11 +194,58 @@ class ProfilePageState extends State<ProfilePage> {
     setState(() => _editingName = false);
   }
 
-  Future<void> _selectAvatar(String avatarPath) async {
-    if (_profile.avatarPath == avatarPath) return;
-    await _profileService.saveAvatarPath(avatarPath);
-    await reload();
-    widget.onProfileChanged?.call();
+  Future<void> _openAvatarCustomizer() async {
+    final saved = await Navigator.of(context).push<bool>(
+      arcadeRoute(
+        (_) => const AvatarCustomizerPage(),
+        motion: ArcadeRouteMotion.fade,
+      ),
+    );
+    if (saved == true) {
+      await reload();
+      widget.onProfileChanged?.call();
+    }
+  }
+
+  /// The identity frame doubles as the avatar-edit entry — tap to open the
+  /// customizer. A small brush chip keeps the affordance discoverable.
+  Widget _buildAvatarEntry() {
+    return Semantics(
+      button: true,
+      label: 'Edit avatar',
+      child: HoldDepress(
+        onTap: _openAvatarCustomizer,
+        borderRadius: BorderRadius.circular(4),
+        child: Stack(
+          children: [
+            LootAvatarFrame(
+              avatarSpec: _profile.avatarSpec,
+              framePath: _equippedFrame?.assetPath,
+              size: 130,
+              borderColor: kBorderVariant,
+            ),
+            Positioned(
+              right: 4,
+              bottom: 4,
+              child: Container(
+                key: const ValueKey('profile_avatar_edit_chip'),
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: kBg,
+                  border: Border.all(color: kBorderVariant),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const ImageIcon(
+                  AssetImage('assets/icons/control/icon_brush.png'),
+                  size: 12,
+                  color: kNeon,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   LootItem? get _equippedTitle => _equippedLoot[LootCategory.titleBadge];
@@ -204,6 +255,14 @@ class ProfilePageState extends State<ProfilePage> {
   Future<void> _openInventory() async {
     await Navigator.of(context).push(
       arcadeRoute((_) => const InventoryPage(), motion: ArcadeRouteMotion.fade),
+    );
+    await reload();
+    widget.onProfileChanged?.call();
+  }
+
+  Future<void> _openShop() async {
+    await Navigator.of(context).push(
+      arcadeRoute((_) => const ShopPage(), motion: ArcadeRouteMotion.fade),
     );
     await reload();
     widget.onProfileChanged?.call();
@@ -234,6 +293,13 @@ class ProfilePageState extends State<ProfilePage> {
     await ProgressionSettingsService().setEnabled(value);
     if (!mounted) return;
     setState(() => _progressionEnabled = value);
+  }
+
+  Future<void> _toggleSound(bool value) async {
+    await SoundSettingsService().setEnabled(value);
+    SfxService.enabled = value;
+    if (!mounted) return;
+    setState(() => _soundEnabled = value);
   }
 
   Future<void> _openLogWeight() async {
@@ -497,6 +563,34 @@ class ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Future<void> _showUnitsSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+      ),
+      builder: (context) => const _UnitsSheet(),
+    );
+    if (!mounted) return;
+    await reload(); // re-render every converted display in the new unit
+  }
+
+  Future<void> _showHeightSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: kCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+      ),
+      builder: (context) => const _HeightSheet(),
+    );
+    if (!mounted) return;
+    await reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading || _summary == null) {
@@ -562,8 +656,6 @@ class ProfilePageState extends State<ProfilePage> {
 
   Widget _buildGuildCard() {
     final summary = _summary!;
-    final cls = _classState?.currentClass ?? CharacterClass.bruiser;
-    final classColor = cls.themeColor;
     final totalXP =
         XpService.calculateTotalXP(_sessions) +
         summary.claimedRewardXP +
@@ -581,19 +673,19 @@ class ProfilePageState extends State<ProfilePage> {
       ...summary.sideQuests,
     ];
     final completedQuests = quests.where((quest) => quest.completed).length;
-    final titleCount = summary.earnedTitles.length;
+    final titleCount = _ownedTitleCount;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
+          key: const ValueKey('profile_guild_card'),
           width: double.infinity,
           padding: const EdgeInsets.all(kSpace4),
           decoration: BoxDecoration(
             color: kSurface2,
-            border: Border.all(color: classColor.withValues(alpha: 0.75)),
+            border: Border.all(color: kBorderVariant.withValues(alpha: 0.75)),
             borderRadius: BorderRadius.circular(4),
-            boxShadow: neonGlow(color: classColor, opacity: 0.16, blur: 18),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -601,13 +693,7 @@ class ProfilePageState extends State<ProfilePage> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  LootAvatarFrame(
-                    avatarPath: _profile.avatarPath,
-                    framePath: _equippedFrame?.assetPath,
-                    size: 130,
-                    borderColor: classColor,
-                    glowColor: classColor,
-                  ),
+                  _buildAvatarEntry(),
                   const SizedBox(width: kSpace4),
                   Expanded(
                     child: Column(
@@ -679,10 +765,7 @@ class ProfilePageState extends State<ProfilePage> {
           titleCount: titleCount,
         ),
         const SizedBox(height: kSpace4),
-        StatCard(
-          stats: _combatStats,
-          showEndBackfillNotice: _showEndBackfillNotice,
-        ),
+        StatCard(stats: _combatStats),
         const SizedBox(height: kSpace3),
         _buildClassSection(),
         const SizedBox(height: kSpace3),
@@ -700,18 +783,25 @@ class ProfilePageState extends State<ProfilePage> {
     final color = cls.themeColor;
 
     return Container(
+      key: const ValueKey('profile_class_section'),
       padding: const EdgeInsets.all(kSpace4),
       decoration: BoxDecoration(
-        color: Color.lerp(kSurface2, color, 0.08),
-        border: Border.all(color: color.withValues(alpha: 0.7)),
+        color: kSurface2,
+        border: Border.all(color: kBorder.withValues(alpha: 0.85)),
         borderRadius: BorderRadius.circular(4),
-        boxShadow: neonGlow(color: color, opacity: 0.12, blur: 16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
+              Container(
+                key: const ValueKey('profile_class_accent_rail'),
+                width: 4,
+                height: 58,
+                color: color,
+              ),
+              const SizedBox(width: kSpace3),
               ClassSprite(
                 assetPath: 'assets/classes/icons/${cls.name}.png',
                 placeholderTint: color,
@@ -758,14 +848,14 @@ class ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: kSpace3),
           Align(
             alignment: Alignment.centerLeft,
-            child: _buildChangeClassButton(color),
+            child: _buildChangeClassButton(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildChangeClassButton(Color color) {
+  Widget _buildChangeClassButton() {
     final status = _respecStatus;
     final (label, enabled) = switch (status.availability) {
       RespecAvailability.locked => (
@@ -781,7 +871,7 @@ class ProfilePageState extends State<ProfilePage> {
     return TextButton(
       onPressed: enabled ? _openRespec : null,
       style: TextButton.styleFrom(
-        foregroundColor: color,
+        foregroundColor: kNeon,
         disabledForegroundColor: kMutedText,
         padding: EdgeInsets.zero,
         minimumSize: const Size(0, 34),
@@ -790,7 +880,7 @@ class ProfilePageState extends State<ProfilePage> {
       child: Text(
         label,
         style: AppFonts.shareTechMono(
-          color: enabled ? color : kMutedText,
+          color: enabled ? kNeon : kMutedText,
           fontSize: 13,
           fontWeight: FontWeight.w700,
         ),
@@ -878,64 +968,129 @@ class ProfilePageState extends State<ProfilePage> {
       CharacterClass.assassin =>
         'STAT BONUS: +20% AGI gain from shoulders, core training.',
       CharacterClass.tank => 'STAT BONUS: +20% VIT gain from legs training.',
-      CharacterClass.vanguard => 'STAT BONUS: +20% gain on whatever you train.',
     };
   }
 
   Widget _buildLootInventoryEntry() {
-    return HoldDepress(
-      onTap: _openInventory,
+    return PhosphorTap(
       borderRadius: BorderRadius.circular(4),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(kSpace4),
-        decoration: BoxDecoration(
-          color: kCard,
-          border: Border.all(color: kBorder),
-          borderRadius: BorderRadius.circular(4),
+      child: HoldDepress(
+        onTap: _openInventory,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(kSpace4),
+          decoration: BoxDecoration(
+            color: kCard,
+            border: Border.all(color: kBorder),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            children: [
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_bag.png'),
+                size: 24,
+                color: kAmber,
+              ),
+              const SizedBox(width: kSpace3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'LOADOUT INVENTORY · $_ownedLootCount/${lootRegistry.length}',
+                      style: const TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 9,
+                        color: kText,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: kSpace1),
+                    Text(
+                      'Owned frames, titles, and themes live here.',
+                      style: AppFonts.shareTechMono(
+                        color: kMutedText,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: kSpace2),
+              const Text(
+                '>',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 12,
+                  color: kNeon,
+                ),
+              ),
+            ],
+          ),
         ),
-        child: Row(
-          children: [
-            const ImageIcon(
-              AssetImage('assets/icons/control/icon_bag.png'),
-              size: 24,
-              color: kAmber,
-            ),
-            const SizedBox(width: kSpace3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'LOOT INVENTORY · $_ownedLootCount/${lootRegistry.length}',
-                    style: const TextStyle(
-                      fontFamily: 'PressStart2P',
-                      fontSize: 9,
-                      color: kText,
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: kSpace1),
-                  Text(
-                    'Frames, titles, and themes live here.',
-                    style: AppFonts.shareTechMono(
-                      color: kMutedText,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+      ),
+    );
+  }
+
+  Widget _buildGemShopEntry() {
+    return PhosphorTap(
+      borderRadius: BorderRadius.circular(4),
+      child: HoldDepress(
+        onTap: _openShop,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(kSpace4),
+          decoration: BoxDecoration(
+            color: kCard,
+            border: Border.all(color: kBorder),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            children: [
+              Image.asset(
+                'assets/icons/economy/icon_gem.png',
+                width: 24,
+                height: 24,
+                filterQuality: FilterQuality.none,
               ),
-            ),
-            const SizedBox(width: kSpace2),
-            const Text(
-              '>',
-              style: TextStyle(
-                fontFamily: 'PressStart2P',
-                fontSize: 12,
-                color: kNeon,
+              const SizedBox(width: kSpace3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'GEM SHOP',
+                      style: TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 9,
+                        color: kNeon,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: kSpace1),
+                    Text(
+                      'Spend earned gems on locked frames and themes.',
+                      style: AppFonts.shareTechMono(
+                        color: kMutedText,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: kSpace2),
+              const Text(
+                '>',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 12,
+                  color: kNeon,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -945,7 +1100,7 @@ class ProfilePageState extends State<ProfilePage> {
     final goal = _bodyGoalState;
     final lastEntry = _lastWeightEntry;
 
-    String lastLoggedLabel = 'No entries yet';
+    String checkInLabel = 'No check-ins yet';
     if (lastEntry != null) {
       final daysAgo = DateTime.now().difference(lastEntry.loggedAt).inDays;
       final timeLabel = daysAgo == 0
@@ -953,8 +1108,8 @@ class ProfilePageState extends State<ProfilePage> {
           : daysAgo == 1
           ? 'yesterday'
           : '$daysAgo days ago';
-      lastLoggedLabel =
-          '$timeLabel · ${lastEntry.weightKg.toStringAsFixed(1)} kg';
+      checkInLabel =
+          'Last check-in · $timeLabel · ${formatWeight(lastEntry.weightKg, Units.weight)}';
     }
 
     return Column(
@@ -962,37 +1117,57 @@ class ProfilePageState extends State<ProfilePage> {
       children: [
         const _SectionHeader(title: 'BODY METRICS'),
         const SizedBox(height: 10),
-        if (goal != null)
-          HoldDepress(
-            onTap: _changeGoal,
-            borderRadius: BorderRadius.circular(4),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: kCard,
-                border: Border.all(color: const Color(0xFF00BFFF)),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                '${goal.goalLabel} \u2192 ${goal.futureClassName}',
-                style: const TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 8,
-                  color: Color(0xFF00BFFF),
-                ),
+        // Act-first status: a calm "ready" chip while the weekly reward window
+        // is open, otherwise a muted countdown. Never weight-change framing.
+        if (_canEarnReward)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: kCard,
+              border: Border.all(color: kNeon),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Text(
+              'CHECK-IN READY',
+              style: TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 8,
+                color: kNeon,
               ),
             ),
+          )
+        else
+          Text(
+            'Next reward in $_daysUntilNextReward '
+            '${_daysUntilNextReward == 1 ? 'day' : 'days'}',
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
         const SizedBox(height: 10),
         Text(
-          lastLoggedLabel,
+          checkInLabel,
           style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
         ),
-        if (goal?.targetWeight != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            'heading toward ${goal!.targetWeight!.toStringAsFixed(1)} kg',
-            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
+        if (goal != null) ...[
+          const SizedBox(height: 8),
+          HoldDepress(
+            onTap: _changeGoal,
+            borderRadius: BorderRadius.circular(4),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    'GOAL \u00b7 ${goal.goalLabel}'
+                    '${goal.targetWeight != null ? ' \u00b7 heading toward ${formatWeight(goal.targetWeight!, Units.weight)}' : ''}',
+                    style: AppFonts.shareTechMono(
+                      color: kMutedText,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(Icons.edit_sharp, size: 12, color: kMutedText),
+              ],
+            ),
           ),
         ],
         if (_activeBoostLabel != null) ...[
@@ -1017,12 +1192,7 @@ class ProfilePageState extends State<ProfilePage> {
           ),
         ],
         const SizedBox(height: 12),
-        PixelButton(
-          label: _canLogWeight
-              ? 'LOG WEIGHT'
-              : 'NEXT LOG IN $_daysUntilNextLog DAYS',
-          onPressed: _canLogWeight ? _openLogWeight : null,
-        ),
+        PixelButton(label: 'LOG WEIGHT', onPressed: _openLogWeight),
         const SizedBox(height: 8),
         PixelButton(
           label: 'VIEW TREND',
@@ -1035,12 +1205,8 @@ class ProfilePageState extends State<ProfilePage> {
 
   Widget _buildNameBlock() {
     final titleItem = _equippedTitle;
-    final title = titleItem?.name ?? _summary!.selectedTitle ?? 'untitled';
-    final titleColor =
-        titleItem?.color ??
-        (_summary!.selectedTitle == null
-            ? kMutedText
-            : const Color(0xFFFFD700));
+    final title = titleItem?.name ?? 'untitled';
+    final titleColor = titleItem?.color ?? kMutedText;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1104,27 +1270,11 @@ class ProfilePageState extends State<ProfilePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionHeader(title: 'AVATAR'),
-        const SizedBox(height: 10),
-        GridView.count(
-          crossAxisCount: 4,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
-            for (final avatarPath in _avatarPaths)
-              _AvatarChoice(
-                path: avatarPath,
-                selected: _profile.avatarPath == avatarPath,
-                onTap: () => _selectAvatar(avatarPath),
-              ),
-          ],
-        ),
-        const SizedBox(height: kSpace5),
         const _SectionHeader(title: 'COSMETICS'),
         const SizedBox(height: kSpace3),
         _buildLootInventoryEntry(),
+        const SizedBox(height: kSpace3),
+        _buildGemShopEntry(),
       ],
     );
   }
@@ -1136,16 +1286,16 @@ class ProfilePageState extends State<ProfilePage> {
         const _SectionHeader(title: 'PLAYER SETUP'),
         const SizedBox(height: 10),
         _SettingsToggleRow(
-          iconPath: 'assets/icons/control/icon_stat.png',
+          iconPath: 'assets/icons/control/ui/icon_body_metrics.png',
           title: 'Body Metrics',
           subtitle: _bodyMetricsEnabled
-              ? 'Weekly weight log active.'
-              : 'Opt-in weekly weight tracking.',
+              ? 'Weight tracking active.'
+              : 'Opt-in weight tracking.',
           value: _bodyMetricsEnabled,
           onChanged: _toggleBodyMetrics,
         ),
         _SettingsToggleRow(
-          iconPath: 'assets/icons/control/icon_trophy.png',
+          iconPath: 'assets/icons/control/ui/icon_suggested_loads.png',
           title: 'Suggested loads',
           subtitle: _progressionEnabled
               ? 'TRY: prompts on Set 1 of each exercise.'
@@ -1166,9 +1316,33 @@ class ProfilePageState extends State<ProfilePage> {
           subtitle: 'Duration target and rest timer.',
           onTap: _showWorkoutDefaultsSheet,
         ),
+        _SettingsRow(
+          iconPath: 'assets/icons/control/icon_stat.png',
+          title: 'Units',
+          subtitle:
+              'Weight in ${Units.weight.labelUpper} · height in ${Units.height.labelUpper}.',
+          onTap: _showUnitsSheet,
+        ),
+        _SettingsRow(
+          iconPath: 'assets/icons/control/icon_stat.png',
+          title: 'Height',
+          subtitle: _heightCm != null
+              ? formatHeight(_heightCm!, Units.height)
+              : 'Not set — tap to add.',
+          onTap: _showHeightSheet,
+        ),
         const SizedBox(height: 18),
         const _SectionHeader(title: 'APP SUPPORT'),
         const SizedBox(height: 10),
+        _SettingsToggleRow(
+          iconPath: 'assets/icons/control/icon_sound.png',
+          title: 'Sound',
+          subtitle: _soundEnabled
+              ? 'Arcade sound effects on.'
+              : 'Muted — no sound effects.',
+          value: _soundEnabled,
+          onChanged: _toggleSound,
+        ),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_bell.png',
           title: 'Notifications',
@@ -1214,13 +1388,305 @@ class ProfilePageState extends State<ProfilePage> {
           ),
         ),
         _SettingsRow(
-          iconPath: 'assets/icons/control/icon_scroll.png',
+          iconPath: 'assets/icons/control/ui/icon_about.png',
           title: 'About',
           subtitle: 'Version, credits, and app notes.',
           onTap: () => _showComingSoon(
             title: 'About',
             description: 'Version details and credits will live here later.',
-            iconPath: 'assets/icons/control/icon_scroll.png',
+            iconPath: 'assets/icons/control/ui/icon_about.png',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Settings sheet to pick the app-wide weight + height units. Selections apply
+/// live (persist to [Units]); the caller reloads on close to re-render displays.
+class _UnitsSheet extends StatefulWidget {
+  const _UnitsSheet();
+
+  @override
+  State<_UnitsSheet> createState() => _UnitsSheetState();
+}
+
+class _UnitsSheetState extends State<_UnitsSheet> {
+  WeightUnit _weight = Units.weight;
+  LengthUnit _height = Units.height;
+
+  Future<void> _setWeight(WeightUnit u) async {
+    await Units.setWeight(u);
+    if (!mounted) return;
+    setState(() => _weight = u);
+  }
+
+  Future<void> _setHeight(LengthUnit u) async {
+    await Units.setHeight(u);
+    if (!mounted) return;
+    setState(() => _height = u);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        18,
+        20,
+        20 + MediaQuery.of(context).padding.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              ImageIcon(
+                AssetImage('assets/icons/control/icon_stat.png'),
+                size: 22,
+                color: Color(0xFF00FF9C),
+              ),
+              SizedBox(width: 10),
+              Text(
+                'UNITS',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 11,
+                  color: Color(0xFF00FF9C),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'WEIGHT',
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          _SheetToggle(
+            options: const ['KG', 'LBS'],
+            selectedIndex: _weight == WeightUnit.kg ? 0 : 1,
+            onSelect: (i) =>
+                _setWeight(i == 0 ? WeightUnit.kg : WeightUnit.lbs),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'HEIGHT',
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          _SheetToggle(
+            options: const ['CM', 'FT-IN'],
+            selectedIndex: _height == LengthUnit.cm ? 0 : 1,
+            onSelect: (i) =>
+                _setHeight(i == 0 ? LengthUnit.cm : LengthUnit.ftIn),
+          ),
+          const SizedBox(height: 20),
+          PixelButton(
+            label: 'DONE',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Two-option segmented toggle styled with theme tokens (selected = neon fill).
+class _SheetToggle extends StatelessWidget {
+  const _SheetToggle({
+    required this.options,
+    required this.selectedIndex,
+    required this.onSelect,
+  });
+
+  final List<String> options;
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (var i = 0; i < options.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onSelect(i),
+              child: Container(
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: selectedIndex == i ? kNeon : kCard,
+                  border: Border.all(
+                    color: selectedIndex == i ? kNeon : kBorder,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  options[i],
+                  style: AppFonts.shareTechMono(
+                    color: selectedIndex == i ? kBg : kText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Settings sheet to view/edit body height, entered in the active length unit
+/// and stored canonical in centimetres via [CalibrationService].
+class _HeightSheet extends StatefulWidget {
+  const _HeightSheet();
+
+  @override
+  State<_HeightSheet> createState() => _HeightSheetState();
+}
+
+class _HeightSheetState extends State<_HeightSheet> {
+  final CalibrationService _service = CalibrationService();
+  final TextEditingController _cmCtrl = TextEditingController();
+  final TextEditingController _feetCtrl = TextEditingController();
+  final TextEditingController _inchCtrl = TextEditingController();
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final cm = await _service.heightCm();
+    if (!mounted) return;
+    setState(() {
+      if (cm != null) {
+        if (Units.height == LengthUnit.cm) {
+          _cmCtrl.text = cm.round().toString();
+        } else {
+          final h = cmToFeetInches(cm);
+          _feetCtrl.text = h.feet.toString();
+          _inchCtrl.text = h.inches.toString();
+        }
+      }
+      _loading = false;
+    });
+  }
+
+  double? get _heightCm {
+    if (Units.height == LengthUnit.cm) {
+      final v = double.tryParse(_cmCtrl.text.trim());
+      return (v != null && v > 0) ? v : null;
+    }
+    final ft = int.tryParse(_feetCtrl.text.trim()) ?? 0;
+    final inch = int.tryParse(_inchCtrl.text.trim()) ?? 0;
+    if (ft <= 0 && inch <= 0) return null;
+    return feetInchesToCm(ft, inch);
+  }
+
+  @override
+  void dispose() {
+    _cmCtrl.dispose();
+    _feetCtrl.dispose();
+    _inchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    await _service.saveHeightCm(_heightCm);
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        18,
+        20,
+        20 +
+            MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).padding.bottom,
+      ),
+      child: _loading
+          ? const SizedBox(height: 140, child: Center(child: PixelLoader()))
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const ImageIcon(
+                      AssetImage('assets/icons/control/icon_stat.png'),
+                      size: 22,
+                      color: Color(0xFF00FF9C),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'HEIGHT (${Units.height.labelUpper})',
+                      style: const TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 11,
+                        color: Color(0xFF00FF9C),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _buildField(),
+                const SizedBox(height: 18),
+                PixelButton(
+                  label: _saving ? 'SAVING...' : 'SAVE',
+                  onPressed: _saving ? null : _save,
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildField() {
+    if (Units.height == LengthUnit.cm) {
+      return ArcadeTextField(
+        controller: _cmCtrl,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        style: AppFonts.shareTechMono(color: kText, fontSize: 18),
+        hintText: 'e.g. 180',
+        suffixText: 'cm',
+        suffixStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: ArcadeTextField(
+            controller: _feetCtrl,
+            keyboardType: TextInputType.number,
+            style: AppFonts.shareTechMono(color: kText, fontSize: 18),
+            hintText: 'e.g. 5',
+            suffixText: 'ft',
+            suffixStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: ArcadeTextField(
+            controller: _inchCtrl,
+            keyboardType: TextInputType.number,
+            style: AppFonts.shareTechMono(color: kText, fontSize: 18),
+            hintText: 'e.g. 11',
+            suffixText: 'in',
+            suffixStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
           ),
         ),
       ],
@@ -1506,52 +1972,6 @@ class _ProfileTabs extends StatelessWidget {
   }
 }
 
-class _AvatarChoice extends StatelessWidget {
-  const _AvatarChoice({
-    required this.path,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String path;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return HoldDepress(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: kCard,
-          border: Border.all(
-            color: selected ? const Color(0xFF00FF9C) : kBorder,
-            width: selected ? 1.5 : 1,
-          ),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Stack(
-          children: [
-            Center(child: Image.asset(path, filterQuality: FilterQuality.none)),
-            if (selected)
-              const Positioned(
-                right: 0,
-                top: 0,
-                child: ImageIcon(
-                  AssetImage('assets/icons/control/icon_star.png'),
-                  size: 14,
-                  color: Color(0xFFFFD700),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.title});
 
@@ -1796,7 +2216,7 @@ class _ScheduleInfoRow extends StatelessWidget {
             style: const TextStyle(
               fontFamily: 'PressStart2P',
               fontSize: 8,
-              color: Color(0xFFFFD700),
+              color: kMutedText,
             ),
           ),
           const SizedBox(width: 10),
@@ -2019,8 +2439,8 @@ class _SmallIconButton extends StatelessWidget {
   }
 }
 
-/// Bottom sheet listing the classes a user may respec into. Vanguard appears
-/// only when [options] includes it (gated by level upstream).
+/// Bottom sheet listing the classes a user may respec into (the [options]
+/// computed upstream, excluding the current class).
 class _RespecPickerSheet extends StatelessWidget {
   const _RespecPickerSheet({required this.options});
 
@@ -2067,14 +2487,17 @@ class _RespecOption extends StatelessWidget {
       onTap: () => Navigator.of(context).pop(cls),
       borderRadius: BorderRadius.circular(4),
       child: Container(
+        key: ValueKey('profile_respec_option_${cls.name}'),
         padding: const EdgeInsets.all(kSpace3),
         decoration: BoxDecoration(
-          color: Color.lerp(kSurface3, color, 0.08),
-          border: Border.all(color: color.withValues(alpha: 0.7)),
+          color: kSurface3,
+          border: Border.all(color: kBorder.withValues(alpha: 0.85)),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Row(
           children: [
+            Container(width: 3, height: 44, color: color),
+            const SizedBox(width: kSpace3),
             ClassSprite(
               assetPath: 'assets/classes/icons/${cls.name}.png',
               placeholderTint: color,

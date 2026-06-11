@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/models/body_goal_models.dart';
-import 'package:workout_track/models/body_metrics_models.dart';
 import 'package:workout_track/services/body_metrics_service.dart';
 
 void main() {
@@ -11,83 +10,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  group('canLogWeight - 7-day cadence enforcement', () {
-    test('allows first-ever log', () async {
-      final service = BodyMetricsService(
-        nowProvider: () => DateTime(2026, 5, 16),
-      );
-      expect(await service.canLogWeight(), true);
-    });
-
-    test('blocks log within 7 days of last entry', () async {
-      final now = DateTime(2026, 5, 16);
-      final service = BodyMetricsService(nowProvider: () => now);
-      await service.logWeight(75.0);
-
-      // 3 days later
-      final laterService = BodyMetricsService(
-        nowProvider: () => now.add(const Duration(days: 3)),
-      );
-      expect(await laterService.canLogWeight(), false);
-    });
-
-    test('allows log after 7 days', () async {
-      final now = DateTime(2026, 5, 16);
-      final service = BodyMetricsService(nowProvider: () => now);
-      await service.logWeight(75.0);
-
-      // 7 days later
-      final laterService = BodyMetricsService(
-        nowProvider: () => now.add(const Duration(days: 7)),
-      );
-      expect(await laterService.canLogWeight(), true);
-    });
-
-    test('clock manipulation guard - prevents backdating', () async {
-      final now = DateTime(2026, 5, 16);
-      final service = BodyMetricsService(nowProvider: () => now);
-      await service.logWeight(75.0);
-
-      // User sets clock back 10 days
-      final backdatedService = BodyMetricsService(
-        nowProvider: () => now.subtract(const Duration(days: 10)),
-      );
-      expect(await backdatedService.canLogWeight(), false);
-    });
-  });
-
-  group('daysUntilNextLog', () {
-    test('returns 0 when no entries exist', () async {
-      final service = BodyMetricsService(
-        nowProvider: () => DateTime(2026, 5, 16),
-      );
-      expect(await service.daysUntilNextLog(), 0);
-    });
-
-    test('returns remaining days correctly', () async {
-      final now = DateTime(2026, 5, 16);
-      final service = BodyMetricsService(nowProvider: () => now);
-      await service.logWeight(75.0);
-
-      final laterService = BodyMetricsService(
-        nowProvider: () => now.add(const Duration(days: 4)),
-      );
-      expect(await laterService.daysUntilNextLog(), 3);
-    });
-
-    test('returns 0 when 7 days have passed', () async {
-      final now = DateTime(2026, 5, 16);
-      final service = BodyMetricsService(nowProvider: () => now);
-      await service.logWeight(75.0);
-
-      final laterService = BodyMetricsService(
-        nowProvider: () => now.add(const Duration(days: 8)),
-      );
-      expect(await laterService.daysUntilNextLog(), 0);
-    });
-  });
-
-  group('logWeight', () {
+  group('logWeight - unrestricted logging + validation', () {
     test('logs entry and retrieves it', () async {
       final service = BodyMetricsService(
         nowProvider: () => DateTime(2026, 5, 16),
@@ -102,126 +25,157 @@ void main() {
       expect(entries.first.weightKg, 74.2);
     });
 
-    test('throws when cadence not met', () async {
+    test('allows multiple logs in the same week (no cadence gate)', () async {
       final now = DateTime(2026, 5, 16);
-      final service = BodyMetricsService(nowProvider: () => now);
-      await service.logWeight(75.0);
+      await BodyMetricsService(nowProvider: () => now).logWeight(75.0);
 
-      final laterService = BodyMetricsService(
-        nowProvider: () => now.add(const Duration(days: 3)),
+      final next = BodyMetricsService(
+        nowProvider: () => now.add(const Duration(days: 2)),
       );
-      expect(() => laterService.logWeight(74.0), throwsA(isA<StateError>()));
+      await next.logWeight(74.6); // would have thrown under the old 7-day gate
+
+      expect(await next.getEntries(), hasLength(2));
+    });
+
+    test('rejects an implausible weight at the data layer', () async {
+      final service = BodyMetricsService(
+        nowProvider: () => DateTime(2026, 5, 16),
+      );
+      expect(() => service.logWeight(750.0), throwsA(isA<ArgumentError>()));
+      expect(() => service.logWeight(5.0), throwsA(isA<ArgumentError>()));
+      expect(await service.getEntries(), isEmpty);
     });
   });
 
-  group('isDirectionAligned', () {
-    test('CUT: aligned when current < previous by >= 0.3 kg', () {
-      final previous = WeightEntry(
-        weightKg: 75.0,
-        loggedAt: DateTime(2026, 5, 9),
+  group('reward cadence (rolling 7-day reward anchor)', () {
+    test('reward is available before any has been granted', () async {
+      final service = BodyMetricsService(
+        nowProvider: () => DateTime(2026, 5, 16),
       );
-      final current = WeightEntry(
-        weightKg: 74.5,
-        loggedAt: DateTime(2026, 5, 16),
-      );
-      expect(
-        BodyMetricsService.isDirectionAligned(current, previous, BodyGoal.cut),
-        true,
-      );
+      expect(await service.canEarnReward(), true);
+      expect(await service.daysUntilNextReward(), 0);
     });
 
-    test('CUT: not aligned when delta < 0.3', () {
-      final previous = WeightEntry(
-        weightKg: 75.0,
-        loggedAt: DateTime(2026, 5, 9),
+    test('blocks a second reward within 7 days of the last', () async {
+      final now = DateTime(2026, 5, 16);
+      await BodyMetricsService(nowProvider: () => now).markRewardGranted();
+
+      final later = BodyMetricsService(
+        nowProvider: () => now.add(const Duration(days: 4)),
       );
-      final current = WeightEntry(
-        weightKg: 74.8,
-        loggedAt: DateTime(2026, 5, 16),
-      );
-      expect(
-        BodyMetricsService.isDirectionAligned(current, previous, BodyGoal.cut),
-        false,
-      );
+      expect(await later.canEarnReward(), false);
+      expect(await later.daysUntilNextReward(), 3);
     });
 
-    test('BULK: aligned when current > previous by >= 0.3 kg', () {
-      final previous = WeightEntry(
-        weightKg: 75.0,
-        loggedAt: DateTime(2026, 5, 9),
+    test('allows a reward again after 7 days', () async {
+      final now = DateTime(2026, 5, 16);
+      await BodyMetricsService(nowProvider: () => now).markRewardGranted();
+
+      final later = BodyMetricsService(
+        nowProvider: () => now.add(const Duration(days: 7)),
       );
-      final current = WeightEntry(
-        weightKg: 75.5,
-        loggedAt: DateTime(2026, 5, 16),
-      );
-      expect(
-        BodyMetricsService.isDirectionAligned(current, previous, BodyGoal.bulk),
-        true,
-      );
+      expect(await later.canEarnReward(), true);
+      expect(await later.daysUntilNextReward(), 0);
     });
 
-    test('BULK: not aligned when weight drops', () {
-      final previous = WeightEntry(
-        weightKg: 75.0,
-        loggedAt: DateTime(2026, 5, 9),
+    test('clock rollback cannot reopen the reward window', () async {
+      final now = DateTime(2026, 5, 16);
+      await BodyMetricsService(nowProvider: () => now).markRewardGranted();
+
+      final backdated = BodyMetricsService(
+        nowProvider: () => now.subtract(const Duration(days: 10)),
       );
-      final current = WeightEntry(
-        weightKg: 74.5,
-        loggedAt: DateTime(2026, 5, 16),
-      );
-      expect(
-        BodyMetricsService.isDirectionAligned(current, previous, BodyGoal.bulk),
-        false,
-      );
+      expect(await backdated.canEarnReward(), false);
     });
 
-    test('RECOMP: aligned when abs(delta) <= 0.5 kg', () {
-      final previous = WeightEntry(
-        weightKg: 75.0,
-        loggedAt: DateTime(2026, 5, 9),
+    test('reward cadence is calendar-day based (no time-of-day drift)', () async {
+      await BodyMetricsService(
+        nowProvider: () => DateTime(2026, 5, 16, 20, 0),
+      ).markRewardGranted();
+
+      final morningSeven = BodyMetricsService(
+        nowProvider: () => DateTime(2026, 5, 23, 6, 0),
       );
-      final current = WeightEntry(
-        weightKg: 75.3,
-        loggedAt: DateTime(2026, 5, 16),
+      expect(await morningSeven.canEarnReward(), true);
+      expect(await morningSeven.daysUntilNextReward(), 0);
+
+      final morningSix = BodyMetricsService(
+        nowProvider: () => DateTime(2026, 5, 22, 6, 0),
       );
-      expect(
-        BodyMetricsService.isDirectionAligned(
-          current,
-          previous,
-          BodyGoal.recomp,
-        ),
-        true,
+      expect(await morningSix.canEarnReward(), false);
+      expect(await morningSix.daysUntilNextReward(), 1);
+    });
+  });
+
+  group('reward-anchor migration seeding', () {
+    test('seeds from a recent log so no free reward on upgrade', () async {
+      // Logged 2 days before the upgrade.
+      await BodyMetricsService(
+        nowProvider: () => DateTime(2026, 5, 14),
+      ).logWeight(75.0);
+
+      final today = BodyMetricsService(
+        nowProvider: () => DateTime(2026, 5, 16),
       );
+      await today.seedRewardAnchorFromLastLog();
+
+      expect(await today.canEarnReward(), false);
+      expect(await today.daysUntilNextReward(), 5);
     });
 
-    test('RECOMP: not aligned when abs(delta) > 0.5 kg', () {
-      final previous = WeightEntry(
-        weightKg: 75.0,
-        loggedAt: DateTime(2026, 5, 9),
+    test('seeds from an old log so a due reward stays available', () async {
+      await BodyMetricsService(
+        nowProvider: () => DateTime(2026, 5, 8),
+      ).logWeight(75.0);
+
+      final today = BodyMetricsService(
+        nowProvider: () => DateTime(2026, 5, 16),
       );
-      final current = WeightEntry(
-        weightKg: 75.8,
-        loggedAt: DateTime(2026, 5, 16),
-      );
-      expect(
-        BodyMetricsService.isDirectionAligned(
-          current,
-          previous,
-          BodyGoal.recomp,
-        ),
-        false,
-      );
+      await today.seedRewardAnchorFromLastLog();
+
+      expect(await today.canEarnReward(), true);
     });
 
-    test('returns false for first-ever log (no previous entry)', () {
-      final current = WeightEntry(
-        weightKg: 75.0,
-        loggedAt: DateTime(2026, 5, 16),
+    test('never-logged user: seeding is a no-op, first log rewards', () async {
+      final service = BodyMetricsService(
+        nowProvider: () => DateTime(2026, 5, 16),
       );
-      expect(
-        BodyMetricsService.isDirectionAligned(current, null, BodyGoal.cut),
-        false,
+      await service.seedRewardAnchorFromLastLog();
+      expect(await service.canEarnReward(), true);
+    });
+
+    test('seeding is idempotent — a second seed never moves the anchor', () async {
+      await BodyMetricsService(
+        nowProvider: () => DateTime(2026, 5, 14),
+      ).logWeight(75.0);
+
+      final svc = BodyMetricsService(nowProvider: () => DateTime(2026, 5, 16));
+      await svc.seedRewardAnchorFromLastLog(); // anchor = 2 days ago
+
+      // A newer log updates the last-log token...
+      await svc.logWeight(74.0);
+      // ...but re-seeding must not overwrite the existing anchor.
+      await svc.seedRewardAnchorFromLastLog();
+
+      expect(await svc.daysUntilNextReward(), 5); // still based on the old log
+    });
+  });
+
+  group('anti-farm: reward anchor survives delete', () {
+    test('granting then deleting the entry keeps the reward window closed', () async {
+      final now = DateTime(2026, 5, 16);
+      final service = BodyMetricsService(nowProvider: () => now);
+      final entry = await service.logWeight(75.0);
+      await service.markRewardGranted();
+
+      final later = BodyMetricsService(
+        nowProvider: () => now.add(const Duration(days: 3)),
       );
+      await later.deleteEntry(entry.loggedAt);
+
+      expect(await later.getEntries(), isEmpty);
+      expect(await later.canEarnReward(), false);
+      expect(await later.daysUntilNextReward(), 4);
     });
   });
 
@@ -240,6 +194,52 @@ void main() {
       final entries = await service2.getEntries();
       expect(entries.length, 1);
       expect(entries.first.weightKg, 74.5);
+    });
+  });
+
+  group('updateEntry', () {
+    test('corrects a weight in place without adding an entry', () async {
+      final now = DateTime(2026, 5, 16);
+      final service = BodyMetricsService(nowProvider: () => now);
+      final entry = await service.logWeight(75.0);
+
+      await service.updateEntry(entry.loggedAt, 76.5);
+
+      final entries = await service.getEntries();
+      expect(entries.length, 1, reason: 'edit must not create a new entry');
+      expect(entries.first.weightKg, 76.5);
+      expect(entries.first.loggedAt, entry.loggedAt);
+    });
+
+    test('does not touch the reward anchor (editing is not a new log)', () async {
+      final now = DateTime(2026, 5, 16);
+      final service = BodyMetricsService(nowProvider: () => now);
+      final entry = await service.logWeight(75.0);
+      await service.markRewardGranted();
+
+      await service.updateEntry(entry.loggedAt, 76.0);
+      expect(await service.canEarnReward(), false);
+    });
+
+    test('is a no-op for an implausible correction', () async {
+      final now = DateTime(2026, 5, 16);
+      final service = BodyMetricsService(nowProvider: () => now);
+      final entry = await service.logWeight(75.0);
+
+      await service.updateEntry(entry.loggedAt, 999.0);
+      final entries = await service.getEntries();
+      expect(entries.first.weightKg, 75.0);
+    });
+
+    test('is a no-op when no entry matches the timestamp', () async {
+      final now = DateTime(2026, 5, 16);
+      final service = BodyMetricsService(nowProvider: () => now);
+      await service.logWeight(75.0);
+
+      await service.updateEntry(DateTime(2020, 1, 1), 80.0);
+      final entries = await service.getEntries();
+      expect(entries.length, 1);
+      expect(entries.first.weightKg, 75.0);
     });
   });
 }

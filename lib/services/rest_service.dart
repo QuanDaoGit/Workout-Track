@@ -249,6 +249,64 @@ class RestService {
     );
   }
 
+  /// LCK as a rolling weekly *consistency* streak: how many full 7-day blocks
+  /// have elapsed since the streak began. The streak survives indefinitely and
+  /// is reset to zero only by an *unscheduled recovery* — a scheduled training
+  /// day that passed with no completed workout and no shield
+  /// ([RestDayKind.unplannedMiss]). Shielded misses ([RestDayKind.protectedMiss])
+  /// and gaps on non-scheduled days never reset it. Pure: deterministic for a
+  /// given [state] + [sessions] + [now].
+  int consistencyWeeks({
+    required List<WorkoutSession> sessions,
+    required RestState state,
+    DateTime? now,
+  }) {
+    final today = _dateOnly(now ?? _nowProvider());
+
+    // The streak cannot predate the user's first completed workout.
+    DateTime? firstWorkout;
+    for (final session in sessions) {
+      if (session.isPartial) continue;
+      final day = _dateOnly(session.date);
+      if (firstWorkout == null || day.isBefore(firstWorkout)) firstWorkout = day;
+    }
+    if (firstWorkout == null) return 0;
+
+    // Walk back from today to the first workout; the most recent unprotected
+    // missed scheduled day ends the streak. Today is never a miss
+    // (dayInfoForState only flags days strictly before today), so the user
+    // always has the current day left to train.
+    DateTime streakStart = firstWorkout;
+    var cursor = today;
+    while (!cursor.isBefore(firstWorkout)) {
+      final info = dayInfoForState(
+        day: cursor,
+        sessions: sessions,
+        state: state,
+        now: today,
+      );
+      if (info.kind == RestDayKind.unplannedMiss) {
+        streakStart = cursor.add(const Duration(days: 1));
+        break;
+      }
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    if (streakStart.isAfter(today)) return 0;
+    final weeks = today.difference(streakStart).inDays ~/ 7;
+    return min(weeks, 100);
+  }
+
+  /// Async convenience: loads rest state and returns [consistencyWeeks]. Mirrors
+  /// how the vitality meter loads state before evaluating recovery balance.
+  Future<int> currentConsistencyWeeks({
+    required List<WorkoutSession> sessions,
+    DateTime? now,
+  }) async {
+    final state = await loadState(now: now);
+    return consistencyWeeks(sessions: sessions, state: state, now: now);
+  }
+
   Future<RestState> refreshWeeklyShieldProgress(
     List<WorkoutSession> sessions, {
     DateTime? now,

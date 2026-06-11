@@ -74,4 +74,9 @@ void main() {
       expect(find.text('BACK TO HOME'), findsOneWidget);
     },
   );
+
+  // The buried-gain regression (a non-statGain hero must still render the STR
+  // gain) lives in its own file — workout_summary_stat_gains_test.dart — because
+  // a second full on-mount save in the same test isolate hangs on the
+  // calibration step's rootBundle asset load (pre-existing infra limitation).
 }

@@ -26,6 +26,18 @@ const kAmberDark = Color(0xFFFFA500);
 const kCyan = Color(0xFF00BFFF);
 const kDanger = Color(0xFFFF2D55);
 
+/// Canonical color per muscle-group bucket (see data/muscle_groups.dart).
+/// Single source of truth for calendars, charts, and balance bars.
+const Map<String, Color> kMuscleGroupColors = {
+  'Chest': kNeon,
+  'Back': kAmber,
+  'Shoulders': Color(0xFF9B59B6),
+  'Arms': kDanger,
+  'Legs': kCyan,
+  'Core': Color(0xFFFF6B1A),
+  'Full Body': kText,
+};
+
 // Spacing scale (4/8/12/16/24).
 const kSpace1 = 4.0;
 const kSpace2 = 8.0;

@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
 import '../data/loot_registry.dart';
-import '../models/loot_drop.dart';
 import '../models/loot_item.dart';
-import '../services/loot_drop_service.dart';
 import '../services/loot_service.dart';
+import '../services/unit_settings_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_button.dart';
@@ -19,11 +18,8 @@ class InventoryPage extends StatefulWidget {
 
 class _InventoryPageState extends State<InventoryPage> {
   final LootService _lootService = LootService();
-  final LootDropService _dropService = LootDropService();
   Set<String> _ownedIds = {};
   Map<LootCategory, LootItem> _equipped = {};
-  List<LootDrop> _recentDrops = [];
-  Map<String, int> _fragments = {};
   bool _loading = true;
 
   @override
@@ -35,24 +31,16 @@ class _InventoryPageState extends State<InventoryPage> {
   Future<void> _load() async {
     final inventory = await _lootService.getInventory();
     final equipped = await _lootService.getEquippedLoot();
-    final recentDrops = await _dropService.recentDrops();
-    final fragments = await _dropService.fragmentCounts();
-    await _dropService.markAllViewed();
     if (!mounted) return;
     setState(() {
       _ownedIds = inventory.map((item) => item.id).toSet();
       _equipped = equipped;
-      _recentDrops = recentDrops;
-      _fragments = fragments;
       _loading = false;
     });
   }
 
   Future<void> _confirmEquip(LootItem item) async {
-    if (!_ownedIds.contains(item.id)) {
-      _showLocked(item);
-      return;
-    }
+    if (!_ownedIds.contains(item.id)) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -71,7 +59,7 @@ class _InventoryPageState extends State<InventoryPage> {
           ),
         ),
         content: Text(
-          item.description,
+          item.displayDescription(Units.weight),
           style: AppFonts.shareTechMono(fontSize: 14, color: kMutedText),
         ),
         actions: [
@@ -99,38 +87,9 @@ class _InventoryPageState extends State<InventoryPage> {
     await _load();
   }
 
-  void _showLocked(LootItem item) {
-    final hint =
-        item.unlockRule?.displayHint ?? 'Locked. Keep training to earn it.';
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: kCard,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(kSpace5),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              item.name.toUpperCase(),
-              style: const TextStyle(
-                fontFamily: 'PressStart2P',
-                fontSize: 10,
-                color: kMutedText,
-              ),
-            ),
-            const SizedBox(height: kSpace3),
-            Text(
-              hint,
-              style: AppFonts.shareTechMono(fontSize: 14, color: kMutedText),
-            ),
-          ],
-        ),
-      ),
-    );
+  Future<void> _clearTitle() async {
+    await _lootService.unequipCategory(LootCategory.titleBadge);
+    await _load();
   }
 
   @override
@@ -157,12 +116,6 @@ class _InventoryPageState extends State<InventoryPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _LootFeedStrip(drops: _recentDrops),
-                  if (_fragments.isNotEmpty) ...[
-                    const SizedBox(height: kSpace4),
-                    _FragmentStrip(fragments: _fragments),
-                  ],
-                  const SizedBox(height: kSpace5),
                   _buildVisualSection(LootCategory.avatarFrame),
                   _buildTitleSection(),
                   _buildVisualSection(LootCategory.homeTheme),
@@ -173,68 +126,73 @@ class _InventoryPageState extends State<InventoryPage> {
   }
 
   Widget _buildVisualSection(LootCategory category) {
-    final items = lootRegistry
-        .where((item) => item.category == category)
-        .toList();
-    final ownedCount = items
+    final allItems = lootRegistry.where((item) => item.category == category);
+    final items = allItems
         .where((item) => _ownedIds.contains(item.id))
-        .length;
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _CategoryHeader(
           label: category.label,
-          owned: ownedCount,
-          total: items.length,
+          owned: items.length,
+          total: allItems.length,
         ),
         const SizedBox(height: kSpace3),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: items.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-            childAspectRatio: 0.78,
+        if (items.isEmpty)
+          _EmptyInventoryHint(category: category)
+        else
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: items.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 4,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 0.78,
+            ),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return _LootGridTile(
+                item: item,
+                equipped: _equipped[category]?.id == item.id,
+                onTap: () => _confirmEquip(item),
+              );
+            },
           ),
-          itemBuilder: (context, index) {
-            final item = items[index];
-            return _LootGridTile(
-              item: item,
-              owned: _ownedIds.contains(item.id),
-              equipped: _equipped[category]?.id == item.id,
-              onTap: () => _confirmEquip(item),
-            );
-          },
-        ),
         const SizedBox(height: kSpace5),
       ],
     );
   }
 
   Widget _buildTitleSection() {
-    final items = lootRegistry
-        .where((item) => item.category == LootCategory.titleBadge)
-        .toList();
-    final ownedCount = items
+    final allItems = lootRegistry.where(
+      (item) => item.category == LootCategory.titleBadge,
+    );
+    final items = allItems
         .where((item) => _ownedIds.contains(item.id))
-        .length;
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _CategoryHeader(
           label: LootCategory.titleBadge.label,
-          owned: ownedCount,
-          total: items.length,
+          owned: items.length,
+          total: allItems.length,
         ),
         const SizedBox(height: kSpace3),
+        // "No Title" is always available: an earned title is never lost, and the
+        // user can freely revert to an untitled card and re-pick any time.
+        _NoTitleRow(
+          selected: _equipped[LootCategory.titleBadge] == null,
+          onTap: _clearTitle,
+        ),
         for (final item in items)
           _TitleLootRow(
             item: item,
-            owned: _ownedIds.contains(item.id),
             equipped: _equipped[LootCategory.titleBadge]?.id == item.id,
             onTap: () => _confirmEquip(item),
           ),
@@ -268,115 +226,94 @@ class _CategoryHeader extends StatelessWidget {
   }
 }
 
-class _LootFeedStrip extends StatelessWidget {
-  const _LootFeedStrip({required this.drops});
+class _EmptyInventoryHint extends StatelessWidget {
+  const _EmptyInventoryHint({required this.category});
 
-  final List<LootDrop> drops;
+  final LootCategory category;
 
   @override
   Widget build(BuildContext context) {
+    final label = category == LootCategory.avatarFrame ? 'frames' : 'themes';
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(kSpace3),
       decoration: BoxDecoration(
-        color: kSurface2,
+        color: kCard,
         border: Border.all(color: kBorder),
         borderRadius: BorderRadius.circular(kCardRadius),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'LOOT FEED',
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 9,
-              color: kNeon,
-            ),
-          ),
-          const SizedBox(height: kSpace2),
-          if (drops.isEmpty)
-            Text(
-              'Cache drops appear after eligible workouts.',
-              style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
-            )
-          else
-            for (final drop in drops)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  _dropLabel(drop),
-                  style: AppFonts.shareTechMono(
-                    color: kMutedText,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-        ],
+      child: Text(
+        'No owned $label yet. Visit the Gem Shop or keep training.',
+        style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
       ),
     );
   }
-
-  String _dropLabel(LootDrop drop) {
-    final tier = drop.tier.name.toUpperCase();
-    switch (drop.contentKind) {
-      case LootDropContentKind.xpBonus:
-        return '$tier CACHE   +${drop.xpBonus} XP';
-      case LootDropContentKind.frameFragment:
-        final item = lootItemById(drop.itemId ?? '');
-        final name = item?.name ?? 'Frame';
-        final assembled = drop.assembledItemId != null ? ' assembled' : '';
-        return '$tier CACHE   $name fragment$assembled';
-      case LootDropContentKind.fullItem:
-        final item = lootItemById(drop.itemId ?? '');
-        return '$tier CACHE   ${item?.name ?? 'New loot'}';
-    }
-  }
 }
 
-class _FragmentStrip extends StatelessWidget {
-  const _FragmentStrip({required this.fragments});
+class _NoTitleRow extends StatelessWidget {
+  const _NoTitleRow({required this.selected, required this.onTap});
 
-  final Map<String, int> fragments;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final entries = fragments.entries.where((entry) => entry.value > 0).toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
-    if (entries.isEmpty) return const SizedBox.shrink();
-
-    return Wrap(
-      spacing: kSpace2,
-      runSpacing: kSpace2,
-      children: [
-        for (final entry in entries)
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: kSpace2,
-              vertical: 6,
-            ),
-            decoration: BoxDecoration(
-              border: Border.all(color: kBorder),
-              borderRadius: BorderRadius.circular(kCardRadius),
-            ),
-            child: Text(
-              '${lootItemById(entry.key)?.name ?? 'Frame'} ${entry.value}/4',
-              style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
-            ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: HoldDepress(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.all(kSpace3),
+          decoration: BoxDecoration(
+            color: kCard,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: selected ? kNeon : kBorder),
           ),
-      ],
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'No Title',
+                      style: AppFonts.shareTechMono(
+                        fontSize: 15,
+                        color: kText,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Show no title on your card.',
+                      style: AppFonts.shareTechMono(
+                        fontSize: 12,
+                        color: kMutedText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                selected ? Icons.check_sharp : Icons.block_sharp,
+                color: selected ? kNeon : kMutedText,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
 class _LootGridTile extends StatelessWidget {
   final LootItem item;
-  final bool owned;
   final bool equipped;
   final VoidCallback onTap;
 
   const _LootGridTile({
     required this.item,
-    required this.owned,
     required this.equipped,
     required this.onTap,
   });
@@ -391,13 +328,7 @@ class _LootGridTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: kCard,
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: equipped
-                ? kNeon
-                : owned
-                ? item.color.withValues(alpha: 0.75)
-                : kBorder,
-          ),
+          border: Border.all(color: equipped ? kNeon : kBorder),
         ),
         child: Column(
           children: [
@@ -406,7 +337,7 @@ class _LootGridTile extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   Opacity(
-                    opacity: owned ? 1 : 0.28,
+                    opacity: 1,
                     child: Image.asset(
                       item.assetPath,
                       fit: BoxFit.contain,
@@ -415,14 +346,6 @@ class _LootGridTile extends StatelessWidget {
                           _LootImageFallback(item: item),
                     ),
                   ),
-                  if (!owned)
-                    const Center(
-                      child: Icon(
-                        Icons.lock_sharp,
-                        color: kMutedText,
-                        size: 18,
-                      ),
-                    ),
                   if (equipped)
                     const Align(
                       alignment: Alignment.topRight,
@@ -439,7 +362,7 @@ class _LootGridTile extends StatelessWidget {
               textAlign: TextAlign.center,
               style: AppFonts.shareTechMono(
                 fontSize: 10,
-                color: owned ? Colors.white : kMutedText,
+                color: kText,
                 height: 1.0,
               ),
             ),
@@ -478,20 +401,17 @@ class _LootImageFallback extends StatelessWidget {
 
 class _TitleLootRow extends StatelessWidget {
   final LootItem item;
-  final bool owned;
   final bool equipped;
   final VoidCallback onTap;
 
   const _TitleLootRow({
     required this.item,
-    required this.owned,
     required this.equipped,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final hint = item.unlockRule?.displayHint ?? item.rarity.label;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: HoldDepress(
@@ -514,13 +434,13 @@ class _TitleLootRow extends StatelessWidget {
                       item.name,
                       style: AppFonts.shareTechMono(
                         fontSize: 15,
-                        color: owned ? item.color : kMutedText,
+                        color: item.color,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      owned ? item.description : hint,
+                      item.displayDescription(Units.weight),
                       style: AppFonts.shareTechMono(
                         fontSize: 12,
                         color: kMutedText,
@@ -530,16 +450,8 @@ class _TitleLootRow extends StatelessWidget {
                 ),
               ),
               Icon(
-                equipped
-                    ? Icons.check_sharp
-                    : owned
-                    ? Icons.inventory_2_sharp
-                    : Icons.lock_sharp,
-                color: equipped
-                    ? kNeon
-                    : owned
-                    ? item.color
-                    : kMutedText,
+                equipped ? Icons.check_sharp : Icons.inventory_2_sharp,
+                color: equipped ? kNeon : item.color,
               ),
             ],
           ),

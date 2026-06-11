@@ -6,8 +6,8 @@ import 'package:workout_track/pages/onboarding/onboarding_flow_page.dart';
 import 'package:workout_track/pages/onboarding/problem_question_page.dart';
 import 'package:workout_track/pages/onboarding/solution_page.dart';
 import 'package:workout_track/theme/tokens.dart';
-import 'package:workout_track/widgets/onboarding_lifter_sprite.dart';
 import 'package:workout_track/widgets/pixel_button.dart';
+import 'package:workout_track/widgets/streak_orbit_icon.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -34,26 +34,31 @@ void main() {
     expect(find.text('HERE, EVERY REP'), findsOneWidget);
     expect(find.text('LEVELS YOU UP'), findsOneWidget);
     expect(
-      find.text('now the work shows.', findRichText: true),
+      find.text('you can see your work.', findRichText: true),
       findsOneWidget,
     );
     expect(
-      find.text('every rep, a little stronger.', findRichText: true),
+      find.text('you become stronger every rep.', findRichText: true),
       findsOneWidget,
     );
     expect(
-      find.text("and you'll keep coming back.", findRichText: true),
+      find.text('and you will keep coming back.', findRichText: true),
       findsOneWidget,
     );
-    expect(find.text('BUILD MY CHARACTER'), findsOneWidget);
+    expect(find.text("LET'S BUILD MY CHARACTER"), findsOneWidget);
+    expect(find.byKey(const ValueKey('solution_backdrop')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('solution_aspiration_tease')),
       findsOneWidget,
     );
-    final reducedSprite = tester.widget<OnboardingLifterSprite>(
-      find.byType(OnboardingLifterSprite),
+    final streak = tester.widget<StreakOrbitIcon>(
+      find.byType(StreakOrbitIcon),
     );
-    expect(reducedSprite.blinkProgress, 0);
+    expect(streak.size, 168);
+
+    final cta = tester.widget<PixelButton>(find.byType(PixelButton));
+    expect(cta.fontSize, 12);
+    expect(cta.minHeight, 64);
 
     final levelLine = tester.widget<Text>(find.text('LEVELS YOU UP'));
     expect(levelLine.style?.color, kAmber);
@@ -71,7 +76,7 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.text('BUILD MY CHARACTER'));
+    await tester.tap(find.text("LET'S BUILD MY CHARACTER"));
     await tester.pump();
     expect(continued, isTrue);
   });
@@ -162,7 +167,7 @@ void main() {
 
     await tester.tap(find.byType(SolutionView));
     await tester.pump();
-    await tester.tap(find.text('BUILD MY CHARACTER'));
+    await tester.tap(find.text("LET'S BUILD MY CHARACTER"));
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(continued, isTrue);
@@ -172,6 +177,17 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: OnboardingFlowPage()));
+
+    // Advance past the welcome landing — through the departure + CRT boot
+    // power-cycle — into the cold open.
+    await tester.tap(find.text('GET STARTED'));
+    final end = DateTime.now().add(const Duration(seconds: 10));
+    while (find.byType(ColdOpenView).evaluate().isEmpty &&
+        DateTime.now().isBefore(end)) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump();
 
     await tester.tap(find.byType(ColdOpenView));
     await tester.pump();
@@ -214,10 +230,7 @@ void main() {
       find.byKey(const ValueKey('solution_aspiration_tease')),
       findsOneWidget,
     );
-    final activeSprite = tester.widget<OnboardingLifterSprite>(
-      find.byType(OnboardingLifterSprite),
-    );
-    expect(activeSprite.blinkProgress, greaterThan(0));
+    expect(find.byType(StreakOrbitIcon), findsOneWidget);
 
     final futureSelfBottom = tester
         .getBottomLeft(find.byKey(const ValueKey('solution_aspiration_tease')))

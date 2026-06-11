@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/programs_library.dart';
 import '../models/program_models.dart';
+import 'loot_service.dart';
+import 'program_customization_service.dart';
 import 'rest_service.dart';
 
 class ProgramService {
@@ -18,6 +20,9 @@ class ProgramService {
   static const ongoingProgramSessionKey = 'program_ongoing_session_id_v1';
   static const ongoingProgramRestSessionKey =
       'program_ongoing_rest_session_id_v1';
+  static const completionsKey = 'program_completions_v1';
+  static const pendingCompletionRevealKey =
+      'program_pending_completion_reveal_v1';
 
   final DateTime Function() _nowProvider;
 
@@ -51,6 +56,7 @@ class ProgramService {
     await prefs.remove(lastRestCreditSnapshotKey);
     await prefs.remove(ongoingProgramSessionKey);
     await prefs.remove(ongoingProgramRestSessionKey);
+    await prefs.remove(pendingCompletionRevealKey);
     return progress;
   }
 
@@ -62,6 +68,9 @@ class ProgramService {
     await prefs.remove(lastRestCreditSnapshotKey);
     await prefs.remove(ongoingProgramSessionKey);
     await prefs.remove(ongoingProgramRestSessionKey);
+    await prefs.remove(pendingCompletionRevealKey);
+    // Note: completionsKey (forged-path history) intentionally persists so the
+    // Guild Card keeps a record even after a program is quit.
   }
 
   Future<ProgramDay?> getTodayDay({DateTime? now}) async {
@@ -103,13 +112,85 @@ class ProgramService {
     return next;
   }
 
-  Future<ProgramProgress?> skipDayManually({DateTime? now}) async {
+  /// Records arc completion exactly once when the active arc reaches the
+  /// program's target. Grants the identity title, flags the program as awaiting
+  /// the next-path choice, and stages a pending reveal. Returns the recorded
+  /// [ProgramCompletion], or null if not complete (or already recorded).
+  ///
+  /// Call this immediately after [advanceDay] on workout save.
+  Future<ProgramCompletion?> evaluateCompletion({DateTime? now}) async {
     final prefs = await SharedPreferences.getInstance();
     final progress = await getActiveProgress(now: now);
     if (progress == null) return null;
-    final next = _nextProgress(progress, completedSessionDelta: 0);
-    await _saveProgress(prefs, next);
-    return next;
+    if (progress.completedArc) return null;
+    final program = programById(progress.programId);
+    if (program == null) return null;
+    if (progress.arcSessions < program.targetSessions) return null;
+
+    final titleId = titleIdForProgram(progress.programId) ?? '';
+    final completion = ProgramCompletion(
+      programId: progress.programId,
+      titleId: titleId,
+      sessions: progress.arcSessions,
+      completedAt: now ?? _nowProvider(),
+    );
+
+    final completions = _loadCompletions(prefs)..add(completion);
+    await prefs.setStringList(
+      completionsKey,
+      completions.map((c) => jsonEncode(c.toJson())).toList(),
+    );
+    if (titleId.isNotEmpty) {
+      await LootService().grantItem(titleId);
+    }
+    await _saveProgress(prefs, progress.copyWith(completedArc: true));
+    await prefs.setString(
+      pendingCompletionRevealKey,
+      jsonEncode(completion.toJson()),
+    );
+    return completion;
+  }
+
+  /// Reads and clears the staged completion reveal (set by [evaluateCompletion]).
+  /// Used by the reveal flow and the Home fallback after an interrupted save.
+  Future<ProgramCompletion?> consumePendingCompletionReveal() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(pendingCompletionRevealKey);
+    if (raw == null) return null;
+    await prefs.remove(pendingCompletionRevealKey);
+    return ProgramCompletion.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+  }
+
+  /// Starts the next program in the completion chain with a fresh arc. Returns
+  /// the new progress, or null if there is no active program / no chain target.
+  Future<ProgramProgress?> beginNextPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final progress = _loadProgress(prefs);
+    if (progress == null) return null;
+    final nextId = programChainNext[progress.programId];
+    if (nextId == null) return null;
+    return startProgram(nextId);
+  }
+
+  /// Keeps the same program but opens a fresh arc (new finish line) without
+  /// wiping history — rolls the arc baseline up to the current session count.
+  Future<ProgramProgress?> stayWithProgram() async {
+    final prefs = await SharedPreferences.getInstance();
+    final progress = _loadProgress(prefs);
+    if (progress == null) return null;
+    final rolled = progress.copyWith(
+      arcStartSessions: progress.completedSessions,
+      completedArc: false,
+    );
+    await _saveProgress(prefs, rolled);
+    await prefs.remove(pendingCompletionRevealKey);
+    return rolled;
+  }
+
+  /// All recorded program completions, oldest first. Drives the Guild Card.
+  Future<List<ProgramCompletion>> completedPrograms() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _loadCompletions(prefs);
   }
 
   Future<ProgramDaySnapshot?> completedSnapshotForToday({DateTime? now}) async {
@@ -183,6 +264,26 @@ class ProgramService {
   Future<bool> isOngoingProgramRestSession(String sessionId) async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(ongoingProgramRestSessionKey) == sessionId;
+  }
+
+  /// Rebuilds the sets × reps targets for a resumed ongoing session, so the
+  /// TARGET banners survive leave/pause → resume (prescriptions are never
+  /// persisted with the session). Empty for manual sessions, rest-day
+  /// sessions, or when no program is active. Safe to call before the day
+  /// advances: [advanceDay] only runs at workout save, which also clears the
+  /// ongoing flag, so the current day index still matches the session.
+  Future<Map<String, SetRepScheme>> prescriptionsForOngoingSession(
+    String sessionId,
+  ) async {
+    if (!await isOngoingProgramSession(sessionId)) return const {};
+    final progress = await getActiveProgress();
+    final day = await getTodayDay();
+    if (progress == null || day == null || !day.isWorkout) return const {};
+    final effective = await ProgramCustomizationService().effectiveDay(
+      progress.programId,
+      day,
+    );
+    return effective.prescription;
   }
 
   Future<void> clearOngoingProgramSession(String sessionId) async {
@@ -267,5 +368,15 @@ class ProgramService {
   ProgramDaySnapshot? _loadSnapshot(String? raw) {
     if (raw == null) return null;
     return ProgramDaySnapshot.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+  }
+
+  List<ProgramCompletion> _loadCompletions(SharedPreferences prefs) {
+    final raw = prefs.getStringList(completionsKey) ?? const [];
+    return raw
+        .map(
+          (e) =>
+              ProgramCompletion.fromJson(jsonDecode(e) as Map<String, dynamic>),
+        )
+        .toList();
   }
 }

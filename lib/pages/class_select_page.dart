@@ -87,17 +87,14 @@ class _ClassSelectPageState extends State<ClassSelectPage> {
                 style: AppFonts.shareTechMono(fontSize: 13, color: kMutedText),
               ),
               const SizedBox(height: kSpace5),
-              // Vanguard is unlocked only via respec at L10 — never offered on
-              // the class-select screen.
-              for (final cls in CharacterClass.values)
-                if (cls != CharacterClass.vanguard) ...[
-                  _ClassCard(
-                    characterClass: cls,
-                    isSelected: _selected == cls,
-                    onTap: () => setState(() => _selected = cls),
-                  ),
-                  const SizedBox(height: kSpace3),
-                ],
+              for (final cls in CharacterClass.values) ...[
+                _ClassCard(
+                  characterClass: cls,
+                  isSelected: _selected == cls,
+                  onTap: () => setState(() => _selected = cls),
+                ),
+                const SizedBox(height: kSpace3),
+              ],
               const Spacer(),
               if (_selected != null)
                 PixelButton(

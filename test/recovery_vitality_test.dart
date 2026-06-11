@@ -21,7 +21,7 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  WorkoutSession _session(DateTime date, String exerciseId) => WorkoutSession(
+  WorkoutSession session(DateTime date, String exerciseId) => WorkoutSession(
     id: 'w-${date.toIso8601String()}-$exerciseId',
     date: date,
     muscleGroup: 'Chest',
@@ -54,7 +54,7 @@ void main() {
       for (var i = 0; i < 14; i++) {
         final day = DateTime(2026, 5, 31).subtract(Duration(days: i));
         if ({1, 3, 5}.contains(day.weekday)) {
-          sessions.add(_session(day, 'bench'));
+          sessions.add(session(day, 'bench'));
         }
       }
 
@@ -81,7 +81,7 @@ void main() {
       // earn only partial credit.
       final sessions = [
         for (var i = 0; i < 14; i++)
-          _session(DateTime(2026, 5, 31).subtract(Duration(days: i)), 'bench'),
+          session(DateTime(2026, 5, 31).subtract(Duration(days: i)), 'bench'),
       ];
       final vit = engine.vitalityFromState(schedule(), sessions, rest);
       expect(vit, lessThan(95));
@@ -95,7 +95,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         'workout_sessions',
-        jsonEncode([_session(now, 'squat').toJson()]),
+        jsonEncode([session(now, 'squat').toJson()]),
       );
 
       final stats = await StatEngine(

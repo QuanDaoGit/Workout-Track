@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/bodyweight_loads.dart';
 import '../data/class_definitions.dart';
 import '../data/muscle_groups.dart';
 import '../models/character_class.dart';
@@ -12,7 +13,6 @@ import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import 'exercise_catalog_service.dart';
 import 'rest_service.dart';
-import 'workout_metric_service.dart';
 
 class StatEngine {
   StatEngine({DateTime Function()? nowProvider, Map<String, String>? catalog})
@@ -26,7 +26,34 @@ class StatEngine {
   static const _lastDeltaKey = 'combat_stat_last_delta';
   static const _lastSessionDateKey = 'combat_stats_last_session_date';
   static const _lastDecayDateKey = 'combat_stats_last_decay_date';
-  static const endBackfillNoticeKey = 'end_stat_backfill_notice_pending';
+
+  /// Bumped whenever the stat computation rules change (`_statsForSessions`
+  /// weights, the seed, or decay application). `MigrationService` recomputes a
+  /// user's cached stats on boot when their stored version differs, so a re-tune
+  /// lands quietly at app-update instead of as a surprise jump mid-workout.
+  ///
+  /// v3: STR/AGI currency switched from raw tonnage (`reps × load`) to
+  /// intensity-weighted e1RM-equivalent credit (see [intensityCreditForSet]);
+  /// bodyweight sets use a per-movement %BW × per-session bodyweight snapshot
+  /// instead of a flat 40 kg; legs feed STR at 0.22 (was 0.10). Existing users
+  /// are protected by the grandfather floor (see [grandfatherFloorKey]).
+  static const statsRulesVersion = 3;
+
+  /// One-time per-stat floor captured at the v3 rules migration: the visible
+  /// STR/AGI values a user had already earned under the tonnage rules. The
+  /// recompute under the new currency is clamped to never display less, so the
+  /// rules change cannot read as lost progress. Decay also cannot take the
+  /// board below this floor — it preserves what the user saw at migration.
+  static const grandfatherFloorKey = 'combat_stat_floor_v1';
+
+  /// Persistent inactivity decay applied as a *factor* on every recompute (not a
+  /// one-off stat mutation), so it survives recomputes until training recovers
+  /// it. Tunable: gentle per missed day, floored at half (you never lose more
+  /// than half your build), fast muscle-memory recovery per completed workout.
+  static const _decayFactorKey = 'combat_decay_factor_v1';
+  static const _decayFactorFloor = 0.5;
+  static const _decayPerDayFactor = 0.97;
+  static const _decayRecoveryStep = 0.15;
 
   static const outputStats = ['STR', 'DEF', 'VIT', 'AGI', 'END'];
   static const stats = ['STR', 'DEF', 'VIT', 'AGI', 'END', 'LCK'];
@@ -37,6 +64,25 @@ class StatEngine {
   static const _decayableStats = ['STR', 'DEF', 'AGI', 'END'];
   static const baseOutputStatValue = 10;
   static const _enduranceScale = 150.0;
+
+  /// Log-curve scale for the STR/AGI volume stats, in intensity-credit units
+  /// (see [intensityCreditForSet]). Retuned from 500 when the currency moved
+  /// off raw tonnage, so a representative session keeps roughly the same early
+  /// pacing. Public for pacing simulations and tests.
+  static const double volumeCurveScale = 120.0;
+
+  /// Epley reps cap for strength credit. Above ~12 reps the e1RM estimate
+  /// stops being meaningful (and uncapped reps would let high-rep fluff farm
+  /// STR — the exact exploit the intensity currency exists to close), so a
+  /// 25-rep set banks the same credit as a 12-rep set at that load. Unlike
+  /// calibration's `bestOneRmForLog` (which *skips* high-rep sets when
+  /// estimating a max), growth credit caps instead of skipping so every
+  /// logged set still moves the number.
+  static const int maxCreditReps = 12;
+
+  /// Deterministic last-resort bodyweight when neither the session snapshot
+  /// nor any earlier session carries one.
+  static const double fallbackBodyweightKg = 70.0;
 
   /// Trailing window for the VIT recovery-balance meter.
   static const _vitalityWindowDays = 14;
@@ -51,20 +97,37 @@ class StatEngine {
     final catalog = await _loadCatalog();
     final seed = _decodeSeed(prefs.getString(calibrationSeedKey));
 
+    // The value the board is currently showing (baseline if never computed),
+    // captured before we overwrite it.
+    final oldCached = _decodeStats(prefs.getString(combatStatsKey));
+
     final computed = _statsForSessions(sessions, catalog, seed);
+    // Apply the persistent inactivity debuff so the board reflects decay and
+    // stays reflected through every recompute (instead of being silently erased
+    // — the root of the summary/board mismatch).
+    _applyDecayFactor(computed, prefs.getDouble(_decayFactorKey) ?? 1.0);
+    // Grandfather floor (v3 rules migration): never display less than the user
+    // had already earned under the old rules — not from the recompute and not
+    // from decay. Applied after decay so the floor wins.
+    _applyGrandfatherFloor(
+      computed,
+      _decodePartialStats(prefs.getString(grandfatherFloorKey)),
+    );
+    // LCK = weekly consistency streak (needs rest-schedule state). Computed
+    // before the delta so a streak that ticks up still surfaces in the finish
+    // summary's luck gain.
+    computed['LCK'] = await _computeLck(sessions);
     final latestSession = sessions.isEmpty ? null : sessions.last;
-    final previousSessions = latestSession == null
-        ? const <WorkoutSession>[]
-        : sessions.where((session) => session.id != latestSession.id).toList();
-    final previous = _statsForSessions(previousSessions, catalog, seed);
-    final delta = latestSession == null
-        ? <String, int>{}
-        : _deltaForLatestSession(
-            before: previous,
-            after: computed,
-            latestSession: latestSession,
-            catalog: catalog,
-          );
+    // Per-session delta = computed − previously-cached, so the finish summary
+    // reflects the *real* change the board will show (including decay-recovery
+    // and re-score "catch-up" jumps a marginal latest-session delta misses). A
+    // missing cache reads as baseline, so a first workout still shows its gain;
+    // with no sessions the delta is empty (baseline vs baseline).
+    final delta = _deltaVsCached(
+      computed: computed,
+      cached: oldCached,
+      active: latestSession != null,
+    );
 
     // VIT is the recovery meter — recomputed fresh from rest/training balance,
     // not from this session's volume. Inject it into the persisted snapshot.
@@ -112,12 +175,11 @@ class StatEngine {
     return const Color(0xFF6B6B8A);
   }
 
-  /// Returns LCK value for current week.
+  /// Returns the current LCK value (weekly consistency streak).
   Future<int> calculateLuck() async {
     final prefs = await SharedPreferences.getInstance();
     final sessions = await _loadCompletedSessions(prefs);
-    final catalog = await _loadCatalog();
-    return _luckForSessions(sessions, catalog);
+    return _computeLck(sessions);
   }
 
   /// Returns stat delta from most recent session.
@@ -132,16 +194,18 @@ class StatEngine {
     if (stored == null) return calculateAllStats();
     final sessions = await _loadCompletedSessions(prefs);
     if (sessions.isEmpty) {
-      // No completed workouts yet — recompute instead of blindly writing
-      // baseline. calculateAllStats applies any calibration seed (so a quiz-
-      // seeded user keeps their starting ranks) and persists a clean baseline
-      // when there is no seed. Writing _emptyStats() here would wipe the seed.
+      // No completed workouts yet: recompute so legacy cached zeros become the
+      // real baseline after seed cleanup, while future workout-derived seed
+      // data still flows through the same calculation path.
       return calculateAllStats();
     }
-    // VIT is a live recovery meter — always refresh it on read so it reflects
-    // today's rest/training balance even between workout saves.
+    // VIT (recovery balance) and LCK (weekly consistency streak) are both live,
+    // date-sensitive meters — refresh them on read so they reflect today's
+    // rest/training state even between workout saves (e.g. a week boundary
+    // crossed while the app was open).
     final decoded = _decodeStats(stored);
     decoded['VIT'] = await _computeVitality(sessions);
+    decoded['LCK'] = await _computeLck(sessions);
     return decoded;
   }
 
@@ -155,36 +219,24 @@ class StatEngine {
     return set.reps * multiplier;
   }
 
-  static Future<void> markEndBackfillNoticePending() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(endBackfillNoticeKey, true);
-  }
-
-  static Future<bool> consumeEndBackfillNotice() async {
-    final prefs = await SharedPreferences.getInstance();
-    final pending = prefs.getBool(endBackfillNoticeKey) ?? false;
-    if (pending) {
-      await prefs.remove(endBackfillNoticeKey);
-    }
-    return pending;
-  }
-
-  /// Check and apply decay if needed.
+  /// Updates the persistent decay factor for any new unprotected missed training
+  /// days, then recomputes so the board reflects it. Decay is a *factor* applied
+  /// on every recompute (see [_applyDecayFactor]) rather than a one-off stat
+  /// mutation, so it persists until training recovers it ([recoverFromWorkout]).
   Future<void> applyDecayIfNeeded() async {
     final prefs = await SharedPreferences.getInstance();
-    var current = _decodeStats(prefs.getString(combatStatsKey));
-    if (prefs.getString(combatStatsKey) == null) {
-      current = await calculateAllStats();
-    }
 
-    final currentLuck = await calculateLuck();
-    current['LCK'] = currentLuck;
+    // No cached stats yet → a full (factor-aware) recompute establishes them.
+    if (prefs.getString(combatStatsKey) == null) {
+      await calculateAllStats();
+      return;
+    }
 
     final sessions = await _loadCompletedSessions(prefs);
     final latestSession = sessions.isEmpty ? null : sessions.last;
     final lastSessionRaw = prefs.getString(_lastSessionDateKey);
     if (latestSession == null && lastSessionRaw == null) {
-      await prefs.setString(combatStatsKey, jsonEncode(current));
+      await _refreshLuckInCache(prefs); // no history → nothing to decay
       return;
     }
 
@@ -207,24 +259,62 @@ class StatEngine {
     final daysToApply = requiredDecayUnits - appliedUnits;
 
     if (daysToApply <= 0) {
-      await prefs.setString(combatStatsKey, jsonEncode(current));
+      await _refreshLuckInCache(prefs); // no new decay; don't touch the factor
       return;
     }
 
-    final peaks = _decodeStats(prefs.getString(_peaksKey));
-    for (final stat in _decayableStats) {
-      final peak = peaks[stat] ?? current[stat] ?? 0;
-      final floorValue = (peak * 0.5).floor();
-      var value = current[stat] ?? 0;
-      for (var day = 0; day < daysToApply; day++) {
-        value = max(floorValue, (value * 0.9).floor());
-      }
-      current[stat] = value;
-    }
-
-    await prefs.setString(combatStatsKey, jsonEncode(current));
+    // New unprotected missed days → drop the factor (gentle, floored at half)
+    // and recompute so every capability stat reflects it.
+    final factor = prefs.getDouble(_decayFactorKey) ?? 1.0;
+    final decayed = max(
+      _decayFactorFloor,
+      factor * pow(_decayPerDayFactor, daysToApply).toDouble(),
+    );
+    await prefs.setDouble(_decayFactorKey, decayed);
     await restService.recordAppliedDecayUnits(chainKey, requiredDecayUnits);
     await prefs.setString(_lastDecayDateKey, today.toIso8601String());
+    await calculateAllStats();
+  }
+
+  void _applyGrandfatherFloor(Map<String, int> stats, Map<String, int> floor) {
+    for (final entry in floor.entries) {
+      final current = stats[entry.key];
+      if (current != null && current < entry.value) {
+        stats[entry.key] = entry.value;
+      }
+    }
+  }
+
+  /// Multiplies the decayable capability stats by the current decay [factor]
+  /// (floored at the output baseline). VIT (recovery meter) and LCK (streak) are
+  /// already "current" values and are never decayed.
+  void _applyDecayFactor(Map<String, int> stats, double factor) {
+    if (factor >= 1.0) return;
+    for (final stat in _decayableStats) {
+      final base = stats[stat];
+      if (base != null) {
+        stats[stat] = max(baseOutputStatValue, (base * factor).floor());
+      }
+    }
+  }
+
+  Future<void> _refreshLuckInCache(SharedPreferences prefs) async {
+    final current = _decodeStats(prefs.getString(combatStatsKey));
+    current['LCK'] = await calculateLuck();
+    await prefs.setString(combatStatsKey, jsonEncode(current));
+  }
+
+  /// A completed workout restores the build (muscle-memory fast): nudge the
+  /// decay factor back toward full. Called on save before the recompute applies
+  /// it, so training visibly recovers what inactivity took.
+  Future<void> recoverFromWorkout() async {
+    final prefs = await SharedPreferences.getInstance();
+    final factor = prefs.getDouble(_decayFactorKey) ?? 1.0;
+    if (factor >= 1.0) return;
+    await prefs.setDouble(
+      _decayFactorKey,
+      min(1.0, factor + _decayRecoveryStep),
+    );
   }
 
   Future<List<WorkoutSession>> _loadCompletedSessions(
@@ -243,6 +333,54 @@ class StatEngine {
   /// Public catalog loader (exerciseId -> primary muscle). Reused by
   /// calibration so its exercise->stat mapping matches the engine exactly.
   Future<Map<String, String>> loadCatalog() => _loadCatalog();
+
+  /// Per-session *linear* axis credits — the Shadow's currency.
+  ///
+  /// Returns one [SessionAxisLoad] per input session (sorted by date) with the
+  /// session's raw STR/AGI/END credit under the same intensity currency and
+  /// muscle weights as the board ([intensityCreditForLog] ×
+  /// [_visibleWeightsForPrimaryMuscle]). Deliberately NOT the log-curved
+  /// 0–1000 board values: ratios over log-curved stats compress real training
+  /// differences. No calibration seed, no decay, no class focus bonus — a pure
+  /// training signal, identical across classes. Read-only: never touches the
+  /// cached board stats.
+  Future<List<SessionAxisLoad>> sessionAxisLoads(
+    List<WorkoutSession> sessions,
+  ) async {
+    final catalog = await _loadCatalog();
+    final sorted = [...sessions]..sort((a, b) => a.date.compareTo(b.date));
+    double? lastKnownBodyweight;
+    final result = <SessionAxisLoad>[];
+    for (final session in sorted) {
+      final bodyweight =
+          session.bodyweightKgAtSave ??
+          lastKnownBodyweight ??
+          fallbackBodyweightKg;
+      if (session.bodyweightKgAtSave != null) {
+        lastKnownBodyweight = session.bodyweightKgAtSave;
+      }
+      var str = 0.0, agi = 0.0, end = 0.0;
+      for (final log in session.exercises) {
+        final volume = intensityCreditForLog(log, bodyweightKg: bodyweight);
+        final endurancePoints = _endurancePointsForLog(log);
+        final primary = _primaryForLog(log, session, catalog);
+        final weights = _visibleWeightsForPrimaryMuscle(primary);
+        str += volume * weights.strVolume;
+        agi += volume * weights.agiVolume;
+        end += endurancePoints * weights.endurancePoints;
+      }
+      result.add(
+        SessionAxisLoad(
+          sessionId: session.id,
+          date: session.date,
+          str: str,
+          agi: agi,
+          end: end,
+        ),
+      );
+    }
+    return result;
+  }
 
   Future<Map<String, String>> _loadCatalog() async {
     if (_catalogOverride != null) return _catalogOverride;
@@ -275,9 +413,21 @@ class StatEngine {
   ]) {
     final volumes = {for (final stat in _kgVolumeStats) stat: 0.0};
     var endurance = 0.0;
+    // Bodyweight is resolved per session from its save-time snapshot; sessions
+    // without one (pre-snapshot history) carry the last-known snapshot forward,
+    // bottoming out at the deterministic fallback. Profile edits never rewrite
+    // history: only the frozen snapshots are read.
+    double? lastKnownBodyweight;
     for (final session in sessions) {
+      final bodyweight =
+          session.bodyweightKgAtSave ??
+          lastKnownBodyweight ??
+          fallbackBodyweightKg;
+      if (session.bodyweightKgAtSave != null) {
+        lastKnownBodyweight = session.bodyweightKgAtSave;
+      }
       for (final log in session.exercises) {
-        final volume = _volumeForLog(log);
+        final volume = intensityCreditForLog(log, bodyweightKg: bodyweight);
         final endurancePoints = _endurancePointsForLog(log);
         final primary = _primaryForLog(log, session, catalog);
         final weights = _visibleWeightsForPrimaryMuscle(primary);
@@ -316,60 +466,41 @@ class StatEngine {
       for (final stat in _kgVolumeStats)
         stat: _withOutputBaseline(_statFromVolume(volumes[stat] ?? 0)),
       'END': _withOutputBaseline(_statFromEndurance(endurance)),
-      'LCK': _luckForSessions(sessions, catalog),
+      // LCK is the weekly consistency streak — injected async in
+      // calculateAllStats (it needs rest-schedule state), not here.
     };
   }
 
-  Map<String, int> _deltaForLatestSession({
-    required Map<String, int> before,
-    required Map<String, int> after,
-    required WorkoutSession latestSession,
-    required Map<String, String> catalog,
+  /// Per-session delta = `computed − previously-cached`, over the visible
+  /// capability stats (LCK only when it rises, matching prior behavior). This is
+  /// the change the board's absolute value actually makes, so the finish summary
+  /// and the Home "last session" tag reflect decay-recovery / re-score jumps
+  /// instead of only a session's marginal contribution. Empty when [active] is
+  /// false (no sessions), so a no-session boot recompute emits nothing.
+  Map<String, int> _deltaVsCached({
+    required Map<String, int> computed,
+    required Map<String, int> cached,
+    required bool active,
   }) {
-    final touched = _touchedStatsForSession(latestSession, catalog);
+    if (!active) return {};
     final delta = <String, int>{};
-    for (final stat in touched) {
-      final value = (after[stat] ?? 0) - (before[stat] ?? 0);
+    for (final stat in const ['STR', 'DEF', 'AGI', 'END']) {
+      final value = (computed[stat] ?? 0) - (cached[stat] ?? 0);
       if (value != 0) delta[stat] = value;
     }
-    final luckDelta = (after['LCK'] ?? 0) - (before['LCK'] ?? 0);
+    final luckDelta = (computed['LCK'] ?? 0) - (cached['LCK'] ?? 0);
     if (luckDelta > 0) delta['LCK'] = luckDelta;
     return delta;
   }
 
-  Set<String> _touchedStatsForSession(
-    WorkoutSession session,
-    Map<String, String> catalog,
-  ) {
-    final touched = <String>{};
-    for (final log in session.exercises) {
-      final primary = _primaryForLog(log, session, catalog);
-      final weights = _visibleWeightsForPrimaryMuscle(primary);
-      if (weights.strVolume > 0) touched.add('STR');
-      if (weights.agiVolume > 0) touched.add('AGI');
-      if (weights.defVolume > 0) touched.add('DEF');
-      final endurancePoints = _endurancePointsForLog(log);
-      if (weights.endurancePoints > 0 && endurancePoints > 0) {
-        touched.add('END');
-      }
-      final classBonusStat = _classBonusStatForLog(session, primary);
-      if (classBonusStat != null) touched.add(classBonusStat);
-      if (_classBonusEnduranceForLog(session, primary, endurancePoints) > 0) {
-        touched.add('END');
-      }
-    }
-    return touched;
-  }
-
-  int _luckForSessions(
-    List<WorkoutSession> sessions,
-    Map<String, String> catalog,
-  ) {
-    // LCK = current consecutive-day training streak, capped at 100.
-    // The consistent lifter is the lucky one. Fed by training history only.
-    return min(
-      WorkoutMetricService.currentStreak(sessions, now: _nowProvider()),
-      100,
+  /// LCK = the weekly consistency streak (consecutive 7-day blocks held without
+  /// an unscheduled recovery). Delegates to the rest schedule, which owns the
+  /// streak rule. The consistent lifter is the lucky one.
+  Future<int> _computeLck(List<WorkoutSession> sessions) {
+    final restService = RestService(nowProvider: _nowProvider);
+    return restService.currentConsistencyWeeks(
+      sessions: sessions,
+      now: _nowProvider(),
     );
   }
 
@@ -457,10 +588,6 @@ class StatEngine {
       // Tank's visible radar identity is durability/work-capacity, so its
       // focus bonus is applied in END currency below.
       CharacterClass.tank => null,
-      // Balanced: the +20% bonus lands on whatever stat the trained muscle
-      // already feeds (bonus on every focus, not one). The §7 #4 "80% rate"
-      // refinement is deferred — this keeps a single shared 0.2 multiplier.
-      CharacterClass.vanguard => statForPrimaryMuscle(primaryMuscle),
     };
   }
 
@@ -475,10 +602,6 @@ class StatEngine {
     if (bucket == null || !musclesForClass(cls).contains(bucket)) return 0;
     return switch (cls) {
       CharacterClass.tank => endurancePoints * 0.2,
-      CharacterClass.vanguard =>
-        _visibleWeightsForPrimaryMuscle(primaryMuscle).endurancePoints > 1.5
-            ? endurancePoints * 0.2
-            : 0,
       CharacterClass.assassin || CharacterClass.bruiser => 0,
     };
   }
@@ -526,14 +649,16 @@ class StatEngine {
         endurancePoints: 1.0,
       ),
       // Legs should read as durability/work-capacity for Tank. Heavy lower-body
-      // work still moves STR, but END is the dominant visible axis.
+      // work moves STR honestly under the intensity currency (squats are a real
+      // strength signal), but END stays the dominant visible axis — pushing
+      // this above ~0.22 flips the Tank radar identity to STR.
       'quadriceps' ||
       'hamstrings' ||
       'glutes' ||
       'calves' ||
       'adductors' ||
       'abductors' => const _StatWeights(
-        strVolume: 0.10,
+        strVolume: 0.22,
         agiVolume: 0.07,
         endurancePoints: 5.0,
       ),
@@ -547,8 +672,8 @@ class StatEngine {
     };
   }
 
-  /// Legacy kg-volume mapping used by calibration seed and Vanguard's fallback
-  /// bonus path. Visible radar shaping uses [_visibleWeightsForPrimaryMuscle].
+  /// Legacy kg-volume mapping used by the calibration seed. Visible radar
+  /// shaping uses [_visibleWeightsForPrimaryMuscle].
   static String? statForPrimaryMuscle(String muscle) {
     return switch (muscle.toLowerCase()) {
       // Legs still have a legacy STR volume bucket here for compatibility.
@@ -574,10 +699,28 @@ class StatEngine {
     };
   }
 
-  double _volumeForLog(ExerciseLog log) {
+  /// Per-set strength credit: the Epley e1RM-equivalent of the set,
+  /// `load × (1 + min(reps, 12) / 30)`. This is the engine's STR/AGI currency
+  /// (v3): summed across sets it is intensity-weighted work — a heavy 3×5
+  /// banks far more than a light 3×25 of equal tonnage, and no single set can
+  /// dominate because credit accumulates instead of taking a best-of. Public
+  /// so calibration and pacing simulations stay in the same currency.
+  static double intensityCreditForSet(double loadKg, int reps) {
+    if (loadKg <= 0 || reps <= 0) return 0;
+    return loadKg * (1 + min(reps, maxCreditReps) / 30);
+  }
+
+  /// Sum of [intensityCreditForSet] across a log's sets. Bodyweight sets
+  /// (weight == 0) load as `%BW × bodyweightKg` via [bodyweightLoadFraction].
+  static double intensityCreditForLog(
+    ExerciseLog log, {
+    required double bodyweightKg,
+  }) {
+    final bodyweightLoad =
+        bodyweightLoadFraction(log.exerciseName) * bodyweightKg;
     return log.sets.fold<double>(0, (sum, set) {
-      final load = set.weight > 0 ? set.weight : 40.0;
-      return sum + set.reps * load;
+      final load = set.weight > 0 ? set.weight : bodyweightLoad;
+      return sum + intensityCreditForSet(load, set.reps);
     });
   }
 
@@ -589,7 +732,7 @@ class StatEngine {
   }
 
   int _statFromVolume(double volume) {
-    return min(1000, (100 * log(volume / 500 + 1)).floor());
+    return min(1000, (100 * log(volume / volumeCurveScale + 1)).floor());
   }
 
   int _statFromEndurance(double endurancePoints) {
@@ -607,7 +750,7 @@ class StatEngine {
     if (above <= 0) return 0;
     // +0.5 lands mid-band so the engine's floor() yields exactly [targetStat]
     // rather than one below it.
-    return 500 * (exp((above + 0.5) / 100) - 1);
+    return volumeCurveScale * (exp((above + 0.5) / 100) - 1);
   }
 
   Map<String, double> _decodeSeed(String? raw) {
@@ -658,6 +801,33 @@ class StatEngine {
 
   DateTime _dateOnly(DateTime date) =>
       DateTime(date.year, date.month, date.day);
+}
+
+/// One completed session's linear axis credits (see
+/// [StatEngine.sessionAxisLoads]). STR/AGI are in intensity-credit units;
+/// END is in endurance points. A dedicated type so these can never be
+/// confused with the log-curved 0–1000 board stat values.
+class SessionAxisLoad {
+  const SessionAxisLoad({
+    required this.sessionId,
+    required this.date,
+    required this.str,
+    required this.agi,
+    required this.end,
+  });
+
+  final String sessionId;
+  final DateTime date;
+  final double str;
+  final double agi;
+  final double end;
+
+  double axis(String axis) => switch (axis) {
+    'STR' => str,
+    'AGI' => agi,
+    'END' => end,
+    _ => 0,
+  };
 }
 
 class _StatWeights {

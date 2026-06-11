@@ -24,7 +24,6 @@ void main() {
 
     expect(decoded.name, 'Nova');
     expect(decoded.characterName, 'Nova');
-    expect(decoded.selectedAvatarId, 'avatar_03');
     expect(decoded.calibration.goal, BodyGoal.cut);
     expect(decoded.calibration.freq, TrainingFreq.mid);
     expect(decoded.calibration.exp, Experience.beginner);
@@ -44,7 +43,6 @@ void main() {
 
       final loaded = await service.loadActiveCharacter();
       expect(loaded?.name, 'Nova');
-      expect(loaded?.selectedAvatarId, 'avatar_03');
       expect(await OnboardingService().isComplete(), isTrue);
     },
   );
@@ -62,7 +60,6 @@ Character _character() {
       clazz: CharacterClass.assassin,
     ),
     classConfirmedAt: DateTime(2026, 5, 29, 12),
-    selectedAvatarId: 'avatar_03',
     characterName: 'Nova',
     createdAt: DateTime(2026, 5, 29, 12, 30),
   );

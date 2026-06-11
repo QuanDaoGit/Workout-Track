@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App background (kBg = 0xFF11111F). Used for the native launch splash so
+         the OS boot screen is dark and hands off seamlessly to the Flutter boot
+         animation — no white flash in either light or dark OS mode. -->
+    <color name="ironbit_bg">#FF11111F</color>
+	<color name="ic_launcher_background">#11111F</color>
+</resources>

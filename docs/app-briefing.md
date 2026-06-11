@@ -74,12 +74,13 @@ This is what makes the fantasy trusted — wipe a session and everything downstr
 | **Stat Engine** | session history (+ onboarding seed, rest state) | visible build stats, VIT/LCK meters, ranks, and last-session delta |
 | **XP / Levels** | session history (+ streak multiplier) | total XP, level, level title |
 | **Classes** | the class stored *on each session* at save time | a +20% volume bonus to that class's stat |
-| **Quests** | session history + class focus | auto-evaluated daily/weekly objectives, claimable XP |
-| **Loot** | stats + session count (milestones) | deterministic cosmetic unlocks (frames/themes) |
+| **Quests** | session history + class focus | auto-evaluated daily/weekly objectives, claimable gems |
+| **Gems** | local quest claim ledger | earned-only cosmetic currency |
+| **Loot** | stats + session count (milestones) + gem purchases | deterministic cosmetic unlocks and early frame/theme buys |
 | **Guild** | the ISO week + local simulation | a social-feel signal (NPC members), single-player |
 | **Rest / Recovery** | session history + rest state | shields, recovery XP, and VIT's inputs |
 | **Progressive Overload** | per-exercise history | next-session weight/rep suggestion |
-| **Body Metrics** (opt-in) | user-logged bodyweight | line chart + XP-boost potions (body-neutral) |
+| **Body Metrics** (opt-in) | user-logged bodyweight | EWMA trend line + weekly XP-boost potion (body-neutral) |
 
 ---
 
@@ -194,14 +195,17 @@ way** (VIT is already a live meter; LCK is the live streak). Planned rest never 
 
 ### 4.8 Calibration — where starting stats come from
 
-So a brand-new character isn't all-10s, onboarding includes a calibration step. The quiz asks
-self-reported **experience** (novice / beginner / intermediate / advanced), maps it to a strength
-tier → a target stat → a **seed volume** in the same kg-volume currency the engine uses, applied
-equally to the legacy kg-volume seed path (**STR/DEF/AGI**) for compatibility. The seed is added *before* the log curve, so it composes with real
-training and is never erased by a recompute. It only ratchets upward and then **freezes** (later
-workouts can't re-seed). Top rank (S) is intentionally **unreachable from self-report** — it must be
-earned by training. (A variant computes the seed from an actual logged "calibration run" using an
-Epley 1-rep-max estimate per stat, tiered against strength standards, over up to 3 sessions.)
+New no-workout characters start honestly at the baseline: **STR/AGI/END/VIT = 10** and
+**LCK = 0**. The onboarding quiz captures self-reported **experience**
+(novice / beginner / intermediate / advanced) as training context only; it does not grant stat
+value or starting rank. The fantasy stays sticky because the visible growth is fed by logged
+workouts.
+
+The only valid calibration seed is workout-derived. If the onboarding path includes an actual
+logged calibration run, the app can estimate a per-stat 1RM from those sets using Epley, map it to
+strength standards, and store a **workout-sourced seed volume** in the same kg-volume currency the
+engine uses. That seed is added *before* the log curve, composes with real training, ratchets upward,
+and freezes after the calibration window. Self-report never writes `calibration_seed_volumes_v1`.
 
 ---
 
@@ -243,25 +247,26 @@ session, so switching classes later never rewrites old growth.
 
 | Class | Focus muscles | Bonus | Theme color |
 |---|---|---|---|
-| **Bruiser** | Chest + Back + Arms | +20% → **STR** | gold |
-| **Assassin** | Shoulders + Core | +20% → **AGI** | cyan |
-| **Tank** | Legs | +20% → **END** | red |
-| **Vanguard** | All-round | +20% → whatever stat the trained muscle feeds | violet |
+| **Bruiser** | Chest + Back + Arms | +20% → **STR** | red `#FF2D55` |
+| **Assassin** | Shoulders + Core | +20% → **AGI** | violet `#B14DFF` |
+| **Tank** | Legs | +20% → **END** | cyan `#00BFFF` |
 
-**Vanguard unlocks at level 10** (the balanced end-game class). Switching class is a destructive
-action (resets ultimate progress) and requires explicit type-to-confirm.
+Switching class is a destructive action (resets ultimate progress) and requires explicit
+type-to-confirm.
 
 ---
 
 ## 7. Supporting systems (brief but complete)
 
-- **Quests.** Auto-evaluated from workout history + class focus — *never* manual "Done" buttons for
+- **Quests.** Auto-evaluated from workout history + class focus - *never* manual "Done" buttons for
   unverifiable tasks. Daily quests are fixed checks (show up, train your class focus, hit a daily
-  volume floor); you may *claim* completed rewards. Quest XP is a base value, balanced assuming up
-  to 3.0× from LCK.
+  volume floor); you may *claim* completed rewards. New quest claims award earned gems, while legacy
+  quest XP remains counted for existing users.
+- **Gems.** Earned-only, local-only cosmetic currency from quest claims. There is no IAP, billing,
+  subscription, paid pack, or server economy.
 - **Loot & inventory.** Cosmetic only (avatar frames, themes). Unlocks are **deterministic
-  milestones** keyed to stats/session count, creating collection pull without paid shortcuts. Class
-  frames are earned through progression.
+  milestones** keyed to stats/session count, with gem prices for early frame/theme purchases. Class
+  frames are still earned through progression. Titles remain achievement-only.
 - **Guild.** A **local single-player simulation** with NPC members, deterministic per ISO week. It
   delivers the *social feel* (a "Forge Nods" signal) without any real networking, account, or
   multiplayer — consistent with offline/no-account.
@@ -275,9 +280,13 @@ action (resets ultimate progress) and requires explicit type-to-confirm.
   1–3 reps, **−2.5 kg** if missed by 4+ (deload), **repeat** if 21+ days since last (detrained),
   **+1 rep** for bodyweight. Rep targets by exercise kind: compound 8, isolation 12, bodyweight 15.
   The suggestion pre-fills set 1 in a muted color ("the app's guess"); it never auto-commits.
-- **Body metrics (opt-in, body-neutral).** Logging bodyweight (7-day cadence) is off by default.
-  No red/green arrows. Logging can grant **XP-boost potions** (consumed on the next workout save,
-  multiplier capped at 5.0×) — rewarding the *act of tracking*, not any particular number.
+- **Body metrics (opt-in, body-neutral).** Off by default. Log bodyweight **any time**; a
+  time-aware EWMA **trend line** (shown once there's enough data) smooths daily noise — the raw
+  number is never the headline and there are no red/green arrows. A single **XP-boost potion**
+  (3 charges, one spent per eligible workout save — so it boosts the next 3 workouts — expiring after
+  3 weeks, multiplier capped at 5.0×) is granted at most once per **rolling 7-day window** — rewarding
+  the *act of tracking*, not any particular number. (The old weekly-logging gate and the silent
+  direction-aligned bonus were removed.)
 - **Calories.** A rough MET-based **estimate** shown on the workout summary only. Not a tracked
   feature, not a goal, never framed as good/bad.
 
@@ -285,16 +294,17 @@ action (resets ultimate progress) and requires explicit type-to-confirm.
 
 ## 8. Onboarding (the first-run cinematic)
 
-A multi-screen cinematic sequence sets up the character and seeds stats:
+A multi-screen cinematic sequence sets up the character identity:
 
 ```
 cold open → problem → solution → calibration quiz → avatar select → name
           → class reveal → generating → rank assessed → start gate → (Home)
 ```
 
-The **calibration quiz** captures experience (→ seed stats, §4.8), training frequency, sex, and
-optional bodyweight (for relative-strength tiers). The class reveal assigns a starting class from
-the answers. After this runs once, the app always opens to the main shell.
+The **calibration quiz** captures experience (training context only, §4.8), training frequency, sex,
+and optional bodyweight. The class reveal assigns a starting class from the answers. Character stats
+still start at baseline until real logged training changes them. After onboarding runs once, the app
+always opens to the main shell.
 
 ---
 
@@ -319,7 +329,7 @@ The app is a **5-tab bottom-navigation shell**:
 |---|---|
 | **Home** | Character avatar/frame, level + title, build/status stats with ranks, last-session deltas, today's mission/quest nudge, class. |
 | **Workout** | History (list + calendar) of past sessions; tap a day → session detail. |
-| **Quests** | Daily/weekly auto-evaluated objectives with claimable XP. |
+| **Quests** | Daily/weekly auto-evaluated objectives with claimable gems. |
 | **Guild** | The local guild simulation — NPC members, weekly social signal. |
 | **Profile** | Avatar/name/class, full stat card, inventory/loot, settings (incl. opt-in body metrics, progressive-overload toggle), progress charts. |
 
@@ -343,8 +353,7 @@ loot appear. Saving writes the `WorkoutSession`, which is what makes every downs
 - **Pixel arcade, dark-mode only.** Neon-on-near-black, sharp 4px corners, retro-game feel.
 - **Palette:** background `#11111F`, card `#1C1C34`, borders `#36365E`, primary neon green
   `#00FF9C`, text `#E8E8FF`, muted text `#9494B8`, amber `#FFD700`, cyan `#00BFFF`, danger red
-  `#FF2D55`. Class colors: Assassin cyan `#4DE5FF`, Bruiser gold `#FFD700`, Tank red `#FF2D55`,
-  Vanguard violet `#B14DFF`.
+  `#FF2D55`. Class colors: Assassin violet `#B14DFF`, Bruiser red `#FF2D55`, Tank cyan `#00BFFF`.
 - **Type:** PressStart2P for headings, Gotham for body, a monospaced font for timers/counters.
 - **Icons:** sharp/angular only (no rounded icons), to match the pixel theme; pixel-art control
   icons where available.
@@ -364,6 +373,6 @@ loot appear. Saving writes the `WorkoutSession`, which is what makes every downs
 - **VIT** = 10-100 recovery-balance meter (rest + completed training good; overtraining/skips bad).
 - **LCK** = streak (cap 100) → XP multiplier up to **3.0×**.
 - **Session XP** = 50 + 5×sets + 1×minute, ×LCK ×potions.
-- **Classes** = +20% volume to one stat for focus muscles; Vanguard unlocks at L10.
+- **Classes** = +20% volume to one stat for focus muscles (Assassin→AGI, Bruiser→STR, Tank→END).
 - **Everything derives from the local `WorkoutSession` history.** No cloud, no account, no IAP.
   Earned identity, sticky progress, body-neutral, offline.

@@ -3,19 +3,26 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:workout_track/models/character_class.dart';
+import 'package:workout_track/widgets/radar_stat_icon.dart';
 
 void main() {
   test('class portrait and sigil assets exist with expected dimensions', () {
     for (final characterClass in CharacterClass.values) {
-      // Vanguard art is not authored yet; ClassSprite renders an errorBuilder
-      // placeholder until the assets land. Skip its asset-dimension checks.
-      if (characterClass == CharacterClass.vanguard) continue;
       final name = characterClass.name;
 
       _expectPngSize('assets/classes/icons/$name.png', 64, 64);
       _expectPngSize('assets/classes/icons/2.0x/$name.png', 128, 128);
       _expectPngSize('assets/classes/icons/3.0x/$name.png', 192, 192);
       _expectPngSize('assets/classes/sigils/$name.png', 32, 32);
+    }
+  });
+
+  test('radar stat assets exist and are registered', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    expect(pubspec, contains('assets/icons/radar/'));
+
+    for (final path in RadarStatIcons.all) {
+      _expectPngSize(path, 384, 384);
     }
   });
 }

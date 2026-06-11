@@ -77,8 +77,15 @@ class ProgressiveOverloadService {
 
   /// Trust-gated progression suggestion for the upcoming Set 1 of [exercise].
   /// Returns null before 5 logged sets so the UI does not guess too early.
+  ///
+  /// When a program prescription is supplied ([targetRepMin] / [targetRepMax])
+  /// it overrides the kind-based rep default. A range (max > min) behaves as
+  /// double progression — aim for the top, reset to the bottom on a load bump;
+  /// a fixed target (or no override) aims for the single number.
   Future<OverloadSuggestion?> suggestNext(
     Exercise exercise, {
+    int? targetRepMin,
+    int? targetRepMax,
     DateTime? now,
   }) async {
     final snapshot = await snapshotFor(exercise);
@@ -87,8 +94,19 @@ class ProgressiveOverloadService {
       return null;
     }
 
+    // Reps to aim for this session, and the reps to reset to after a load bump.
+    // A range (max > min) progresses like double progression; a fixed target
+    // (or no prescription) aims for a single number.
+    final bool prescribed = targetRepMin != null;
+    final int aimReps = prescribed
+        ? (targetRepMax != null && targetRepMax > targetRepMin
+              ? targetRepMax
+              : targetRepMin)
+        : snapshot.targetReps;
+    final int resetReps = prescribed ? targetRepMin : aimReps;
+
     if (snapshot.isBodyweight) {
-      if (_metTarget(snapshot)) {
+      if (_metTargetReps(snapshot, aimReps)) {
         return OverloadSuggestion(
           weight: snapshot.topSet.weight,
           reps: snapshot.topSet.reps + 1,
@@ -99,7 +117,7 @@ class ProgressiveOverloadService {
       }
       return OverloadSuggestion(
         weight: snapshot.topSet.weight,
-        reps: snapshot.targetReps,
+        reps: aimReps,
         reason: OverloadReason.repTarget,
         confidenceHigh: true,
         setsLogged: snapshot.totalSetsLogged,
@@ -111,60 +129,66 @@ class ProgressiveOverloadService {
         _returnFromBreakDays) {
       return OverloadSuggestion(
         weight: _roundToNearestHalf(snapshot.topSet.weight * 0.95),
-        reps: snapshot.targetReps,
+        reps: resetReps,
         reason: OverloadReason.detrained,
         confidenceHigh: true,
         setsLogged: snapshot.totalSetsLogged,
       );
     }
 
-    final targetTotal = snapshot.targetReps * snapshot.lastSets.length;
+    final setCount = snapshot.lastSets.length;
     final actualTotal = snapshot.lastSets.fold<int>(
       0,
       (sum, set) => sum + set.reps,
     );
-    final shortfall = targetTotal - actualTotal;
+    // Deload is judged against the bottom of the range, load increase against
+    // the top. For a fixed target (or the kind default) floor == top, so this
+    // collapses to the original single-target behaviour.
+    final topShortfall = aimReps * setCount - actualTotal;
+    final floorShortfall = resetReps * setCount - actualTotal;
 
-    if (shortfall > (snapshot.targetReps * 0.25).ceil()) {
+    if (floorShortfall > (aimReps * 0.25).ceil()) {
       final next = _capAtOneRepMax(
         _roundToNearestHalf(snapshot.topSet.weight * 0.95),
         snapshot.estimatedOneRepMax,
       );
       return OverloadSuggestion(
         weight: next,
-        reps: snapshot.targetReps,
+        reps: aimReps,
         reason: OverloadReason.deload,
         confidenceHigh: true,
         setsLogged: snapshot.totalSetsLogged,
       );
     }
 
-    if (shortfall <= 0) {
+    if (topShortfall <= 0) {
+      // Hit the top across the work -> add load, reset to the bottom.
       final next = _capAtOneRepMax(
         snapshot.topSet.weight + _weightIncrement,
         snapshot.estimatedOneRepMax,
       );
       return OverloadSuggestion(
         weight: _roundToNearestHalf(next),
-        reps: snapshot.targetReps,
+        reps: resetReps,
         reason: OverloadReason.weightIncrease,
         confidenceHigh: true,
         setsLogged: snapshot.totalSetsLogged,
       );
     }
 
+    // Inside the range -> hold the load and keep pushing toward the top.
     return OverloadSuggestion(
       weight: snapshot.topSet.weight,
-      reps: snapshot.targetReps,
+      reps: aimReps,
       reason: OverloadReason.repTarget,
       confidenceHigh: true,
       setsLogged: snapshot.totalSetsLogged,
     );
   }
 
-  bool _metTarget(ExerciseProgressionSnapshot snapshot) {
+  bool _metTargetReps(ExerciseProgressionSnapshot snapshot, int target) {
     if (snapshot.lastSets.isEmpty) return false;
-    return snapshot.lastSets.every((set) => set.reps >= snapshot.targetReps);
+    return snapshot.lastSets.every((set) => set.reps >= target);
   }
 
   /// Heaviest top set: max by `(weight, reps)`. Bodyweight sets pick max reps.

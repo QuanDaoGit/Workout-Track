@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/muscle_groups.dart';
 import '../models/workout_models.dart';
+import 'calibration_service.dart';
 import 'rest_service.dart';
 import 'stat_engine.dart';
 
@@ -17,6 +18,15 @@ class WorkoutStorageService {
   static final StreamController<void> _changes =
       StreamController<void>.broadcast();
 
+  /// Decoded-session cache, keyed by the raw JSON string it was parsed from.
+  /// `getSessions()` is called from every log surface and re-parsing the full
+  /// blob each time is the hot path; keying on the raw string keeps the cache
+  /// correct even when prefs are written externally (tests, migrations) —
+  /// `prefs.getString` is an in-memory lookup, so the guard costs a string
+  /// identity check, not a parse.
+  static String? _cachedRaw;
+  static List<WorkoutSession>? _sessionCache;
+
   static Stream<void> get changes => _changes.stream;
 
   Future<void> saveSession(WorkoutSession session) async {
@@ -24,6 +34,21 @@ class WorkoutStorageService {
     sessions.add(session);
     await _writeSessions(sessions);
     if (!session.isPartial) {
+      if (!session.isAbandoned) {
+        // Auto-calibrate from the first few real workouts (measured 1RM → tier →
+        // seed), before the recompute so the seed lands. Gated to the opening
+        // sessions so established users are never retroactively seeded.
+        final completedCount = sessions
+            .where((s) => !s.isPartial && !s.isAbandoned)
+            .length;
+        await CalibrationService().maybeCalibrateEarlyWorkout(
+          session,
+          completedSessionCount: completedCount,
+        );
+        // Training recovers inactivity decay (muscle memory) before the
+        // recompute applies the restored factor.
+        await StatEngine().recoverFromWorkout();
+      }
       await StatEngine().calculateAllStats();
       await RestService().refreshWeeklyShieldProgress(sessions);
       if (!session.isAbandoned) {
@@ -128,10 +153,10 @@ class WorkoutStorageService {
 
   Future<void> _writeSessions(List<WorkoutSession> sessions) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _sessionsKey,
-      jsonEncode(sessions.map((s) => s.toJson()).toList()),
-    );
+    final raw = jsonEncode(sessions.map((s) => s.toJson()).toList());
+    await prefs.setString(_sessionsKey, raw);
+    _cachedRaw = raw;
+    _sessionCache = List.of(sessions);
     _emitChanged();
   }
 
@@ -139,11 +164,18 @@ class WorkoutStorageService {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_sessionsKey);
     if (raw == null) return [];
-    final list = jsonDecode(raw) as List<dynamic>;
-    return [
-      for (final item in list)
+    final cached = _sessionCache;
+    if (cached != null && raw == _cachedRaw) {
+      // Copy on the way out: callers mutate the returned list (sort/add).
+      return List.of(cached);
+    }
+    final sessions = [
+      for (final item in jsonDecode(raw) as List<dynamic>)
         WorkoutSession.fromJson(item as Map<String, dynamic>),
     ];
+    _cachedRaw = raw;
+    _sessionCache = List.of(sessions);
+    return sessions;
   }
 
   Future<WorkoutSession?> lastCompletedSession() async {
@@ -234,6 +266,18 @@ class WorkoutStorageService {
     await _writeSessions(updated);
   }
 
+  /// Replace a stored session by id (set edits from the session detail page).
+  /// The session's persisted XP fields (`awardedXP` etc.) are intentionally
+  /// left to the caller: XP was earned at save time — edits fix the record,
+  /// not the reward (and editing must never farm XP).
+  Future<void> updateSession(WorkoutSession session) async {
+    final sessions = await getSessions();
+    final index = sessions.indexWhere((s) => s.id == session.id);
+    if (index < 0) return;
+    sessions[index] = session;
+    await _writeSessions(sessions);
+  }
+
   static void _emitChanged() {
     if (!_changes.isClosed) _changes.add(null);
   }
@@ -253,29 +297,4 @@ WorkoutSession _annotatedIfMatch(
 WorkoutSession _withStatDelta(
   WorkoutSession session,
   Map<String, int> statDelta,
-) {
-  return WorkoutSession(
-    id: session.id,
-    date: session.date,
-    startedAt: session.startedAt,
-    pausedAt: session.pausedAt,
-    autoDiscardAt: session.autoDiscardAt,
-    muscleGroup: session.muscleGroup,
-    targetMuscleGroups: session.targetMuscleGroups,
-    targetDurationMinutes: session.targetDurationMinutes,
-    actualDurationSeconds: session.actualDurationSeconds,
-    exercises: session.exercises,
-    estimatedCalories: session.estimatedCalories,
-    isPartial: session.isPartial,
-    isAbandoned: session.isAbandoned,
-    isPausedForResume: session.isPausedForResume,
-    selectedExerciseIds: session.selectedExerciseIds,
-    baseXP: session.baseXP,
-    lckMultiplier: session.lckMultiplier,
-    potionMultiplier: session.potionMultiplier,
-    lootBonusXP: session.lootBonusXP,
-    awardedXP: session.awardedXP,
-    classAtSave: session.classAtSave,
-    statDelta: Map<String, int>.from(statDelta),
-  );
-}
+) => session.copyWith(statDelta: Map<String, int>.from(statDelta));

@@ -24,8 +24,7 @@ to a character, a rank, a frame, a title, and a ritual that remembers their effo
 | `kDanger` | `0xFFFF2D55` | Destructive / warnings |
 
 ## Class colors
-Assassin `0xFF4DE5FF` (cyan) · Bruiser `0xFFFFD700` (gold) · Tank `0xFFFF2D55` (red) ·
-Vanguard `0xFFB14DFF` (violet).
+Assassin `0xFFB14DFF` (violet) · Bruiser `0xFFFF2D55` (red) · Tank `0xFF00BFFF` (blue).
 
 ## Typography
 - **PressStart2P** — headings (`headlineSmall`, `titleLarge`, AppBar).

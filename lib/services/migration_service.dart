@@ -1,5 +1,15 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/loot_registry.dart';
+import '../models/avatar_spec.dart';
+import '../models/loot_item.dart';
+import 'body_metrics_service.dart';
+import 'calibration_service.dart';
+import 'character_service.dart';
+import 'loot_service.dart';
+import 'profile_service.dart';
 import 'stat_engine.dart';
 
 /// One-shot cleanup of dead `shared_preferences` keys left over from the
@@ -11,6 +21,11 @@ class MigrationService {
 
   static const _doneKey = 'migration_v1_battle_strip_done';
   static const _endStatDoneKey = 'migration_v2_end_stat_done';
+  static const _clearSelfReportedSeedDoneKey =
+      'migration_v_clear_self_reported_stat_seed_done';
+  static const _titleUnificationDoneKey = 'migration_v_title_unification_done';
+  static const _weightLogRewardAnchorDoneKey =
+      'migration_v_weightlog_reward_anchor_done';
 
   static const _deadKeys = <String>[
     // Battle / dungeon / scrap
@@ -56,10 +71,154 @@ class MigrationService {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_endStatDoneKey) == true) return;
 
-    final stats = await StatEngine().calculateAllStats();
-    if ((stats['END'] ?? 0) > StatEngine.baseOutputStatValue) {
-      await StatEngine.markEndBackfillNoticePending();
-    }
+    // One-time recompute so END is backfilled into the cached stats from a
+    // user's existing history after the END-from-history stat redesign.
+    await StatEngine().calculateAllStats();
     await prefs.setBool(_endStatDoneKey, true);
+  }
+
+  static Future<void> runClearSelfReportedStatSeedOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_clearSelfReportedSeedDoneKey) == true) return;
+
+    await prefs.remove(StatEngine.calibrationSeedKey);
+    await prefs.remove(CalibrationService.calibrationSessionCountKey);
+    await prefs.remove(CalibrationService.calibrationCompleteKey);
+    await prefs.remove(CalibrationService.calibrationSeedSourceKey);
+
+    await StatEngine().calculateAllStats();
+    await prefs.setBool(_clearSelfReportedSeedDoneKey, true);
+  }
+
+  static const _statsRulesVersionKey = 'stats_rules_version_v1';
+
+  /// Recomputes cached combat stats whenever [StatEngine.statsRulesVersion]
+  /// changes, so a re-tune of the stat formula surfaces at app-update boot — not
+  /// as a surprise jump mid-workout. Version-gated (re-runs on every future
+  /// bump), unlike the one-shot cleanups above.
+  ///
+  /// Before the recompute, the visible STR/AGI a user already earned under the
+  /// old rules is captured once as a grandfather floor: the new currency must
+  /// never read as lost progress, so the engine clamps the board to at least
+  /// these values forever after (normal growth continues above them).
+  static Future<void> runStatsRecomputeIfRulesChanged() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getInt(_statsRulesVersionKey) == StatEngine.statsRulesVersion) {
+      return;
+    }
+    if (prefs.getString(StatEngine.grandfatherFloorKey) == null) {
+      final cachedRaw = prefs.getString(StatEngine.combatStatsKey);
+      // Only grandfather a board that real completed sessions back. A cached
+      // value with no history behind it (corruption, cleared data) was never
+      // earned — recomputing it away is the correction, not lost progress.
+      if (cachedRaw != null && await _hasCompletedSessions(prefs)) {
+        final cached = jsonDecode(cachedRaw) as Map<String, dynamic>;
+        final floor = <String, int>{
+          for (final stat in const ['STR', 'AGI'])
+            if ((cached[stat] as num?) != null &&
+                (cached[stat] as num).toInt() > StatEngine.baseOutputStatValue)
+              stat: (cached[stat] as num).toInt(),
+        };
+        if (floor.isNotEmpty) {
+          await prefs.setString(
+            StatEngine.grandfatherFloorKey,
+            jsonEncode(floor),
+          );
+        }
+      }
+    }
+    await StatEngine().calculateAllStats();
+    await prefs.setInt(_statsRulesVersionKey, StatEngine.statsRulesVersion);
+  }
+
+  static Future<bool> _hasCompletedSessions(SharedPreferences prefs) async {
+    final raw = prefs.getString('workout_sessions');
+    if (raw == null || raw.isEmpty) return false;
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded.any((item) {
+        final map = item as Map<String, dynamic>;
+        return (map['isPartial'] as bool? ?? false) == false &&
+            (map['isAbandoned'] as bool? ?? false) == false;
+      });
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static const _avatarSpecSeedDoneKey = 'migration_v_avatar_spec_seed_done';
+
+  /// Seeds the pixel-face avatar for installs that predate the avatar system.
+  /// Their old image avatar can't be converted to a 20x20 spec, so an existing
+  /// character gets the same gender-seeded starter face a new user would get
+  /// (from the stored quiz sex answer), editable from the profile. One-shot;
+  /// skips installs that already carry a spec (or have no character yet —
+  /// onboarding writes the spec itself).
+  static Future<void> runAvatarSpecSeedOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_avatarSpecSeedDoneKey) == true) return;
+
+    final profileService = ProfileService();
+    if (!await profileService.hasStoredAvatarSpec()) {
+      final character = await CharacterService().loadActiveCharacter();
+      if (character != null) {
+        await profileService.saveAvatarSpec(
+          AvatarDefaults.forSex(character.calibration.sex),
+        );
+      }
+    }
+    await prefs.setBool(_avatarSpecSeedDoneKey, true);
+  }
+
+  /// Backfills the unified loot-title collection for existing users. Titles used
+  /// to live in two systems (quest `selectedTitle` + loot `titleBadge`); they are
+  /// now loot-only. For every claimed side-quest title, grant the matching loot
+  /// title; if the user had a quest `selectedTitle` and nothing is equipped, equip
+  /// it. One-shot + idempotent. Run after [runOnce] on boot.
+  static Future<void> runTitleUnificationOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_titleUnificationDoneKey) == true) return;
+
+    final raw = prefs.getString('quest_state_v1');
+    if (raw != null && raw.isNotEmpty) {
+      final loot = LootService();
+      Map<String, dynamic> json;
+      try {
+        json = jsonDecode(raw) as Map<String, dynamic>;
+      } catch (_) {
+        json = const {};
+      }
+
+      final claims = json['claims'];
+      if (claims is Map) {
+        for (final entry in claims.values) {
+          if (entry is Map) {
+            final lootId = questTitleNameToLootId[entry['title']];
+            if (lootId != null) await loot.grantItem(lootId);
+          }
+        }
+      }
+
+      final lootId = questTitleNameToLootId[json['selectedTitle']];
+      if (lootId != null) {
+        await loot.grantItem(lootId);
+        final equipped = await loot.getEquippedItem(LootCategory.titleBadge);
+        if (equipped == null) await loot.equipItem(lootId);
+      }
+    }
+
+    await prefs.setBool(_titleUnificationDoneKey, true);
+  }
+
+  /// Seeds the weekly-reward anchor for the decoupled weight-log cadence. Before
+  /// this build, the 7-day window gated the *log*; now it gates only the
+  /// *reward* (logging is unrestricted). Seeding the new reward anchor from the
+  /// legacy last-log token means a returning user is neither handed a free potion
+  /// on upgrade nor blocked from their next due one. One-shot + idempotent.
+  static Future<void> runWeightLogRewardAnchorOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_weightLogRewardAnchorDoneKey) == true) return;
+    await BodyMetricsService().seedRewardAnchorFromLastLog();
+    await prefs.setBool(_weightLogRewardAnchorDoneKey, true);
   }
 }

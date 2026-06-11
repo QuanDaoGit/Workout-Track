@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "runDirectory": "C:\\Users\\daomi\\develop\\project\\workout_track\\outputs\\imagegen\\generative-polish\\ironbit-app-store-screenshot-2026-06-07",
+  "streamPath": "C:\\Users\\daomi\\develop\\project\\workout_track\\outputs\\imagegen\\generative-polish\\ironbit-app-store-screenshot-2026-06-07\\data\\stream.json",
+  "runStatePath": "C:\\Users\\daomi\\develop\\project\\workout_track\\outputs\\imagegen\\generative-polish\\ironbit-app-store-screenshot-2026-06-07\\run-state.json",
+  "latestActionPath": "C:\\Users\\daomi\\develop\\project\\workout_track\\outputs\\imagegen\\generative-polish\\ironbit-app-store-screenshot-2026-06-07\\latest-action.json",
+  "paths": {
+    "streamPath": "C:\\Users\\daomi\\develop\\project\\workout_track\\outputs\\imagegen\\generative-polish\\ironbit-app-store-screenshot-2026-06-07\\data\\stream.json",
+    "runStatePath": "C:\\Users\\daomi\\develop\\project\\workout_track\\outputs\\imagegen\\generative-polish\\ironbit-app-store-screenshot-2026-06-07\\run-state.json",
+    "latestActionPath": "C:\\Users\\daomi\\develop\\project\\workout_track\\outputs\\imagegen\\generative-polish\\ironbit-app-store-screenshot-2026-06-07\\latest-action.json"
+  },
+  "itemCount": 1,
+  "items": [
+    {
+      "id": "ironbit-first-quest-polished",
+      "title": "First Quest - polished store screenshot",
+      "caption": "Creative Production generative-polish export with exact app UI and copy.",
+      "tone": "",
+      "prompt": "Generated background only; deterministic text, logo, device frame, and real app screenshot composited after generation.",
+      "imageUrl": "/generated/mcp-thumbs/ironbit-first-quest-polished.jpg",
+      "previewImageUrl": "/generated/mcp-thumbs/ironbit-first-quest-polished.jpg",
+      "sourceImageUrl": "/generated/ironbit-first-quest-polished.png"
+    }
+  ],
+  "visibleItemIds": [
+    "ironbit-first-quest-polished"
+  ],
+  "hiddenImageIds": [],
+  "selectedImageIds": [],
+  "currentImageId": "ironbit-first-quest-polished",
+  "updatedAt": "2026-06-06T16:30:35.643192Z"
+}

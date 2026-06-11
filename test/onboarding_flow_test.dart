@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:workout_track/models/user_profile_sex.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/pages/Workout session/workout_summary.dart';
-import 'package:workout_track/pages/onboarding/calibration_data_page.dart';
 import 'package:workout_track/pages/onboarding/cold_open_page.dart';
 import 'package:workout_track/pages/onboarding/onboarding_flow_page.dart';
 import 'package:workout_track/pages/onboarding/problem_question_page.dart';
@@ -52,7 +50,7 @@ void main() {
   testWidgets('Onboarding flow shows problem screen after cold open', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: OnboardingFlowPage()));
+    await _startFlow(tester);
 
     expect(find.byType(ColdOpenView), findsOneWidget);
     await tester.tap(find.byType(ColdOpenView));
@@ -66,7 +64,7 @@ void main() {
   testWidgets('Welcome to Problem uses the onboarding CRT wipe', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: OnboardingFlowPage()));
+    await _startFlow(tester);
 
     await tester.tap(find.byType(ColdOpenView));
     await tester.pump();
@@ -89,7 +87,7 @@ void main() {
   testWidgets('Problem to Solution uses the amber ripple transition', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: OnboardingFlowPage()));
+    await _startFlow(tester);
 
     await tester.tap(find.byType(ColdOpenView));
     await tester.pump();
@@ -114,7 +112,7 @@ void main() {
   testWidgets('Solution CTA starts the onboarding amber handoff', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: OnboardingFlowPage()));
+    await _startFlow(tester);
 
     await tester.tap(find.byType(ColdOpenView));
     await tester.pump();
@@ -128,7 +126,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byType(SolutionView));
     await tester.pump();
-    await tester.tap(find.text('BUILD MY CHARACTER'));
+    await tester.tap(find.text("LET'S BUILD MY CHARACTER"));
     await tester.pump(const Duration(milliseconds: 140));
 
     expect(
@@ -215,7 +213,7 @@ void main() {
     expect(_findProblemQuestion(), findsOneWidget);
     expect(
       find.text(
-        "You're not alone. The work never feels like it adds up — so it fades before it shows.",
+        "You're not alone. The work never feels like it adds up and so it fades away before it even shows.",
       ),
       findsOneWidget,
     );
@@ -283,49 +281,18 @@ void main() {
     expect(find.byType(WelcomeBenchPressScene), findsOneWidget);
   });
 
-  testWidgets('Calibration data submits parsed bodyweight and selected sex', (
-    tester,
-  ) async {
-    double? submittedBw;
-    UserProfileSex? submittedSex;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CalibrationDataView(
-            onSubmit: (bw, sex) {
-              submittedBw = bw;
-              submittedSex = sex;
-            },
-          ),
-        ),
-      ),
-    );
+}
 
-    await tester.enterText(find.byType(TextField), '75');
-    await tester.tap(find.text('Male'));
-    await tester.pump();
-    await tester.tap(find.text('CONTINUE'));
-    await tester.pump();
-
-    expect(submittedBw, 75.0);
-    expect(submittedSex, UserProfileSex.male);
-  });
-
-  testWidgets('Calibration data treats blank bodyweight as skipped (null)', (
-    tester,
-  ) async {
-    double? submittedBw = -1;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CalibrationDataView(onSubmit: (bw, _) => submittedBw = bw),
-        ),
-      ),
-    );
-    await tester.tap(find.text('CONTINUE'));
-    await tester.pump();
-    expect(submittedBw, isNull);
-  });
+/// Pumps the flow and advances past the welcome landing — through the departure
+/// (logo zoom) and the CRT "boot the cabinet" power-cycle — into the cold open,
+/// fully cleared, where the existing assertions begin.
+Future<void> _startFlow(WidgetTester tester) async {
+  await tester.pumpWidget(const MaterialApp(home: OnboardingFlowPage()));
+  await tester.tap(find.text('GET STARTED'));
+  await _pumpUntilFound(tester, find.byType(ColdOpenView));
+  // Let the power-on bloom finish and the boot overlay clear.
+  await tester.pump(const Duration(milliseconds: 800));
+  await tester.pump();
 }
 
 bool _usesFontFamily(WidgetTester tester, String family) {

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/avatar_spec.dart';
 import '../models/profile_models.dart';
 
 class ProfileService {
@@ -29,16 +30,23 @@ class ProfileService {
     );
   }
 
-  Future<void> saveAvatarPath(String avatarPath) async {
+  Future<void> saveAvatarSpec(AvatarSpec avatarSpec) async {
     final profile = await loadProfile();
-    final cleanPath = avatarPath.trim();
-    await _save(
-      profile.copyWith(
-        avatarPath: cleanPath.isEmpty
-            ? ProfileData.defaultAvatarPath
-            : cleanPath,
-      ),
-    );
+    await _save(profile.copyWith(avatarSpec: avatarSpec));
+  }
+
+  /// Whether the stored profile carries an avatar spec (vs. a legacy save
+  /// from before the pixel-face system). Used by the one-shot migration.
+  Future<bool> hasStoredAvatarSpec() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_profileKey);
+    if (raw == null) return false;
+    try {
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      return json['avatarSpec'] is Map;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _save(ProfileData profile) async {

@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/avatar_spec.dart';
 import '../models/character_class.dart';
 import '../models/guild_models.dart';
 
@@ -126,7 +128,8 @@ class GuildService {
       lastActiveAt: lastActive,
       weeklyVolumeKg: 0, // filled deterministically on weekly sync
       weeklySessions: 0,
-      avatarPath: 'assets/avatar/${(index % 7) + 1}.png',
+      // Seeded Random → the same NPC always wears the same random face.
+      avatarSpec: AvatarSpec.random(Random(index)),
     );
   }
 
@@ -201,6 +204,11 @@ class GuildService {
           m.copyWith(
             weeklyVolumeKg: vol,
             weeklySessions: _npcWeeklySessions(m.userId, week),
+            // Backfill faces for guilds seeded before the pixel-face system
+            // (legacy image paths decode to null). Seeded by userId → stable.
+            avatarSpec:
+                m.avatarSpec ??
+                AvatarSpec.random(Random(m.userId.hashCode & 0x7fffffff)),
           ),
         );
       }

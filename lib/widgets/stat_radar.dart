@@ -1,193 +1,226 @@
 import 'dart:math';
 
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../models/stat_radar_read.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
 
+/// Character-stats radar: a hand-drawn triangle for STR / AGI / END.
+///
+/// Drawn entirely in code (one [CustomPainter]) — no chart library and no image
+/// assets. Grid, data polygon, and axis labels share one geometry so the labels
+/// always anchor to the real vertices, and the data shape is scaled by the
+/// rank-band curve ([rankBandFraction]) rather than a chart library's relative
+/// min/max normalization.
 class StatRadar extends StatelessWidget {
-  const StatRadar({super.key, required this.stats});
+  const StatRadar({super.key, required this.stats, this.height = 188});
 
   final Map<String, int> stats;
+  final double height;
 
   // Triangle: STR / AGI / END only. DEF retired from visible UI; VIT renders as
   // a separate horizontal bar in the stat card.
-  static const _labels = ['STR', 'AGI', 'END'];
-  static const _maxStatValue = 1000.0;
+  static const _labels = StatRadarRead.visibleStats;
   static const _activationThreshold = 10;
+
+  // Radius headroom reserved for the axis labels.
+  static const double _labelInset = 26;
+
+  // Per-axis label offset from each vertex (x → right, y → down). STR lifts
+  // straight up; the two bottom labels push diagonally down-and-out so they
+  // clear the triangle's base instead of sliding sideways.
+  static const _labelOffsets = <Offset>[
+    Offset(0, -12), // STR (top)
+    Offset(13, 13), // AGI (bottom-right) — 45° down-right
+    Offset(-13, 13), // END (bottom-left) — 45° down-left
+  ];
+
+  static Offset _vertex(Offset center, double radius, int i) {
+    final angle = -pi / 2 + i * 2 * pi / 3;
+    return Offset(
+      center.dx + cos(angle) * radius,
+      center.dy + sin(angle) * radius,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final hasShape = _labels.any(
       (label) => (stats[label] ?? 0) >= _activationThreshold,
     );
-    if (!hasShape) {
-      return const _EmptyStatRadar();
-    }
-
-    final entries = [
-      for (final label in _labels)
-        RadarEntry(value: (stats[label] ?? 0).clamp(0, 1000).toDouble()),
-    ];
+    final dominant = StatRadarRead.dominantAxis(stats);
 
     return SizedBox(
-      height: 168,
+      height: height,
       width: double.infinity,
-      child: RadarChart(
-        RadarChartData(
-          radarShape: RadarShape.polygon,
-          tickCount: 4,
-          radarBackgroundColor: kBg.withValues(alpha: 0.35),
-          radarBorderData: BorderSide(color: kBorder, width: 1),
-          gridBorderData: BorderSide(color: kBorder.withValues(alpha: 0.7)),
-          tickBorderData: BorderSide(color: kBorder.withValues(alpha: 0.35)),
-          ticksTextStyle: const TextStyle(
-            color: Colors.transparent,
-            fontSize: 0,
-          ),
-          titleTextStyle: const TextStyle(
-            fontFamily: 'PressStart2P',
-            color: kMutedText,
-            fontSize: 7,
-          ),
-          titlePositionPercentageOffset: 0.15,
-          getTitle: (index, angle) => RadarChartTitle(
-            text: _labels[index],
-            angle: angle,
-            positionPercentageOffset: 0.18,
-          ),
-          radarTouchData: RadarTouchData(enabled: false),
-          dataSets: [
-            RadarDataSet(
-              dataEntries: const [
-                RadarEntry(value: _maxStatValue),
-                RadarEntry(value: _maxStatValue),
-                RadarEntry(value: _maxStatValue),
-              ],
-              fillColor: Colors.transparent,
-              borderColor: Colors.transparent,
-              borderWidth: 0,
-              entryRadius: 0,
-            ),
-            RadarDataSet(
-              dataEntries: entries,
-              fillColor: kNeon.withValues(alpha: 0.18),
-              borderColor: kNeon,
-              borderWidth: 2,
-              entryRadius: 2.5,
-            ),
-          ],
-        ),
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
-      ),
-    );
-  }
-}
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = Size(constraints.maxWidth, constraints.maxHeight);
+          final center = Offset(size.width / 2, size.height / 2);
+          final radius = min(size.width, size.height) / 2 - _labelInset;
+          final labelPoints = [
+            for (var i = 0; i < _labels.length; i++)
+              _vertex(center, radius, i) + _labelOffsets[i],
+          ];
 
-class _EmptyStatRadar extends StatelessWidget {
-  const _EmptyStatRadar();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 168,
-      width: double.infinity,
-      child: Stack(
-        children: [
-          const Positioned.fill(
-            child: CustomPaint(painter: _EmptyRadarPainter()),
-          ),
-          // Triangle apex (up) = STR, bottom-right = AGI, bottom-left = END.
-          const Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: _RadarAxisLabel('STR'),
-          ),
-          const Positioned(
-            right: 36,
-            bottom: 30,
-            child: _RadarAxisLabel('AGI'),
-          ),
-          const Positioned(left: 36, bottom: 30, child: _RadarAxisLabel('END')),
-          Center(
-            child: Text(
-              'Train to shape your build',
-              textAlign: TextAlign.center,
-              style: AppFonts.shareTechMono(
-                color: kMutedText,
-                fontSize: 11,
-                height: 1.2,
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _RadarPainter(
+                    stats: stats,
+                    center: center,
+                    radius: radius,
+                    hasShape: hasShape,
+                  ),
+                ),
               ),
-            ),
-          ),
-        ],
+              if (!hasShape)
+                Center(
+                  child: Text(
+                    'Train to shape your build',
+                    textAlign: TextAlign.center,
+                    style: AppFonts.shareTechMono(
+                      color: kMutedText,
+                      fontSize: 11,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              for (var i = 0; i < _labels.length; i++)
+                Positioned(
+                  left: labelPoints[i].dx,
+                  top: labelPoints[i].dy,
+                  child: FractionalTranslation(
+                    translation: const Offset(-0.5, -0.5),
+                    child: _RadarAxisLabel(
+                      _labels[i],
+                      highlighted: dominant == _labels[i],
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _RadarAxisLabel extends StatelessWidget {
-  const _RadarAxisLabel(this.label);
+class _RadarPainter extends CustomPainter {
+  const _RadarPainter({
+    required this.stats,
+    required this.center,
+    required this.radius,
+    required this.hasShape,
+  });
 
-  final String label;
+  final Map<String, int> stats;
+  final Offset center;
+  final double radius;
+  final bool hasShape;
 
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      textAlign: TextAlign.center,
-      style: const TextStyle(
-        fontFamily: 'PressStart2P',
-        color: kMutedText,
-        fontSize: 7,
-      ),
-    );
+  static const _labels = StatRadarRead.visibleStats;
+
+  Offset _vertex(double r, int i) {
+    final angle = -pi / 2 + i * 2 * pi / 3;
+    return Offset(center.dx + cos(angle) * r, center.dy + sin(angle) * r);
   }
-}
-
-class _EmptyRadarPainter extends CustomPainter {
-  const _EmptyRadarPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.shortestSide * 0.34).clamp(42.0, 58.0);
-    final points = List.generate(5, (index) {
-      final angle = -pi / 2 + index * 2 * pi / 5;
-      return Offset(
-        center.dx + cos(angle) * radius,
-        center.dy + sin(angle) * radius,
-      );
-    });
-    final paint = Paint()
+    if (radius <= 0) return;
+
+    final outer = [for (var i = 0; i < 3; i++) _vertex(radius, i)];
+
+    // Translucent background polygon.
+    canvas.drawPath(
+      _polygonPath(outer),
+      Paint()
+        ..color = kBg.withValues(alpha: 0.35)
+        ..style = PaintingStyle.fill,
+    );
+
+    // Dotted rank rings at 1/5 .. 4/5 of the radius (the D/C, C/B, B/A, A/S
+    // promotion boundaries).
+    final ringPaint = Paint()
       ..color = kBorder.withValues(alpha: 0.72)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
-
     for (var ring = 1; ring <= 4; ring++) {
-      final t = ring / 4;
-      final ringPoints = [
-        for (final point in points) Offset.lerp(center, point, t) ?? center,
-      ];
-      _drawDottedPolygon(canvas, ringPoints, paint);
+      final t = ring / 5;
+      final pts = [for (var i = 0; i < 3; i++) _vertex(radius * t, i)];
+      _drawDottedPolygon(canvas, pts, ringPaint);
     }
 
-    final axisPaint = Paint()
+    // Outer border ring (solid, slightly stronger).
+    canvas.drawPath(
+      _polygonPath(outer),
+      Paint()
+        ..color = kBorder
+        ..strokeWidth = 1
+        ..style = PaintingStyle.stroke,
+    );
+
+    // Axis spokes.
+    final spokePaint = Paint()
       ..color = kBorder.withValues(alpha: 0.32)
       ..strokeWidth = 1;
-    for (final point in points) {
-      canvas.drawLine(center, point, axisPaint);
+    for (final p in outer) {
+      canvas.drawLine(center, p, spokePaint);
     }
+
+    if (!hasShape) return;
+
+    // Data polygon, scaled by the rank-band curve.
+    final dataPoints = [
+      for (var i = 0; i < 3; i++)
+        _vertex(
+          radius * StatRadarRead.rankBandFraction(stats[_labels[i]] ?? 0),
+          i,
+        ),
+    ];
+    final path = _polygonPath(dataPoints);
+    canvas
+      ..drawPath(
+        path,
+        Paint()
+          ..color = kNeon.withValues(alpha: 0.18)
+          ..style = PaintingStyle.fill,
+      )
+      ..drawPath(
+        path,
+        Paint()
+          ..color = kNeon
+          ..strokeWidth = 2
+          ..style = PaintingStyle.stroke,
+      );
+
+    final dotPaint = Paint()
+      ..color = kNeon
+      ..style = PaintingStyle.fill;
+    for (final p in dataPoints) {
+      canvas.drawCircle(p, 2.5, dotPaint);
+    }
+  }
+
+  Path _polygonPath(List<Offset> points) {
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (final p in points.skip(1)) {
+      path.lineTo(p.dx, p.dy);
+    }
+    return path..close();
   }
 
   void _drawDottedPolygon(Canvas canvas, List<Offset> points, Paint paint) {
     for (var i = 0; i < points.length; i++) {
-      final start = points[i];
-      final end = points[(i + 1) % points.length];
-      _drawDottedLine(canvas, start, end, paint);
+      _drawDottedLine(
+        canvas,
+        points[i],
+        points[(i + 1) % points.length],
+        paint,
+      );
     }
   }
 
@@ -211,5 +244,45 @@ class _EmptyRadarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _EmptyRadarPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _RadarPainter old) =>
+      old.hasShape != hasShape ||
+      old.center != center ||
+      old.radius != radius ||
+      !_sameStats(old.stats);
+
+  bool _sameStats(Map<String, int> other) {
+    for (final label in _labels) {
+      if ((other[label] ?? 0) != (stats[label] ?? 0)) return false;
+    }
+    return true;
+  }
+}
+
+class _RadarAxisLabel extends StatelessWidget {
+  const _RadarAxisLabel(this.label, {this.highlighted = false});
+
+  final String label;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = highlighted ? kNeon : kMutedText;
+    return Semantics(
+      label: highlighted ? '$label dominant stat axis' : '$label stat axis',
+      child: Text(
+        key: ValueKey(
+          highlighted
+              ? 'stat_radar_axis_${label}_dominant'
+              : 'stat_radar_axis_${label}_normal',
+        ),
+        label,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontFamily: 'PressStart2P',
+          color: color,
+          fontSize: highlighted ? 8 : 7,
+        ),
+      ),
+    );
+  }
 }

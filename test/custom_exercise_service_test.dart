@@ -1,6 +1,6 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/services/custom_exercise_service.dart';
@@ -11,9 +11,8 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     // Mock the asset bundle for built-in exercises
-    ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
-      'flutter/assets',
-      (message) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMessageHandler('flutter/assets', (message) async {
         final key = utf8.decode(message!.buffer.asUint8List());
         if (key == 'assets/exercises.json') {
           final json = jsonEncode([
@@ -38,10 +37,8 @@ void main() {
   });
 
   tearDown(() {
-    ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
-      'flutter/assets',
-      null,
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMessageHandler('flutter/assets', null);
   });
 
   group('saveCustomExercise', () {

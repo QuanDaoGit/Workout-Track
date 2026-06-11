@@ -1,0 +1,102 @@
+[
+  {
+    "id": "A1",
+    "expectedClass": "assassin",
+    "classAtSave": "assassin",
+    "stats": { "STR": 264, "AGI": 437, "END": 332 },
+    "logs": [
+      { "exerciseId": "press", "weight": 30, "reps": 10, "sets": 3 },
+      { "exerciseId": "lateral", "weight": 10, "reps": 15, "sets": 3 },
+      { "exerciseId": "crunch", "weight": 0, "reps": 15, "sets": 3 }
+    ]
+  },
+  {
+    "id": "A2",
+    "expectedClass": "assassin",
+    "classAtSave": "assassin",
+    "stats": { "STR": 274, "AGI": 447, "END": 366 },
+    "logs": [
+      { "exerciseId": "lateral", "weight": 12, "reps": 15, "sets": 4 },
+      { "exerciseId": "crunch", "weight": 0, "reps": 20, "sets": 4 },
+      { "exerciseId": "press", "weight": 25, "reps": 12, "sets": 2 }
+    ]
+  },
+  {
+    "id": "A3",
+    "expectedClass": "assassin",
+    "classAtSave": "assassin",
+    "stats": { "STR": 290, "AGI": 464, "END": 366 },
+    "logs": [
+      { "exerciseId": "press", "weight": 35, "reps": 8, "sets": 4 },
+      { "exerciseId": "crunch", "weight": 0, "reps": 20, "sets": 4 },
+      { "exerciseId": "lateral", "weight": 8, "reps": 18, "sets": 3 }
+    ]
+  },
+  {
+    "id": "B1",
+    "expectedClass": "bruiser",
+    "classAtSave": "bruiser",
+    "stats": { "STR": 509, "AGI": 292, "END": 297 },
+    "logs": [
+      { "exerciseId": "bench", "weight": 80, "reps": 8, "sets": 3 },
+      { "exerciseId": "row", "weight": 70, "reps": 10, "sets": 3 },
+      { "exerciseId": "curl", "weight": 25, "reps": 12, "sets": 3 },
+      { "exerciseId": "triceps", "weight": 25, "reps": 12, "sets": 3 }
+    ]
+  },
+  {
+    "id": "B2",
+    "expectedClass": "bruiser",
+    "classAtSave": "bruiser",
+    "stats": { "STR": 526, "AGI": 307, "END": 248 },
+    "logs": [
+      { "exerciseId": "bench", "weight": 90, "reps": 6, "sets": 4 },
+      { "exerciseId": "row", "weight": 75, "reps": 8, "sets": 4 },
+      { "exerciseId": "triceps", "weight": 30, "reps": 10, "sets": 3 }
+    ]
+  },
+  {
+    "id": "B3",
+    "expectedClass": "bruiser",
+    "classAtSave": "bruiser",
+    "stats": { "STR": 490, "AGI": 280, "END": 286 },
+    "logs": [
+      { "exerciseId": "row", "weight": 85, "reps": 8, "sets": 4 },
+      { "exerciseId": "curl", "weight": 25, "reps": 10, "sets": 4 },
+      { "exerciseId": "triceps", "weight": 25, "reps": 10, "sets": 4 }
+    ]
+  },
+  {
+    "id": "T1",
+    "expectedClass": "tank",
+    "classAtSave": "tank",
+    "stats": { "STR": 368, "AGI": 259, "END": 454 },
+    "logs": [
+      { "exerciseId": "squat", "weight": 100, "reps": 8, "sets": 3 },
+      { "exerciseId": "rdl", "weight": 80, "reps": 10, "sets": 3 },
+      { "exerciseId": "calf", "weight": 60, "reps": 15, "sets": 3 }
+    ]
+  },
+  {
+    "id": "T2",
+    "expectedClass": "tank",
+    "classAtSave": "tank",
+    "stats": { "STR": 373, "AGI": 264, "END": 490 },
+    "logs": [
+      { "exerciseId": "squat", "weight": 90, "reps": 12, "sets": 4 },
+      { "exerciseId": "rdl", "weight": 70, "reps": 12, "sets": 3 },
+      { "exerciseId": "calf", "weight": 50, "reps": 20, "sets": 3 }
+    ]
+  },
+  {
+    "id": "T3",
+    "expectedClass": "tank",
+    "classAtSave": "tank",
+    "stats": { "STR": 361, "AGI": 253, "END": 524 },
+    "logs": [
+      { "exerciseId": "squat", "weight": 70, "reps": 15, "sets": 4 },
+      { "exerciseId": "rdl", "weight": 65, "reps": 12, "sets": 3 },
+      { "exerciseId": "calf", "weight": 40, "reps": 20, "sets": 4 }
+    ]
+  }
+]

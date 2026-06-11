@@ -4,20 +4,23 @@ import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
 import 'motion/phosphor_tap.dart';
 import 'pulse_color_text.dart';
+import 'radar_stat_icon.dart';
 
 /// LCK reframed as a *buff*, not a stat. Sits beside the XP bar and reads as a
 /// reward modifier ("LCK x2"), with the streak reason + XP boost on tap. Hidden
 /// entirely when there is no active buff (multiplier <= 1.0).
 ///
-/// LCK in this app is the consecutive-day training streak (capped 100); the
-/// diamond tiers convert it to the XP multiplier via [XpService].
+/// LCK in this app is the weekly consistency streak (consecutive clean weeks,
+/// capped 100); the diamond tiers convert it to the XP multiplier via
+/// [XpService].
 class LckBuffBadge extends StatelessWidget {
   const LckBuffBadge({super.key, required this.multiplier, required this.lck});
 
   /// The XP multiplier (e.g. 2.0). Badge is hidden when <= 1.0.
   final double multiplier;
 
-  /// The raw LCK value (streak in days, capped 100) — drives the reason copy.
+  /// The raw LCK value (consistency streak in weeks, capped 100) — drives the
+  /// reason copy.
   final int lck;
 
   String get _label {
@@ -29,10 +32,9 @@ class LckBuffBadge extends StatelessWidget {
 
   String get _reason {
     final pct = ((multiplier - 1.0) * 100).round();
-    final weeks = lck ~/ 7;
-    final streak = weeks >= 1
-        ? '$weeks clean ${weeks == 1 ? 'week' : 'weeks'}'
-        : '$lck-day streak';
+    final streak = lck >= 1
+        ? '$lck clean ${lck == 1 ? 'week' : 'weeks'}'
+        : 'consistency streak';
     return '$streak · +$pct% XP';
   }
 
@@ -57,7 +59,12 @@ class LckBuffBadge extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.bolt_sharp, size: 10, color: kAmber),
+              RadarStatIcon(
+                key: const ValueKey('lck_buff_badge_icon'),
+                assetPath: RadarStatIcons.lckForValue(lck),
+                size: 12,
+                semanticLabel: 'Luck streak',
+              ),
               const SizedBox(width: 3),
               PulseColorText(
                 _label,
@@ -91,8 +98,9 @@ class LckBuffBadge extends StatelessWidget {
           ),
         ),
         content: Text(
-          '$_reason\n\nTrain on consecutive days to raise your streak and the '
-          'XP multiplier. Miss a day and the streak resets.',
+          '$_reason\n\nTrain every scheduled day to grow your weekly streak and '
+          'the XP multiplier. Skipping a scheduled day (an unscheduled rest) '
+          'resets it — a shielded miss does not.',
           style: AppFonts.shareTechMono(
             color: kText,
             fontSize: 13,

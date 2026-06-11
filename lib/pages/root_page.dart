@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../models/program_models.dart';
 import '../models/workout_models.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/loot_drop_service.dart';
+import '../services/program_customization_service.dart';
+import '../services/program_service.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_progress_bar.dart';
@@ -17,12 +20,24 @@ import 'guild_page.dart';
 import 'home.dart';
 import 'profile_page.dart';
 import 'quests_page.dart';
+import 'shop_page.dart';
 import 'workout_page.dart';
+
+/// Builds the onboarding first-session starter from the program's current day.
+/// A program **workout** day → a pre-filled program-mode [StartWorkoutPage]
+/// (Day 1, lifts auto-selected); no program or a rest day → the generic picker.
+/// Pure and synchronous so the launch decision is unit-testable without the
+/// shell. Shares the program starter builder with the Home program-day start, so
+/// both routes pre-fill the same full Day 1 loadout.
+StartWorkoutPage buildFirstSessionStarter(ProgramDay? day) {
+  if (day == null || !day.isWorkout) return const StartWorkoutPage();
+  return programDayStarter(day);
+}
 
 class RootPage extends StatefulWidget {
   const RootPage({super.key, this.openWorkoutStarterOnLaunch = false});
 
-  /// When true (onboarding "START WORKOUT" finale), open [StartWorkoutPage] on
+  /// When true (onboarding "START WORKOUT" finale), open the first session on
   /// top of the shell right after first paint. This keeps RootPage as the
   /// navigation root so every workout exit — which funnels through
   /// `popUntil((r) => r.isFirst)` — returns to Home, not the exercise picker.
@@ -66,21 +81,36 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       _showExpiredPausedSummaryIfNeeded();
     });
     if (widget.openWorkoutStarterOnLaunch) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          arcadeRoute(
-            (_) => const StartWorkoutPage(),
-            motion: ArcadeRouteMotion.flow,
-          ),
-        ).then((_) {
-          if (!mounted) return;
-          _loadOngoingSession();
-          _reloadQuestAwarePages();
-        });
-      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openFirstSession());
     }
+  }
+
+  /// Onboarding "START WORKOUT" finale. If the user chose a program, drop them
+  /// into a **pre-filled Day 1** (program-mode [StartWorkoutPage] auto-selects
+  /// the day's curated lifts) instead of a blank picker — the activation spine.
+  /// Manual-path users (no program) or the defensive rest-day case fall back to
+  /// the generic picker. Always pushed on top of RootPage so exit → Home.
+  Future<void> _openFirstSession() async {
+    if (!mounted) return;
+    final progress = await ProgramService().getActiveProgress();
+    final day = await ProgramService().getTodayDay();
+    if (!mounted) return;
+    // Apply the program's permanent exercise swaps before pre-filling Day 1.
+    final effective = (progress != null && day != null && day.isWorkout)
+        ? await ProgramCustomizationService().effectiveDay(
+            progress.programId,
+            day,
+          )
+        : day;
+    if (!mounted) return;
+    final starter = buildFirstSessionStarter(effective);
+    await Navigator.push(
+      context,
+      arcadeRoute((_) => starter, motion: ArcadeRouteMotion.flow),
+    );
+    if (!mounted) return;
+    _loadOngoingSession();
+    _reloadQuestAwarePages();
   }
 
   @override
@@ -191,6 +221,20 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
         .toList();
     if (exercises.isEmpty || !mounted) return;
 
+    // Carry the program flags so finishing a resumed PROGRAM session still
+    // advances the day (mirrors start_workout._continueOngoingSession). Without
+    // this, the dock resume would drop isProgramWorkout and the program would
+    // stall on the same day.
+    final programService = ProgramService();
+    final isProgram = await programService.isOngoingProgramSession(session.id);
+    final advanceRest = await programService.isOngoingProgramRestSession(
+      session.id,
+    );
+    final prescriptions = await programService.prescriptionsForOngoingSession(
+      session.id,
+    );
+    if (!mounted) return;
+
     Navigator.push(
       context,
       arcadeRoute(
@@ -200,6 +244,9 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
           durationMinutes: session.targetDurationMinutes,
           exercises: exercises,
           resumeFromSession: session,
+          isProgramWorkout: isProgram,
+          advanceProgramRestDayOnCompletion: advanceRest,
+          prescriptions: prescriptions,
         ),
         motion: ArcadeRouteMotion.flow,
       ),
@@ -213,11 +260,20 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     return session.elapsedSecondsForDisplay(DateTime.now());
   }
 
+  void _openShop() {
+    Navigator.of(context).push(
+      arcadeRoute((_) => const ShopPage(), motion: ArcadeRouteMotion.fade),
+    );
+  }
+
   late final List<Widget> _pages = [
     HomePage(
       key: _homeKey,
       onViewQuests: () => _selectTab(2),
       onViewProfile: () => _selectTab(4),
+      onViewWorkouts: () => _selectTab(1),
+      onOpenShop: _openShop,
+      onViewGuild: () => _selectTab(3),
     ),
     WorkoutPage(key: _workoutKey),
     QuestsPage(key: _questsKey, onQuestChanged: _reloadQuestAwarePages),
@@ -256,12 +312,21 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
             label: 'Workout',
           ),
           const BottomNavigationBarItem(
-            icon: ImageIcon(AssetImage('assets/icons/control/icon_scroll.png')),
+            icon: ImageIcon(
+              AssetImage('assets/icons/control/ui/icon_nav_quests.png'),
+            ),
+            activeIcon: ImageIcon(
+              AssetImage('assets/icons/control/ui/icon_nav_quests_active.png'),
+            ),
             label: 'Quests',
           ),
-          // No guild pixel asset yet — sharp Material icon per icon rules.
           const BottomNavigationBarItem(
-            icon: Icon(Icons.shield_sharp),
+            icon: ImageIcon(
+              AssetImage('assets/icons/control/ui/icon_nav_guild.png'),
+            ),
+            activeIcon: ImageIcon(
+              AssetImage('assets/icons/control/ui/icon_nav_guild_active.png'),
+            ),
             label: 'Guild',
           ),
           BottomNavigationBarItem(

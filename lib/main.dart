@@ -2,42 +2,25 @@ import 'package:flutter/material.dart';
 import 'theme/app_fonts.dart';
 import 'theme/tokens.dart';
 
-import 'pages/onboarding/onboarding_flow_page.dart';
-import 'pages/root_page.dart';
-import 'services/class_migration_service.dart';
-import 'services/migration_service.dart';
-import 'services/onboarding_service.dart';
-import 'services/stat_engine.dart';
+import 'pages/boot_splash_page.dart';
+import 'services/demo_seed_service.dart';
 import 'widgets/motion/ambient_drift.dart';
-import 'widgets/pixel_loader.dart';
+
+/// Marketing/QA-only data switch. Empty (the default) in every normal build.
+///   --dart-define=SEED_DEMO=intermediate   seed a demo intermediate profile
+///   --dart-define=SEED_DEMO=clear          wipe local data back to first-run
+const _seedDemo = String.fromEnvironment('SEED_DEMO');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await MigrationService.runOnce();
-  await MigrationService.runEndStatBackfillOnce();
-  await StatEngine().applyDecayIfNeeded();
-  await ClassMigrationService().migrateIfNeeded();
-  runApp(const MyApp());
-}
-
-/// Decides the first screen on launch: the onboarding flow for new users, or
-/// the main app for everyone else. Completion navigates forward explicitly, so
-/// this gate only runs once per launch.
-class _AppGate extends StatelessWidget {
-  const _AppGate();
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: OnboardingService().isComplete(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Scaffold(body: Center(child: PixelLoader(size: 32)));
-        }
-        return snapshot.data! ? const RootPage() : const OnboardingFlowPage();
-      },
-    );
+  if (_seedDemo == 'intermediate') {
+    await DemoSeedService.seedIntermediate();
+  } else if (_seedDemo == 'clear') {
+    await DemoSeedService.clearAll();
   }
+  // Launch work is relocated to BootSplashPage so the boot animation honestly
+  // covers it (occupied-time) instead of running during the native splash.
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -47,7 +30,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: const _AppGate(),
+      home: const BootSplashPage(),
       builder: (context, child) => DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(

@@ -1,25 +1,41 @@
 enum QuestCategory { daily, weekly, side }
 
 class QuestClaim {
-  const QuestClaim({required this.xp, required this.claimedAt, this.title});
+  const QuestClaim({
+    required this.xp,
+    required this.gems,
+    required this.claimedAt,
+    this.title,
+  });
 
   final int xp;
+  final int gems;
   final DateTime claimedAt;
   final String? title;
 
   Map<String, dynamic> toJson() => {
     'xp': xp,
+    'gems': gems,
     'claimedAt': claimedAt.toIso8601String(),
     'title': title,
   };
 
   factory QuestClaim.fromJson(Map<String, dynamic> json) => QuestClaim(
     xp: (json['xp'] as num?)?.toInt() ?? 0,
+    gems: (json['gems'] as num?)?.toInt() ?? 0,
     claimedAt:
         DateTime.tryParse(json['claimedAt'] as String? ?? '') ??
         DateTime.fromMillisecondsSinceEpoch(0),
     title: json['title'] as String?,
   );
+}
+
+class QuestClaimResult {
+  const QuestClaimResult({required this.xp, required this.gems, this.title});
+
+  final int xp;
+  final int gems;
+  final String? title;
 }
 
 class QuestState {
@@ -38,6 +54,8 @@ class QuestState {
   final String? selectedTitle;
 
   int get claimedXP => claims.values.fold(0, (sum, claim) => sum + claim.xp);
+  int get claimedGems =>
+      claims.values.fold(0, (sum, claim) => sum + claim.gems);
 
   QuestState copyWith({
     String? dailyPeriodKey,
@@ -99,6 +117,7 @@ class QuestItem {
     required this.title,
     required this.description,
     required this.rewardXP,
+    required this.rewardGems,
     required this.completed,
     required this.claimed,
     required this.isManual,
@@ -112,6 +131,7 @@ class QuestItem {
   final String title;
   final String description;
   final int rewardXP;
+  final int rewardGems;
   final bool completed;
   final bool claimed;
   final bool isManual;
@@ -127,18 +147,18 @@ class QuestSummary {
     required this.weeklyQuests,
     required this.sideQuests,
     required this.claimedRewardXP,
+    required this.claimedRewardGems,
     required this.todayClaimedXP,
-    required this.earnedTitles,
-    this.selectedTitle,
+    required this.todayClaimedGems,
   });
 
   final List<QuestItem> dailyQuests;
   final List<QuestItem> weeklyQuests;
   final List<QuestItem> sideQuests;
   final int claimedRewardXP;
+  final int claimedRewardGems;
   final int todayClaimedXP;
-  final List<String> earnedTitles;
-  final String? selectedTitle;
+  final int todayClaimedGems;
 
   int get weeklyCompleted =>
       weeklyQuests.where((quest) => quest.completed).length;

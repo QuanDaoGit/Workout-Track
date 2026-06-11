@@ -1,7 +1,7 @@
 import '../models/user_profile_sex.dart';
 
-/// Strength tiers used to calibrate the character's starting stats from the
-/// onboarding "calibration run". Ordered weakest -> strongest.
+/// Strength tiers used only for workout-derived calibration runs. Ordered
+/// weakest -> strongest.
 enum StrengthTier { untrained, beginner, intermediate, advanced, elite }
 
 /// Relative-strength + tier model for onboarding calibration.

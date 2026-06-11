@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ironbit Radar Readability Study</title>
+  <style>
+    @font-face {
+      font-family: "Press Start 2P";
+      src: url("../fonts/pressstart2p/PressStart2P-Regular.ttf") format("truetype");
+    }
+
+    @font-face {
+      font-family: "Share Tech Mono";
+      src: url("../fonts/sharetechmono/ShareTechMono-Regular.ttf") format("truetype");
+    }
+
+    :root {
+      --bg: #0d0d1a;
+      --panel: #1a1a2e;
+      --border: #2a2a4a;
+      --neon: #00ff9c;
+      --text: #e8e8ff;
+      --muted: #6b6b8a;
+      --dim: #555577;
+      --amber: #ffd700;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #15151f;
+      color: var(--text);
+      font-family: "Share Tech Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+    }
+
+    .phone {
+      position: relative;
+      width: 390px;
+      height: 844px;
+      overflow: hidden;
+      background: var(--bg);
+      border: 1px solid #24243c;
+      padding: 32px;
+    }
+
+    .phone::after {
+      content: "";
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.04) 0,
+        rgba(255, 255, 255, 0.04) 1px,
+        transparent 1px,
+        transparent 4px
+      );
+    }
+
+    h1,
+    h2,
+    button,
+    .label,
+    .counter {
+      font-family: "Press Start 2P", ui-monospace, monospace;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      margin: 0 0 20px;
+      color: var(--neon);
+      font-size: 17px;
+      line-height: 1.6;
+    }
+
+    h2 {
+      margin: 0;
+      color: var(--neon);
+      font-size: 13px;
+      line-height: 1.6;
+      text-align: center;
+    }
+
+    p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    input {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 0 12px;
+      font: inherit;
+      font-size: 14px;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--neon);
+    }
+
+    .screen {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .intro {
+      justify-content: center;
+    }
+
+    .class-key {
+      display: grid;
+      gap: 8px;
+      margin: 8px 0 20px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: rgba(26, 26, 46, 0.48);
+    }
+
+    .class-key-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .class-key-row b {
+      color: var(--text);
+      font-family: "Press Start 2P", ui-monospace, monospace;
+      font-size: 8px;
+      font-weight: 400;
+    }
+
+    .trial {
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+    }
+
+    .topline {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 52px;
+    }
+
+    .radar-wrap {
+      position: relative;
+      width: 290px;
+      height: 260px;
+    }
+
+    canvas {
+      width: 290px;
+      height: 260px;
+      image-rendering: pixelated;
+    }
+
+    .axis-label {
+      position: absolute;
+      color: var(--muted);
+      font-family: "Press Start 2P", ui-monospace, monospace;
+      font-size: 9px;
+      text-align: center;
+    }
+
+    .axis-label.hot {
+      color: var(--neon);
+      font-size: 10px;
+    }
+
+    .axis-str {
+      top: 0;
+      left: 0;
+      right: 0;
+    }
+
+    .axis-agi {
+      right: 10px;
+      bottom: 30px;
+    }
+
+    .axis-end {
+      left: 10px;
+      bottom: 30px;
+    }
+
+    .choices {
+      width: 100%;
+      display: grid;
+      gap: 12px;
+    }
+
+    button {
+      width: 100%;
+      min-height: 48px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    button.primary {
+      border-color: var(--neon);
+      background: var(--neon);
+      color: var(--bg);
+    }
+
+    button:hover,
+    button:focus-visible {
+      outline: none;
+      border-color: var(--neon);
+    }
+
+    .results {
+      gap: 16px;
+      justify-content: center;
+    }
+
+    .score {
+      color: var(--amber);
+      font-family: "Press Start 2P", ui-monospace, monospace;
+      font-size: 24px;
+      line-height: 1.5;
+    }
+
+    .receipt {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+      max-height: 250px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @media (max-width: 430px) {
+      body {
+        display: block;
+        background: var(--bg);
+      }
+
+      .phone {
+        width: 100vw;
+        height: 100vh;
+        border: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="phone">
+    <section id="intro" class="screen intro">
+      <h1>RADAR READABILITY<br>STUDY</h1>
+      <p>You will see each Ironbit stat radar for 5 seconds.</p>
+      <p>Learn the class key once. During each profile, use only the radar shape and STR / AGI / END axis labels.</p>
+      <div class="class-key" aria-label="Class key">
+        <div class="class-key-row">
+          <b>ASSASSIN</b>
+          <span>AGI-led profile</span>
+        </div>
+        <div class="class-key-row">
+          <b>BRUISER</b>
+          <span>STR-led profile</span>
+        </div>
+        <div class="class-key-row">
+          <b>TANK</b>
+          <span>END-led profile</span>
+        </div>
+      </div>
+      <label>
+        Participant code (no real name)
+        <input
+          id="participant-id"
+          maxlength="32"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="P01"
+        >
+      </label>
+      <button id="start" class="primary">START</button>
+    </section>
+
+    <section id="trial" class="screen trial hidden">
+      <div class="topline">
+        <span id="progress">PROFILE 1 / 9</span>
+        <span id="timer">5.0s</span>
+      </div>
+      <div id="radar" class="radar-wrap">
+        <canvas id="canvas" width="290" height="260"></canvas>
+        <div id="label-str" class="axis-label axis-str">STR</div>
+        <div id="label-agi" class="axis-label axis-agi">AGI</div>
+        <div id="label-end" class="axis-label axis-end">END</div>
+      </div>
+      <div id="prompt" class="hidden">
+        <h2>WHAT CLASS IS THIS?</h2>
+      </div>
+      <div id="choices" class="choices hidden">
+        <button data-guess="assassin">ASSASSIN</button>
+        <button data-guess="bruiser">BRUISER</button>
+        <button data-guess="tank">TANK</button>
+        <button data-guess="unsure">NOT SURE</button>
+      </div>
+    </section>
+
+    <section id="results" class="screen results hidden">
+      <h1>RESULTS</h1>
+      <div id="score" class="score">0%</div>
+      <p id="verdict"></p>
+      <div id="receipt" class="receipt"></div>
+      <button id="download" class="primary">DOWNLOAD JSON</button>
+      <button id="restart">RUN AGAIN</button>
+    </section>
+  </main>
+
+  <script id="study-cases" type="application/json">
+[
+  {
+    "id": "A1",
+    "expectedClass": "assassin",
+    "classAtSave": "assassin",
+    "stats": { "STR": 264, "AGI": 437, "END": 332 },
+    "logs": [
+      { "exerciseId": "press", "weight": 30, "reps": 10, "sets": 3 },
+      { "exerciseId": "lateral", "weight": 10, "reps": 15, "sets": 3 },
+      { "exerciseId": "crunch", "weight": 0, "reps": 15, "sets": 3 }
+    ]
+  },
+  {
+    "id": "A2",
+    "expectedClass": "assassin",
+    "classAtSave": "assassin",
+    "stats": { "STR": 274, "AGI": 447, "END": 366 },
+    "logs": [
+      { "exerciseId": "lateral", "weight": 12, "reps": 15, "sets": 4 },
+      { "exerciseId": "crunch", "weight": 0, "reps": 20, "sets": 4 },
+      { "exerciseId": "press", "weight": 25, "reps": 12, "sets": 2 }
+    ]
+  },
+  {
+    "id": "A3",
+    "expectedClass": "assassin",
+    "classAtSave": "assassin",
+    "stats": { "STR": 290, "AGI": 464, "END": 366 },
+    "logs": [
+      { "exerciseId": "press", "weight": 35, "reps": 8, "sets": 4 },
+      { "exerciseId": "crunch", "weight": 0, "reps": 20, "sets": 4 },
+      { "exerciseId": "lateral", "weight": 8, "reps": 18, "sets": 3 }
+    ]
+  },
+  {
+    "id": "B1",
+    "expectedClass": "bruiser",
+    "classAtSave": "bruiser",
+    "stats": { "STR": 509, "AGI": 292, "END": 297 },
+    "logs": [
+      { "exerciseId": "bench", "weight": 80, "reps": 8, "sets": 3 },
+      { "exerciseId": "row", "weight": 70, "reps": 10, "sets": 3 },
+      { "exerciseId": "curl", "weight": 25, "reps": 12, "sets": 3 },
+      { "exerciseId": "triceps", "weight": 25, "reps": 12, "sets": 3 }
+    ]
+  },
+  {
+    "id": "B2",
+    "expectedClass": "bruiser",
+    "classAtSave": "bruiser",
+    "stats": { "STR": 526, "AGI": 307, "END": 248 },
+    "logs": [
+      { "exerciseId": "bench", "weight": 90, "reps": 6, "sets": 4 },
+      { "exerciseId": "row", "weight": 75, "reps": 8, "sets": 4 },
+      { "exerciseId": "triceps", "weight": 30, "reps": 10, "sets": 3 }
+    ]
+  },
+  {
+    "id": "B3",
+    "expectedClass": "bruiser",
+    "classAtSave": "bruiser",
+    "stats": { "STR": 490, "AGI": 280, "END": 286 },
+    "logs": [
+      { "exerciseId": "row", "weight": 85, "reps": 8, "sets": 4 },
+      { "exerciseId": "curl", "weight": 25, "reps": 10, "sets": 4 },
+      { "exerciseId": "triceps", "weight": 25, "reps": 10, "sets": 4 }
+    ]
+  },
+  {
+    "id": "T1",
+    "expectedClass": "tank",
+    "classAtSave": "tank",
+    "stats": { "STR": 368, "AGI": 259, "END": 454 },
+    "logs": [
+      { "exerciseId": "squat", "weight": 100, "reps": 8, "sets": 3 },
+      { "exerciseId": "rdl", "weight": 80, "reps": 10, "sets": 3 },
+      { "exerciseId": "calf", "weight": 60, "reps": 15, "sets": 3 }
+    ]
+  },
+  {
+    "id": "T2",
+    "expectedClass": "tank",
+    "classAtSave": "tank",
+    "stats": { "STR": 373, "AGI": 264, "END": 490 },
+    "logs": [
+      { "exerciseId": "squat", "weight": 90, "reps": 12, "sets": 4 },
+      { "exerciseId": "rdl", "weight": 70, "reps": 12, "sets": 3 },
+      { "exerciseId": "calf", "weight": 50, "reps": 20, "sets": 3 }
+    ]
+  },
+  {
+    "id": "T3",
+    "expectedClass": "tank",
+    "classAtSave": "tank",
+    "stats": { "STR": 361, "AGI": 253, "END": 524 },
+    "logs": [
+      { "exerciseId": "squat", "weight": 70, "reps": 15, "sets": 4 },
+      { "exerciseId": "rdl", "weight": 65, "reps": 12, "sets": 3 },
+      { "exerciseId": "calf", "weight": 40, "reps": 20, "sets": 4 }
+    ]
+  }
+]
+</script>
+  <script>
+    const studyId = "ironbit_radar_readability_v1";
+    const studyMode = "radar_only_v1";
+    const fixtureVersion = "radar_readability_cases_v1_2026-06-01";
+    const visibleAxes = ["STR", "AGI", "END"];
+    const dominantLeadThreshold = 40;
+    const cases = JSON.parse(document.getElementById("study-cases").textContent)
+      .map((item) => ({
+        id: item.id,
+        className: item.expectedClass,
+        stats: item.stats,
+      }));
+
+    const exposureMs = 5000;
+    let order = [];
+    let index = 0;
+    let responses = [];
+    let startedAt = null;
+    let participantId = null;
+    let choiceShownAt = null;
+    let radarShownAt = null;
+    let radarExposureMs = null;
+    let exposureTimer = null;
+    let countdownTimer = null;
+
+    const intro = document.getElementById("intro");
+    const trial = document.getElementById("trial");
+    const results = document.getElementById("results");
+    const progress = document.getElementById("progress");
+    const timer = document.getElementById("timer");
+    const participantInput = document.getElementById("participant-id");
+    const radar = document.getElementById("radar");
+    const prompt = document.getElementById("prompt");
+    const choices = document.getElementById("choices");
+    const score = document.getElementById("score");
+    const verdict = document.getElementById("verdict");
+    const receipt = document.getElementById("receipt");
+
+    function shuffle(items) {
+      const copy = items.slice();
+      for (let i = copy.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    function show(id) {
+      intro.classList.toggle("hidden", id !== "intro");
+      trial.classList.toggle("hidden", id !== "trial");
+      results.classList.toggle("hidden", id !== "results");
+    }
+
+    function dominantAxis(stats) {
+      const axes = visibleAxes.slice().sort((a, b) => stats[b] - stats[a]);
+      return stats[axes[0]] - stats[axes[1]] >= dominantLeadThreshold ? axes[0] : null;
+    }
+
+    function protocolFingerprint() {
+      const caseParts = cases
+        .map((item) => {
+          const statPart = visibleAxes
+            .map((axis) => `${axis}=${item.stats[axis]}`)
+            .join(",");
+          return `${item.id}:${item.className}:${statPart}`;
+        })
+        .join("|");
+      return fnv1a(
+        [
+          studyId,
+          studyMode,
+          fixtureVersion,
+          exposureMs,
+          dominantLeadThreshold,
+          visibleAxes.join(","),
+          caseParts,
+        ].join("|")
+      );
+    }
+
+    function fnv1a(text) {
+      let hash = 2166136261;
+      for (let i = 0; i < text.length; i += 1) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(16).padStart(8, "0");
+    }
+
+    function participantCode() {
+      const typed = participantInput.value.trim();
+      if (typed) return typed.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 32);
+      return `P-${Date.now().toString(36).toUpperCase()}`;
+    }
+
+    function drawRadar(stats) {
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const center = { x: canvas.width / 2, y: canvas.height / 2 + 8 };
+      const radius = 86;
+      const labels = visibleAxes;
+      const points = labels.map((label, i) => {
+        const angle = -Math.PI / 2 + i * 2 * Math.PI / 3;
+        const value = Math.max(0, Math.min(1000, stats[label])) / 1000;
+        return {
+          x: center.x + Math.cos(angle) * radius * value,
+          y: center.y + Math.sin(angle) * radius * value,
+        };
+      });
+      const grid = labels.map((_, i) => {
+        const angle = -Math.PI / 2 + i * 2 * Math.PI / 3;
+        return {
+          x: center.x + Math.cos(angle) * radius,
+          y: center.y + Math.sin(angle) * radius,
+        };
+      });
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.lineWidth = 1;
+      for (let ring = 1; ring <= 4; ring += 1) {
+        const t = ring / 4;
+        ctx.beginPath();
+        grid.forEach((p, i) => {
+          const x = center.x + (p.x - center.x) * t;
+          const y = center.y + (p.y - center.y) * t;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.strokeStyle = "rgba(42, 42, 74, 0.72)";
+        ctx.stroke();
+      }
+      grid.forEach((p) => {
+        ctx.beginPath();
+        ctx.moveTo(center.x, center.y);
+        ctx.lineTo(p.x, p.y);
+        ctx.strokeStyle = "rgba(42, 42, 74, 0.4)";
+        ctx.stroke();
+      });
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = "rgba(0, 255, 156, 0.18)";
+      ctx.fill();
+      ctx.strokeStyle = "#00ff9c";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      points.forEach((p) => {
+        ctx.fillStyle = "#00ff9c";
+        ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+      });
+
+      const dominant = dominantAxis(stats);
+      ["str", "agi", "end"].forEach((axis) => {
+        const el = document.getElementById(`label-${axis}`);
+        el.classList.toggle("hot", axis.toUpperCase() === dominant);
+      });
+    }
+
+    function beginStudy() {
+      order = shuffle(cases);
+      index = 0;
+      responses = [];
+      participantId = participantCode();
+      startedAt = new Date().toISOString();
+      show("trial");
+      beginTrial();
+    }
+
+    function beginTrial() {
+      const current = order[index];
+      progress.textContent = `PROFILE ${index + 1} / ${order.length}`;
+      prompt.classList.add("hidden");
+      choices.classList.add("hidden");
+      radar.classList.remove("hidden");
+      drawRadar(current.stats);
+      radarShownAt = performance.now();
+      radarExposureMs = null;
+      const endAt = Date.now() + exposureMs;
+      timer.textContent = "5.0s";
+      clearTimeout(exposureTimer);
+      clearInterval(countdownTimer);
+      countdownTimer = setInterval(() => {
+        const remaining = Math.max(0, endAt - Date.now()) / 1000;
+        timer.textContent = `${remaining.toFixed(1)}s`;
+      }, 100);
+      exposureTimer = setTimeout(showChoices, exposureMs);
+    }
+
+    function showChoices() {
+      clearInterval(countdownTimer);
+      timer.textContent = "GUESS";
+      choiceShownAt = performance.now();
+      radarExposureMs = radarShownAt == null
+        ? null
+        : Math.round(choiceShownAt - radarShownAt);
+      radar.classList.add("hidden");
+      prompt.classList.remove("hidden");
+      choices.classList.remove("hidden");
+    }
+
+    function submitGuess(guess) {
+      const current = order[index];
+      const responseTimeMs = choiceShownAt == null
+        ? null
+        : Math.round(performance.now() - choiceShownAt);
+      responses.push({
+        trialIndex: index + 1,
+        caseId: current.id,
+        actualClass: current.className,
+        guess,
+        correct: guess === current.className,
+        radarExposureMs,
+        responseTimeMs,
+        stats: current.stats,
+      });
+      index += 1;
+      if (index >= order.length) finishStudy();
+      else beginTrial();
+    }
+
+    function finishStudy() {
+      const correct = responses.filter((r) => r.correct).length;
+      const accuracy = correct / responses.length;
+      const payload = {
+        study: studyId,
+        mode: studyMode,
+        fixtureVersion,
+        protocolHash: protocolFingerprint(),
+        participantId,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        exposureMs,
+        correct,
+        total: responses.length,
+        accuracy,
+        responses,
+      };
+      localStorage.setItem("ironbit_radar_readability_results_v1", JSON.stringify(payload));
+      score.textContent = "COMPLETE";
+      verdict.textContent = "Receipt ready. Download the JSON and give it to the facilitator.";
+      receipt.textContent =
+        `Participant: ${participantId}\n` +
+        `Profiles logged: ${responses.length}\n` +
+        "Receipt status: ready for download";
+      show("results");
+    }
+
+    function downloadResults() {
+      const text = localStorage.getItem("ironbit_radar_readability_results_v1") || "{}";
+      let id = "participant";
+      try {
+        id = JSON.parse(text).participantId || id;
+      } catch (_) {}
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ironbit-radar-readability-${id}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    document.getElementById("start").addEventListener("click", beginStudy);
+    document.getElementById("restart").addEventListener("click", beginStudy);
+    document.getElementById("download").addEventListener("click", downloadResults);
+    choices.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-guess]");
+      if (button) submitGuess(button.dataset.guess);
+    });
+  </script>
+</body>
+</html>

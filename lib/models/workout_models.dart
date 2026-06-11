@@ -197,6 +197,7 @@ class WorkoutSession {
     this.lootBonusXP,
     this.awardedXP,
     this.classAtSave,
+    this.bodyweightKgAtSave,
     this.statDelta = const {},
   }) : startedAt = startedAt ?? date,
        targetMuscleGroups = _normalizedTargets(muscleGroup, targetMuscleGroups);
@@ -222,9 +223,46 @@ class WorkoutSession {
   final int? lootBonusXP;
   final int? awardedXP;
   final String? classAtSave;
+
+  /// Bodyweight (kg) snapshotted when the session was saved, like
+  /// [classAtSave]. Frozen on the session so later profile edits never rewrite
+  /// the strength credit of past workouts. Null on history that predates the
+  /// snapshot (StatEngine carries the last-known value forward).
+  final double? bodyweightKgAtSave;
   final Map<String, int> statDelta;
 
   bool get isOngoing => isPartial && !isAbandoned;
+
+  /// Copy with replaced exercise logs and/or stat delta. Deliberately narrow:
+  /// identity, timing, and XP fields are immutable once a session is saved.
+  WorkoutSession copyWith({
+    List<ExerciseLog>? exercises,
+    Map<String, int>? statDelta,
+  }) => WorkoutSession(
+    id: id,
+    date: date,
+    startedAt: startedAt,
+    pausedAt: pausedAt,
+    autoDiscardAt: autoDiscardAt,
+    muscleGroup: muscleGroup,
+    targetMuscleGroups: targetMuscleGroups,
+    targetDurationMinutes: targetDurationMinutes,
+    actualDurationSeconds: actualDurationSeconds,
+    exercises: exercises ?? this.exercises,
+    estimatedCalories: estimatedCalories,
+    isPartial: isPartial,
+    isAbandoned: isAbandoned,
+    isPausedForResume: isPausedForResume,
+    selectedExerciseIds: selectedExerciseIds,
+    baseXP: baseXP,
+    lckMultiplier: lckMultiplier,
+    potionMultiplier: potionMultiplier,
+    lootBonusXP: lootBonusXP,
+    awardedXP: awardedXP,
+    classAtSave: classAtSave,
+    bodyweightKgAtSave: bodyweightKgAtSave,
+    statDelta: statDelta ?? this.statDelta,
+  );
 
   String get targetMuscleLabel =>
       targetMuscleGroupsLabel(targetMuscleGroups, fallback: muscleGroup);
@@ -265,6 +303,7 @@ class WorkoutSession {
     if (lootBonusXP != null) 'lootBonusXP': lootBonusXP,
     if (awardedXP != null) 'awardedXP': awardedXP,
     if (classAtSave != null) 'classAtSave': classAtSave,
+    if (bodyweightKgAtSave != null) 'bodyweightKgAtSave': bodyweightKgAtSave,
     if (statDelta.isNotEmpty) 'statDelta': statDelta,
   };
 
@@ -308,6 +347,7 @@ class WorkoutSession {
       lootBonusXP: (j['lootBonusXP'] as num?)?.toInt(),
       awardedXP: (j['awardedXP'] as num?)?.toInt(),
       classAtSave: j['classAtSave'] as String?,
+      bodyweightKgAtSave: (j['bodyweightKgAtSave'] as num?)?.toDouble(),
       statDelta: _decodeStatDelta(j['statDelta']),
     );
   }

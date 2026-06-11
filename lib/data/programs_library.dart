@@ -1,12 +1,17 @@
-import 'package:flutter/material.dart';
-
 import '../models/program_models.dart';
-import '../theme/tokens.dart';
 import 'muscle_groups.dart';
+
+// Shared per-exercise prescriptions, authored once and referenced per day.
+const _l8 = SetRepScheme(sets: 3, repMin: 8); // linear compound
+const _l10 = SetRepScheme(sets: 3, repMin: 10); // linear isolation
+const _dp812 = SetRepScheme(sets: 3, repMin: 8, repMax: 12); // double-prog compound
+const _dp1015 = SetRepScheme(sets: 3, repMin: 10, repMax: 15); // double-prog isolation
+const _dp1215 = SetRepScheme(sets: 3, repMin: 12, repMax: 15); // double-prog calves
 
 const programsLibrary = [
   Program(
     id: 'full_body_3x',
+    progression: ProgressionScheme.linear,
     name: 'FULL BODY 3X',
     description: 'Three balanced training days with recovery between runs.',
     tier: 'BEGINNER',
@@ -25,6 +30,13 @@ const programsLibrary = [
           'Dumbbell_Bicep_Curl',
           'Triceps_Pushdown',
         ],
+        prescription: {
+          'Barbell_Bench_Press_-_Medium_Grip': _l8,
+          'Wide-Grip_Lat_Pulldown': _l8,
+          'Barbell_Squat': _l8,
+          'Dumbbell_Bicep_Curl': _l10,
+          'Triceps_Pushdown': _l10,
+        },
       ),
       ProgramDay(dayNumber: 2, type: ProgramDayType.rest, label: 'REST'),
       ProgramDay(
@@ -39,6 +51,13 @@ const programsLibrary = [
           'Hammer_Curls',
           'EZ-Bar_Skullcrusher',
         ],
+        prescription: {
+          'Dumbbell_Bench_Press': _l8,
+          'Seated_Cable_Rows': _l8,
+          'Leg_Press': _l8,
+          'Hammer_Curls': _l10,
+          'EZ-Bar_Skullcrusher': _l10,
+        },
       ),
       ProgramDay(dayNumber: 4, type: ProgramDayType.rest, label: 'REST'),
       ProgramDay(
@@ -53,6 +72,13 @@ const programsLibrary = [
           'Cable_Hammer_Curls_-_Rope_Attachment',
           'Triceps_Pushdown_-_Rope_Attachment',
         ],
+        prescription: {
+          'Incline_Dumbbell_Press': _l8,
+          'One-Arm_Dumbbell_Row': _l8,
+          'Dumbbell_Lunges': _l8,
+          'Cable_Hammer_Curls_-_Rope_Attachment': _l10,
+          'Triceps_Pushdown_-_Rope_Attachment': _l10,
+        },
       ),
       ProgramDay(dayNumber: 6, type: ProgramDayType.rest, label: 'REST'),
       ProgramDay(dayNumber: 7, type: ProgramDayType.rest, label: 'REST'),
@@ -60,6 +86,7 @@ const programsLibrary = [
   ),
   Program(
     id: 'upper_lower',
+    progression: ProgressionScheme.doubleProgression,
     name: 'UPPER LOWER',
     description: 'Four focused sessions split between upper and lower body.',
     tier: 'INTERMEDIATE',
@@ -78,6 +105,13 @@ const programsLibrary = [
           'Dumbbell_Bicep_Curl',
           'Triceps_Pushdown',
         ],
+        prescription: {
+          'Barbell_Bench_Press_-_Medium_Grip': _dp812,
+          'Wide-Grip_Lat_Pulldown': _dp812,
+          'Seated_Cable_Rows': _dp812,
+          'Dumbbell_Bicep_Curl': _dp1015,
+          'Triceps_Pushdown': _dp1015,
+        },
       ),
       ProgramDay(
         dayNumber: 2,
@@ -91,6 +125,13 @@ const programsLibrary = [
           'Lying_Leg_Curls',
           'Standing_Calf_Raises',
         ],
+        prescription: {
+          'Barbell_Squat': _dp812,
+          'Leg_Press': _dp812,
+          'Dumbbell_Lunges': _dp812,
+          'Lying_Leg_Curls': _dp1015,
+          'Standing_Calf_Raises': _dp1215,
+        },
       ),
       ProgramDay(dayNumber: 3, type: ProgramDayType.rest, label: 'REST'),
       ProgramDay(
@@ -105,6 +146,13 @@ const programsLibrary = [
           'Hammer_Curls',
           'EZ-Bar_Skullcrusher',
         ],
+        prescription: {
+          'Dumbbell_Bench_Press': _dp812,
+          'One-Arm_Dumbbell_Row': _dp812,
+          'Close-Grip_Front_Lat_Pulldown': _dp812,
+          'Hammer_Curls': _dp1015,
+          'EZ-Bar_Skullcrusher': _dp1015,
+        },
       ),
       ProgramDay(
         dayNumber: 5,
@@ -118,6 +166,13 @@ const programsLibrary = [
           'Seated_Leg_Curl',
           'Seated_Calf_Raise',
         ],
+        prescription: {
+          'Hack_Squat': _dp812,
+          'Front_Squat_Clean_Grip': _dp812,
+          'Romanian_Deadlift': _dp812,
+          'Seated_Leg_Curl': _dp1015,
+          'Seated_Calf_Raise': _dp1215,
+        },
       ),
       ProgramDay(dayNumber: 6, type: ProgramDayType.rest, label: 'REST'),
       ProgramDay(dayNumber: 7, type: ProgramDayType.rest, label: 'REST'),
@@ -125,6 +180,7 @@ const programsLibrary = [
   ),
   Program(
     id: 'ppl',
+    progression: ProgressionScheme.doubleProgression,
     name: 'PUSH PULL LEGS',
     description: 'Six-day gym split for repeatable strength practice.',
     tier: 'INTERMEDIATE/ADVANCED',
@@ -143,6 +199,13 @@ const programsLibrary = [
           'Triceps_Pushdown',
           'Dumbbell_One-Arm_Triceps_Extension',
         ],
+        prescription: {
+          'Barbell_Bench_Press_-_Medium_Grip': _dp812,
+          'Barbell_Incline_Bench_Press_-_Medium_Grip': _dp812,
+          'Dumbbell_Flyes': _dp1015,
+          'Triceps_Pushdown': _dp1015,
+          'Dumbbell_One-Arm_Triceps_Extension': _dp1015,
+        },
       ),
       ProgramDay(
         dayNumber: 2,
@@ -156,6 +219,13 @@ const programsLibrary = [
           'Barbell_Curl',
           'Hammer_Curls',
         ],
+        prescription: {
+          'Wide-Grip_Lat_Pulldown': _dp812,
+          'Seated_Cable_Rows': _dp812,
+          'One-Arm_Dumbbell_Row': _dp812,
+          'Barbell_Curl': _dp1015,
+          'Hammer_Curls': _dp1015,
+        },
       ),
       ProgramDay(
         dayNumber: 3,
@@ -169,6 +239,13 @@ const programsLibrary = [
           'Lying_Leg_Curls',
           'Standing_Calf_Raises',
         ],
+        prescription: {
+          'Barbell_Squat': _dp812,
+          'Leg_Press': _dp812,
+          'Romanian_Deadlift': _dp812,
+          'Lying_Leg_Curls': _dp1015,
+          'Standing_Calf_Raises': _dp1215,
+        },
       ),
       ProgramDay(
         dayNumber: 4,
@@ -182,6 +259,13 @@ const programsLibrary = [
           'EZ-Bar_Skullcrusher',
           'Triceps_Pushdown_-_Rope_Attachment',
         ],
+        prescription: {
+          'Dumbbell_Bench_Press': _dp812,
+          'Incline_Dumbbell_Press': _dp812,
+          'Cable_Crossover': _dp1015,
+          'EZ-Bar_Skullcrusher': _dp1015,
+          'Triceps_Pushdown_-_Rope_Attachment': _dp1015,
+        },
       ),
       ProgramDay(
         dayNumber: 5,
@@ -195,6 +279,13 @@ const programsLibrary = [
           'EZ-Bar_Curl',
           'Preacher_Curl',
         ],
+        prescription: {
+          'Bent_Over_Barbell_Row': _dp812,
+          'Close-Grip_Front_Lat_Pulldown': _dp812,
+          'Straight-Arm_Pulldown': _dp1015,
+          'EZ-Bar_Curl': _dp1015,
+          'Preacher_Curl': _dp1015,
+        },
       ),
       ProgramDay(
         dayNumber: 6,
@@ -208,6 +299,13 @@ const programsLibrary = [
           'Seated_Leg_Curl',
           'Seated_Calf_Raise',
         ],
+        prescription: {
+          'Hack_Squat': _dp812,
+          'Dumbbell_Lunges': _dp812,
+          'Leg_Extensions': _dp1015,
+          'Seated_Leg_Curl': _dp1015,
+          'Seated_Calf_Raise': _dp1215,
+        },
       ),
       ProgramDay(dayNumber: 7, type: ProgramDayType.rest, label: 'REST'),
     ],
@@ -221,11 +319,29 @@ Program? programById(String id) {
   return null;
 }
 
-Color programTierColor(String tier) {
-  if (tier.contains('ADVANCED')) return kDanger;
-  if (tier.contains('INTERMEDIATE')) return kAmber;
-  return kCyan;
+/// Deterministic next program offered when an arc completes (BEGIN NEXT PATH).
+/// Push Pull Legs chains to itself — a fresh, harder-earned cycle.
+const Map<String, String> programChainNext = {
+  'full_body_3x': 'upper_lower',
+  'upper_lower': 'ppl',
+  'ppl': 'ppl',
+};
+
+/// The identity Title granted when a program arc is completed.
+const Map<String, String> programTitleId = {
+  'full_body_3x': 'title_foundation_forged',
+  'upper_lower': 'title_iron_rhythm',
+  'ppl': 'title_split_discipline',
+};
+
+/// The next program in the completion chain, or null if the id is unknown.
+Program? nextProgramInChain(String programId) {
+  final nextId = programChainNext[programId];
+  return nextId == null ? null : programById(nextId);
 }
+
+/// The Title id earned by completing [programId], or null if none is mapped.
+String? titleIdForProgram(String programId) => programTitleId[programId];
 
 String programDayFocusSummary(ProgramDay day) {
   if (day.type == ProgramDayType.rest) return 'recovery scheduled';
@@ -285,4 +401,80 @@ String programDayAbbreviation(ProgramDay day) {
     'LOWER' => 'LO',
     _ => day.label.length <= 2 ? day.label : day.label.substring(0, 2),
   };
+}
+
+/// The next workout day after the user's current position, plus an on-track
+/// estimate of how many calendar days away it is. See [nextWorkoutLookahead].
+class ProgramLookahead {
+  const ProgramLookahead(this.workout, this.daysAway);
+
+  final ProgramDay workout;
+
+  /// On-track minimum calendar days until [workout] becomes today. Always >= 1.
+  final int daysAway;
+}
+
+/// The next WORKOUT day after the user's current position, with an on-track
+/// estimate of how many calendar days away it is. Rest slots auto-advance ~1
+/// per day; a pending or just-finished workout's successor becomes "today" the
+/// next day.
+///
+/// [todayConsumed] must be true ONLY on the completed-today surface, where
+/// `ProgramService.advanceDay` has already moved [currentDayIndex] onto the
+/// next slot. Returns null only for an empty schedule (no workout days).
+ProgramLookahead? nextWorkoutLookahead(
+  Program program,
+  int currentDayIndex, {
+  required bool todayConsumed,
+}) {
+  final schedule = program.weekSchedule;
+  if (schedule.isEmpty) return null;
+  final startK = todayConsumed ? 0 : 1; // inclusive vs strictly-after
+  final dayBase = todayConsumed ? 1 : 0; // daysAway = k + dayBase
+  for (var k = startK; k < startK + schedule.length; k++) {
+    final idx = (currentDayIndex + k) % schedule.length;
+    if (schedule[idx].isWorkout) {
+      return ProgramLookahead(schedule[idx], k + dayBase);
+    }
+  }
+  return null;
+}
+
+/// Relative wording for a [ProgramLookahead.daysAway] count. The single swap
+/// point if a future optional day/time intention ever sharpens the "when".
+String relativeWhen(int daysAway) => switch (daysAway) {
+  <= 1 => 'tomorrow',
+  _ => 'in $daysAway days',
+};
+
+/// Returns [day] with per-program exercise [swaps] applied. Each suggested
+/// exercise id is remapped through [swaps] (originalId → replacementId) and the
+/// prescription is re-keyed to match, the replacement inheriting the original's
+/// [SetRepScheme]. A remapped id that duplicates an earlier one is dropped
+/// (first occurrence wins, order preserved). Rest days, empty swaps, and days
+/// that no swap touches return [day] unchanged.
+ProgramDay applyProgramSwaps(ProgramDay day, Map<String, String> swaps) {
+  if (swaps.isEmpty || !day.isWorkout) return day;
+  if (!day.suggestedExerciseIds.any(swaps.containsKey)) return day;
+
+  final newIds = <String>[];
+  final seen = <String>{};
+  for (final id in day.suggestedExerciseIds) {
+    final mapped = swaps[id] ?? id;
+    if (seen.add(mapped)) newIds.add(mapped);
+  }
+
+  final newPrescription = <String, SetRepScheme>{};
+  for (final entry in day.prescription.entries) {
+    newPrescription[swaps[entry.key] ?? entry.key] = entry.value;
+  }
+
+  return ProgramDay(
+    dayNumber: day.dayNumber,
+    type: day.type,
+    label: day.label,
+    focus: day.focus,
+    suggestedExerciseIds: newIds,
+    prescription: newPrescription,
+  );
 }

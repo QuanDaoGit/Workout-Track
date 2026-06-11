@@ -5,9 +5,7 @@ import '../theme/app_fonts.dart';
 
 import '../services/body_metrics_service.dart';
 import '../theme/tokens.dart';
-import '../widgets/arcade_route.dart';
 import '../widgets/pixel_button.dart';
-import 'goal_selection_page.dart';
 
 class BodyMetricsOnboardingPage extends StatefulWidget {
   const BodyMetricsOnboardingPage({super.key});
@@ -36,24 +34,6 @@ class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
     super.dispose();
   }
 
-  void _nextStep() {
-    setState(() => _step++);
-  }
-
-  Future<void> _openGoalSelection() async {
-    final result = await Navigator.push<GoalSelectionResult>(
-      context,
-      arcadeRoute(
-        (_) => const GoalSelectionPage(),
-        motion: ArcadeRouteMotion.fade,
-      ),
-    );
-    if (result != null && mounted) {
-      // Goal has been set via GoalSelectionPage
-      _nextStep(); // Move to logging guidance
-    }
-  }
-
   Future<void> _completeOnboarding() async {
     await BodyMetricsService().completeOnboarding();
     if (!mounted) return;
@@ -66,7 +46,6 @@ class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
       appBar: AppBar(title: const Text('BODY METRICS')),
       body: switch (_step) {
         0 => _buildPledge(),
-        1 => _buildGoalPrompt(),
         _ => _buildGuidance(),
       },
     );
@@ -127,40 +106,6 @@ class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
     );
   }
 
-  Widget _buildGoalPrompt() {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        24,
-        48,
-        24,
-        24 + MediaQuery.of(context).padding.bottom,
-      ),
-      child: Column(
-        children: [
-          const Spacer(),
-          const Text(
-            "WHAT'S YOUR\nDIRECTION?",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 14,
-              color: kNeon,
-              height: 2.0,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'this helps tailor your rewards.\nyou can change anytime.',
-            textAlign: TextAlign.center,
-            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
-          ),
-          const Spacer(),
-          PixelButton(label: 'CHOOSE PATH', onPressed: _openGoalSelection),
-        ],
-      ),
-    );
-  }
-
   Widget _buildGuidance() {
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -181,10 +126,11 @@ class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
             ),
           ),
           const SizedBox(height: 32),
-          _guidanceLine('log once per week.'),
+          _guidanceLine('log anytime — daily is fine.'),
           _guidanceLine('morning is best. before food. before water.'),
           _guidanceLine('wear the same thing each time.'),
-          _guidanceLine('weekly cadence smooths the noise.'),
+          _guidanceLine('the trend line smooths the noise.'),
+          _guidanceLine('showing up each week earns a boost.'),
           const Spacer(),
           PixelButton(label: 'GOT IT', onPressed: _completeOnboarding),
         ],

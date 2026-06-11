@@ -23,6 +23,9 @@ The project root wraps the whole product, not just the app code. Each non-code f
 **Before starting any task:**
 - Read docs/PRD.md for scope and intent.
 - Ask clarifying questions until 95% confident. Do not make any assumptions.
+- For features and non-trivial fixes, follow the `/deep-feature` pipeline (skill routing → audit
+  → research → opinion → Codex adversarial review → plan → implement). Trivial = non-behavioral
+  text/formatting only — state why before skipping.
 
 **After every major step:**
 1. Run `flutter analyze` — zero issues required.
@@ -83,7 +86,7 @@ RPG-gamified workout tracker. Flutter app, Android-only. All persistence uses `S
 3. `ExerciseSessionPage` — set logging (weight + reps). "Finish Exercise" validates and pops data back.
 4. `WorkoutSummaryPage` — post-workout XP awards, stats, calorie breakdown. `PopScope(canPop: false)`. "Save & Exit" persists via `WorkoutStorageService` then pops to root.
 
-**Onboarding flow** (`lib/pages/onboarding/`): multi-screen cinematic sequence — cold open → problem → solution → calibration quiz → avatar select → name → class reveal → generating → rank assessed → start gate. Completes by pushing `RootPage(openWorkoutStarterOnLaunch: true)`.
+**Onboarding flow** (`lib/pages/onboarding/`): multi-screen cinematic sequence — cold open → problem → solution → calibration quiz → name (creates the character) → class reveal → generating → start gate. There is no avatar step: a gender-seeded default pixel face (`AvatarDefaults.forSex`) is assigned at name-commit and shown at the start gate; users edit it later from Profile. Completes by pushing `RootPage(openWorkoutStarterOnLaunch: true)`.
 
 ### Core gamification systems
 
@@ -91,7 +94,7 @@ RPG-gamified workout tracker. Flutter app, Android-only. All persistence uses `S
 |--------|---------|-------------|
 | XP & Levels | `XpService` | Session XP from volume/time/sets. Threshold-based leveling. LCK stat multiplier. |
 | Combat Stats | `StatEngine` | Visible radar stats are STR/AGI/END. VIT = recovery meter. LCK = streak-based XP multiplier. DEF is hidden legacy storage only. Daily decay for inactivity. Calibration seed from onboarding quiz. |
-| Classes | `ClassService`, `class_definitions.dart` | 4 classes: Assassin (Shoulders+Core), Bruiser (Chest+Back+Arms), Tank (Legs), Vanguard (all, unlocks at L10). Each has a theme color and associated body goal. |
+| Classes | `ClassService`, `class_definitions.dart` | 3 classes: Assassin (Shoulders+Core), Bruiser (Chest+Back+Arms), Tank (Legs). Each has a theme color and associated body goal. (Vanguard was removed.) |
 | Quests | `QuestService` | Weekly/side quests with XP rewards. Computed from workout sessions + class context. |
 | Loot & Inventory | `LootService`, `loot_registry.dart` | Avatar frames and themes. Rarity tiers. Equip/unequip. Deterministic milestone unlocks for collection pull. |
 | Guild | `GuildService` | Local single-player simulation with NPC members. Deterministic per ISO week. Forge Nods social signal. |
@@ -99,7 +102,8 @@ RPG-gamified workout tracker. Flutter app, Android-only. All persistence uses `S
 | Progressive Overload | `ProgressiveOverloadService` | Suggests weight/rep targets based on history. Kind-aware (compound/isolation/bodyweight). |
 | Rest & Recovery | `RestService`, `RestTimerService` | Shield charges, recovery XP, rest day protection. VIT stat integration. |
 | Programs | `ProgramService`, `programs_library.dart` | Structured workout programs with scheduled sessions. |
-| Character | `CharacterService` | Avatar, name, class. Created during onboarding. |
+| Character | `CharacterService` | Name, class, quiz answers. Created during onboarding. |
+| Avatar | `AvatarSpec` (`models/avatar_spec.dart`), `IronbitAvatar` (`widgets/avatar/`) | Procedural 20×20 pixel face (skin/eyes/hair/hairColor/expression) — zero image assets, ~8,100 combos. Stored on `ProfileData.avatarSpec`; edited via `AvatarCustomizerPage` (tap the profile identity frame). Guild NPCs use seeded `AvatarSpec.random`. |
 
 ### Product doctrine
 
@@ -121,6 +125,7 @@ features, prefer surfaces that strengthen one of the long-term hooks:
 3. `data/curated_exercises.dart` — `curatedExerciseIdsByMuscleGroup` map filters the picker to a curated subset per muscle group.
 4. `data/muscle_groups.dart` — canonical 7-bucket taxonomy (Chest/Back/Shoulders/Arms/Legs/Core/Full Body). `muscleGroupForDetailed()` maps raw muscle names from JSON → buckets.
 5. Exercise images: `assets/exercises/exercises/<ExerciseName>/0.jpg`, `1.jpg`, etc.
+6. Form demos: `data/exercise_demos.dart` is a small id→asset registry (curated, currently the 5 FULL BODY A lifts). `widgets/exercise_demo_player.dart` (`video_player`/ExoPlayer) plays the muted looping mp4 — tap toggles pause/play, reduced-motion starts paused, backgrounding pauses. The large surfaces (`exercise_session.dart` via the `widgets/exercise_demo_cabinet.dart` "demo cabinet", `exercise_detail.dart` hero) host the player; the cabinet has a persisted HIDE/SHOW toggle (`WorkoutDefaultsService`, `exercise_demo_hidden_v1`) and a fullscreen viewer. Thumbnails use the poster still via `exerciseThumbAsset()`. Exercises without a demo fall back to the static catalog photo. Source mp4s live in `assets/exercises/animated-videos/` (undeclared); `ops/generate_exercise_demos.py` normalizes them into the declared `assets/exercises/demos/` mp4s + posters.
 
 ### Persistence pattern
 
@@ -148,7 +153,7 @@ All state in `SharedPreferences` as JSON strings. Key services and their storage
 - `ChoiceChip` selected state needs a manual `labelStyle` with `color: kBg` — M3 chip theme can't express different label colors for selected vs unselected natively.
 - Card/button border-radius is 4px (`kCardRadius`) throughout.
 - Fonts: PressStart2P (headings — `headlineSmall`, `titleLarge`, AppBar), Gotham (body — everything else), `AppFonts.shareTechMono()` for monospaced timer/counter displays (local font, not GoogleFonts).
-- Class-specific theme colors: Assassin `0xFF4DE5FF` (cyan), Bruiser `0xFFFFD700` (gold), Tank `0xFFFF2D55` (red), Vanguard `0xFFB14DFF` (violet).
+- Class-specific theme colors (match each class's icon art): Assassin `0xFFB14DFF` (violet), Bruiser `kDanger` `0xFFFF2D55` (red), Tank `kCyan` `0xFF00BFFF` (blue).
 
 ## Icon Rules
 - NEVER use default Material icons (Icons.xxx)
@@ -177,7 +182,7 @@ Skip planning confirmation. Execute immediately without asking for approval to p
 | 4 | 7-day cadence enforced at service layer, not UI-only | Prevents clock manipulation exploits; service uses max(storedTimestamp, now) guard. |
 | 5 | No red/green colors on weight arrows or deltas | Body-neutral design: muted-only directional indicators prevent implicit "good/bad" framing. |
 | 6 | Direction-aligned bonus is silent when not earned | Reward page never mentions alignment/misalignment; absence of bonus is simply absence, not failure. |
-| 7 | XP Boost Potions consumed on workout save, not on grant | Prevents potion waste if user logs weight but doesn't work out within 24h; incentivizes timely training. |
+| 7 | XP Boost Potions are charge-based: 3 charges per potion, one spent per eligible workout save (3→2→1→gone), expiring after 1 week as a backstop | Rewards the act of tracking across the next few workouts rather than a single 24h window; spent on save (not grant) so it still incentivizes timely training. |
 | 8 | Potion multiplier capped at 5.0x | Prevents runaway XP inflation from stacking many potions; keeps leveling meaningful. |
 | 9 | BodyGoal stored as snapshot in each WeightEntry | Allows historical analysis even after goal changes; direction alignment checks use current goal, not historical. |
 | 10 | Custom exercises use explicit primaryMuscle field, not runtime lookup | StatEngine can map custom exercises to combat stats without needing the raw JSON primaryMuscles array. |

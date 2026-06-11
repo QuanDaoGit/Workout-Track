@@ -192,6 +192,105 @@ void main() {
     expect(result.state.shieldCharges, 0);
     expect(result.state.protectedMissDateKeys, contains('2026-05-11'));
   });
+
+  group('consistencyWeeks (weekly LCK)', () {
+    final service = RestService();
+    final state = RestState.defaults(); // default schedule: Mon / Wed / Fri
+    final now = DateTime(2026, 6, 1, 9); // a Monday
+
+    test('no completed history → 0', () {
+      expect(
+        service.consistencyWeeks(sessions: const [], state: state, now: now),
+        0,
+      );
+    });
+
+    test('first workout today → 0 (no full 7-day block yet)', () {
+      expect(
+        service.consistencyWeeks(
+          sessions: [_session(date: now)],
+          state: state,
+          now: now,
+        ),
+        0,
+      );
+    });
+
+    test('three perfectly-adherent M/W/F weeks → 3', () {
+      final sessions = _scheduledThrough(
+        from: DateTime(2026, 5, 11),
+        untilExclusive: now,
+      );
+      expect(
+        service.consistencyWeeks(sessions: sessions, state: state, now: now),
+        3,
+      );
+    });
+
+    test('an unprotected missed scheduled day resets to 0', () {
+      // Drop the most recent scheduled Friday (05-29) → unscheduled recovery.
+      final sessions = _scheduledThrough(
+        from: DateTime(2026, 5, 11),
+        untilExclusive: DateTime(2026, 5, 29),
+      );
+      expect(
+        service.consistencyWeeks(sessions: sessions, state: state, now: now),
+        0,
+      );
+    });
+
+    test('a shielded miss does not reset the streak', () {
+      final sessions = _scheduledThrough(
+        from: DateTime(2026, 5, 11),
+        untilExclusive: DateTime(2026, 5, 29),
+      );
+      final shielded = state.copyWith(
+        protectedMissDateKeys: {RestService.dateKey(DateTime(2026, 5, 29))},
+      );
+      expect(
+        service.consistencyWeeks(sessions: sessions, state: shielded, now: now),
+        3,
+      );
+    });
+
+    test('long gaps on non-scheduled days do not reset', () {
+      // Mon-only schedule: the six non-scheduled days between Mondays are never
+      // misses, so a sparse-but-adherent history still accrues weeks.
+      final monOnly = state.copyWith(trainingWeekdays: {1});
+      final sessions = [
+        _session(date: DateTime(2026, 5, 11, 10)),
+        _session(date: DateTime(2026, 5, 18, 10)),
+        _session(date: DateTime(2026, 5, 25, 10)),
+      ];
+      expect(
+        service.consistencyWeeks(sessions: sessions, state: monOnly, now: now),
+        3,
+      );
+    });
+  });
+}
+
+/// Seeds a completed session on every scheduled [weekdays] day in
+/// `[from, untilExclusive)`.
+List<WorkoutSession> _scheduledThrough({
+  required DateTime from,
+  required DateTime untilExclusive,
+  Set<int> weekdays = const {1, 3, 5},
+}) {
+  final out = <WorkoutSession>[];
+  var day = DateTime(from.year, from.month, from.day);
+  final end = DateTime(
+    untilExclusive.year,
+    untilExclusive.month,
+    untilExclusive.day,
+  );
+  while (day.isBefore(end)) {
+    if (weekdays.contains(day.weekday)) {
+      out.add(_session(date: day.add(const Duration(hours: 10))));
+    }
+    day = day.add(const Duration(days: 1));
+  }
+  return out;
 }
 
 WorkoutSession _session({required DateTime date}) {

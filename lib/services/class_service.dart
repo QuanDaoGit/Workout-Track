@@ -111,9 +111,8 @@ class ClassService {
     return const RespecStatus(RespecAvailability.available, 0);
   }
 
-  /// Classes the user may respec into, given their level. Excludes the current
-  /// class and gates Vanguard behind its unlock level. Vanguard never appears
-  /// on the first class-select screen (that flow uses the quiz, not this).
+  /// Classes the user may respec into. Excludes the current class. (All classes
+  /// unlock at level 1; the [level] gate is retained for forward-compatibility.)
   Future<List<CharacterClass>> availableRespecClasses(int level) async {
     final current = await getCurrentClass();
     return [

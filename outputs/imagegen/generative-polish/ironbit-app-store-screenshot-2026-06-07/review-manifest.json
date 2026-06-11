@@ -1,0 +1,15 @@
+[
+  {
+    "id": "ironbit-first-quest-polished",
+    "index": 1,
+    "title": "First Quest - polished store screenshot",
+    "label": "First Quest",
+    "caption": "Creative Production generative-polish export with exact app UI and copy.",
+    "src": "final/ironbit-first-quest-polished-1440x2560.png",
+    "href": "final/ironbit-first-quest-polished-1440x2560.png",
+    "sourceImageUrl": "final/ironbit-first-quest-polished-1440x2560.png",
+    "routeName": "Generative Polish",
+    "family": "App Store Screenshot",
+    "prompt": "Generated background only; deterministic text, logo, device frame, and real app screenshot composited after generation."
+  }
+]

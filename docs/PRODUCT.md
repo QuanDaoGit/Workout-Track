@@ -33,9 +33,9 @@ END is backfilled from existing workout history because those reps are real logg
 - LCK 75-99: 3 diamonds, 2.5x XP
 - LCK 100: 4 diamonds, 3.0x XP
 
-Workout XP and claimable quest XP are stored at award time after applying LCK. Active XP potions multiply on top of LCK for workouts. Recovery XP is automatic rest XP and is not multiplied by LCK.
+Workout XP is stored at award time after applying LCK. Active XP potions multiply on top of LCK for workouts. Recovery XP is automatic rest XP and is not multiplied by LCK.
 
-Quest XP values are base values. Balance future quest rewards assuming a committed user can receive up to 3.0x from LCK before any separate potion effects.
+Quests now award earned gems instead of new XP. Legacy claimed quest XP remains counted so existing users do not lose levels, but future quest claims should write `0` XP and the appropriate gem award.
 
 ## Classes
 
@@ -54,6 +54,19 @@ character ledger move. Quest progress must be derivable from workout history or 
 so the user trusts that the fantasy is attached to real effort. Daily quests are fixed
 auto-evaluated training checks: show up, train class focus, and hit the daily volume floor. Users
 may still claim completed rewards, but there is no "Done" button for unverifiable tasks.
+
+## Gems and cosmetic shop
+
+Gems are an earned-only local currency for cosmetic early unlocks. There is no IAP, billing,
+subscription, paid pack, or external economy in v1. Gems come from claimable quests:
+
+- daily quests: 5 gems each
+- weekly quests: 5 / 5 / 10 / 10 / 20 gems
+- side quests: 100 gems and the existing title reward
+
+Frames and themes can have a `gemPrice` and can be purchased early from Inventory. Deterministic
+milestone unlocks remain the guaranteed progression path. Titles remain achievement-only and do not
+have gem prices.
 
 ## Progressive overload guidance
 

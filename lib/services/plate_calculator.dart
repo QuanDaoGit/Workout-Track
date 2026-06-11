@@ -33,4 +33,11 @@ class PlateCalculator {
     if (perSide > 0.001) return const [];
     return result;
   }
+
+  /// Reverse direction: total bar weight for a per-side stack.
+  /// Unit-agnostic — pass values in whatever unit the caller works in.
+  static double totalWeight(
+    List<double> perSide, {
+    double barKg = defaultBarKg,
+  }) => barKg + 2 * perSide.fold<double>(0, (sum, plate) => sum + plate);
 }

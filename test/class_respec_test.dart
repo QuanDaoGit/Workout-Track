@@ -9,32 +9,24 @@ void main() {
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  group('Vanguard gating', () {
-    test('unlockLevel is 10 for Vanguard, 1 for the rest', () {
-      expect(CharacterClass.vanguard.unlockLevel, 10);
+  group('class roster', () {
+    test('all classes unlock at level 1', () {
       expect(CharacterClass.assassin.unlockLevel, 1);
       expect(CharacterClass.bruiser.unlockLevel, 1);
       expect(CharacterClass.tank.unlockLevel, 1);
     });
 
-    test(
-      'availableRespecClasses excludes current and gates Vanguard at L10',
-      () async {
-        final svc = ClassService();
-        await svc.selectClass(CharacterClass.assassin);
+    test('availableRespecClasses excludes the current class', () async {
+      final svc = ClassService();
+      await svc.selectClass(CharacterClass.assassin);
 
-        final below = await svc.availableRespecClasses(9);
-        expect(below, isNot(contains(CharacterClass.assassin))); // current
-        expect(below, isNot(contains(CharacterClass.vanguard))); // L<10
-        expect(
-          below,
-          containsAll([CharacterClass.bruiser, CharacterClass.tank]),
-        );
-
-        final atTen = await svc.availableRespecClasses(10);
-        expect(atTen, contains(CharacterClass.vanguard));
-      },
-    );
+      final options = await svc.availableRespecClasses(1);
+      expect(options, isNot(contains(CharacterClass.assassin))); // current
+      expect(
+        options,
+        containsAll([CharacterClass.bruiser, CharacterClass.tank]),
+      );
+    });
   });
 
   group('respec lock window', () {

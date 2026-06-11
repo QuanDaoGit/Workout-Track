@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../models/avatar_spec.dart';
 import '../../models/character.dart';
 import '../../models/character_draft.dart';
 import '../../services/character_service.dart';
 import '../../services/profile_service.dart';
+import '../../services/program_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_route.dart';
@@ -12,20 +14,12 @@ import '../../widgets/motion/phosphor_tap.dart';
 import '../../widgets/motion/power_on.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/screen_shake.dart';
-import 'avatar_select_screen.dart';
 import 'start_gate_screen.dart';
 
-typedef CharacterCreatedCallback = Future<void> Function(Character character);
-
 class NameScreen extends StatefulWidget {
-  const NameScreen({
-    super.key,
-    required this.draft,
-    required this.onCharacterCreated,
-  });
+  const NameScreen({super.key, required this.draft});
 
   final CharacterDraft draft;
-  final CharacterCreatedCallback onCharacterCreated;
 
   @override
   State<NameScreen> createState() => _NameScreenState();
@@ -57,16 +51,6 @@ class _NameScreenState extends State<NameScreen>
   }
 
   String get _trimmedName => _nameController.text.trim();
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.draft.selectedAvatarId == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) Navigator.of(context).pop();
-      });
-    }
-  }
 
   @override
   void didChangeDependencies() {
@@ -113,39 +97,38 @@ class _NameScreenState extends State<NameScreen>
       return;
     }
 
-    final selectedAvatarId = widget.draft.selectedAvatarId;
-    if (selectedAvatarId == null) {
-      Navigator.of(context).pop();
-      return;
-    }
-
-    final trimmed = _trimmedName;
-    final character = Character(
-      name: trimmed,
-      calibration: widget.draft.calibration,
-      classConfirmedAt: widget.draft.classConfirmedAt,
-      selectedAvatarId: selectedAvatarId,
-      characterName: trimmed,
-      createdAt: DateTime.now(),
-    );
-
+    // Naming is the commit point: the character is created here and the
+    // start gate reveals it (no avatar step — the starter face is seeded
+    // from the quiz's sex answer and editable later from the profile).
+    final name = _trimmedName;
+    final draft = widget.draft.copyWith(characterName: name);
     setState(() => _committing = true);
+    final character = Character(
+      name: name,
+      calibration: draft.calibration,
+      classConfirmedAt: draft.classConfirmedAt,
+      characterName: name,
+      createdAt: DateTime.now(),
+      winningVision: draft.winningVision,
+      obstacle: draft.obstacle,
+      trainingWhy: draft.trainingWhy,
+    );
     await CharacterService().createCharacterAndCompleteOnboarding(character);
+    final selectedProgramId = draft.selectedProgramId;
+    if (selectedProgramId != null) {
+      await ProgramService().startProgram(selectedProgramId);
+    }
     // Mirror identity into ProfileService so Home/Profile (which read the
-    // profile store, not the Character blob) show the real name + avatar.
-    final avatarPath = onboardingAvatarOptions
-        .firstWhere(
-          (o) => o.id == selectedAvatarId,
-          orElse: () => onboardingAvatarOptions.first,
-        )
-        .assetPath;
+    // profile store, not the Character blob) show the real name + face.
+    final avatarSpec = AvatarDefaults.forSex(draft.calibration.sex);
     await ProfileService().saveDisplayName(character.characterName);
-    await ProfileService().saveAvatarPath(avatarPath);
-    await widget.onCharacterCreated(character);
+    await ProfileService().saveAvatarSpec(avatarSpec);
     if (!mounted) return;
-    await Navigator.of(
-      context,
-    ).push(arcadeRoute((_) => StartGateScreen(character: character)));
+    await Navigator.of(context).push(
+      arcadeRoute(
+        (_) => StartGateScreen(character: character, avatarSpec: avatarSpec),
+      ),
+    );
     if (mounted) setState(() => _committing = false);
   }
 

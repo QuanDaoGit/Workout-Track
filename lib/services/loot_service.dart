@@ -9,6 +9,7 @@ import '../models/loot_unlock_rule.dart';
 import '../models/milestone_models.dart';
 import '../models/workout_models.dart';
 import 'exercise_catalog_service.dart';
+import 'gem_service.dart';
 
 class LootService {
   static const bool unlockAllLootForTestBuild = false;
@@ -81,12 +82,50 @@ class LootService {
     await prefs.setString(_equippedKey, jsonEncode(encoded));
   }
 
+  /// Clear the equipped item in [category] (e.g. revert a title to "None").
+  /// Non-destructive: ownership is untouched, only the equipped slot is removed.
+  Future<void> unequipCategory(LootCategory category) async {
+    final prefs = await SharedPreferences.getInstance();
+    final equipped = await getEquippedLoot();
+    if (equipped.remove(category) == null) return;
+    final encoded = <String, String>{};
+    for (final entry in equipped.entries) {
+      encoded[entry.key.storageKey] = entry.value.id;
+    }
+    await prefs.setString(_equippedKey, jsonEncode(encoded));
+  }
+
   /// Grant a specific item directly. Idempotent.
   Future<void> grantItem(String itemId) async {
     final prefs = await SharedPreferences.getInstance();
     final owned = await _ownedIds(prefs);
     if (owned.contains(itemId)) return;
     owned.add(itemId);
+    await _saveOwnedIds(prefs, owned);
+  }
+
+  Future<void> purchaseItemWithGems(String itemId) async {
+    final item = lootItemById(itemId);
+    if (item == null) {
+      throw StateError('Unknown loot item: $itemId');
+    }
+    final price = item.gemPrice;
+    if (price == null ||
+        (item.category != LootCategory.avatarFrame &&
+            item.category != LootCategory.homeTheme)) {
+      throw StateError('Item is not purchasable with gems.');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final owned = await _ownedIds(prefs);
+    if (owned.contains(item.id)) return;
+
+    await GemService().spendGems(
+      sourceId: item.id,
+      amount: price,
+      label: item.name,
+    );
+    owned.add(item.id);
     await _saveOwnedIds(prefs, owned);
   }
 

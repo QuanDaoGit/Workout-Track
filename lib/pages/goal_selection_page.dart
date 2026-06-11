@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
 import '../models/body_goal_models.dart';
+import '../models/unit_models.dart';
 import '../services/body_goal_service.dart';
+import '../services/unit_settings_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/motion/arcade_text_field.dart';
 import '../widgets/motion/hold_depress.dart';
@@ -84,7 +86,16 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
 
     double? weight;
     if (!skip && _weightController.text.trim().isNotEmpty) {
-      weight = double.tryParse(_weightController.text.trim());
+      // Entered in the active unit; persist canonical kg.
+      final parsed = parseWeightToKg(_weightController.text, Units.weight);
+      if (parsed == null || !isPlausibleWeightKg(parsed)) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid target weight, or skip.')),
+        );
+        return;
+      }
+      weight = parsed;
     }
 
     await _service.setGoal(_selectedGoal!, targetWeight: weight);
@@ -124,7 +135,6 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
           goal: BodyGoal.cut,
           icon: '\u25BC', // ▼
           label: 'CUT',
-          className: 'ASSASSIN',
           description: 'lean down. preserve strength.',
           borderColor: kDanger,
           onTap: () => _confirmGoal(BodyGoal.cut),
@@ -134,7 +144,6 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
           goal: BodyGoal.recomp,
           icon: '\u2500', // ─
           label: 'RECOMP',
-          className: 'BRUISER',
           description: 'hold weight. gain strength.',
           borderColor: kAmber,
           onTap: () => _confirmGoal(BodyGoal.recomp),
@@ -144,7 +153,6 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
           goal: BodyGoal.bulk,
           icon: '\u25B2', // ▲
           label: 'BULK',
-          className: 'TANK',
           description: 'build mass. accept the gain.',
           borderColor: kNeon,
           onTap: () => _confirmGoal(BodyGoal.bulk),
@@ -183,9 +191,9 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             autofocus: true,
             style: AppFonts.shareTechMono(color: kText, fontSize: 24),
-            hintText: 'kg',
+            hintText: Units.weight.label,
             hintStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 24),
-            suffixText: 'kg',
+            suffixText: Units.weight.label,
             suffixStyle: AppFonts.shareTechMono(
               color: kMutedText,
               fontSize: 14,
@@ -227,7 +235,6 @@ class _GoalCard extends StatelessWidget {
     required this.goal,
     required this.icon,
     required this.label,
-    required this.className,
     required this.description,
     required this.borderColor,
     required this.onTap,
@@ -236,7 +243,6 @@ class _GoalCard extends StatelessWidget {
   final BodyGoal goal;
   final String icon;
   final String label;
-  final String className;
   final String description;
   final Color borderColor;
   final VoidCallback onTap;
@@ -275,11 +281,6 @@ class _GoalCard extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '\u2192 $className',
-              style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
             ),
             const SizedBox(height: 8),
             Text(

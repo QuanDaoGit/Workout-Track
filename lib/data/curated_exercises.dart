@@ -161,22 +161,33 @@ const Map<String, List<String>> curatedExerciseIdsByMuscleGroup = {
     'Mountain_Climbers',
     'Air_Bike',
   ],
+  // Foundational compounds + accessories spanning every muscle group — the
+  // movements the Full Body program is built from. (Replaces the prior
+  // Olympic/kettlebell-only set, which was inappropriate as the add/swap pool
+  // for a beginner Full Body day.) Every id is asset-backed (also curated under
+  // its primary muscle bucket above).
   'Full Body': [
-    'Clean_and_Jerk',
-    'Atlas_Stones',
-    'Kettlebell_Sumo_High_Pull',
-    'Push_Press',
-    'One-Arm_Kettlebell_Snatch',
-    'Plyo_Kettlebell_Pushups',
+    'Barbell_Bench_Press_-_Medium_Grip',
+    'Dumbbell_Bench_Press',
+    'Incline_Dumbbell_Press',
+    'Wide-Grip_Lat_Pulldown',
+    'Seated_Cable_Rows',
+    'One-Arm_Dumbbell_Row',
+    'Pullups',
     'Barbell_Deadlift',
-    'Sumo_Deadlift',
-    'Overhead_Squat',
-    'Power_Clean',
-    'Clean_and_Press',
-    'Kettlebell_Thruster',
-    'Kettlebell_Turkish_Get-Up_Squat_style',
-    'One-Arm_Kettlebell_Swings',
-    'Bench_Sprint',
+    'Barbell_Squat',
+    'Leg_Press',
+    'Dumbbell_Lunges',
+    'Romanian_Deadlift',
+    'Standing_Military_Press',
+    'Dumbbell_Shoulder_Press',
+    'Side_Lateral_Raise',
+    'Dumbbell_Bicep_Curl',
+    'Hammer_Curls',
+    'Cable_Hammer_Curls_-_Rope_Attachment',
+    'Triceps_Pushdown',
+    'Triceps_Pushdown_-_Rope_Attachment',
+    'EZ-Bar_Skullcrusher',
   ],
 };
 

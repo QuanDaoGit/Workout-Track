@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/onboarding_lifter_sprite.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/screen_shake.dart';
+import '../../widgets/streak_orbit_icon.dart';
 import '../../widgets/strobe_flash.dart';
 
 /// Screen 3 — the Solution. The loudest beat of the onboarding intro: states
@@ -49,11 +49,6 @@ class _SolutionViewState extends State<SolutionView>
     vsync: this,
     duration: const Duration(milliseconds: 1600),
   );
-  late final AnimationController _futureSelfBlinkController =
-      AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 4800),
-      );
 
   bool _complete = false;
   bool _reducedMotion = false;
@@ -89,15 +84,11 @@ class _SolutionViewState extends State<SolutionView>
     if (_reducedMotion) {
       _introController.stop();
       _ctaPulseController.stop();
-      _futureSelfBlinkController.stop();
-      _futureSelfBlinkController.value = 0;
       _complete = true;
       _slamFired = true;
       _introController.value = 1;
     } else if (!_complete && !_introController.isAnimating) {
       _introController.forward(from: 0);
-    } else if (_complete && !_futureSelfBlinkController.isAnimating) {
-      _futureSelfBlinkController.repeat();
     }
   }
 
@@ -106,7 +97,6 @@ class _SolutionViewState extends State<SolutionView>
     _frameTimer?.cancel();
     _introController.dispose();
     _ctaPulseController.dispose();
-    _futureSelfBlinkController.dispose();
     super.dispose();
   }
 
@@ -136,9 +126,6 @@ class _SolutionViewState extends State<SolutionView>
     if (!_reducedMotion && !_ctaPulseController.isAnimating) {
       _ctaPulseController.repeat(reverse: true);
     }
-    if (!_reducedMotion && !_futureSelfBlinkController.isAnimating) {
-      _futureSelfBlinkController.repeat();
-    }
     if (mounted) setState(() {});
   }
 
@@ -167,11 +154,20 @@ class _SolutionViewState extends State<SolutionView>
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _handleBackgroundTap,
-        child: ColoredBox(
-          color: kBg,
+        child: DecoratedBox(
+          key: _solutionBackdropKey,
+          decoration: const BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment(0, -1.08),
+              radius: 1.35,
+              colors: [kBgGradientTop, kBg, kBgGradientBottom],
+              stops: [0, 0.52, 1],
+            ),
+          ),
           child: Stack(
             fit: StackFit.expand,
             children: [
+              Positioned.fill(child: CustomPaint(painter: _CrtScreenPainter())),
               Center(
                 child: FittedBox(
                   fit: BoxFit.contain,
@@ -210,8 +206,38 @@ class _SolutionViewState extends State<SolutionView>
 const _solutionDesignFrameKey = ValueKey('solution_design_frame');
 const _solutionEffectLayerKey = ValueKey('solution_effect_layer');
 const _solutionEffectBorderKey = ValueKey('solution_effect_border');
-const _solutionFutureSelfTop = 520.0;
-const _solutionCtaTop = 674.0;
+const _solutionBackdropKey = ValueKey('solution_backdrop');
+const _solutionFutureSelfTop = 472.0;
+const _solutionCtaTop = 704.0;
+
+class _CrtScreenPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scanPaint = Paint()
+      ..color = const Color(0x06FFFFFF)
+      ..strokeWidth = 1
+      ..isAntiAlias = false;
+    for (double y = 0; y < size.height; y += 3) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), scanPaint);
+    }
+
+    final vignettePaint = Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(0, -0.12),
+        radius: 0.95,
+        colors: [
+          Colors.transparent,
+          Colors.transparent,
+          Colors.black.withValues(alpha: 0.42),
+        ],
+        stops: const [0, 0.58, 1],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, vignettePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
 
 class _SolutionEffectLayer extends StatelessWidget {
   const _SolutionEffectLayer({
@@ -266,7 +292,6 @@ class _SolutionComposition extends StatelessWidget {
       animation: Listenable.merge([
         host._introController,
         host._ctaPulseController,
-        host._futureSelfBlinkController,
       ]),
       builder: (context, _) {
         final ms = host._complete
@@ -294,7 +319,7 @@ class _SolutionComposition extends StatelessWidget {
           children: [
             // Solution statement.
             Positioned(
-              top: 226,
+              top: 132,
               left: 24,
               right: 24,
               child: Column(
@@ -306,13 +331,13 @@ class _SolutionComposition extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontFamily: 'PressStart2P',
-                        fontSize: 16,
+                        fontSize: 18,
                         color: kText,
-                        height: 1.6,
+                        height: 1.5,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Opacity(
                     opacity: line2Visible ? 1.0 : 0.0,
                     child: const Text(
@@ -320,9 +345,9 @@ class _SolutionComposition extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontFamily: 'PressStart2P',
-                        fontSize: 16,
+                        fontSize: 18,
                         color: kAmber,
-                        height: 1.6,
+                        height: 1.5,
                       ),
                     ),
                   ),
@@ -331,14 +356,14 @@ class _SolutionComposition extends StatelessWidget {
             ),
             // Motivation block — three lines arriving in sequence.
             Positioned(
-              top: 404,
+              top: 320,
               left: 32,
               right: 32,
               child: Column(
                 children: [
-                  _motivLine(ms, 0, 'now the work ', 'shows', '.'),
-                  _motivLine(ms, 1, 'every rep, a little ', 'stronger', '.'),
-                  _motivLine(ms, 2, "and you'll keep coming back.", '', ''),
+                  _motivLine(ms, 0, 'you can ', 'see', ' your work.'),
+                  _motivLine(ms, 1, 'you become ', 'stronger', ' every rep.'),
+                  _motivLine(ms, 2, "and ", 'you', ' will keep coming back.'),
                 ],
               ),
             ),
@@ -351,19 +376,9 @@ class _SolutionComposition extends StatelessWidget {
                 child: IgnorePointer(
                   child: Opacity(
                     opacity: futureSelfOpacity,
-                    child: Column(
-                      key: const ValueKey('solution_aspiration_tease'),
-                      children: [
-                        OnboardingLifterSprite(
-                          mode: OnboardingLifterSpriteMode.triumph,
-                          width: 140,
-                          height: 100,
-                          edgeColor: kAmber,
-                          blinkProgress: host._futureSelfBlinkController.value,
-                        ),
-                        const SizedBox(height: 6),
-                        const _TinyAmberStrBar(),
-                      ],
+                    child: const Column(
+                      key: ValueKey('solution_aspiration_tease'),
+                      children: [StreakOrbitIcon(size: 168)],
                     ),
                   ),
                 ),
@@ -385,9 +400,9 @@ class _SolutionComposition extends StatelessWidget {
                       toggles: 1,
                       toggleMs: 120,
                       child: PixelButton(
-                        label: 'BUILD MY CHARACTER',
-                        fontSize: 14,
-                        minHeight: 56,
+                        label: 'LET\'S BUILD MY CHARACTER',
+                        fontSize: 12,
+                        minHeight: 64,
                         onPressed: host._handleCta,
                       ),
                     ),
@@ -402,7 +417,7 @@ class _SolutionComposition extends StatelessWidget {
   }
 
   double _futureSelfOpacity(double ms) {
-    const settledOpacity = 0.6;
+    const settledOpacity = 0.9;
     if (host._complete || host._reducedMotion) return settledOpacity;
     if (ms < 1550) return 0;
     if (ms < 1750) return ((ms - 1550) / 200).clamp(0.0, 1.0).toDouble();
@@ -459,35 +474,6 @@ class _SolutionComposition extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _TinyAmberStrBar extends StatelessWidget {
-  const _TinyAmberStrBar();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 120,
-      height: 12,
-      child: Row(
-        children: [
-          for (var i = 0; i < 4; i++) ...[
-            Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: kAmber.withValues(alpha: 0.75),
-                  border: Border.all(color: kAmber),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const SizedBox.expand(),
-              ),
-            ),
-            if (i != 3) const SizedBox(width: 5),
-          ],
-        ],
       ),
     );
   }

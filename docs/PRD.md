@@ -46,11 +46,12 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
   - DEF is hidden legacy compatibility storage only, not a visible stat.
 - [x] Workout-output stats start at 10 (LCK at 0); daily decay only after consecutive inactivity, never on planned rest.
 - [x] Stat card on Profile (radar + detail rows); stat delta shown after each completed session.
-- [x] Calibration quiz during onboarding seeds an initial stat baseline.
+- [x] Calibration quiz captures training context; workout-output stats start at 10 until real
+      logged training changes them.
 
 ### Classes
-- [x] 4 classes: **Assassin** (Shoulders+Core), **Bruiser** (Chest+Back+Arms), **Tank** (Legs),
-      **Vanguard** (all, unlocks at L10). Each has a theme color and session-time mechanical bonus.
+- [x] 3 classes: **Assassin** (Shoulders+Core), **Bruiser** (Chest+Back+Arms), **Tank** (Legs).
+      Each has a theme color and session-time mechanical bonus. (Vanguard was removed.)
 - [x] Class is persisted on each `WorkoutSession` at save time so later switching never rewrites history.
 
 ### Supporting systems
@@ -59,7 +60,15 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 - [x] Loot & inventory (`LootService`) — deterministic milestone unlocks (avatar frames/themes)
       that create collection pull without paid shortcuts.
 - [x] Guild (`GuildService`) — local single-player simulation with NPC members, deterministic per ISO week.
-- [x] Body metrics (`BodyMetricsService`) — opt-in, body-neutral weight tracking on a 7-day cadence.
+- [x] The Shadow (`ShadowService`) — nemesis built from the user's own steady training: acute
+      (last 10 days) vs chronic (prior 28 days) per-axis pace contest on STR/AGI/END. Home
+      callout + Guild-tab arena (ghost of the user's own avatar, dual radar). First genuine
+      defeat grants the Shadowbane title + Spectral Frame (identity only — never XP/gems);
+      a decaying high-water floor blocks rewards for beating a rested-away baseline. See
+      `docs/stats-mechanics.md` → "The Shadow".
+- [x] Body metrics (`BodyMetricsService`) — opt-in, body-neutral weight tracking: log any time, an
+      EWMA **trend line** smooths the noise, and a single weekly XP-boost reward (rolling 7-day
+      window) rewards the act of checking in.
 - [x] Progressive overload (`ProgressiveOverloadService`) — plate-true ±2.5 kg suggestions, kind-aware.
 - [x] Rest & recovery (`RestService`) — shield charges, recovery XP, rest-day protection.
 - [x] Programs (`ProgramService`) — structured workout programs (PPL, Full Body, Upper/Lower).

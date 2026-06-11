@@ -25,7 +25,7 @@ class _ProblemQuestionViewState extends State<ProblemQuestionView>
   static const _afterStrong = ' —\nthen quit by week two?';
   static const _question = '$_beforeStrong$_strong$_afterStrong';
   static const _sympathy =
-      "You're not alone. The work never feels like it adds up — so it fades before it shows.";
+      "You're not alone. The work never feels like it adds up and so it fades away before it even shows.";
   static const _introMs = 3000;
   static const _typeEndMs = 1280;
   static const _strongStartMs = 1600;

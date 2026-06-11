@@ -1,12 +1,32 @@
 import 'package:flutter/material.dart';
 
+import '../data/loot_registry.dart';
+import '../data/programs_library.dart';
+import '../models/avatar_spec.dart';
+import '../models/character_class.dart';
 import '../models/guild_models.dart';
+import '../models/loot_item.dart';
+import '../models/program_models.dart';
+import '../models/shadow_models.dart';
+import '../models/unit_models.dart';
 import '../models/workout_models.dart';
+import '../services/character_service.dart';
 import '../services/class_service.dart';
 import '../services/guild_service.dart';
+import '../services/loot_service.dart';
+import '../services/profile_service.dart';
+import '../services/program_service.dart';
+import '../services/shadow_service.dart';
+import '../services/unit_settings_service.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
+import '../widgets/avatar/ironbit_avatar.dart';
+import '../widgets/shadow/shadow_detail.dart';
+
+/// Weekly volume tonnage (stored kg) rendered in the active unit.
+String _vol(int kg) =>
+    '${fmtVol(kgToDisplay(kg.toDouble(), Units.weight))} ${Units.weight.label}';
 
 class GuildPage extends StatefulWidget {
   const GuildPage({super.key});
@@ -24,6 +44,13 @@ class GuildPageState extends State<GuildPage> {
   GuildRecap? _recap;
   int _nodsReceived = 0;
   final Set<String> _nodded = {};
+
+  CharacterClass? _playerClass;
+  String _playerName = '';
+  AvatarSpec _playerAvatar = AvatarSpec.fallback;
+  LootItem? _equippedTitle;
+  List<ProgramCompletion> _completions = const [];
+  ShadowEvaluation? _shadowEval;
 
   @override
   void initState() {
@@ -64,6 +91,13 @@ class GuildPageState extends State<GuildPage> {
         nodded.add(m.userId);
       }
     }
+    final character = await CharacterService().loadActiveCharacter();
+    final profile = await ProfileService().loadProfile();
+    final equippedTitle = await LootService().getEquippedItem(
+      LootCategory.titleBadge,
+    );
+    final completions = await ProgramService().completedPrograms();
+    final shadowEval = await ShadowService().evaluate();
     if (!mounted) return;
     setState(() {
       _guildData = view.guild;
@@ -73,6 +107,12 @@ class GuildPageState extends State<GuildPage> {
       _nodded
         ..clear()
         ..addAll(nodded);
+      _playerClass = classFocus;
+      _playerName = character?.name ?? '';
+      _playerAvatar = profile.avatarSpec;
+      _equippedTitle = equippedTitle;
+      _completions = completions;
+      _shadowEval = shadowEval;
       _loading = false;
     });
   }
@@ -107,7 +147,15 @@ class GuildPageState extends State<GuildPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // The Shadow arena — you vs you, deliberately above the social
+            // roster (intimate, not competitive-with-others).
+            if (_shadowEval != null) ...[
+              ShadowDetail(evaluation: _shadowEval!, avatarSpec: _playerAvatar),
+              const SizedBox(height: 16),
+            ],
             _header(guild),
+            const SizedBox(height: 16),
+            _guildCard(),
             const SizedBox(height: 16),
             _recapCard(),
             const SizedBox(height: 16),
@@ -119,6 +167,9 @@ class GuildPageState extends State<GuildPage> {
             for (final m in _members) ...[
               _MemberTile(
                 member: m,
+                // Player row mirrors the live profile face; NPCs wear their
+                // own stored spec.
+                avatarSpec: m.isPlayer ? _playerAvatar : m.avatarSpec,
                 nodded: _nodded.contains(m.userId),
                 onNod: m.isPlayer ? null : () => _sendNod(m),
               ),
@@ -142,6 +193,7 @@ class GuildPageState extends State<GuildPage> {
 
   Widget _header(Guild guild) {
     return Container(
+      key: const ValueKey('guild_header_card'),
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -163,7 +215,7 @@ class GuildPageState extends State<GuildPage> {
           const SizedBox(height: 8),
           Text(
             '${_members.length}/${GuildService.maxMembers} members · '
-            '${guild.weeklyVolumeKg} kg this week',
+            '${_vol(guild.weeklyVolumeKg)} this week',
             style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
           ),
           if (_nodsReceived > 0) ...[
@@ -178,14 +230,100 @@ class GuildPageState extends State<GuildPage> {
     );
   }
 
-  Widget _recapCard() {
-    final recap = _recap!;
+  Widget _guildCard() {
+    final clazz = _playerClass;
+    final accent = clazz?.themeColor ?? kNeon;
+    final title = _equippedTitle;
     return Container(
+      key: const ValueKey('guild_player_card'),
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Color.lerp(kSurface2, kAmber, 0.05),
-        border: Border.all(color: kAmber.withValues(alpha: 0.7)),
+        color: kCard,
+        border: Border.all(color: accent),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'GUILD CARD',
+            style: AppFonts.shareTechMono(
+              color: kMutedText,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _playerName.isEmpty ? 'RECRUIT' : _playerName.toUpperCase(),
+            style: const TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 14,
+              color: kText,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            clazz == null ? 'NO CLASS' : clazz.displayName.toUpperCase(),
+            style: AppFonts.shareTechMono(color: accent, fontSize: 12),
+          ),
+          if (title != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'TITLE · ${title.name}',
+              style: AppFonts.shareTechMono(color: title.color, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            'PATHS FORGED',
+            style: AppFonts.shareTechMono(
+              color: kMutedText,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (_completions.isEmpty)
+            Text(
+              'No paths forged yet. Finish a program to forge your first.',
+              style: AppFonts.shareTechMono(
+                color: kDim,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            )
+          else
+            for (final c in _completions) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '- ${programById(c.programId)?.name ?? c.programId}'
+                  '  ·  ${lootItemById(c.titleId)?.name ?? ''}',
+                  style: AppFonts.shareTechMono(
+                    color: kText,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _recapCard() {
+    final recap = _recap!;
+    return Container(
+      key: const ValueKey('guild_weekly_recap_card'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: kCard,
+        border: Border.all(color: kBorder),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
@@ -194,15 +332,15 @@ class GuildPageState extends State<GuildPage> {
           Text(
             'WEEKLY RECAP',
             style: AppFonts.shareTechMono(
-              color: kAmber,
+              color: kMutedText,
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            '${recap.guildName} lifted ${recap.weeklyVolumeKg} kg this week. '
-            'You: ${recap.playerVolumeKg} kg. '
+            '${recap.guildName} lifted ${_vol(recap.weeklyVolumeKg)} this week. '
+            'You: ${_vol(recap.playerVolumeKg)}. '
             'Top 3 received a frame fragment.',
             style: AppFonts.shareTechMono(
               color: kText,
@@ -214,8 +352,9 @@ class GuildPageState extends State<GuildPage> {
             const SizedBox(height: 6),
             Text(
               'You finished top 3 — fragment earned.',
+              key: const ValueKey('guild_fragment_earned_text'),
               style: AppFonts.shareTechMono(
-                color: kNeon,
+                color: kAmber,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -230,11 +369,13 @@ class GuildPageState extends State<GuildPage> {
 class _MemberTile extends StatelessWidget {
   const _MemberTile({
     required this.member,
+    required this.avatarSpec,
     required this.nodded,
     required this.onNod,
   });
 
   final GuildMember member;
+  final AvatarSpec? avatarSpec;
   final bool nodded;
   final VoidCallback? onNod;
 
@@ -253,6 +394,11 @@ class _MemberTile extends StatelessWidget {
     return Opacity(
       opacity: inactive ? 0.45 : 1.0,
       child: Container(
+        key: ValueKey(
+          member.isPlayer
+              ? 'guild_member_player'
+              : 'guild_member_${member.userId}',
+        ),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: kCard,
@@ -291,7 +437,7 @@ class _MemberTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${member.weeklyVolumeKg} kg · ${member.weeklySessions} '
+                    '${_vol(member.weeklyVolumeKg)} · ${member.weeklySessions} '
                     'sessions · ${_lastActive(now)}',
                     style: AppFonts.shareTechMono(
                       color: kMutedText,
@@ -321,7 +467,7 @@ class _MemberTile extends StatelessWidget {
   }
 
   Widget _avatar() {
-    final path = member.avatarPath;
+    final spec = avatarSpec;
     return Container(
       width: 40,
       height: 40,
@@ -331,13 +477,11 @@ class _MemberTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
       ),
       clipBehavior: Clip.antiAlias,
-      child: path == null
+      child: spec == null
           ? const Icon(Icons.person_sharp, color: kMutedText, size: 22)
-          : Image.asset(
-              path,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) =>
-                  const Icon(Icons.person_sharp, color: kMutedText, size: 22),
+          // Rosters render many faces — isolate each sprite's repaints.
+          : RepaintBoundary(
+              child: Center(child: IronbitAvatar(spec: spec, size: 36)),
             ),
     );
   }

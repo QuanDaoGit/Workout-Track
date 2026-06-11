@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
+import '../models/unit_models.dart';
 import '../services/body_goal_service.dart';
 import '../services/body_metrics_service.dart';
+import '../services/unit_settings_service.dart';
 import '../services/xp_boost_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
@@ -31,48 +33,38 @@ class _LogWeightPageState extends State<LogWeightPage> {
   }
 
   bool get _isValid {
-    final value = double.tryParse(_controller.text.trim());
-    return value != null && value > 0;
+    // Parse in the active unit; bound to a plausible bodyweight (canonical kg)
+    // so a fat-finger value (e.g. 9999) can't be saved and wreck the chart.
+    final kg = parseWeightToKg(_controller.text, Units.weight);
+    return kg != null && isPlausibleWeightKg(kg);
   }
 
   Future<void> _confirm() async {
-    final kg = double.parse(_controller.text.trim());
+    // Entered in the active unit; persist canonical kg.
+    final kg = parseWeightToKg(_controller.text, Units.weight);
+    if (kg == null || !isPlausibleWeightKg(kg)) return;
     setState(() => _saving = true);
 
-    // Get current goal and previous entry for direction alignment
+    // Snapshot the goal onto the entry; logging itself is always allowed.
     final goalState = await _goalService.getGoalState();
-    final previousEntry = await _metricsService.getLastEntry();
+    await _metricsService.logWeight(kg, currentGoal: goalState?.goal);
 
-    // Log the weight
-    final entry = await _metricsService.logWeight(
-      kg,
-      currentGoal: goalState?.goal,
-    );
-
-    // Grant base XP Boost Potion (always)
-    await _potionService.grantPotion();
-
-    // Check direction-aligned bonus
-    bool bonusGranted = false;
-    if (goalState != null &&
-        previousEntry != null &&
-        BodyMetricsService.isDirectionAligned(
-          entry,
-          previousEntry,
-          goalState.goal,
-        )) {
-      await _potionService.grantPotion(directionBonus: true);
-      bonusGranted = true;
+    // One weekly act-reward: a single potion for showing up, granted at most
+    // once per rolling 7-day window. The reward is for the act of tracking, not
+    // the number — absence of a reward is silent, never framed as a miss.
+    bool rewarded = false;
+    if (await _metricsService.canEarnReward()) {
+      await _potionService.grantPotion();
+      await _metricsService.markRewardGranted();
+      rewarded = true;
     }
 
     if (!mounted) return;
 
-    // Navigate to reward reveal
     await Navigator.pushReplacement(
       context,
       arcadeRoute(
-        (_) =>
-            LogWeightRewardPage(weightKg: kg, bonusPotionGranted: bonusGranted),
+        (_) => LogWeightRewardPage(weightKg: kg, rewarded: rewarded),
         motion: ArcadeRouteMotion.reveal,
       ),
     );
@@ -106,7 +98,7 @@ class _LogWeightPageState extends State<LogWeightPage> {
                 color: kMutedText,
                 fontSize: 24,
               ),
-              suffixText: 'kg',
+              suffixText: Units.weight.label,
               suffixStyle: AppFonts.shareTechMono(
                 color: kMutedText,
                 fontSize: 14,

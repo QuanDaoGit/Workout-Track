@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:workout_track/models/unit_models.dart';
 import 'package:workout_track/services/plate_calculator.dart';
 
 void main() {
@@ -39,6 +40,68 @@ void main() {
     test('handles big lifts', () {
       // 200 kg on 20 kg bar = 90 kg per side = 25*3 + 15
       expect(PlateCalculator.platesPerSide(200), [25, 25, 25, 15]);
+    });
+  });
+
+  group('PlateCalculator.platesPerSide - lb plate set', () {
+    test('135 lb on a 45 lb bar = one 45 per side', () {
+      expect(
+        PlateCalculator.platesPerSide(
+          135,
+          barKg: defaultBarLbs,
+          plates: lbPlates,
+        ),
+        [45],
+      );
+    });
+
+    test('225 lb on a 45 lb bar = two 45s per side', () {
+      expect(
+        PlateCalculator.platesPerSide(
+          225,
+          barKg: defaultBarLbs,
+          plates: lbPlates,
+        ),
+        [45, 45],
+      );
+    });
+
+    test('non-loadable lb target returns empty (no asymmetric loads)', () {
+      // (46 - 45) / 2 = 0.5 lb per side — smallest lb plate is 2.5.
+      expect(
+        PlateCalculator.platesPerSide(
+          46,
+          barKg: defaultBarLbs,
+          plates: lbPlates,
+        ),
+        isEmpty,
+      );
+    });
+  });
+
+  group('PlateCalculator.totalWeight', () {
+    test('empty stack is just the bar', () {
+      expect(PlateCalculator.totalWeight(const []), 20);
+      expect(PlateCalculator.totalWeight(const [], barKg: 15), 15);
+    });
+
+    test('mixed kg stack: bar + 2x per-side sum', () {
+      // 20 + 2 * (20 + 10) = 80
+      expect(PlateCalculator.totalWeight(const [20, 10]), 80);
+      // 20 + 2 * (25 + 2.5 + 1.25) = 77.5
+      expect(PlateCalculator.totalWeight(const [25, 2.5, 1.25]), 77.5);
+    });
+
+    test('lb numbers: two 45s per side on a 45 bar = 225', () {
+      expect(
+        PlateCalculator.totalWeight(const [45, 45], barKg: defaultBarLbs),
+        225,
+      );
+    });
+
+    test('round-trips with platesPerSide', () {
+      final plates = PlateCalculator.platesPerSide(102.5);
+      expect(PlateCalculator.totalWeight(plates), 102.5);
     });
   });
 }

@@ -431,4 +431,119 @@ void main() {
       expect(ProgressiveOverloadService.epley1RM(0, 10, false), 0.0);
     });
   });
+
+  group('suggestNext — program prescription', () {
+    test('fixed prescription overrides the kind default (linear bump)', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', _sets(80, [5, 5, 5, 5, 5])),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        targetRepMin: 5,
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s!.reason, OverloadReason.weightIncrease);
+      expect(s.weight, 82.5);
+      expect(s.reps, 5);
+    });
+
+    test('without a prescription the same work deloads on the kind default', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', _sets(80, [5, 5, 5, 5, 5])),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s!.reason, OverloadReason.deload);
+    });
+
+    test('double progression: hit the top → +load, reps reset to the floor', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', _sets(80, [12, 12, 12, 12, 12])),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        targetRepMin: 8,
+        targetRepMax: 12,
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s!.reason, OverloadReason.weightIncrease);
+      expect(s.weight, 82.5);
+      expect(s.reps, 8);
+    });
+
+    test('double progression: inside the range → hold load, aim for the top', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', _sets(80, [8, 8, 8, 8, 8])),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        targetRepMin: 8,
+        targetRepMax: 12,
+        now: DateTime(2025, 1, 5),
+      );
+      // Bottom of an 8–12 range must NOT deload.
+      expect(s!.reason, OverloadReason.repTarget);
+      expect(s.weight, 80);
+      expect(s.reps, 12);
+    });
+
+    test('double progression: below the floor → deload', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', _sets(80, [5, 5, 5, 5, 5])),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        targetRepMin: 8,
+        targetRepMax: 12,
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s!.reason, OverloadReason.deload);
+      expect(s.weight, 76);
+    });
+
+    test('cold start (<5 logged sets) yields no load suggestion', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', _sets(80, [8, 8])),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        targetRepMin: 8,
+        targetRepMax: 12,
+        now: DateTime(2025, 1, 5),
+      );
+      expect(s, isNull);
+    });
+  });
 }

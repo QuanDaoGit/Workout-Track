@@ -323,6 +323,18 @@ FinishSelection selectHero(FinishResult r) {
   return FinishSelection(hero: hero, secondaryBadges: secondary);
 }
 
+/// Visible capability gains (STR/AGI/END) for the summary's "STAT GAINS" row.
+/// Only a statGain hero excludes its own stat (its +N already IS the headline);
+/// every other hero kind keeps all positive gains — a rank-up's +N, or a gain
+/// buried under level-up/loot fireworks, must still render somewhere.
+Map<String, int> supportingGains(Map<String, int> statDelta, FinishHero hero) =>
+    {
+      for (final stat in kHeroStatCandidates)
+        if ((hero.kind != HeroKind.statGain || stat != hero.stat) &&
+            (statDelta[stat] ?? 0) > 0)
+          stat: statDelta[stat]!,
+    };
+
 MilestoneEvent? _firstEvent(List<MilestoneEvent> events, MilestoneKind kind) {
   for (final event in events) {
     if (event.kind == kind) return event;

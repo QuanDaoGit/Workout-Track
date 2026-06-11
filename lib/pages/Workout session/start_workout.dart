@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../data/curated_exercises.dart';
+import '../../data/exercise_demos.dart';
 import '../../data/muscle_groups.dart';
+import '../../data/programs_library.dart';
+import '../../models/program_models.dart';
 import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
 import '../../services/exercise_catalog_service.dart';
@@ -22,6 +25,72 @@ import '../../widgets/pixel_button.dart';
 import '../../widgets/pixel_loader.dart';
 import 'active_workout.dart';
 
+/// Builds a program-mode [StartWorkoutPage] for [day]: the day's target groups
+/// and prescribed lifts pre-filled and pre-selected, muscle focus locked. Shared
+/// by the onboarding first session and the Home program-day start so both routes
+/// pre-fill the same full Day 1 loadout (a time-pressed user trims it on the
+/// review screen before starting).
+StartWorkoutPage programDayStarter(ProgramDay day) {
+  final targetGroups = programDayTargetMuscleGroups(day);
+  final curated = day.suggestedExerciseIds.isNotEmpty
+      ? day.suggestedExerciseIds
+      : curatedExerciseIdsForMuscleGroups(targetGroups);
+  return StartWorkoutPage(
+    initialMuscleGroups: targetGroups,
+    programCuratedExerciseIds: curated,
+    programPrescriptions: day.prescription,
+    programDayLabel: day.label,
+    programFocusSummary: programDayFocusSummary(day),
+    isProgramWorkout: true,
+  );
+}
+
+/// Final commit gate shown after CONTINUE, before the live workout timer starts.
+/// Returns true only if the user confirms. Non-destructive: declining leaves the
+/// review screen untouched.
+Future<bool> showStartWorkoutConfirmDialog(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: kCard,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+        side: const BorderSide(color: kNeon),
+      ),
+      title: const Text(
+        'START THIS WORKOUT?',
+        style: TextStyle(
+          fontFamily: 'PressStart2P',
+          fontSize: 11,
+          color: kNeon,
+        ),
+      ),
+      content: Text(
+        'Begin the live session now?',
+        style: AppFonts.shareTechMono(fontSize: 14, color: kMutedText),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: Text(
+            'CANCEL',
+            style: AppFonts.shareTechMono(color: kMutedText),
+          ),
+        ),
+        SizedBox(
+          width: 150,
+          child: PixelButton(
+            label: 'START',
+            fullWidth: false,
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
+}
+
 class StartWorkoutPage extends StatefulWidget {
   const StartWorkoutPage({
     super.key,
@@ -30,15 +99,30 @@ class StartWorkoutPage extends StatefulWidget {
     this.programDayLabel,
     this.programFocusSummary,
     this.programCuratedExerciseIds,
+    this.programPrescriptions = const {},
     this.isProgramWorkout = false,
     this.advanceProgramRestDayOnCompletion = false,
+    this.initialSelectedExerciseIds,
   });
 
   final String? initialMuscleGroup;
   final List<String>? initialMuscleGroups;
+
+  /// Pre-selected exercise ids ("repeat workout" from a past session).
+  /// Consumed once: after the first preselection pass, changing the muscle
+  /// focus falls back to the normal history-based seeding.
+  final List<String>? initialSelectedExerciseIds;
   final String? programDayLabel;
   final String? programFocusSummary;
+
+  /// The day's full prescribed loadout — pre-filled, pre-selected, and the
+  /// candidate pool for the picker (so every prescribed lift stays addable).
   final List<String>? programCuratedExerciseIds;
+
+  /// Per-exercise sets × reps targets for program days, keyed by exercise id.
+  /// Empty for manual workouts.
+  final Map<String, SetRepScheme> programPrescriptions;
+
   final bool isProgramWorkout;
   final bool advanceProgramRestDayOnCompletion;
 
@@ -120,6 +204,8 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     _refreshHistoryPreselection();
   }
 
+  bool _initialSelectionConsumed = false;
+
   Future<void> _refreshHistoryPreselection() async {
     final targets = List<String>.from(_selectedMuscleGroups);
     if (targets.isEmpty) {
@@ -128,8 +214,22 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     }
 
     final catalog = await _safeExerciseCatalogFuture;
+
+    final initialIds = widget.initialSelectedExerciseIds;
+    if (initialIds != null && !_initialSelectionConsumed) {
+      _initialSelectionConsumed = true;
+      final catalogIds = {for (final exercise in catalog) exercise.id};
+      final valid = initialIds.where(catalogIds.contains).toSet();
+      if (valid.isNotEmpty && mounted) {
+        setState(() => _selectedExerciseIds = valid);
+        return;
+      }
+    }
+    // Program mode pre-selects today's full prescribed loadout (not a top-3
+    // slice) so "show today's exercises in selected state" holds. Manual mode
+    // keeps the history-based top-3 seed.
     final topIds = _programMode && widget.programCuratedExerciseIds != null
-        ? widget.programCuratedExerciseIds!.take(3).toList()
+        ? widget.programCuratedExerciseIds!
         : await WorkoutStorageService().topExerciseIdsForTargets(
             targets,
             catalog,
@@ -200,6 +300,12 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     }
 
     if (!mounted) return;
+    // Final commit gate before the live timer starts. Cancel → stay on the
+    // review screen with no session created. (Resuming an ongoing session above
+    // returns early and is exempt — it's continuing, not starting.)
+    final confirmed = await showStartWorkoutConfirmDialog(context);
+    if (!mounted || !confirmed) return;
+
     _pushActiveWorkout(
       muscleGroup: _selectedMuscleGroups.first,
       targetMuscleGroups: _selectedMuscleGroups,
@@ -232,6 +338,9 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       return;
     }
 
+    // Rebuilt from program state: the session's own prescriptions were never
+    // persisted, and widget.programPrescriptions may belong to a newer day.
+    final programService = ProgramService();
     _pushActiveWorkout(
       muscleGroup: session.muscleGroup,
       targetMuscleGroups: session.targetMuscleGroups,
@@ -239,11 +348,14 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       exercises: exercises,
       restSeconds: _restSeconds,
       resumeFromSession: session,
-      isProgramWorkout: await ProgramService().isOngoingProgramSession(
+      isProgramWorkout: await programService.isOngoingProgramSession(
         session.id,
       ),
-      advanceProgramRestDayOnCompletion: await ProgramService()
+      advanceProgramRestDayOnCompletion: await programService
           .isOngoingProgramRestSession(session.id),
+      prescriptions: await programService.prescriptionsForOngoingSession(
+        session.id,
+      ),
     );
   }
 
@@ -279,6 +391,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     WorkoutSession? resumeFromSession,
     bool isProgramWorkout = false,
     bool advanceProgramRestDayOnCompletion = false,
+    Map<String, SetRepScheme>? prescriptions,
   }) {
     Navigator.push(
       context,
@@ -292,6 +405,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
           resumeFromSession: resumeFromSession,
           isProgramWorkout: isProgramWorkout,
           advanceProgramRestDayOnCompletion: advanceProgramRestDayOnCompletion,
+          prescriptions: prescriptions ?? widget.programPrescriptions,
         ),
         motion: ArcadeRouteMotion.flow,
       ),
@@ -306,9 +420,15 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     final exerciseById = {
       for (final exercise in exercises) exercise.id: exercise,
     };
-    final ids =
-        widget.programCuratedExerciseIds ??
-        curatedExerciseIdsForMuscleGroups(_selectedMuscleGroups);
+    // Program mode shows today's prescribed lifts PLUS the rest of the curated
+    // pool for the day's locked muscles, so the user can genuinely add/swap
+    // (not just re-check the prescribed set). Today's lifts stay pre-selected.
+    final ids = _programMode && widget.programCuratedExerciseIds != null
+        ? [
+            ...widget.programCuratedExerciseIds!,
+            ...curatedExerciseIdsForMuscleGroups(_selectedMuscleGroups),
+          ]
+        : curatedExerciseIdsForMuscleGroups(_selectedMuscleGroups);
     final result = <Exercise>[];
     final added = <String>{};
 
@@ -604,7 +724,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
                         ArcadeImageFilter(
                           borderRadius: BorderRadius.zero,
                           child: Image.asset(
-                            exercise.imageAssetPath,
+                            exerciseThumbAsset(exercise),
                             fit: BoxFit.cover,
                             filterQuality: FilterQuality.low,
                             errorBuilder: (context, error, stackTrace) =>
@@ -684,7 +804,7 @@ class _StepHeader extends StatelessWidget {
       style: const TextStyle(
         fontFamily: 'PressStart2P',
         fontSize: 8,
-        color: kAmber,
+        color: kNeon,
       ),
     );
   }
@@ -710,7 +830,7 @@ class _ProgramTargetSummary extends StatelessWidget {
         children: [
           const ImageIcon(
             AssetImage('assets/icons/control/icon_scroll.png'),
-            color: kAmber,
+            color: kNeon,
             size: 18,
           ),
           const SizedBox(width: kSpace3),

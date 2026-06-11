@@ -31,7 +31,6 @@ void main() {
       clazz: CharacterClass.assassin,
     ),
     classConfirmedAt: DateTime(2026, 5, 29, 12),
-    selectedAvatarId: 'avatar_04',
     characterName: 'Nova',
     createdAt: DateTime(2026, 5, 29, 12),
   );

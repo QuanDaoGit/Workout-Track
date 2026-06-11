@@ -1,6 +1,6 @@
 # Ironbit Stats Mechanics
 
-Last verified against code: 2026-06-01.
+Last verified against code: 2026-06-12 (stats rules v3 — intensity currency).
 
 This document describes the current character-stat system as implemented in `StatEngine`, `XpService`, `RestService`, and `ProgressiveOverloadService`.
 
@@ -16,13 +16,39 @@ Ironbit's visible stat board has three graded capability stats, plus two separat
 | AGI | Agility | Weighted logged kg-volume from shoulders/core and support work | 10-1000 |
 | END | Endurance | Weighted logged reps, scaled logarithmically | 10-1000 |
 | VIT | Vitality | Recovery and training-balance meter | 10-100 |
-| LCK | Luck | Current consecutive training-day streak | 0-100 |
+| LCK | Luck | Weekly consistency streak (clean weeks on the training schedule) | 0-100 |
 
 `STR / AGI / END` are the radar stats. `VIT` and `LCK` render as separate rows because they are recovery/consistency meters, not build-shape stats.
 
 Workout-output stats start at `10`. LCK starts at `0`.
 
 `DEF` is not a displayed stat anymore. The engine still keeps a hidden legacy `DEF` accumulator so old local snapshots and storage keys decode safely, but it should not appear in radar, detail rows, finish heroes, or product copy.
+
+## Radar Readability Rule
+
+The visible radar must be readable in roughly five seconds. For class-focus training, the top visible axis should point to the user's training identity:
+
+| Top axis | Intended read |
+|---|---|
+| STR | Bruiser |
+| AGI | Assassin |
+| END | Tank |
+
+The app test suite includes deterministic proxy coverage for this invariant, and the human validation protocol lives in `docs/radar-readability-validation.md`. The proxy is useful for regression safety, but the product goal is not considered fully proven until blind users can guess the class from the radar with greater than `70%` accuracy.
+
+The default stat card includes a compact, class-neutral legend under the radar:
+
+```text
+STR POWER · AGI CONTROL · END STAMINA
+```
+
+It also shows a class-neutral build read derived from the dominant axis:
+
+```text
+BUILD: POWER | CONTROL | STAMINA | BALANCED
+```
+
+This explains the axes and the visible shape without revealing the user's class.
 
 ## Grade Ladder
 
@@ -40,22 +66,40 @@ Stat values cap at `1000`, except VIT, which caps at `100`.
 
 ## STR / AGI Volume Formula
 
-For each completed, non-abandoned workout session, each set contributes volume:
+For each completed, non-abandoned workout session, each set contributes
+**intensity credit** — the set's Epley e1RM-equivalent, not raw tonnage:
 
 ```text
-weighted set volume = reps * load
+set credit = load * (1 + min(reps, 12) / 30)
 ```
 
-If a set has `weight == 0`, the engine uses `40kg` as a bodyweight proxy.
+Heavy work outranks light work at equal tonnage (a 3×5 @ 100kg banks ~351
+credit, a 3×25 @ 20kg banks ~84), and reps above 12 add no extra strength
+credit, so high-rep fluff cannot farm STR. Credit is *summed* across sets — a
+single heavy max cannot dominate consistent training. (Unlike calibration's
+1RM detection, which *skips* sets above 12 reps, growth credit caps reps
+instead of skipping so every logged set still moves the number.)
 
-For STR / AGI, weighted raw volume is converted with a logarithmic curve:
+If a set has `weight == 0`, the load is `%BW × bodyweight`: the fraction comes
+from a per-movement table (`data/bodyweight_loads.dart` — push-up ≈ `0.65`,
+pull-up/chin-up/dip/squat/pistol = `1.0`, lunge/step-up = `0.85`, unknown
+defaults to `0.65`) and the bodyweight from the session's save-time snapshot
+(`WorkoutSession.bodyweightKgAtSave`, captured like `classAtSave`). Sessions
+without a snapshot carry the last-known one forward, bottoming out at a
+deterministic `70kg` fallback. Snapshots are frozen at save: profile edits
+never rewrite the strength credit of past sessions.
+
+For STR / AGI, accumulated credit is converted with a logarithmic curve:
 
 ```text
-stat gain from volume = floor(100 * ln(volume / 500 + 1))
+stat gain from volume = floor(100 * ln(volume / 120 + 1))
 displayed stat = min(1000, 10 + stat gain)
 ```
 
-This gives fast early movement and slower late-game growth.
+This gives fast early movement and slower late-game growth. The `120` scale
+(`StatEngine.volumeCurveScale`) replaced the tonnage-era `500` so a
+representative session keeps roughly the same early pacing in the new
+currency.
 
 ### Muscle-To-Visible-Stat Weights
 
@@ -65,8 +109,13 @@ Each logged exercise can move more than one visible stat. This keeps the radar r
 |---|---:|---:|---:|
 | chest, triceps, forearms | `1.00x` | `0.12x` | `1.00x` |
 | lats, middle back, lower back, biceps, traps, neck | `0.80x` | `0.12x` | `1.00x` |
-| quadriceps, hamstrings, glutes, calves, adductors, abductors | `0.10x` | `0.07x` | `5.00x` |
+| quadriceps, hamstrings, glutes, calves, adductors, abductors | `0.22x` | `0.07x` | `5.00x` |
 | shoulders, abdominals | `0.20x` | `1.00x` | `1.10x` |
+
+Legs at `0.22x` (raised from `0.10x` in v3) let heavy squats read as real
+strength under the intensity currency while END stays the dominant visible
+axis for leg training — pushing this above ~`0.22x` flips the Tank radar
+identity to STR.
 
 VIT is not fed by any muscle. Hidden legacy DEF still receives pulling/back/arm volume internally for compatibility, but it is not part of the visible stat board.
 
@@ -128,21 +177,30 @@ If there is no usable recovery history yet, VIT is `10`.
 
 ## LCK Formula
 
-LCK is not a workout-output stat. It is the current consecutive training-day streak, capped at `100`.
+LCK is not a workout-output stat. It is a **weekly consistency streak**: the number of full
+7-day blocks the user has sustained since the streak began, capped at `100`.
 
 ```text
-LCK = min(currentTrainingStreak, 100)
+LCK = min(floor(daysSinceStreakStart / 7), 100)
 ```
 
-LCK diamonds:
+The streak is **skip-only reset**: it survives indefinitely and resets to `0` only on an
+*unscheduled recovery* — a scheduled training day that passed with no completed workout and no
+shield (a `RestDayKind.unplannedMiss`). Shielded misses and gaps on non-scheduled days never
+reset it. `streakStart` is the day after the most recent unprotected missed scheduled day, or the
+user's first completed workout if they have never missed one. Today is never counted as a miss, so
+the current day is always still available to train. Implemented as
+`RestService.consistencyWeeks` and surfaced as `LCK` by `StatEngine`.
 
-| LCK | Diamonds | XP multiplier |
+LCK diamonds (fast-start weekly ladder):
+
+| LCK (clean weeks) | Diamonds | XP multiplier |
 |---:|---:|---:|
-| 0-24 | 0 | `1.0x` |
-| 25-49 | 1 | `1.5x` |
-| 50-74 | 2 | `2.0x` |
-| 75-99 | 3 | `2.5x` |
-| 100 | 4 | `3.0x` |
+| 0 | 0 | `1.0x` |
+| 1-2 | 1 | `1.5x` |
+| 3-5 | 2 | `2.0x` |
+| 6-9 | 3 | `2.5x` |
+| 10+ | 4 | `3.0x` |
 
 LCK affects XP multiplier and cache rarity shift. It should not be plotted on the same scale as STR/AGI/END.
 
@@ -155,13 +213,14 @@ Class bonuses add `+20%` extra growth on class-focus muscles, but the bonus land
 | Assassin | Shoulders + Core | AGI |
 | Bruiser | Chest + Back + Arms | STR |
 | Tank | Legs | END |
-| Vanguard | All buckets | Same stat the trained muscle already feeds |
 
 Example: a Bruiser training back gets visible STR support from the base pulling weight and an extra `20%` class-bonus volume contribution into STR. A Tank training legs gets END-biased rep growth plus the Tank END bonus.
 
 ## Calibration Seed
 
-Calibration can seed starting capability by writing seed volume in the same currency the normal stat formula consumes.
+Self-reported quiz experience does not seed stats. A level-1 user with no completed workout history stays at the baseline values above.
+
+Calibration can seed capability only when it is derived from real logged workout sets. That workout-derived seed writes volume in the same currency the normal stat formula consumes.
 
 Current constraints:
 
@@ -169,6 +228,7 @@ Current constraints:
 - END is not seeded, because it is rep-band derived.
 - VIT is not seeded, because it is the recovery meter.
 - The seed composes with real training and is recomputed through the same stat curve.
+- Future seed writes should mark `calibration_seed_source_v1 = workout`.
 
 ## Last-Session Delta
 
@@ -203,6 +263,69 @@ newValue = max(floor(peak * 0.5), floor(currentValue * 0.9))
 ```
 
 The stat cannot decay below 50% of its historical peak.
+
+## The Shadow (acute:chronic contest)
+
+The Shadow is the user's nemesis built from their own steady training — a
+live mirror, recomputed from history on every evaluation (`ShadowService`,
+key `shadow_state_v1`). It personifies the decay system as a visible opponent:
+keep pace with your past month and you hold it off; slip and it pulls ahead.
+
+**Currency:** per-session *linear* axis credits from
+`StatEngine.sessionAxisLoads` — the same intensity currency and muscle weights
+as the board, but never log-curved, with no calibration seed, no decay, and no
+class focus bonus (pure training signal, identical across classes). STR/AGI
+are in intensity-credit units; END in endurance points.
+
+**Windows (uncoupled ACWR):** per axis,
+
+```text
+acuteRate   = credit per day over the last 10 days        (YOU)
+chronicRate = credit per day over the 28 days before that (THE SHADOW)
+r           = acuteRate / chronicRate
+```
+
+Calendar-day rate windows — not session counts — so sparse and dense trainers
+compare honestly and a 10-day acute window spans any common split cycle.
+
+**Per-axis states:** `r >= 0.95` ahead (threshold sits under 1.0 to absorb
+window quantization noise), `0.8 <= r < 0.95` close (the ACWR literature's
+healthy floor), `r < 0.8` behind (with a plain-language reason). An axis whose
+chronic rate is under its sufficiency floor is *forming* — never scored as a
+loss.
+
+**Lifecycle:** < 6 completed sessions → locked teaser ("Something is
+forming."); < 3 sessions in the chronic window → forming; 6–11 sessions →
+provisional (labeled experimental, no permanent reward); ≥ 12 sessions →
+mature.
+
+**Defeat and the faded floor:** the Shadow is bested when every sufficient
+axis is ahead. A per-axis chronic high-water (decaying ~2%/week) guards
+against under-training: if the current baseline has decayed well below its
+high-water, the Shadow is *faded* — out-pacing it reads as rebuilding and
+awards nothing. The first genuine (mature, non-faded) defeat grants the
+`Shadowbane` title and the Spectral Frame once, idempotently — identity only,
+never XP or gems. The Shadow never mutates board stats, decay, or XP.
+
+**Surfaces:** compact Home callout (status line, tap-through) and the Guild
+tab arena (ghost avatar = the user's own pixel face desaturated/tinted, dual
+radar with the Shadow as the dashed reference ring, per-axis reads, reward
+state). Week-over-week mean-ratio comparison drives a "gap closing"
+encouragement while behind.
+
+## Rules-Version Migration (Grandfather Floor)
+
+`StatEngine.statsRulesVersion` (currently `3`) is bumped whenever the stat
+formula changes; `MigrationService.runStatsRecomputeIfRulesChanged` recomputes
+cached stats at app-update boot so a re-tune never lands mid-workout.
+
+At the v3 migration (tonnage → intensity currency), the visible STR/AGI a user
+had already earned under the old rules is captured once as a **grandfather
+floor** (`combat_stat_floor_v1`). The engine clamps every later recompute —
+including decay — to at least these values, so the rules change can never read
+as lost progress. Normal growth continues above the floor. The floor is only
+written when real completed sessions back the cached board; a cached value with
+no history behind it (corruption, cleared data) is recomputed away instead.
 
 ## XP Mechanics
 
@@ -258,7 +381,7 @@ Rank title by level:
 
 ## Suggested Loads
 
-Suggested loads are opt-in and default off unless the user explicitly enables them.
+Suggested loads are **on by default** from first install.
 
 A TRY suggestion appears only after at least 5 logged sets for that exercise.
 
@@ -304,6 +427,9 @@ Important stat-related local keys:
 | `combat_stat_last_delta` | latest-session stat delta |
 | `combat_stats_last_session_date` | last completed stat-producing session date |
 | `combat_stats_last_decay_date` | last decay application date |
-| `calibration_seed_volumes_v1` | calibration seed volume |
+| `combat_stat_floor_v1` | grandfather floor from the v3 rules migration |
+| `stats_rules_version_v1` | last stat-rules version the cache was computed under |
+| `calibration_seed_volumes_v1` | workout-derived calibration seed volume |
 | `workout_sessions` | saved workout history |
 | `rest_state_v1` | recovery schedule, shields, rest claims |
+| `shadow_state_v1` | Shadow high-water floor, weekly ratio, defeat marker |

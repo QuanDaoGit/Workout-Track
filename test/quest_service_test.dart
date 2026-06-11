@@ -2,8 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workout_track/models/loot_item.dart';
 import 'package:workout_track/models/rest_models.dart';
 import 'package:workout_track/models/workout_models.dart';
+import 'package:workout_track/services/gem_service.dart';
+import 'package:workout_track/services/loot_service.dart';
 import 'package:workout_track/services/quest_service.dart';
 import 'package:workout_track/services/rest_service.dart';
 
@@ -31,7 +34,8 @@ void main() {
       _session(date: now, setCount: 4),
     ], now: now);
     expect(completed.dailyQuests.every((quest) => quest.completed), isTrue);
-    expect(completed.dailyQuests.map((quest) => quest.rewardXP), [5, 10, 15]);
+    expect(completed.dailyQuests.map((quest) => quest.rewardXP), [0, 0, 0]);
+    expect(completed.dailyQuests.map((quest) => quest.rewardGems), [5, 5, 5]);
   });
 
   test('weekly workout quests reset on the next Monday period', () async {
@@ -65,7 +69,13 @@ void main() {
       (quest) => quest.id == 'show_up',
     );
 
-    expect(await service.claimReward(showUp.claimKey, const [], now: now), 0);
+    final emptyClaim = await service.claimReward(
+      showUp.claimKey,
+      const [],
+      now: now,
+    );
+    expect(emptyClaim.gems, 0);
+    expect(emptyClaim.xp, 0);
 
     final sessions = [_session(date: now)];
     final completed = await service.getSummary(sessions, now: now);
@@ -83,9 +93,13 @@ void main() {
       now: now,
     );
 
-    expect(firstClaim, 5);
-    expect(secondClaim, 0);
-    expect((await service.getSummary(sessions, now: now)).claimedRewardXP, 5);
+    expect(firstClaim.gems, 5);
+    expect(firstClaim.xp, 0);
+    expect(secondClaim.gems, 0);
+    final updated = await service.getSummary(sessions, now: now);
+    expect(updated.claimedRewardXP, 0);
+    expect(updated.claimedRewardGems, 5);
+    expect(await GemService().balance(), 5);
   });
 
   test('unclaimed daily rewards do not carry forward after midnight', () async {
@@ -99,17 +113,16 @@ void main() {
     );
 
     expect(dayOneShowUp.claimable, isTrue);
-    expect(
-      await service.claimReward(
-        dayOneShowUp.claimKey,
-        dayOneSessions,
-        now: dayTwo,
-      ),
-      0,
+    final claim = await service.claimReward(
+      dayOneShowUp.claimKey,
+      dayOneSessions,
+      now: dayTwo,
     );
+    expect(claim.gems, 0);
+    expect(claim.xp, 0);
   });
 
-  test('LCK multiplier applies when quest rewards are claimed', () async {
+  test('LCK multiplier does not scale gem quest rewards', () async {
     final service = QuestService();
     final now = DateTime(2026, 5, 13, 10);
     final sessions = [
@@ -122,11 +135,16 @@ void main() {
       (quest) => quest.id == 'class_focus',
     );
 
-    expect(classFocus.rewardXP, 15);
-    expect(
-      await service.claimReward(classFocus.claimKey, sessions, now: now),
-      15,
+    expect(classFocus.rewardXP, 0);
+    expect(classFocus.rewardGems, 5);
+    final claim = await service.claimReward(
+      classFocus.claimKey,
+      sessions,
+      now: now,
     );
+    expect(claim.gems, 5);
+    expect(claim.xp, 0);
+    expect(await GemService().balance(), 5);
   });
 
   test(
@@ -222,15 +240,18 @@ void main() {
       (quest) => quest.id == 'side_minutes_300',
     );
 
+    // The legacy claim is re-keyed to side_minutes_300 (titles are now loot, so
+    // the rename is no longer surfaced on the summary).
     expect(summary.claimedRewardXP, 123);
-    expect(summary.earnedTitles, contains('Time Keeper'));
-    expect(summary.selectedTitle, 'Time Keeper');
+    expect(summary.claimedRewardGems, 0);
     expect(quest.claimed, isTrue);
     expect(quest.rewardXP, 123);
+    expect(quest.rewardGems, 0);
   });
 
-  test('claimed side quest titles can be selected and persist', () async {
+  test('claiming a side quest grants its title as loot and equips the first', () async {
     final service = QuestService();
+    final loot = LootService();
     final now = DateTime(2026, 5, 13, 10);
     final sessions = [_session(date: now)];
     final summary = await service.getSummary(sessions, now: now);
@@ -239,12 +260,32 @@ void main() {
     );
 
     final reward = await service.claimReward(side.claimKey, sessions, now: now);
-    await service.selectTitle('Iron Novice');
-    final updated = await service.getSummary(sessions, now: now);
 
-    expect(reward, greaterThan(0));
-    expect(updated.earnedTitles, contains('Iron Novice'));
-    expect(updated.selectedTitle, 'Iron Novice');
+    expect(reward.gems, 100);
+    expect(reward.xp, 0);
+    final owned = await loot.getInventory();
+    expect(owned.any((item) => item.id == 'title_iron_novice'), isTrue);
+    final equipped = await loot.getEquippedItem(LootCategory.titleBadge);
+    expect(equipped?.id, 'title_iron_novice');
+  });
+
+  test('claiming a title does not override an already-equipped title', () async {
+    final service = QuestService();
+    final loot = LootService();
+    final now = DateTime(2026, 5, 13, 10);
+    final sessions = [_session(date: now)];
+    await loot.equipItem('title_recruit');
+
+    final summary = await service.getSummary(sessions, now: now);
+    final side = summary.sideQuests.firstWhere(
+      (quest) => quest.id == 'side_first_workout',
+    );
+    await service.claimReward(side.claimKey, sessions, now: now);
+
+    final owned = await loot.getInventory();
+    expect(owned.any((item) => item.id == 'title_iron_novice'), isTrue);
+    final equipped = await loot.getEquippedItem(LootCategory.titleBadge);
+    expect(equipped?.id, 'title_recruit');
   });
 
   test('period key helpers use local day and Monday week start', () {
@@ -252,35 +293,33 @@ void main() {
     expect(QuestService.weeklyPeriodKey(DateTime(2026, 5, 13)), '2026-05-11');
   });
 
-  test(
-    'recovery XP scales quest rewards but does not complete quests',
-    () async {
-      final now = DateTime(2026, 5, 12);
-      SharedPreferences.setMockInitialValues({
-        RestService.stateKey: jsonEncode(
-          RestState.defaults(currentWeekKey: RestService.weekKey(now))
-              .copyWith(
-                recoveryClaims: {
-                  '2026-05-12': RestRecoveryClaim(xp: 500, claimedAt: now),
-                },
-              )
-              .toJson(),
-        ),
-      });
+  test('recovery XP does not scale gem rewards or complete quests', () async {
+    final now = DateTime(2026, 5, 12);
+    SharedPreferences.setMockInitialValues({
+      RestService.stateKey: jsonEncode(
+        RestState.defaults(currentWeekKey: RestService.weekKey(now))
+            .copyWith(
+              recoveryClaims: {
+                '2026-05-12': RestRecoveryClaim(xp: 500, claimedAt: now),
+              },
+            )
+            .toJson(),
+      ),
+    });
 
-      final summary = await QuestService().getSummary(const [], now: now);
-      final firstWorkout = summary.weeklyQuests.firstWhere(
-        (quest) => quest.id == 'weekly_workout_1',
-      );
-      final side = summary.sideQuests.firstWhere(
-        (quest) => quest.id == 'side_first_workout',
-      );
+    final summary = await QuestService().getSummary(const [], now: now);
+    final firstWorkout = summary.weeklyQuests.firstWhere(
+      (quest) => quest.id == 'weekly_workout_1',
+    );
+    final side = summary.sideQuests.firstWhere(
+      (quest) => quest.id == 'side_first_workout',
+    );
 
-      expect(firstWorkout.completed, isFalse);
-      expect(side.completed, isFalse);
-      expect(side.rewardXP, 50);
-    },
-  );
+    expect(firstWorkout.completed, isFalse);
+    expect(side.completed, isFalse);
+    expect(side.rewardXP, 0);
+    expect(side.rewardGems, 100);
+  });
 }
 
 WorkoutSession _session({

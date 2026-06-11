@@ -249,7 +249,7 @@ class MilestoneService {
   }
 
   static int? _nextDiamond(int lck) {
-    for (final threshold in const [25, 50, 75, 100]) {
+    for (final threshold in XpService.lckDiamondWeekThresholds) {
       if (lck < threshold) return threshold;
     }
     return null;

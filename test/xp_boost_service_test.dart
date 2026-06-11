@@ -17,7 +17,8 @@ void main() {
 
       expect(potion.multiplier, 2.0);
       expect(potion.isDirectionBonus, false);
-      expect(potion.expiresAt, now.add(const Duration(hours: 24)));
+      expect(potion.expiresAt, now.add(const Duration(days: 21)));
+      expect(potion.chargesRemaining, 3);
 
       final active = await service.getActivePotions();
       expect(active.length, 1);
@@ -39,8 +40,8 @@ void main() {
       final grantService = XpBoostService(nowProvider: () => now);
       await grantService.grantPotion();
 
-      // 25 hours later - potion expired
-      now = now.add(const Duration(hours: 25));
+      // 22 days later - potion expired (3-week backstop)
+      now = now.add(const Duration(days: 22));
       final laterService = XpBoostService(nowProvider: () => now);
       final active = await laterService.getActivePotions();
       expect(active, isEmpty);
@@ -82,47 +83,15 @@ void main() {
     });
   });
 
-  group('consumeForSession', () {
-    test('returns correct bonus XP', () async {
+  group('recordBonusXp', () {
+    test('accumulates the lifetime total, ignoring non-positive amounts', () async {
       final service = XpBoostService(
         nowProvider: () => DateTime(2026, 5, 16, 10, 0),
       );
-      await service.grantPotion(); // 2x
-
-      final bonusXP = await service.consumeForSession(100);
-      expect(bonusXP, 100); // 100 * 2.0 - 100 = 100
-    });
-
-    test('returns 0 with no active potions', () async {
-      final service = XpBoostService(
-        nowProvider: () => DateTime(2026, 5, 16, 10, 0),
-      );
-      final bonusXP = await service.consumeForSession(100);
-      expect(bonusXP, 0);
-    });
-
-    test('removes consumed potions after use', () async {
-      final service = XpBoostService(
-        nowProvider: () => DateTime(2026, 5, 16, 10, 0),
-      );
-      await service.grantPotion();
-      await service.consumeForSession(100);
-
-      final active = await service.getActivePotions();
-      expect(active, isEmpty);
-    });
-
-    test('running total accumulates across sessions', () async {
-      final service = XpBoostService(
-        nowProvider: () => DateTime(2026, 5, 16, 10, 0),
-      );
-      await service.grantPotion();
-      await service.consumeForSession(100); // bonus: 100
-
-      // Grant another potion and consume again
-      await service.grantPotion();
-      await service.consumeForSession(50); // bonus: 50
-
+      await service.recordBonusXp(100);
+      await service.recordBonusXp(50);
+      await service.recordBonusXp(0); // no-op
+      await service.recordBonusXp(-10); // no-op
       expect(await service.getTotalBonusXP(), 150);
     });
   });
@@ -135,8 +104,33 @@ void main() {
       await service.grantPotion();
 
       expect(await service.consumeActivePotions(), 2.0);
-      expect(await service.getActivePotions(), isEmpty);
       expect(await service.getTotalBonusXP(), 0);
+    });
+
+    test('spends one charge per workout, keeping the potion until depleted',
+        () async {
+      final service = XpBoostService(
+        nowProvider: () => DateTime(2026, 5, 16, 10, 0),
+      );
+      await service.grantPotion(); // 3 charges
+
+      // Workout 1: still boosted, 2 charges left.
+      expect(await service.consumeActivePotions(), 2.0);
+      var active = await service.getActivePotions();
+      expect(active.length, 1);
+      expect(active.first.chargesRemaining, 2);
+
+      // Workout 2: still boosted, 1 charge left.
+      expect(await service.consumeActivePotions(), 2.0);
+      active = await service.getActivePotions();
+      expect(active.first.chargesRemaining, 1);
+
+      // Workout 3: last charge spent, potion gone.
+      expect(await service.consumeActivePotions(), 2.0);
+      expect(await service.getActivePotions(), isEmpty);
+
+      // Workout 4: no boost.
+      expect(await service.consumeActivePotions(), 1.0);
     });
   });
 
@@ -155,18 +149,24 @@ void main() {
       expect(await service.getActiveBoostLabel(), isNull);
     });
 
-    test('returns formatted label with active potion', () async {
+    test('returns charge-based label with active potion', () async {
       final now = DateTime(2026, 5, 16, 10, 0);
       final service = XpBoostService(nowProvider: () => now);
       await service.grantPotion();
 
-      // Check 6 hours later
-      final laterService = XpBoostService(
-        nowProvider: () => now.add(const Duration(hours: 6)),
-      );
-      final label = await laterService.getActiveBoostLabel();
+      final label = await service.getActiveBoostLabel();
       expect(label, contains('2x'));
-      expect(label, contains('18h LEFT'));
+      expect(label, contains('3 WORKOUTS'));
+    });
+
+    test('label reflects remaining charges after a workout', () async {
+      final now = DateTime(2026, 5, 16, 10, 0);
+      final service = XpBoostService(nowProvider: () => now);
+      await service.grantPotion();
+      await service.consumeActivePotions();
+
+      final label = await service.getActiveBoostLabel();
+      expect(label, contains('2 WORKOUTS'));
     });
   });
 }

@@ -30,16 +30,6 @@ String fmtDayDate(DateTime d) {
   return '${weekdays[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
 }
 
-const _muscleColors = {
-  'Chest': Color(0xFF00FF9C),
-  'Back': Color(0xFFFFD700),
-  'Shoulders': Color(0xFF9B59B6),
-  'Arms': Color(0xFFFF2D55),
-  'Legs': Color(0xFF00BFFF),
-  'Core': Color(0xFFFF6B1A),
-  'Full Body': Color(0xFFE8E8FF),
-};
-
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
 
@@ -77,6 +67,20 @@ class _CalendarPageState extends State<CalendarPage> {
       _restState = restState;
       _loading = false;
     });
+  }
+
+  /// Distinct days in the focused month with at least one completed
+  /// (non-abandoned) session. Flavor only — the goal mechanic is weekly.
+  int get _daysConqueredInFocusedMonth {
+    var count = 0;
+    for (final entry in _sessionsByDay.entries) {
+      if (entry.key.year != _focusedMonth.year ||
+          entry.key.month != _focusedMonth.month) {
+        continue;
+      }
+      if (entry.value.any((session) => !session.isAbandoned)) count++;
+    }
+    return count;
   }
 
   void _prevMonth() => setState(() {
@@ -148,24 +152,29 @@ class _CalendarPageState extends State<CalendarPage> {
       sessions: sessions ?? const [],
       state: _restState,
     );
+    final firstActivityDay = _sessionsByDay.keys.isEmpty
+        ? null
+        : _sessionsByDay.keys.reduce((a, b) => a.isBefore(b) ? a : b);
     final markerKind = calendarMarkerKindFor(
       restInfo: restInfo,
       hasWorkout: hasWorkout,
       abandonedOnly: abandonedOnly,
       isToday: isToday,
       isSelected: isSelected,
+      suppressMissed:
+          firstActivityDay == null || day.isBefore(firstActivityDay),
     );
     final workoutColor = hasWorkout
-        ? _muscleColors[sessions.first.muscleGroup] ?? const Color(0xFF00FF9C)
+        ? kMuscleGroupColors[sessions.first.muscleGroup] ?? kNeon
         : null;
 
     // Determine icon
     BoxDecoration decoration = BoxDecoration(
-      color: isSelected ? const Color(0xFF00FF9C).withValues(alpha: 0.2) : null,
+      color: isSelected ? kNeon.withValues(alpha: 0.2) : null,
       border: isSelected
-          ? Border.all(color: const Color(0xFF00FF9C), width: 1.5)
+          ? Border.all(color: kNeon, width: 1.5)
           : isToday
-          ? Border.all(color: const Color(0xFF00FF9C), width: 1)
+          ? Border.all(color: kNeon, width: 1)
           : null,
       borderRadius: BorderRadius.circular(4),
     );
@@ -183,9 +192,9 @@ class _CalendarPageState extends State<CalendarPage> {
               style: TextStyle(
                 fontSize: 11,
                 color: isSelected
-                    ? const Color(0xFF00FF9C)
+                    ? kNeon
                     : isPast || isToday
-                    ? const Color(0xFFE8E8FF)
+                    ? kText
                     : kMutedText,
                 fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
               ),
@@ -232,7 +241,7 @@ class _CalendarPageState extends State<CalendarPage> {
                           scaleX: -1,
                           child: const ImageIcon(
                             AssetImage('assets/icons/control/icon_next.png'),
-                            color: Color(0xFF00FF9C),
+                            color: kNeon,
                             size: 20,
                           ),
                         ),
@@ -242,19 +251,35 @@ class _CalendarPageState extends State<CalendarPage> {
                         style: const TextStyle(
                           fontFamily: 'PressStart2P',
                           fontSize: 12,
-                          color: Color(0xFF00FF9C),
+                          color: kNeon,
                         ),
                       ),
                       IconButton(
                         onPressed: _nextMonth,
                         icon: const ImageIcon(
                           AssetImage('assets/icons/control/icon_next.png'),
-                          color: Color(0xFF00FF9C),
+                          color: kNeon,
                           size: 20,
                         ),
                       ),
                     ],
                   ),
+
+                  if (_daysConqueredInFocusedMonth > 0) ...[
+                    const SizedBox(height: 2),
+                    Center(
+                      child: Text(
+                        '$_daysConqueredInFocusedMonth DAY'
+                        '${_daysConqueredInFocusedMonth == 1 ? '' : 'S'}'
+                        ' CONQUERED',
+                        style: const TextStyle(
+                          fontFamily: 'PressStart2P',
+                          fontSize: 8,
+                          color: kAmber,
+                        ),
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 8),
 
@@ -350,8 +375,10 @@ class _CalendarPageState extends State<CalendarPage> {
                             (session) => session.isAbandoned,
                           ),
                       workoutColor: selectedSessions.isNotEmpty
-                          ? _muscleColors[selectedSessions.first.muscleGroup] ??
-                                const Color(0xFF00FF9C)
+                          ? kMuscleGroupColors[selectedSessions
+                                    .first
+                                    .muscleGroup] ??
+                                kNeon
                           : null,
                     ),
                     const SizedBox(height: 8),
@@ -375,8 +402,8 @@ class _CalendarPageState extends State<CalendarPage> {
                                     Container(
                                       width: 4,
                                       color: session.isAbandoned
-                                          ? const Color(0xFFFF2D55)
-                                          : const Color(0xFF00FF9C),
+                                          ? kDanger
+                                          : kNeon,
                                     ),
                                     Expanded(
                                       child: ListTile(

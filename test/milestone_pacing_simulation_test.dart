@@ -3,8 +3,10 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:workout_track/data/loot_registry.dart';
 import 'package:workout_track/models/milestone_models.dart';
+import 'package:workout_track/models/rest_models.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/services/milestone_service.dart';
+import 'package:workout_track/services/rest_service.dart';
 import 'package:workout_track/services/stat_engine.dart';
 import 'package:workout_track/services/xp_service.dart';
 
@@ -15,7 +17,7 @@ void main() {
       final weeks = _simulate(weekdays: const [0, 1, 3, 4], weeks: 8);
 
       expect(_lootIdsForWeek(weeks, 4), contains('frame_neon'));
-      expect(_lootIdsForWeek(weeks, 5), contains('title_grinder'));
+      expect(_lootIdsForWeek(weeks, 5), contains('title_iron_warden'));
       expect(_kindsForWeek(weeks, 6), contains(MilestoneKind.levelUp));
       expect(_lootIdsForWeek(weeks, 7), contains('title_iron_will'));
       expect(_lootIdsForWeek(weeks, 8), contains('theme_forest'));
@@ -57,6 +59,13 @@ void main() {
 List<_WeekEvents> _simulate({required List<int> weekdays, required int weeks}) {
   final sessions = <WorkoutSession>[];
   final owned = defaultLootIds.toSet();
+  // LCK is the weekly consistency streak; the sim trains exactly its scheduled
+  // weekdays, so a matching rest schedule yields perfect week-over-week
+  // adherence. weekdays are 0-indexed from Monday → DateTime.weekday (1-7).
+  final restService = RestService();
+  final restState = RestState.defaults().copyWith(
+    trainingWeekdays: {for (final w in weekdays) w + 1},
+  );
   final eventsByWeek = <int, List<MilestoneEvent>>{};
   final start = DateTime(2026, 1, 5); // Monday.
   var totalXP = 0;
@@ -80,7 +89,11 @@ List<_WeekEvents> _simulate({required List<int> weekdays, required int weeks}) {
   for (var week = 0; week < weeks; week++) {
     for (final weekday in weekdays) {
       final date = start.add(Duration(days: week * 7 + weekday));
-      final lckBefore = XpService.lckForSessions(sessions, now: date);
+      final lckBefore = restService.consistencyWeeks(
+        sessions: sessions,
+        state: restState,
+        now: date,
+      );
       final beforeStats = currentStats(lckBefore);
       final before = MilestoneService.snapshotFromSessions(
         sessions: sessions,
@@ -95,12 +108,22 @@ List<_WeekEvents> _simulate({required List<int> weekdays, required int weeks}) {
       final session = _session(date: date, muscle: muscle);
       sessions.add(session);
       totalXP = XpService.calculateTotalXP(sessions);
+      // Accumulate in the engine's intensity-credit currency (v3) so the sim
+      // paces the same curve real training drives.
       volumeByStat[_statForMuscle(muscle)] =
           volumeByStat[_statForMuscle(muscle)]! +
-          session.exercises.first.totalVolume;
+          session.exercises.first.sets.fold<double>(
+            0,
+            (sum, set) =>
+                sum + StatEngine.intensityCreditForSet(set.weight, set.reps),
+          );
       endurance += 72;
 
-      final lckAfter = XpService.lckForSessions(sessions, now: date);
+      final lckAfter = restService.consistencyWeeks(
+        sessions: sessions,
+        state: restState,
+        now: date,
+      );
       final after = MilestoneService.snapshotFromSessions(
         sessions: sessions,
         stats: currentStats(lckAfter),
@@ -143,20 +166,23 @@ WorkoutSession _session({required DateTime date, required String muscle}) {
     targetDurationMinutes: 45,
     actualDurationSeconds: 45 * 60,
     estimatedCalories: 0,
+    // 9×8 @ 60 kg: under the intensity currency this paces ~5.7 curve units
+    // per session, matching the old 40 kg tonnage sim (2880/500 = 5.76) so
+    // milestone cadence stays calibrated.
     exercises: [
       ExerciseLog(
         exerciseId: id,
         exerciseName: muscle,
         sets: const [
-          SetEntry(weight: 40, reps: 8),
-          SetEntry(weight: 40, reps: 8),
-          SetEntry(weight: 40, reps: 8),
-          SetEntry(weight: 40, reps: 8),
-          SetEntry(weight: 40, reps: 8),
-          SetEntry(weight: 40, reps: 8),
-          SetEntry(weight: 40, reps: 8),
-          SetEntry(weight: 40, reps: 8),
-          SetEntry(weight: 40, reps: 8),
+          SetEntry(weight: 60, reps: 8),
+          SetEntry(weight: 60, reps: 8),
+          SetEntry(weight: 60, reps: 8),
+          SetEntry(weight: 60, reps: 8),
+          SetEntry(weight: 60, reps: 8),
+          SetEntry(weight: 60, reps: 8),
+          SetEntry(weight: 60, reps: 8),
+          SetEntry(weight: 60, reps: 8),
+          SetEntry(weight: 60, reps: 8),
         ],
       ),
     ],
@@ -171,7 +197,8 @@ String _statForMuscle(String muscle) => switch (muscle) {
 
 int _statFromVolume(double volume) => min(
   1000,
-  StatEngine.baseOutputStatValue + (100 * log(volume / 500 + 1)).floor(),
+  StatEngine.baseOutputStatValue +
+      (100 * log(volume / StatEngine.volumeCurveScale + 1)).floor(),
 );
 
 List<MilestoneEvent> _eventsForWeek(List<_WeekEvents> weeks, int week) => weeks

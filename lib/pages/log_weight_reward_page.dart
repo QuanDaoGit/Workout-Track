@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
+import '../models/unit_models.dart';
+import '../services/unit_settings_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/strobe_flash.dart';
@@ -9,11 +11,15 @@ class LogWeightRewardPage extends StatelessWidget {
   const LogWeightRewardPage({
     super.key,
     required this.weightKg,
-    this.bonusPotionGranted = false,
+    this.rewarded = true,
   });
 
   final double weightKg;
-  final bool bonusPotionGranted;
+
+  /// Whether this check-in earned the weekly XP-boost potion. When false the
+  /// page stays calm and affirming — never framed as a missed reward
+  /// (body-neutral: absence is just absence).
+  final bool rewarded;
 
   @override
   Widget build(BuildContext context) {
@@ -41,58 +47,20 @@ class LogWeightRewardPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'weight: ${weightKg.toStringAsFixed(1)} kg',
+                'weight: ${formatWeight(weightKg, Units.weight)}',
                 style: AppFonts.shareTechMono(color: kText, fontSize: 14),
               ),
               const SizedBox(height: 40),
-              // Base potion
-              StrobeFlash(
-                trigger: true,
-                color: kNeon,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const ImageIcon(
-                      AssetImage('assets/icons/control/icon_potion.png'),
-                      color: kNeon,
-                      size: 32,
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '+2x XP',
-                          style: TextStyle(
-                            fontFamily: 'PressStart2P',
-                            fontSize: 12,
-                            color: kNeon,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'for 24h',
-                          style: AppFonts.shareTechMono(
-                            color: kMutedText,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (bonusPotionGranted) ...[
-                const SizedBox(height: 20),
+              if (rewarded)
                 StrobeFlash(
                   trigger: true,
-                  color: kAmber,
+                  color: kNeon,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const ImageIcon(
                         AssetImage('assets/icons/control/icon_potion.png'),
-                        color: kAmber,
+                        color: kNeon,
                         size: 32,
                       ),
                       const SizedBox(width: 12),
@@ -100,16 +68,16 @@ class LogWeightRewardPage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            '+2x XP BONUS',
+                            '+2x XP',
                             style: TextStyle(
                               fontFamily: 'PressStart2P',
                               fontSize: 12,
-                              color: kAmber,
+                              color: kNeon,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'for 24h',
+                            'next 3 workouts',
                             style: AppFonts.shareTechMono(
                               color: kMutedText,
                               fontSize: 11,
@@ -119,8 +87,16 @@ class LogWeightRewardPage extends StatelessWidget {
                       ),
                     ],
                   ),
+                )
+              else
+                Text(
+                  'every check-in sharpens your trend.',
+                  textAlign: TextAlign.center,
+                  style: AppFonts.shareTechMono(
+                    color: kMutedText,
+                    fontSize: 12,
+                  ),
                 ),
-              ],
               const Spacer(),
               PixelButton(
                 label: 'CONTINUE',

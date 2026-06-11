@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/motion/power_on.dart';
 import '../../widgets/welcome_bench_press_scene.dart';
 
 /// Screen 1 - Cold Open. Arcade boot screen for first-run onboarding. Tap to
@@ -42,73 +43,165 @@ class ColdOpenView extends StatelessWidget {
   }
 }
 
-class _ColdOpenComposition extends StatelessWidget {
+class _ColdOpenComposition extends StatefulWidget {
   const _ColdOpenComposition();
 
   @override
+  State<_ColdOpenComposition> createState() => _ColdOpenCompositionState();
+}
+
+class _ColdOpenCompositionState extends State<_ColdOpenComposition>
+    with SingleTickerProviderStateMixin {
+  // Staged CRT entrance: the IRONBIT wordmark flies up into its slot first (the
+  // shared element the boot transition powers on into), then the scene, meter,
+  // lines, and prompt power on in sequence. Static under reduced motion.
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  );
+
+  bool get _reduceMotion {
+    final media = MediaQuery.of(context);
+    return media.disableAnimations || media.accessibleNavigation;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_reduceMotion) {
+      _entrance.value = 1;
+    } else if (!_entrance.isAnimating && _entrance.value == 0) {
+      _entrance.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        const Positioned(
-          top: 94,
-          left: 0,
-          right: 0,
-          child: Text(
-            'IRONBIT',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 14,
-              height: 1,
-              color: kNeon,
-              letterSpacing: 1,
+    return AnimatedBuilder(
+      animation: _entrance,
+      builder: (context, _) {
+        final e = _reduceMotion ? 1.0 : _entrance.value;
+        // Wordmark flies up into its slot first (top 300 → 94).
+        final wt = Curves.easeOutCubic.transform(
+          (e / 0.30).clamp(0.0, 1.0).toDouble(),
+        );
+        final wordTop = 300 - (300 - 94) * wt;
+        final wordOpacity = (e / 0.20).clamp(0.0, 1.0).toDouble();
+
+        return Stack(
+          children: [
+            Positioned(
+              top: wordTop,
+              left: 0,
+              right: 0,
+              child: Opacity(
+                opacity: wordOpacity,
+                child: const Text(
+                  'IRONBIT',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 14,
+                    height: 1,
+                    color: kNeon,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-        const Positioned(
-          top: 250,
-          left: 67,
-          child: WelcomeBenchPressScene(width: 256, height: 192),
-        ),
-        const Positioned(top: 456, left: 75, child: _StrMeter()),
-        const Positioned(
-          top: 574,
-          left: 0,
-          right: 0,
-          child: Text(
-            'WELCOME, RECRUIT',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 16,
-              height: 1,
-              color: kNeon,
-              letterSpacing: 1,
+            _PoweredSlot(
+              enabled: e >= 0.34,
+              top: 250,
+              left: 67,
+              child: const WelcomeBenchPressScene(width: 256, height: 192),
             ),
-          ),
-        ),
-        Positioned(
-          top: 607,
-          left: 42,
-          right: 42,
-          child: Text(
-            'YOUR TRAINING BUILDS YOUR CHARACTER',
-            textAlign: TextAlign.center,
-            style: AppFonts.shareTechMono(
-              color: kMutedText,
-              fontSize: 13,
-              height: 1.35,
-              letterSpacing: 0.5,
+            _PoweredSlot(
+              enabled: e >= 0.46,
+              top: 456,
+              left: 75,
+              child: const _StrMeter(),
             ),
-          ),
-        ),
-        const Positioned(
-          top: 774,
-          left: 0,
-          right: 0,
-          child: _PressStartPrompt(),
-        ),
-      ],
+            _PoweredSlot(
+              enabled: e >= 0.58,
+              top: 574,
+              left: 0,
+              right: 0,
+              child: const Text(
+                'WELCOME, RECRUIT',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 16,
+                  height: 1,
+                  color: kNeon,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            _PoweredSlot(
+              enabled: e >= 0.68,
+              top: 607,
+              left: 42,
+              right: 42,
+              child: Text(
+                'YOUR TRAINING BUILDS YOUR CHARACTER',
+                textAlign: TextAlign.center,
+                style: AppFonts.shareTechMono(
+                  color: kMutedText,
+                  fontSize: 13,
+                  height: 1.35,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            _PoweredSlot(
+              enabled: e >= 0.80,
+              top: 774,
+              left: 0,
+              right: 0,
+              child: const _PressStartPrompt(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// A `Positioned` child that CRT-powers-on (via [PowerOn]) when [enabled] flips
+/// true — used to stagger the cold-open elements in after the wordmark lands.
+class _PoweredSlot extends StatelessWidget {
+  const _PoweredSlot({
+    required this.enabled,
+    required this.top,
+    required this.child,
+    this.left,
+    this.right,
+  });
+
+  final bool enabled;
+  final double top;
+  final double? left;
+  final double? right;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: top,
+      left: left,
+      right: right,
+      child: PowerOn(
+        enabled: enabled,
+        builder: (context, power) =>
+            Opacity(opacity: power.clamp(0.0, 1.0), child: child),
+      ),
     );
   }
 }

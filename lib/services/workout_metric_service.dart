@@ -1,7 +1,42 @@
 import '../models/workout_models.dart';
+import 'progressive_overload_service.dart';
 
 class WorkoutMetricService {
   const WorkoutMetricService._();
+
+  /// Per-session count of exercises whose best estimated 1RM beat that
+  /// exercise's best across all *earlier* sessions. The first-ever log of an
+  /// exercise sets the baseline and is intentionally not counted as a PR —
+  /// otherwise every new exercise would spam badges.
+  static Map<String, int> prCountsBySession(List<WorkoutSession> sessions) {
+    final ordered =
+        sessions.where((s) => !s.isPartial && !s.isAbandoned).toList()
+          ..sort((a, b) => a.date.compareTo(b.date));
+    final bestByExercise = <String, double>{};
+    final counts = <String, int>{};
+    for (final session in ordered) {
+      var prs = 0;
+      for (final log in session.exercises) {
+        var sessionBest = 0.0;
+        for (final set in log.sets) {
+          final rm = ProgressiveOverloadService.epley1RM(
+            set.weight,
+            set.reps,
+            set.weight == 0,
+          );
+          if (rm > sessionBest) sessionBest = rm;
+        }
+        if (sessionBest <= 0) continue;
+        final prior = bestByExercise[log.exerciseId] ?? 0;
+        if (sessionBest > prior) {
+          if (prior > 0) prs++;
+          bestByExercise[log.exerciseId] = sessionBest;
+        }
+      }
+      counts[session.id] = prs;
+    }
+    return counts;
+  }
 
   static int trainingDaysThisWeek(
     List<WorkoutSession> sessions, {

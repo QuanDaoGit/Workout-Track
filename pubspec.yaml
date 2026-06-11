@@ -36,12 +36,18 @@ dependencies:
   path_provider: ^2.1.0
   shared_preferences: ^2.5.5
   mcp_toolkit: ^3.0.0
+  audioplayers: ^6.1.0
+  video_player: ^2.9.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Fake video platform in widget tests (test/helpers/fake_video_platform.dart).
+  video_player_platform_interface: ^6.7.0
   drift_dev: ^2.22.0
   build_runner: ^2.4.0
+  # Launcher-icon generation (build-time only).
+  flutter_launcher_icons: ^0.14.4
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -49,6 +55,17 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+# Launcher icon — generated from the bordered tile. The generator already insets
+# the adaptive foreground 16% into the safe zone, so we pass the full tile; the
+# adaptive background matches the tile's own dark bg for a seamless mask.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/branding/app_icon.png"
+  adaptive_icon_background: "#11111F"
+  adaptive_icon_foreground: "assets/branding/app_icon.png"
+  min_sdk_android: 21
 
 
 # For information on the generic Dart part of this file, see the
@@ -87,6 +104,8 @@ flutter:
           weight: 400
   # To add assets to your application, add an assets section, like this:
   assets:
+    - assets/audio/
+    - assets/exercises/demos/
     - assets/exercises.json
     - assets/exercises/exercises/Alternate_Hammer_Curl/
     - assets/exercises/exercises/Alternating_Renegade_Row/
@@ -213,7 +232,9 @@ flutter:
     - assets/exercises/exercises/Zercher_Squats/
     - assets/exercises/exercises/Zottman_Curl/
     - assets/icons/control/
-    - assets/avatar/
+    - assets/icons/control/ui/
+    - assets/icons/economy/
+    - assets/icons/radar/
     - assets/unlocks/frames/
     - assets/unlocks/themes/
     - assets/classes/icons/

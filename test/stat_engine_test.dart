@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/models/rest_models.dart';
+import 'package:workout_track/models/stat_radar_read.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/services/rest_service.dart';
 import 'package:workout_track/services/stat_engine.dart';
@@ -49,29 +51,6 @@ void main() {
     });
   });
 
-  test(
-    'getStoredStats preserves a calibration seed when no sessions are logged yet',
-    () async {
-      // A freshly-onboarded, quiz-seeded user has a seed but zero completed
-      // workouts. Reading stats repeatedly must NOT wipe the seed to baseline.
-      final now = DateTime(2026, 5, 14, 10);
-      final engine = StatEngine(nowProvider: () => now, catalog: catalog);
-      final prefs = await SharedPreferences.getInstance();
-      final vol = StatEngine.volumeForStat(650); // advanced → rank A
-      await prefs.setString(
-        StatEngine.calibrationSeedKey,
-        jsonEncode({'STR': vol}),
-      );
-
-      final first = await engine.getStoredStats();
-      expect(engine.getRank(first['STR']!), 'A');
-
-      // Second read with still-no-sessions must stay seeded, not reset to D.
-      final second = await engine.getStoredStats();
-      expect(engine.getRank(second['STR']!), 'A');
-    },
-  );
-
   test('calculates weighted and bodyweight volume with cap', () async {
     final now = DateTime(2026, 5, 14, 10);
     await _seedSessions([
@@ -88,7 +67,12 @@ void main() {
       nowProvider: () => now,
       catalog: catalog,
     ).calculateAllStats();
-    final expected = _statFromVolume(5800);
+    // Intensity-credit currency: 5 × e1RM(100,10) for the bench, and the
+    // bodyweight triceps sets load 0.65 × 70 kg fallback bodyweight.
+    final benchCredit = 5 * StatEngine.intensityCreditForSet(100, 10);
+    final bodyweightCredit =
+        2 * StatEngine.intensityCreditForSet(0.65 * 70, 10);
+    final expected = _statFromVolume(benchCredit + bodyweightCredit);
 
     expect(stats['STR'], 10 + expected);
     expect(stats['END'], 10 + _statFromEndurance(70));
@@ -195,8 +179,11 @@ void main() {
 
     // Class focus now pushes visible radar identity:
     // bruiser -> STR, assassin -> AGI, tank -> END.
-    expect(stats['STR'], 10 + _statFromVolume(1500));
-    expect(stats['AGI'], 10 + _statFromVolume(1390));
+    final credit = StatEngine.intensityCreditForSet(100, 10);
+    // STR: bruiser bench 1.0 + 0.2 bonus, assassin crunch 0.20, tank squat 0.22.
+    expect(stats['STR'], 10 + _statFromVolume(credit * (1.2 + 0.20 + 0.22)));
+    // AGI: crunch 1.0 + 0.2 bonus, bench 0.12, squat 0.07.
+    expect(stats['AGI'], 10 + _statFromVolume(credit * (1.2 + 0.12 + 0.07)));
     expect(stats['END'], 10 + _statFromEndurance(73));
     // VIT is the recovery meter now (not volume) — covered by its own tests.
   });
@@ -284,6 +271,90 @@ void main() {
     },
   );
 
+  test(
+    'radar-only classifier reads class-typical variants above seventy percent',
+    () async {
+      final now = DateTime(2026, 5, 14, 10);
+      final cases = _radarReadabilityCases();
+
+      var correct = 0;
+      final failures = <String>[];
+      for (final c in cases) {
+        SharedPreferences.setMockInitialValues({});
+        await _seedSessions(
+          _classTypicalSessions(
+            now: now,
+            classAtSave: c.classAtSave,
+            logs: c.logs,
+          ),
+        );
+
+        final stats = await StatEngine(
+          nowProvider: () => now.add(const Duration(days: 19)),
+          catalog: catalog,
+        ).calculateAllStats();
+        for (final axis in ['STR', 'AGI', 'END']) {
+          expect(
+            stats[axis],
+            c.expectedStats[axis],
+            reason: '${c.id} $axis should match the study fixture',
+          );
+        }
+        final visibleGrades = [
+          for (final axis in ['STR', 'AGI', 'END'])
+            _gradeIndex(stats[axis] ?? 0),
+        ];
+        expect(
+          visibleGrades.reduce(max) - visibleGrades.reduce(min),
+          lessThanOrEqualTo(2),
+          reason: '${c.expectedClass} variant should not show a dead stat',
+        );
+
+        final guess = _classGuessFromRadar(stats);
+        if (guess == c.expectedClass) {
+          correct += 1;
+        } else {
+          failures.add('${c.expectedClass}: guessed $guess from $stats');
+        }
+      }
+
+      final accuracy = correct / cases.length;
+      expect(accuracy, greaterThan(0.70), reason: failures.join('\n'));
+    },
+  );
+
+  test('radar readability study embeds the shared fixture cases', () {
+    final fixture = jsonDecode(
+      File('tool/radar_readability_cases.json').readAsStringSync(),
+    );
+    final html = File('tool/radar_readability_study.html').readAsStringSync();
+    final match = RegExp(
+      r'<script id="study-cases" type="application/json">\s*(.*?)\s*</script>',
+      dotAll: true,
+    ).firstMatch(html);
+
+    expect(match, isNotNull);
+    expect(jsonDecode(match!.group(1)!), fixture);
+  });
+
+  test('radar readability study keeps trial exposure radar-only', () {
+    final html = File('tool/radar_readability_study.html').readAsStringSync();
+
+    expect(html, contains('const studyMode = "radar_only_v1";'));
+    expect(html, contains('id="participant-id"'));
+    expect(html, contains('participantId'));
+    expect(html, contains('AGI-led profile'));
+    expect(html, contains('STR-led profile'));
+    expect(html, contains('END-led profile'));
+    expect(html, isNot(contains('Pass target:')));
+    expect(html, isNot(contains('id="legend"')));
+    expect(html, isNot(contains('id="build-read"')));
+    expect(html, isNot(contains('BUILD:')));
+    expect(html, isNot(contains('STR</b> POWER')));
+    expect(html, isNot(contains('AGI</b> CONTROL')));
+    expect(html, isNot(contains('END</b> STAMINA')));
+  });
+
   test('ignores partial and abandoned sessions', () async {
     final now = DateTime(2026, 5, 14, 10);
     await _seedSessions([
@@ -315,8 +386,8 @@ void main() {
     });
   });
 
-  test('LCK reflects current training streak capped at 100', () async {
-    final now = DateTime(2026, 5, 14, 10);
+  test('LCK is the weekly consistency streak on the training schedule', () async {
+    final now = DateTime(2026, 6, 1, 9); // Monday; default schedule is M/W/F.
     final engine = StatEngine(nowProvider: () => now, catalog: catalog);
 
     // 0 sessions → no streak → LCK 0.
@@ -324,73 +395,39 @@ void main() {
     await _seedSessions([]);
     expect(await engine.calculateLuck(), 0);
 
-    // Session today only → streak 1.
+    // Three full weeks of M/W/F adherence (no missed scheduled day) → 3 weeks.
     SharedPreferences.setMockInitialValues({});
-    await _seedSessions([
-      _session(date: now, logs: [_log('bench')]),
-    ]);
-    expect(await engine.calculateLuck(), 1);
-
-    // Three consecutive days ending today → streak 3.
-    SharedPreferences.setMockInitialValues({});
-    await _seedSessions([
-      _session(
-        date: now.subtract(const Duration(days: 2)),
-        id: 'd-2',
-        logs: [_log('bench')],
-      ),
-      _session(
-        date: now.subtract(const Duration(days: 1)),
-        id: 'd-1',
-        logs: [_log('bench')],
-      ),
-      _session(date: now, id: 'd0', logs: [_log('bench')]),
-    ]);
+    await _seedSessions(
+      _scheduledSessions(firstDay: DateTime(2026, 5, 11), until: now),
+    );
     expect(await engine.calculateLuck(), 3);
 
-    // Gap on yesterday breaks the streak — only today counts.
+    // Skipping the most recent scheduled Friday (05-29) is an unscheduled
+    // recovery → the streak resets to 0.
     SharedPreferences.setMockInitialValues({});
-    await _seedSessions([
-      _session(
-        date: now.subtract(const Duration(days: 2)),
-        id: 'd-2',
-        logs: [_log('bench')],
+    await _seedSessions(
+      _scheduledSessions(
+        firstDay: DateTime(2026, 5, 11),
+        until: DateTime(2026, 5, 29),
       ),
-      _session(date: now, id: 'd0', logs: [_log('bench')]),
-    ]);
-    expect(await engine.calculateLuck(), 1);
-
-    // Longer streaks should map directly to LCK until the 100 cap.
-    SharedPreferences.setMockInitialValues({});
-    await _seedSessions(_streakSessions(now: now, days: 50));
-    expect(await engine.calculateLuck(), 50);
-
-    SharedPreferences.setMockInitialValues({});
-    await _seedSessions(_streakSessions(now: now, days: 100));
-    expect(await engine.calculateLuck(), 100);
-
-    SharedPreferences.setMockInitialValues({});
-    await _seedSessions(_streakSessions(now: now, days: 200));
-    expect(await engine.calculateLuck(), 100);
+    );
+    expect(await engine.calculateLuck(), 0);
   });
 
-  test('LCK XP multiplier thresholds use 25-point diamond tiers', () {
+  test('LCK diamond/multiplier ladder uses weekly thresholds (1/3/6/10)', () {
     expect(XpService.lckDiamondCount(0), 0);
     expect(XpService.lckXpMultiplier(0), 1.0);
-    expect(XpService.lckDiamondCount(24), 0);
-    expect(XpService.lckXpMultiplier(24), 1.0);
-    expect(XpService.lckDiamondCount(25), 1);
-    expect(XpService.lckXpMultiplier(25), 1.5);
-    expect(XpService.lckDiamondCount(49), 1);
-    expect(XpService.lckXpMultiplier(49), 1.5);
-    expect(XpService.lckDiamondCount(50), 2);
-    expect(XpService.lckXpMultiplier(50), 2.0);
-    expect(XpService.lckDiamondCount(74), 2);
-    expect(XpService.lckXpMultiplier(74), 2.0);
-    expect(XpService.lckDiamondCount(75), 3);
-    expect(XpService.lckXpMultiplier(75), 2.5);
-    expect(XpService.lckDiamondCount(99), 3);
-    expect(XpService.lckXpMultiplier(99), 2.5);
+    expect(XpService.lckDiamondCount(1), 1);
+    expect(XpService.lckXpMultiplier(1), 1.5);
+    expect(XpService.lckDiamondCount(2), 1);
+    expect(XpService.lckDiamondCount(3), 2);
+    expect(XpService.lckXpMultiplier(3), 2.0);
+    expect(XpService.lckDiamondCount(5), 2);
+    expect(XpService.lckDiamondCount(6), 3);
+    expect(XpService.lckXpMultiplier(6), 2.5);
+    expect(XpService.lckDiamondCount(9), 3);
+    expect(XpService.lckDiamondCount(10), 4);
+    expect(XpService.lckXpMultiplier(10), 3.0);
     expect(XpService.lckDiamondCount(100), 4);
     expect(XpService.lckXpMultiplier(100), 3.0);
   });
@@ -441,39 +478,20 @@ void main() {
   });
 
   test(
-    'applies decay after two missed non-rest days and respects floor',
+    'decay drops the factor and lowers the board after unprotected misses',
     () async {
       final prefs = await SharedPreferences.getInstance();
       await _seedSessions([
         _session(date: DateTime(2026, 5, 8), logs: [_log('bench')]),
       ]);
-      await prefs.setString(
-        StatEngine.combatStatsKey,
-        jsonEncode({
-          'STR': 800,
-          'DEF': 500,
-          'VIT': 100,
-          'AGI': 0,
-          'END': 100,
-          'LCK': 40,
-        }),
-      );
-      await prefs.setString(
-        'combat_stat_peaks',
-        jsonEncode({
-          'STR': 1000,
-          'DEF': 1000,
-          'VIT': 100,
-          'AGI': 0,
-          'END': 100,
-          'LCK': 40,
-        }),
-      );
-      await prefs.setString(
-        'combat_stats_last_session_date',
-        DateTime(2026, 5, 8).toIso8601String(),
-      );
 
+      // The true (un-decayed) board.
+      final full = await StatEngine(
+        nowProvider: () => DateTime(2026, 5, 8, 12),
+        catalog: catalog,
+      ).calculateAllStats();
+
+      // Unprotected missed training days later → decay applies.
       await StatEngine(
         nowProvider: () => DateTime(2026, 5, 14, 9),
         catalog: catalog,
@@ -482,13 +500,13 @@ void main() {
       final decayed =
           jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
               as Map<String, dynamic>;
+      final factor = prefs.getDouble('combat_decay_factor_v1')!;
 
-      expect(decayed['STR'], 720);
-      expect(decayed['DEF'], 500);
-      // VIT is the recovery meter now — excluded from decay, so it's untouched.
-      expect(decayed['VIT'], 100);
-      expect(decayed['END'], 90);
-      expect(decayed['LCK'], 0);
+      // Factor dropped (gentle), floored at half, and the board reflects it.
+      expect(factor, lessThan(1.0));
+      expect(factor, greaterThanOrEqualTo(0.5));
+      expect(decayed['STR'], (full['STR']! * factor).floor());
+      expect(decayed['STR'], lessThan(full['STR']!));
     },
   );
 
@@ -567,32 +585,12 @@ void main() {
         isAbandoned: true,
       ),
     ]);
-    await prefs.setString(
-      StatEngine.combatStatsKey,
-      jsonEncode({
-        'STR': 800,
-        'DEF': 0,
-        'VIT': 0,
-        'AGI': 0,
-        'END': 50,
-        'LCK': 0,
-      }),
-    );
-    await prefs.setString(
-      'combat_stat_peaks',
-      jsonEncode({
-        'STR': 1000,
-        'DEF': 0,
-        'VIT': 0,
-        'AGI': 0,
-        'END': 50,
-        'LCK': 0,
-      }),
-    );
-    await prefs.setString(
-      'combat_stats_last_session_date',
-      DateTime(2026, 5, 8).toIso8601String(),
-    );
+
+    // True board from the one *completed* session.
+    final full = await StatEngine(
+      nowProvider: () => DateTime(2026, 5, 8, 12),
+      catalog: catalog,
+    ).calculateAllStats();
 
     await StatEngine(
       nowProvider: () => DateTime(2026, 5, 14, 9),
@@ -602,18 +600,71 @@ void main() {
     final stored =
         jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
             as Map<String, dynamic>;
+    final factor = prefs.getDouble('combat_decay_factor_v1')!;
 
-    expect(stored['STR'], 720);
+    // Ongoing/abandoned sessions don't count as training, so decay still applied
+    // from the last completed session.
+    expect(factor, lessThan(1.0));
+    expect(stored['STR'], (full['STR']! * factor).floor());
+    expect(stored['STR'], lessThan(full['STR']!));
   });
 
-  test('stores character stats and touched last-session delta', () async {
+  test('calculateAllStats applies the decay factor to capability stats only', () async {
+    final prefs = await SharedPreferences.getInstance();
+    await _seedSessions([
+      _session(date: DateTime(2026, 5, 8), logs: [_log('bench')]),
+    ]);
+    final full = await StatEngine(
+      nowProvider: () => DateTime(2026, 5, 8, 12),
+      catalog: catalog,
+    ).calculateAllStats();
+
+    await prefs.setDouble('combat_decay_factor_v1', 0.5);
+    final decayed = await StatEngine(
+      nowProvider: () => DateTime(2026, 5, 8, 12),
+      catalog: catalog,
+    ).calculateAllStats();
+
+    // STR (capability) is halved; VIT (recovery meter) and LCK (streak) are not.
+    expect(decayed['STR'], (full['STR']! * 0.5).floor());
+    expect(decayed['STR'], lessThan(full['STR']!));
+    expect(decayed['VIT'], full['VIT']);
+    expect(decayed['LCK'], full['LCK']);
+  });
+
+  test('recoverFromWorkout climbs the decay factor toward full, capped at 1.0', () async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('combat_decay_factor_v1', 0.5);
+    final engine = StatEngine(catalog: catalog);
+
+    await engine.recoverFromWorkout();
+    expect(prefs.getDouble('combat_decay_factor_v1'), closeTo(0.65, 1e-9));
+
+    for (var i = 0; i < 10; i++) {
+      await engine.recoverFromWorkout();
+    }
+    expect(prefs.getDouble('combat_decay_factor_v1'), 1.0);
+  });
+
+  test('last-session delta is the real change vs the previously-shown board', () async {
     final first = DateTime(2026, 5, 13, 10);
     final second = DateTime(2026, 5, 14, 10);
+
+    // Board state the user last saw, after the first workout.
+    await _seedSessions([
+      _session(date: first, id: 'first', logs: [_log('bench')]),
+    ]);
+    final afterFirst = await StatEngine(
+      nowProvider: () => first,
+      catalog: catalog,
+    ).calculateAllStats();
+
+    // Second workout saved → recompute. The delta is measured against the cached
+    // board value, not a marginal latest-session recompute.
     await _seedSessions([
       _session(date: first, id: 'first', logs: [_log('bench')]),
       _session(date: second, id: 'second', logs: [_log('bench')]),
     ]);
-
     final engine = StatEngine(nowProvider: () => second, catalog: catalog);
     final stats = await engine.calculateAllStats();
     final delta = await engine.getLastSessionDelta();
@@ -623,23 +674,48 @@ void main() {
       jsonDecode(prefs.getString(StatEngine.combatStatsKey)!),
       containsPair('STR', stats['STR']),
     );
-    // Two consecutive-day sessions: visible capability stats grew with the new
-    // set, and LCK grew with the streak (1 -> 2).
-    expect(delta.keys, containsAll(['STR', 'AGI', 'END', 'LCK']));
-    expect(
-      delta['STR'],
-      stats['STR']! - (StatEngine.baseOutputStatValue + _statFromVolume(250)),
+    // Visible capability stats grew from the cached board to the new one. (LCK
+    // is the weekly consistency streak — a 2-day span doesn't tick it, so it is
+    // covered separately.)
+    expect(delta.keys, containsAll(['STR', 'AGI', 'END']));
+    expect(delta['STR'], stats['STR']! - afterFirst['STR']!);
+    expect(delta['AGI'], stats['AGI']! - afterFirst['AGI']!);
+    expect(delta['END'], stats['END']! - afterFirst['END']!);
+  });
+
+  test('last-session delta surfaces a decay-recovery board jump (regression)', () async {
+    final d1 = DateTime(2026, 5, 10, 10);
+    final d2 = DateTime(2026, 5, 11, 10);
+    await _seedSessions([
+      _session(date: d1, id: 'a', logs: [_log('bench')]),
+      _session(date: d2, id: 'b', logs: [_log('bench')]),
+    ]);
+    final full = await StatEngine(
+      nowProvider: () => d2,
+      catalog: catalog,
+    ).calculateAllStats();
+
+    // A rest gap decayed the *cached* board value below the true recompute,
+    // without changing the logged session history.
+    final prefs = await SharedPreferences.getInstance();
+    final cache = Map<String, dynamic>.from(
+      jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
+          as Map<String, dynamic>,
     );
-    expect(
-      delta['AGI'],
-      stats['AGI']! - (StatEngine.baseOutputStatValue + _statFromVolume(30)),
-    );
-    expect(
-      delta['END'],
-      stats['END']! -
-          (StatEngine.baseOutputStatValue + _statFromEndurance(2.5)),
-    );
-    expect(delta['LCK'], 1);
+    final decayedStr = (full['STR']! * 0.6).floor();
+    cache['STR'] = decayedStr;
+    await prefs.setString(StatEngine.combatStatsKey, jsonEncode(cache));
+
+    // The next recompute (e.g. finishing a workout) snaps the board back up; the
+    // delta must reflect that recovery so the finish summary matches the board —
+    // the reported bug (board jumped, summary showed nothing).
+    final engine = StatEngine(nowProvider: () => d2, catalog: catalog);
+    final stats = await engine.calculateAllStats();
+    final delta = await engine.getLastSessionDelta();
+
+    expect(stats['STR'], full['STR']);
+    expect(delta['STR'], full['STR']! - decayedStr);
+    expect(delta['STR'], greaterThan(0));
   });
 
   test('returns rank letters and colors on the widening ladder', () {
@@ -730,26 +806,94 @@ List<WorkoutSession> _classTypicalSessions({
   ];
 }
 
-List<WorkoutSession> _streakSessions({
-  required DateTime now,
-  required int days,
+/// Seeds a completed session on every scheduled [weekdays] day in
+/// `[firstDay, until)` (until exclusive). Used to build perfectly-adherent
+/// histories for the weekly consistency streak (LCK).
+List<WorkoutSession> _scheduledSessions({
+  required DateTime firstDay,
+  required DateTime until,
+  Set<int> weekdays = const {1, 3, 5}, // default schedule: Mon / Wed / Fri
 }) {
-  return [
-    for (var i = days - 1; i >= 0; i--)
-      _session(
-        date: DateTime(now.year, now.month, now.day - i, now.hour),
-        id: 'streak-$i',
-        logs: [_log('bench')],
-      ),
-  ];
+  final out = <WorkoutSession>[];
+  var day = DateTime(firstDay.year, firstDay.month, firstDay.day);
+  final end = DateTime(until.year, until.month, until.day);
+  var i = 0;
+  while (day.isBefore(end)) {
+    if (weekdays.contains(day.weekday)) {
+      out.add(
+        _session(
+          date: day.add(const Duration(hours: 10)),
+          id: 'sched-$i',
+          logs: [_log('bench')],
+        ),
+      );
+      i++;
+    }
+    day = day.add(const Duration(days: 1));
+  }
+  return out;
 }
 
 int _statFromVolume(double volume) {
-  return min(1000, (100 * log(volume / 500 + 1)).floor());
+  return min(
+    1000,
+    (100 * log(volume / StatEngine.volumeCurveScale + 1)).floor(),
+  );
 }
 
 int _statFromEndurance(double endurancePoints) {
   return min(1000, (100 * log(endurancePoints / 150 + 1)).floor());
+}
+
+List<_RadarReadabilityCase> _radarReadabilityCases() {
+  final raw =
+      jsonDecode(File('tool/radar_readability_cases.json').readAsStringSync())
+          as List<dynamic>;
+  return [
+    for (final item in raw.cast<Map<String, dynamic>>())
+      _RadarReadabilityCase(
+        id: item['id'] as String,
+        classAtSave: item['classAtSave'] as String,
+        expectedClass: item['expectedClass'] as String,
+        expectedStats: (item['stats'] as Map<String, dynamic>).map(
+          (key, value) => MapEntry(key, value as int),
+        ),
+        logs: [
+          for (final log
+              in (item['logs'] as List<dynamic>).cast<Map<String, dynamic>>())
+            _log(
+              log['exerciseId'] as String,
+              weight: (log['weight'] as num).toDouble(),
+              reps: log['reps'] as int,
+              sets: log['sets'] as int,
+            ),
+        ],
+      ),
+  ];
+}
+
+class _RadarReadabilityCase {
+  const _RadarReadabilityCase({
+    required this.id,
+    required this.classAtSave,
+    required this.expectedClass,
+    required this.expectedStats,
+    required this.logs,
+  });
+
+  final String id;
+  final String classAtSave;
+  final String expectedClass;
+  final Map<String, int> expectedStats;
+  final List<ExerciseLog> logs;
+}
+
+String? _classGuessFromRadar(Map<String, int> stats) {
+  final axes = StatRadarRead.axisToClass.keys.toList()
+    ..sort((a, b) => (stats[b] ?? 0).compareTo(stats[a] ?? 0));
+  final lead = (stats[axes.first] ?? 0) - (stats[axes[1]] ?? 0);
+  if (lead < StatRadarRead.dominantLeadThreshold) return null;
+  return StatRadarRead.classForAxis(axes.first);
 }
 
 int _gradeIndex(int value) {

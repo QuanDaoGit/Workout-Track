@@ -5,22 +5,11 @@ import '../data/programs_library.dart';
 import '../models/program_models.dart';
 import '../services/program_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_button.dart';
 import 'program_detail_page.dart';
-
-class ProgramsLibraryPage extends StatelessWidget {
-  const ProgramsLibraryPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Programs')),
-      body: const ProgramsLibraryBody(),
-    );
-  }
-}
 
 class ProgramsLibraryBody extends StatefulWidget {
   const ProgramsLibraryBody({
@@ -158,6 +147,10 @@ class _ActiveProgramSummary extends StatelessWidget {
     final program = programById(progress.programId);
     if (program == null) return const SizedBox.shrink();
 
+    final target = program.targetSessions;
+    final done = progress.arcSessions;
+    final pct = target == 0 ? 0 : ((done / target) * 100).round();
+
     return Container(
       padding: const EdgeInsets.all(kSpace4),
       decoration: BoxDecoration(
@@ -165,48 +158,72 @@ class _ActiveProgramSummary extends StatelessWidget {
         border: Border.all(color: kNeon),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const ImageIcon(
-            AssetImage('assets/icons/control/icon_scroll.png'),
-            color: kNeon,
-            size: 20,
+          Row(
+            children: [
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_scroll.png'),
+                color: kNeon,
+                size: 20,
+              ),
+              const SizedBox(width: kSpace3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      progress.completedArc
+                          ? 'PATH COMPLETE'
+                          : 'ACTIVE PROGRAM',
+                      style: TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 8,
+                        color: progress.completedArc ? kAmber : kMutedText,
+                      ),
+                    ),
+                    const SizedBox(height: kSpace2),
+                    Text(
+                      program.name,
+                      style: const TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 10,
+                        color: kText,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: kSpace1),
+                    Text(
+                      'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}/7',
+                      style: AppFonts.shareTechMono(
+                        color: kMutedText,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _MiniTextBadge(label: '${progress.completedSessions} DONE'),
+            ],
           ),
-          const SizedBox(width: kSpace3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'ACTIVE PROGRAM',
-                  style: TextStyle(
-                    fontFamily: 'PressStart2P',
-                    fontSize: 8,
-                    color: kMutedText,
-                  ),
+          const SizedBox(height: kSpace3),
+          Row(
+            children: [
+              Expanded(
+                child: ArcadeProgressBar(
+                  value: target == 0 ? 0 : done / target,
+                  height: 6,
+                  fillColor: progress.completedArc ? kAmber : kNeon,
                 ),
-                const SizedBox(height: kSpace2),
-                Text(
-                  program.name,
-                  style: const TextStyle(
-                    fontFamily: 'PressStart2P',
-                    fontSize: 10,
-                    color: kText,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: kSpace1),
-                Text(
-                  'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}/7',
-                  style: AppFonts.shareTechMono(
-                    color: kMutedText,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: kSpace3),
+              Text(
+                '$done / $target • $pct%',
+                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+              ),
+            ],
           ),
-          _MiniTextBadge(label: '${progress.completedSessions} DONE'),
         ],
       ),
     );
@@ -228,7 +245,6 @@ class _ProgramCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tierColor = programTierColor(program.tier);
     return HoldDepress(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
@@ -257,7 +273,7 @@ class _ProgramCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: kSpace2),
-                _TierBadge(label: program.tier, color: tierColor),
+                _TierBadge(label: program.tier),
               ],
             ),
             const SizedBox(height: kSpace3),
@@ -284,24 +300,28 @@ class _ProgramCard extends StatelessWidget {
 }
 
 class _TierBadge extends StatelessWidget {
-  const _TierBadge({required this.label, required this.color});
+  const _TierBadge({required this.label});
 
   final String label;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
     final normalized = label.replaceAll('/ADVANCED', '');
     return Container(
+      key: ValueKey('program_library_tier_badge_$normalized'),
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        border: Border.all(color: color),
+        color: kCard.withValues(alpha: 0.35),
+        border: Border.all(color: kBorderVariant),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         normalized,
-        style: TextStyle(fontFamily: 'PressStart2P', fontSize: 7, color: color),
+        style: const TextStyle(
+          fontFamily: 'PressStart2P',
+          fontSize: 7,
+          color: kMutedText,
+        ),
       ),
     );
   }

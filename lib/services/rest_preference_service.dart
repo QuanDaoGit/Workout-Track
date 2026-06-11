@@ -26,6 +26,5 @@ class RestPreferenceService {
     CharacterClass.tank => 180,
     CharacterClass.bruiser => 90,
     CharacterClass.assassin => 60,
-    CharacterClass.vanguard => 120,
   };
 }

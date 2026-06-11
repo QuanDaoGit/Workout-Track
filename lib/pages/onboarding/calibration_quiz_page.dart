@@ -5,64 +5,94 @@ import 'package:flutter/services.dart';
 
 import '../../models/body_goal_models.dart';
 import '../../models/calibration_quiz_models.dart';
-import '../../models/character_class.dart';
+import '../../models/resolve_models.dart';
+import '../../models/unit_models.dart';
 import '../../models/user_profile_sex.dart';
+import '../../services/unit_settings_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_chip.dart';
 import '../../widgets/motion/arcade_text_field.dart';
-import '../../widgets/motion/hold_depress.dart';
+import '../../widgets/onboarding/option_question.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/segmented_progress_bar.dart';
 import '../../widgets/typewriter_text.dart';
 
-/// 4-question calibration quiz. Derives [CharacterClass] from Q1, captures
-/// training cadence + experience + (optional) bodyweight & sex. Returns the
-/// [CalibrationResult] via `Navigator.pop(result)` on completion unless
-/// [onResult] is provided. Onboarding uses [onResult] to push the class reveal
-/// over Q4 so back-navigation can restore the completed quiz answers.
+/// The onboarding question quiz. Renders a caller-supplied list of
+/// [QuizQuestion]s with a shared progress header. The onboarding flow runs it in
+/// two segments around the class reveal: `[trainingWhy, goal, weightSex,
+/// winningVision]` then `[experience, frequency, obstacle]` — the goal derives
+/// [CharacterClass]; the vow/vision/obstacle are identity beats woven in for
+/// narrative pacing. Accumulated answers are returned via [onComplete].
 ///
 /// **Design note** — internally uses a single route with an inline step index
 /// rather than a stack of pushed routes. This gives reliable back-restore
-/// behavior and a clean result return without coordinating pop counts across
-/// 4 routes. The arcade route flash is therefore the *enter/exit* boundary of
-/// the quiz; Q→Q transitions use a quieter directional fade-slide, consistent
-/// with the prompt's "no motion while reading" principle.
+/// behavior without coordinating pop counts across questions. The arcade route
+/// flash is the *enter/exit* boundary of the segment; Q→Q transitions rely on
+/// the per-question typewriter + wipe-in stagger ("no motion while reading").
 class CalibrationQuizPage extends StatefulWidget {
-  const CalibrationQuizPage({super.key, this.onResult});
+  const CalibrationQuizPage({
+    super.key,
+    required this.questions,
+    required this.onComplete,
+    this.onExit,
+    this.initialAnswers,
+    this.progressBaseCells = 0,
+  });
 
-  final Future<void> Function(CalibrationResult result)? onResult;
+  /// The ordered questions this segment renders.
+  final List<QuizQuestion> questions;
 
-  // Cell 1 is "borrowed" from the intro; the quiz contributes cells 2–5.
-  static const int totalProgressCells = 5;
-  static const int introHeadStart = 1;
+  /// Called with the accumulated answers when the last question is answered.
+  final void Function(QuizAnswers answers) onComplete;
+
+  /// Back pressed on the first question. When null, the first question hides
+  /// its back affordance — used for the post-reveal segment, since the
+  /// calibration is the point of no return.
+  final VoidCallback? onExit;
+
+  /// Pre-fills answers (e.g. when re-entering a segment).
+  final QuizAnswers? initialAnswers;
+
+  /// Progress cells already filled before this segment's first question. The
+  /// pre-class segment (goal + weight/sex) is 0; the post-reveal segment
+  /// (experience + frequency) is 2.
+  final int progressBaseCells;
+
+  // Total cells across the onboarding question journey — the seven quiz
+  // questions: vow + goal + weight/sex + vision (segment A) and experience +
+  // frequency + obstacle (segment B). The cinematic intro shows no progress bar.
+  static const int totalProgressCells = 7;
 
   @override
   State<CalibrationQuizPage> createState() => _CalibrationQuizPageState();
 }
 
 class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
-  int _step = 0; // 0=Q1, 1=Q2, 2=Q3, 3=Q4
+  int _step = 0;
+
+  // Re-entrancy guard for the 280 ms select-hold and the CONTINUE submit. Without
+  // it, a fast double-tap fires _advance twice — skipping a question or firing
+  // onComplete with default answers. Reset whenever a new question is shown.
+  bool _advancing = false;
 
   // Steps whose entrance has already played — used to suppress the
   // typewriter + wipe-in when navigating back to an already-seen question.
   final Set<int> _seenSteps = {};
 
-  // Accumulated answers.
-  BodyGoal? _goal;
-  TrainingFreq? _freq;
-  Experience? _exp;
-  double? _bodyWeightKg;
-  UserProfileSex _sex = UserProfileSex.preferNotToSay;
+  late final QuizAnswers _answers =
+      widget.initialAnswers?.copy() ?? QuizAnswers();
 
-  int get _progressCells =>
-      CalibrationQuizPage.introHeadStart + _step + 1; // 2..5 across Q1..Q4
+  int get _progressCells => widget.progressBaseCells + _step + 1;
+  bool get _isLast => _step == widget.questions.length - 1;
 
-  Future<void> _advanceFrom(int currentStep, Object answer) async {
+  Future<void> _select(Object answer) async {
+    if (_advancing) return;
+    _advancing = true;
     // Apply the answer immediately so back-navigation restores it.
-    if (answer is BodyGoal) _goal = answer;
-    if (answer is TrainingFreq) _freq = answer;
-    if (answer is Experience) _exp = answer;
+    if (answer is BodyGoal) _answers.goal = answer;
+    if (answer is TrainingFreq) _answers.freq = answer;
+    if (answer is Experience) _answers.exp = answer;
     // 280 ms hold so the selection animation (120 ms) completes and the
     // choice visibly "lands" before the screen swaps.
     final reducedMotion = MediaQuery.of(context).disableAnimations;
@@ -70,40 +100,47 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
       await Future<void>.delayed(const Duration(milliseconds: 280));
     }
     if (!mounted) return;
-    setState(() => _step = currentStep + 1);
+    _advance();
+  }
+
+  // Multi-select identity questions confirm via an explicit CONTINUE: store the
+  // chosen set, then advance under the same re-entrancy guard as the others.
+  void _confirmIdentity(VoidCallback applyAnswer) {
+    if (_advancing) return;
+    _advancing = true;
+    applyAnswer();
+    _advance();
+  }
+
+  void _finishWeightSex({
+    double? bodyWeightKg,
+    double? heightCm,
+    required UserProfileSex sex,
+  }) {
+    if (_advancing) return;
+    _advancing = true;
+    _answers.bodyWeightKg = bodyWeightKg;
+    _answers.heightCm = heightCm;
+    _answers.sex = sex;
+    _advance();
+  }
+
+  void _advance() {
+    if (_isLast) {
+      widget.onComplete(_answers);
+    } else {
+      setState(() => _step++);
+      _advancing = false; // new question — accept input again
+    }
   }
 
   void _goBack() {
     if (_step == 0) {
-      Navigator.of(context).pop(); // null result → flow re-renders SolutionView
+      widget.onExit?.call();
       return;
     }
     setState(() => _step--);
-  }
-
-  Future<void> _finish({
-    double? bodyWeightKg,
-    required UserProfileSex sex,
-  }) async {
-    final goal = _goal!;
-    final freq = _freq!;
-    final exp = _exp!;
-    _bodyWeightKg = bodyWeightKg;
-    _sex = sex;
-    final result = CalibrationResult(
-      goal: goal,
-      freq: freq,
-      exp: exp,
-      bodyWeightKg: _bodyWeightKg,
-      sex: _sex,
-      clazz: deriveClass(goal),
-    );
-    final callback = widget.onResult;
-    if (callback != null) {
-      await callback(result);
-      return;
-    }
-    Navigator.of(context).pop(result);
+    _advancing = false;
   }
 
   @override
@@ -111,53 +148,99 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
     // Note: internal Q→Q transitions are intentionally instant (no
     // AnimatedSwitcher) — the visible inter-question motion is provided by
     // the per-question typewriter + wipe-in stagger that runs when each new
-    // question screen mounts. Keeps the Q4 form's TextField/ChoiceChips out
-    // of any animation overlap.
-    return Scaffold(
-      backgroundColor: kBg,
-      body: SafeArea(child: _buildCurrentQuestion()),
+    // question screen mounts.
+    // Mirror the on-screen back button for the system back gesture: step back
+    // within the segment, or exit via onExit at the first step. When onExit is
+    // null (post-reveal segment) the first step is the point of no return, so
+    // _goBack no-ops and the gesture is absorbed.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _goBack();
+      },
+      child: Scaffold(
+        backgroundColor: kBg,
+        body: SafeArea(child: _buildCurrentQuestion()),
+      ),
     );
   }
 
   Widget _buildCurrentQuestion() {
     // Set.add returns true only the first time this step is viewed.
     final firstView = _seenSteps.add(_step);
-    return switch (_step) {
-      0 => _GoalQuestion(
-        key: const ValueKey('quiz-q1'),
-        step: _step,
+    // Hide the back affordance on the first question when there's no exit.
+    final onBack = (_step == 0 && widget.onExit == null) ? null : _goBack;
+    return switch (widget.questions[_step]) {
+      QuizQuestion.goal => _GoalQuestion(
+        key: const ValueKey('quiz-goal'),
         progressCells: _progressCells,
-        selected: _goal,
+        selected: _answers.goal,
         animate: firstView,
-        onBack: _goBack,
-        onSelect: (g) => _advanceFrom(0, g),
+        onBack: onBack,
+        onSelect: _select,
       ),
-      1 => _FreqQuestion(
-        key: const ValueKey('quiz-q2'),
-        step: _step,
+      QuizQuestion.frequency => _FreqQuestion(
+        key: const ValueKey('quiz-frequency'),
         progressCells: _progressCells,
-        selected: _freq,
+        selected: _answers.freq,
         animate: firstView,
-        onBack: _goBack,
-        onSelect: (f) => _advanceFrom(1, f),
+        onBack: onBack,
+        onSelect: _select,
       ),
-      2 => _ExperienceQuestion(
-        key: const ValueKey('quiz-q3'),
-        step: _step,
+      QuizQuestion.experience => _ExperienceQuestion(
+        key: const ValueKey('quiz-experience'),
         progressCells: _progressCells,
-        selected: _exp,
+        selected: _answers.exp,
         animate: firstView,
-        onBack: _goBack,
-        onSelect: (e) => _advanceFrom(2, e),
+        onBack: onBack,
+        onSelect: _select,
       ),
-      _ => _CalibrationQuestion(
-        key: const ValueKey('quiz-q4'),
+      QuizQuestion.weightSex => _CalibrationQuestion(
+        key: const ValueKey('quiz-weightSex'),
         progressCells: _progressCells,
-        initialBodyWeightKg: _bodyWeightKg,
-        initialSex: _sex,
+        initialBodyWeightKg: _answers.bodyWeightKg,
+        initialHeightCm: _answers.heightCm,
+        initialSex: _answers.sex,
         animate: firstView,
-        onBack: _goBack,
-        onContinue: _finish,
+        onBack: onBack,
+        onContinue: _finishWeightSex,
+      ),
+      QuizQuestion.trainingWhy => _MultiSelectQuestion<TrainingWhy>(
+        key: const ValueKey('quiz-trainingWhy'),
+        progressCells: _progressCells,
+        prompt: 'I TRAIN BECAUSE…',
+        options: [
+          for (final w in TrainingWhy.values) _MultiOption(w, w.label),
+        ],
+        selected: _answers.trainingWhy,
+        animate: firstView,
+        onBack: onBack,
+        onConfirm: (set) => _confirmIdentity(() => _answers.trainingWhy = set),
+      ),
+      QuizQuestion.winningVision => _MultiSelectQuestion<WinningVision>(
+        key: const ValueKey('quiz-winningVision'),
+        progressCells: _progressCells,
+        prompt: 'WHAT DOES WINNING\nLOOK LIKE TO YOU?',
+        options: [
+          for (final v in WinningVision.values)
+            _MultiOption(v, v.label, v.subtext),
+        ],
+        selected: _answers.winningVision,
+        animate: firstView,
+        onBack: onBack,
+        onConfirm: (set) =>
+            _confirmIdentity(() => _answers.winningVision = set),
+      ),
+      QuizQuestion.obstacle => _MultiSelectQuestion<Obstacle>(
+        key: const ValueKey('quiz-obstacle'),
+        progressCells: _progressCells,
+        prompt: 'WHAT USUALLY GETS\nIN THE WAY?',
+        options: [for (final o in Obstacle.values) _MultiOption(o, o.label)],
+        selected: _answers.obstacle,
+        animate: firstView,
+        onBack: onBack,
+        onConfirm: (set) => _confirmIdentity(() => _answers.obstacle = set),
       ),
     };
   }
@@ -173,16 +256,20 @@ class _QuestionScaffold extends StatelessWidget {
     required this.prompt,
     required this.body,
     required this.onBack,
-    this.subtitle,
     this.animatePrompt = true,
+    this.subtitle,
   });
 
   final int progressCells;
   final String prompt;
   final Widget body;
-  final VoidCallback onBack;
-  final String? subtitle;
+  final VoidCallback? onBack;
   final bool animatePrompt;
+
+  /// Optional muted line beneath the prompt. Used only by the multi-select
+  /// identity questions to surface "Pick all that apply"; single-select
+  /// questions leave it null (no descriptive subtitle).
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -198,18 +285,20 @@ class _QuestionScaffold extends StatelessWidget {
               SizedBox(
                 width: 56,
                 height: 56,
-                child: Semantics(
-                  button: true,
-                  label: 'Back',
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.chevron_left_sharp,
-                      color: kText,
-                      size: 28,
-                    ),
-                    onPressed: onBack,
-                  ),
-                ),
+                child: onBack == null
+                    ? null
+                    : Semantics(
+                        button: true,
+                        label: 'Back',
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.chevron_left_sharp,
+                            color: kText,
+                            size: 28,
+                          ),
+                          onPressed: onBack,
+                        ),
+                      ),
               ),
               Expanded(
                 child: Padding(
@@ -273,8 +362,7 @@ class _QuestionScaffold extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: AppFonts.shareTechMono(
                     color: kMutedText,
-                    fontSize: 13,
-                    height: 1.4,
+                    fontSize: 12,
                   ),
                 ),
               ],
@@ -295,159 +383,12 @@ class _QuestionScaffold extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Option card (variant A)
-// ---------------------------------------------------------------------------
-
-class _OptionCard extends StatelessWidget {
-  const _OptionCard({
-    required this.title,
-    required this.subtext,
-    required this.isSelected,
-    required this.hasAnySelection,
-    required this.onTap,
-  });
-
-  final String title;
-  final String subtext;
-  final bool isSelected;
-  final bool hasAnySelection;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final reducedMotion = MediaQuery.of(context).disableAnimations;
-    final dimmed = hasAnySelection && !isSelected;
-    const accent = kNeon;
-    final borderColor = isSelected ? accent : kBorder;
-    final titleColor = isSelected ? accent : kText;
-    final duration = reducedMotion
-        ? Duration.zero
-        : const Duration(milliseconds: 120);
-
-    return Semantics(
-      button: true,
-      inMutuallyExclusiveGroup: true,
-      selected: isSelected,
-      label: '$title. $subtext',
-      child: HoldDepress(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: AnimatedOpacity(
-          duration: duration,
-          opacity: dimmed ? 0.4 : 1.0,
-          child: AnimatedContainer(
-            duration: duration,
-            curve: Curves.easeOut,
-            width: double.infinity,
-            constraints: const BoxConstraints(minHeight: 72),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: kCard,
-              border: Border.all(color: borderColor, width: isSelected ? 2 : 1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedDefaultTextStyle(
-                  duration: duration,
-                  style: TextStyle(
-                    fontFamily: 'PressStart2P',
-                    fontSize: 11,
-                    color: titleColor,
-                    height: 1.2,
-                  ),
-                  child: Text(title),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  subtext,
-                  style: AppFonts.shareTechMono(
-                    color: kMutedText,
-                    fontSize: 12,
-                    height: 1.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _WipeIn extends StatefulWidget {
-  const _WipeIn({required this.delay, required this.child});
-
-  final Duration delay;
-  final Widget child;
-
-  @override
-  State<_WipeIn> createState() => _WipeInState();
-}
-
-class _WipeInState extends State<_WipeIn> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 200),
-  );
-  Timer? _startTimer;
-  bool _reducedMotion = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final reduced = MediaQuery.of(context).disableAnimations;
-    _reducedMotion = reduced;
-    if (reduced) {
-      _controller.value = 1;
-      return;
-    }
-    if (!_controller.isAnimating && _controller.value == 0) {
-      _startTimer?.cancel();
-      _startTimer = Timer(widget.delay, () {
-        if (mounted) _controller.forward();
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _startTimer?.cancel();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_reducedMotion) return widget.child;
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final t = _controller.value;
-        return ClipRect(
-          child: Align(
-            alignment: Alignment.topCenter,
-            heightFactor: t.clamp(0.0001, 1.0),
-            child: Opacity(opacity: t, child: child),
-          ),
-        );
-      },
-      child: widget.child,
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Q1 — GOAL (determines class)
 // ---------------------------------------------------------------------------
 
 class _GoalQuestion extends StatelessWidget {
   const _GoalQuestion({
     super.key,
-    required this.step,
     required this.progressCells,
     required this.selected,
     required this.animate,
@@ -455,11 +396,10 @@ class _GoalQuestion extends StatelessWidget {
     required this.onSelect,
   });
 
-  final int step;
   final int progressCells;
   final BodyGoal? selected;
   final bool animate;
-  final VoidCallback onBack;
+  final VoidCallback? onBack;
   final ValueChanged<BodyGoal> onSelect;
 
   @override
@@ -467,28 +407,31 @@ class _GoalQuestion extends StatelessWidget {
     return _QuestionScaffold(
       progressCells: progressCells,
       prompt: "WHAT'S THE GOAL?",
-      subtitle: 'this sets your class.',
       animatePrompt: animate,
       onBack: onBack,
-      body: _OptionList(
+      body: OptionList(
         hasAnySelection: selected != null,
         animate: animate,
+        mainAxisAlignment: MainAxisAlignment.start,
         options: [
-          _OptionDef(
+          OptionDef(
             title: 'GET LEANER',
             subtext: 'drop fat. keep strength.',
+            icon: Icons.trending_down_sharp,
             isSelected: selected == BodyGoal.cut,
             onTap: () => onSelect(BodyGoal.cut),
           ),
-          _OptionDef(
+          OptionDef(
             title: 'STAY + STRENGTHEN',
             subtext: 'hold weight. add strength.',
+            icon: Icons.trending_flat_sharp,
             isSelected: selected == BodyGoal.recomp,
             onTap: () => onSelect(BodyGoal.recomp),
           ),
-          _OptionDef(
+          OptionDef(
             title: 'GET BIGGER',
             subtext: 'add size. accept the gain.',
+            icon: Icons.trending_up_sharp,
             isSelected: selected == BodyGoal.bulk,
             onTap: () => onSelect(BodyGoal.bulk),
           ),
@@ -505,7 +448,6 @@ class _GoalQuestion extends StatelessWidget {
 class _FreqQuestion extends StatelessWidget {
   const _FreqQuestion({
     super.key,
-    required this.step,
     required this.progressCells,
     required this.selected,
     required this.animate,
@@ -513,11 +455,10 @@ class _FreqQuestion extends StatelessWidget {
     required this.onSelect,
   });
 
-  final int step;
   final int progressCells;
   final TrainingFreq? selected;
   final bool animate;
-  final VoidCallback onBack;
+  final VoidCallback? onBack;
   final ValueChanged<TrainingFreq> onSelect;
 
   @override
@@ -527,23 +468,24 @@ class _FreqQuestion extends StatelessWidget {
       prompt: 'HOW OFTEN?',
       animatePrompt: animate,
       onBack: onBack,
-      body: _OptionList(
+      body: OptionList(
         hasAnySelection: selected != null,
         animate: animate,
+        mainAxisAlignment: MainAxisAlignment.start,
         options: [
-          _OptionDef(
+          OptionDef(
             title: '2–3 DAYS',
             subtext: 'steady. sustainable.',
             isSelected: selected == TrainingFreq.low,
             onTap: () => onSelect(TrainingFreq.low),
           ),
-          _OptionDef(
+          OptionDef(
             title: '4–5 DAYS',
             subtext: 'serious volume.',
             isSelected: selected == TrainingFreq.mid,
             onTap: () => onSelect(TrainingFreq.mid),
           ),
-          _OptionDef(
+          OptionDef(
             title: '6+ DAYS',
             subtext: 'all in.',
             isSelected: selected == TrainingFreq.high,
@@ -562,7 +504,6 @@ class _FreqQuestion extends StatelessWidget {
 class _ExperienceQuestion extends StatelessWidget {
   const _ExperienceQuestion({
     super.key,
-    required this.step,
     required this.progressCells,
     required this.selected,
     required this.animate,
@@ -570,11 +511,10 @@ class _ExperienceQuestion extends StatelessWidget {
     required this.onSelect,
   });
 
-  final int step;
   final int progressCells;
   final Experience? selected;
   final bool animate;
-  final VoidCallback onBack;
+  final VoidCallback? onBack;
   final ValueChanged<Experience> onSelect;
 
   @override
@@ -584,29 +524,30 @@ class _ExperienceQuestion extends StatelessWidget {
       prompt: 'YOUR LEVEL?',
       animatePrompt: animate,
       onBack: onBack,
-      body: _OptionList(
+      body: OptionList(
         hasAnySelection: selected != null,
         animate: animate,
+        mainAxisAlignment: MainAxisAlignment.start,
         options: [
-          _OptionDef(
+          OptionDef(
             title: 'NOVICE',
             subtext: 'first real program.',
             isSelected: selected == Experience.novice,
             onTap: () => onSelect(Experience.novice),
           ),
-          _OptionDef(
+          OptionDef(
             title: 'BEGINNER',
             subtext: 'a few months in.',
             isSelected: selected == Experience.beginner,
             onTap: () => onSelect(Experience.beginner),
           ),
-          _OptionDef(
+          OptionDef(
             title: 'INTERMEDIATE',
             subtext: 'consistent for a year+.',
             isSelected: selected == Experience.intermediate,
             onTap: () => onSelect(Experience.intermediate),
           ),
-          _OptionDef(
+          OptionDef(
             title: 'ADVANCED',
             subtext: 'years under the bar.',
             isSelected: selected == Experience.advanced,
@@ -618,62 +559,90 @@ class _ExperienceQuestion extends StatelessWidget {
   }
 }
 
-class _OptionDef {
-  const _OptionDef({
-    required this.title,
-    required this.subtext,
-    required this.isSelected,
-    required this.onTap,
-  });
+// ---------------------------------------------------------------------------
+// Identity beats — vow / vision / obstacle (Resolve questions, interleaved)
+// ---------------------------------------------------------------------------
+
+/// One selectable option for a [_MultiSelectQuestion].
+class _MultiOption<T> {
+  const _MultiOption(this.value, this.title, [this.subtext]);
+  final T value;
   final String title;
-  final String subtext;
-  final bool isSelected;
-  final VoidCallback onTap;
+  final String? subtext;
 }
 
-class _OptionList extends StatelessWidget {
-  const _OptionList({
-    required this.hasAnySelection,
+/// A multi-select identity question: tap any number of cards (each highlights,
+/// none dim), then CONTINUE (enabled once ≥1 is picked) commits the chosen set.
+/// Restores prior picks on back-nav from the set passed in [selected].
+class _MultiSelectQuestion<T> extends StatefulWidget {
+  const _MultiSelectQuestion({
+    super.key,
+    required this.progressCells,
+    required this.prompt,
     required this.options,
-    this.animate = true,
+    required this.selected,
+    required this.animate,
+    required this.onBack,
+    required this.onConfirm,
   });
 
-  final bool hasAnySelection;
-  final List<_OptionDef> options;
+  final int progressCells;
+  final String prompt;
+  final List<_MultiOption<T>> options;
+  final Set<T> selected;
   final bool animate;
+  final VoidCallback? onBack;
+  final ValueChanged<Set<T>> onConfirm;
+
+  @override
+  State<_MultiSelectQuestion<T>> createState() =>
+      _MultiSelectQuestionState<T>();
+}
+
+class _MultiSelectQuestionState<T> extends State<_MultiSelectQuestion<T>> {
+  late final Set<T> _selected = {...widget.selected};
+
+  void _toggle(T value) => setState(() {
+    // Set.add returns false when already present → treat as a deselect.
+    if (!_selected.add(value)) _selected.remove(value);
+  });
 
   @override
   Widget build(BuildContext context) {
-    final children = <Widget>[];
-    for (var i = 0; i < options.length; i++) {
-      final card = _OptionCard(
-        title: options[i].title,
-        subtext: options[i].subtext,
-        isSelected: options[i].isSelected,
-        hasAnySelection: hasAnySelection,
-        onTap: options[i].onTap,
-      );
-      children.add(
-        animate
-            ? _WipeIn(
-                delay: Duration(milliseconds: i * 80),
-                child: card,
-              )
-            : card,
-      );
-      if (i != options.length - 1) children.add(const SizedBox(height: 12));
-    }
-    // Center the cards in the available space (kills the top-heavy void) while
-    // still scrolling if the list is taller than the viewport (Q3 has four).
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: children,
+    return _QuestionScaffold(
+      progressCells: widget.progressCells,
+      prompt: widget.prompt,
+      subtitle: 'Pick all that apply',
+      animatePrompt: widget.animate,
+      onBack: widget.onBack,
+      body: Column(
+        children: [
+          Expanded(
+            child: OptionList(
+              // Multi-select: never dim non-selected cards — all stay tappable.
+              hasAnySelection: false,
+              animate: widget.animate,
+              mainAxisAlignment: MainAxisAlignment.start,
+              options: [
+                for (final o in widget.options)
+                  OptionDef(
+                    title: o.title,
+                    subtext: o.subtext,
+                    isSelected: _selected.contains(o.value),
+                    onTap: () => _toggle(o.value),
+                  ),
+              ],
+            ),
           ),
-        ),
+          const SizedBox(height: 16),
+          PixelButton(
+            label: 'CONTINUE',
+            powerOn: true,
+            onPressed: _selected.isEmpty
+                ? null
+                : () => widget.onConfirm(_selected),
+          ),
+        ],
       ),
     );
   }
@@ -688,6 +657,7 @@ class _CalibrationQuestion extends StatefulWidget {
     super.key,
     required this.progressCells,
     required this.initialBodyWeightKg,
+    required this.initialHeightCm,
     required this.initialSex,
     required this.animate,
     required this.onBack,
@@ -696,11 +666,13 @@ class _CalibrationQuestion extends StatefulWidget {
 
   final int progressCells;
   final double? initialBodyWeightKg;
+  final double? initialHeightCm;
   final UserProfileSex initialSex;
   final bool animate;
-  final VoidCallback onBack;
+  final VoidCallback? onBack;
   final FutureOr<void> Function({
     double? bodyWeightKg,
+    double? heightCm,
     required UserProfileSex sex,
   })
   onContinue;
@@ -710,25 +682,96 @@ class _CalibrationQuestion extends StatefulWidget {
 }
 
 class _CalibrationQuestionState extends State<_CalibrationQuestion> {
+  // Units default to the app-wide preference (lbs / ft-in on a fresh install);
+  // toggling here updates that preference for the rest of the app.
+  late WeightUnit _weightUnit = Units.weight;
+  late LengthUnit _heightUnit = Units.height;
+
   late final TextEditingController _weightController = TextEditingController(
-    text: widget.initialBodyWeightKg?.toString() ?? '',
+    text: widget.initialBodyWeightKg != null
+        ? weightValue(widget.initialBodyWeightKg!, _weightUnit)
+        : '',
+  );
+  late final TextEditingController _cmController = TextEditingController(
+    text: (widget.initialHeightCm != null && _heightUnit == LengthUnit.cm)
+        ? widget.initialHeightCm!.round().toString()
+        : '',
+  );
+  late final TextEditingController _feetController = TextEditingController(
+    text: _initialFeetInches?.feet.toString() ?? '',
+  );
+  late final TextEditingController _inchController = TextEditingController(
+    text: _initialFeetInches?.inches.toString() ?? '',
   );
   late UserProfileSex _sex = widget.initialSex;
 
-  double? get _validBodyWeight {
-    final raw = _weightController.text.trim();
-    final parsed = double.tryParse(raw);
-    return (parsed != null && parsed > 0) ? parsed : null;
+  ({int feet, int inches})? get _initialFeetInches {
+    if (widget.initialHeightCm == null || _heightUnit != LengthUnit.ftIn) {
+      return null;
+    }
+    return cmToFeetInches(widget.initialHeightCm!);
+  }
+
+  /// Bodyweight parsed in the active unit, returned in canonical kg.
+  double? get _bodyWeightKg =>
+      parseWeightToKg(_weightController.text, _weightUnit);
+
+  /// Height parsed in the active unit, returned in canonical cm.
+  double? get _heightCm {
+    if (_heightUnit == LengthUnit.cm) {
+      final v = double.tryParse(_cmController.text.trim());
+      return (v != null && v > 0) ? v : null;
+    }
+    final ft = int.tryParse(_feetController.text.trim()) ?? 0;
+    final inch = int.tryParse(_inchController.text.trim()) ?? 0;
+    if (ft <= 0 && inch <= 0) return null;
+    return feetInchesToCm(ft, inch);
+  }
+
+  void _setWeightUnit(WeightUnit unit) {
+    if (unit == _weightUnit) return;
+    final kg = _bodyWeightKg; // parse with the old unit before switching
+    Units.setWeight(unit);
+    setState(() {
+      _weightUnit = unit;
+      _weightController.text = kg != null ? weightValue(kg, unit) : '';
+    });
+  }
+
+  void _setHeightUnit(LengthUnit unit) {
+    if (unit == _heightUnit) return;
+    final cm = _heightCm; // parse with the old unit before switching
+    Units.setHeight(unit);
+    setState(() {
+      _heightUnit = unit;
+      if (unit == LengthUnit.cm) {
+        _cmController.text = cm != null ? cm.round().toString() : '';
+      } else {
+        final h = cm != null ? cmToFeetInches(cm) : null;
+        _feetController.text = h?.feet.toString() ?? '';
+        _inchController.text = h?.inches.toString() ?? '';
+      }
+    });
   }
 
   @override
   void dispose() {
     _weightController.dispose();
+    _cmController.dispose();
+    _feetController.dispose();
+    _inchController.dispose();
     super.dispose();
   }
 
   void _submit() {
-    widget.onContinue(bodyWeightKg: _validBodyWeight, sex: _sex);
+    // Bodyweight seeds the stat engine, so drop an implausible fat-finger value
+    // (treat as not provided) rather than letting it inflate the seed.
+    final bw = _bodyWeightKg;
+    widget.onContinue(
+      bodyWeightKg: (bw != null && isPlausibleWeightKg(bw)) ? bw : null,
+      heightCm: _heightCm,
+      sex: _sex,
+    );
   }
 
   @override
@@ -736,13 +779,19 @@ class _CalibrationQuestionState extends State<_CalibrationQuestion> {
     return _QuestionScaffold(
       progressCells: widget.progressCells,
       prompt: 'DIAL IT IN',
-      subtitle: 'optional — your weight fine-tunes the numbers.',
       animatePrompt: widget.animate,
       onBack: widget.onBack,
       body: ListView(
         children: [
+          _UnitToggleRow(
+            options: const ['KG', 'LBS'],
+            selectedIndex: _weightUnit == WeightUnit.kg ? 0 : 1,
+            onSelect: (i) =>
+                _setWeightUnit(i == 0 ? WeightUnit.kg : WeightUnit.lbs),
+          ),
+          const SizedBox(height: 8),
           Text(
-            'BODYWEIGHT (KG)',
+            'BODYWEIGHT (${_weightUnit.labelUpper})',
             style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
           ),
           const SizedBox(height: 8),
@@ -753,9 +802,23 @@ class _CalibrationQuestionState extends State<_CalibrationQuestion> {
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
             ],
             style: AppFonts.shareTechMono(color: kText, fontSize: 16),
-            hintText: 'e.g. 75',
+            hintText: _weightUnit == WeightUnit.kg ? 'e.g. 75' : 'e.g. 165',
             onChanged: (_) => setState(() {}), // re-evaluate CONTINUE enable
           ),
+          const SizedBox(height: 24),
+          _UnitToggleRow(
+            options: const ['CM', 'FT-IN'],
+            selectedIndex: _heightUnit == LengthUnit.cm ? 0 : 1,
+            onSelect: (i) =>
+                _setHeightUnit(i == 0 ? LengthUnit.cm : LengthUnit.ftIn),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'HEIGHT (${_heightUnit.labelUpper})',
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          _buildHeightField(),
           const SizedBox(height: 24),
           Text(
             'SEX',
@@ -778,6 +841,83 @@ class _CalibrationQuestionState extends State<_CalibrationQuestion> {
           PixelButton(label: 'CONTINUE', powerOn: true, onPressed: _submit),
         ],
       ),
+    );
+  }
+
+  Widget _buildHeightField() {
+    if (_heightUnit == LengthUnit.cm) {
+      return ArcadeTextField(
+        controller: _cmController,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+        style: AppFonts.shareTechMono(color: kText, fontSize: 16),
+        hintText: 'e.g. 180',
+        onChanged: (_) => setState(() {}),
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: ArcadeTextField(
+            controller: _feetController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: AppFonts.shareTechMono(color: kText, fontSize: 16),
+            hintText: 'e.g. 5',
+            suffixText: 'ft',
+            suffixStyle: AppFonts.shareTechMono(
+              color: kMutedText,
+              fontSize: 12,
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: ArcadeTextField(
+            controller: _inchController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: AppFonts.shareTechMono(color: kText, fontSize: 16),
+            hintText: 'e.g. 11',
+            suffixText: 'in',
+            suffixStyle: AppFonts.shareTechMono(
+              color: kMutedText,
+              fontSize: 12,
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Compact two-option segmented toggle for unit selection, styled with the
+/// existing arcade chip language.
+class _UnitToggleRow extends StatelessWidget {
+  const _UnitToggleRow({
+    required this.options,
+    required this.selectedIndex,
+    required this.onSelect,
+  });
+
+  final List<String> options;
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      children: [
+        for (var i = 0; i < options.length; i++)
+          ArcadeChip(
+            label: options[i],
+            selected: selectedIndex == i,
+            onTap: () => onSelect(i),
+          ),
+      ],
     );
   }
 }

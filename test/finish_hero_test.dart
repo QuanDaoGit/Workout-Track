@@ -60,8 +60,8 @@ void main() {
   test('diamond milestone wins over loot and gain', () {
     final sel = selectHero(
       result(
-        lckBefore: 20, // 0 diamonds
-        lckAfter: 25, // 1 diamond
+        lckBefore: 0, // 0 diamonds
+        lckAfter: 1, // 1 diamond (first clean week)
         statDelta: {'AGI': 4},
         afterStats: {'AGI': 50},
         lootUnlocked: ['frame_x'],
@@ -225,5 +225,50 @@ void main() {
       sel.secondaryBadges.any((b) => b.kind == HeroKind.titleUnlock),
       isFalse,
     );
+  });
+
+  group('supportingGains (the STAT GAINS row)', () {
+    test('a rank-up hero keeps its own stat — the +N must render somewhere', () {
+      final sel = selectHero(
+        result(statDelta: {'STR': 10, 'AGI': 3}, afterStats: {'STR': 100}),
+      );
+      expect(sel.hero.kind, HeroKind.rankPromotion);
+      expect(
+        supportingGains({'STR': 10, 'AGI': 3}, sel.hero),
+        {'STR': 10, 'AGI': 3},
+      );
+    });
+
+    test('a statGain hero excludes its own stat (already the headline)', () {
+      final sel = selectHero(
+        result(statDelta: {'STR': 8, 'END': 2}, afterStats: {'STR': 50}),
+      );
+      expect(sel.hero.kind, HeroKind.statGain);
+      expect(sel.hero.stat, 'STR');
+      expect(supportingGains({'STR': 8, 'END': 2}, sel.hero), {'END': 2});
+    });
+
+    test('a level-up hero keeps all gains (none are shown elsewhere)', () {
+      final sel = selectHero(
+        result(
+          oldTotalXP: 40,
+          newTotalXP: 60,
+          statDelta: {'STR': 5, 'AGI': 2},
+          afterStats: {'STR': 50},
+        ),
+      );
+      expect(sel.hero.kind, HeroKind.levelUp);
+      expect(
+        supportingGains({'STR': 5, 'AGI': 2}, sel.hero),
+        {'STR': 5, 'AGI': 2},
+      );
+    });
+
+    test('negative and zero deltas never render', () {
+      final sel = selectHero(
+        result(oldTotalXP: 40, newTotalXP: 60, statDelta: const {'STR': -4}),
+      );
+      expect(supportingGains({'STR': -4, 'AGI': 0}, sel.hero), isEmpty);
+    });
   });
 }

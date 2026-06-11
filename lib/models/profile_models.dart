@@ -1,37 +1,41 @@
+import 'avatar_spec.dart';
+
 class ProfileData {
-  const ProfileData({required this.displayName, required this.avatarPath});
+  const ProfileData({required this.displayName, required this.avatarSpec});
 
   static const defaultName = 'Player';
-  static const defaultAvatarPath = 'assets/avatar/EverFace1.0.png';
 
   final String displayName;
-  final String avatarPath;
+  final AvatarSpec avatarSpec;
 
-  ProfileData copyWith({String? displayName, String? avatarPath}) {
+  ProfileData copyWith({String? displayName, AvatarSpec? avatarSpec}) {
     return ProfileData(
       displayName: displayName ?? this.displayName,
-      avatarPath: avatarPath ?? this.avatarPath,
+      avatarSpec: avatarSpec ?? this.avatarSpec,
     );
   }
 
   Map<String, dynamic> toJson() => {
     'displayName': displayName,
-    'avatarPath': avatarPath,
+    'avatarSpec': avatarSpec.toJson(),
   };
 
   factory ProfileData.fromJson(Map<String, dynamic> json) {
     final name = (json['displayName'] as String? ?? '').trim();
-    final avatar = (json['avatarPath'] as String? ?? '').trim();
+    // Legacy saves carry an `avatarPath` image path instead of a spec —
+    // AvatarSpec.fromJson(null) maps those to the fallback face.
     return ProfileData(
       displayName: name.isEmpty ? defaultName : name,
-      avatarPath: avatar.isEmpty ? defaultAvatarPath : avatar,
+      avatarSpec: AvatarSpec.fromJson(
+        (json['avatarSpec'] as Map?)?.cast<String, dynamic>(),
+      ),
     );
   }
 
   factory ProfileData.defaults() {
     return const ProfileData(
       displayName: defaultName,
-      avatarPath: defaultAvatarPath,
+      avatarSpec: AvatarSpec.fallback,
     );
   }
 }

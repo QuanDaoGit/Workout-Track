@@ -1,8 +1,9 @@
 import 'dart:math';
 
+import '../models/unit_models.dart';
 import '../models/workout_models.dart';
 import '../models/xp_reward_models.dart';
-import 'workout_metric_service.dart';
+import 'unit_settings_service.dart';
 
 class XpProgress {
   const XpProgress({
@@ -97,9 +98,10 @@ class XpService {
         reason: 'Workout qualifies for rewards.',
       );
     }
-    return const SessionRewardEligibility(
+    return SessionRewardEligibility(
       eligible: false,
-      reason: 'Log 15 min, 200 kg, or 3 exercises to earn XP.',
+      reason:
+          'Log 15 min, ${formatWeight(200, Units.weight, decimals: 0)}, or 3 exercises to earn XP.',
     );
   }
 
@@ -120,10 +122,19 @@ class XpService {
     );
   }
 
-  static int lckForSessions(List<WorkoutSession> sessions, {DateTime? now}) =>
-      min(WorkoutMetricService.currentStreak(sessions, now: now), 100);
+  /// Weekly LCK diamond thresholds, in consecutive consistency weeks. Fast-start
+  /// ladder: the first diamond lands after a single clean week, the full
+  /// four-diamond 3.0x buff at ten. See `RestService.consistencyWeeks` for how
+  /// the streak (LCK) itself is earned and reset.
+  static const lckDiamondWeekThresholds = [1, 3, 6, 10];
 
-  static int lckDiamondCount(int lck) => (lck ~/ 25).clamp(0, 4).toInt();
+  static int lckDiamondCount(int lck) {
+    var filled = 0;
+    for (final threshold in lckDiamondWeekThresholds) {
+      if (lck >= threshold) filled++;
+    }
+    return filled;
+  }
 
   static double lckXpMultiplier(int lck) => 1.0 + (lckDiamondCount(lck) * 0.5);
 

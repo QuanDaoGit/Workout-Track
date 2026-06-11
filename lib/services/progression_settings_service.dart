@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/workout_models.dart';
 
 /// User toggle for "Suggested loads" in Profile -> Settings.
-/// Defaults to off until the user opts in after enough completed workouts.
+/// On by default from first install; the user can disable it in settings.
 class ProgressionSettingsService {
   static const String _key = 'progression_suggestions_enabled';
   static const String _promptAcceptedKey = 'progression_prompt_accepted';
@@ -14,7 +14,7 @@ class ProgressionSettingsService {
 
   Future<bool> isEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_key) ?? false;
+    return prefs.getBool(_key) ?? true;
   }
 
   Future<void> setEnabled(bool value) async {
@@ -28,7 +28,7 @@ class ProgressionSettingsService {
     DateTime? now,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_key) == true) return false;
+    if (prefs.getBool(_key) ?? true) return false;
     if (prefs.getBool(_promptAcceptedKey) == true) return false;
 
     final dismissCount = prefs.getInt(_promptDismissCountKey) ?? 0;

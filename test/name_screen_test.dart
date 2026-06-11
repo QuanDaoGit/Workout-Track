@@ -3,15 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/models/body_goal_models.dart';
 import 'package:workout_track/models/calibration_quiz_models.dart';
-import 'package:workout_track/models/character.dart';
 import 'package:workout_track/models/character_class.dart';
 import 'package:workout_track/models/character_draft.dart';
+import 'package:workout_track/models/avatar_spec.dart';
 import 'package:workout_track/models/user_profile_sex.dart';
-import 'package:workout_track/pages/onboarding/avatar_select_screen.dart';
 import 'package:workout_track/pages/onboarding/name_screen.dart';
 import 'package:workout_track/pages/onboarding/start_gate_screen.dart';
 import 'package:workout_track/services/character_service.dart';
-import 'package:workout_track/services/onboarding_service.dart';
+import 'package:workout_track/services/profile_service.dart';
 import 'package:workout_track/widgets/motion/power_on.dart';
 
 void main() {
@@ -83,98 +82,65 @@ void main() {
     },
   );
 
-  testWidgets('keyboard done commits when valid', (tester) async {
-    Character? created;
-    await _pumpNameScreen(
-      tester,
-      onCharacterCreated: (character) async => created = character,
-    );
+  testWidgets('keyboard done commits and advances to the start gate', (
+    tester,
+  ) async {
+    await _pumpNameScreen(tester);
 
     await tester.enterText(find.byType(TextField), 'Nova');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
-    expect(created?.name, 'Nova');
-    expect(created?.selectedAvatarId, 'avatar_04');
-    expect(await OnboardingService().isComplete(), isTrue);
-    expect((await CharacterService().loadActiveCharacter())?.name, 'Nova');
     expect(find.byType(StartGateScreen), findsOneWidget);
-    // Reduced-motion path lands directly on the sustained state: prompt
-    // visible, both buttons rendered.
-    expect(find.text('READY TO TRAIN?'), findsOneWidget);
-    expect(find.text('START WORKOUT'), findsOneWidget);
-    expect(find.text('EXPLORE FIRST'), findsOneWidget);
   });
 
-  testWidgets('button tap commits when valid', (tester) async {
-    Character? created;
-    await _pumpNameScreen(
-      tester,
-      onCharacterCreated: (character) async => created = character,
-    );
+  testWidgets('button tap commits and advances to the start gate', (
+    tester,
+  ) async {
+    await _pumpNameScreen(tester);
 
     await tester.enterText(find.byType(TextField), 'Kai');
     await tester.pump();
     await tester.tap(find.text('I AM KAI'));
     await tester.pumpAndSettle();
 
-    expect(created?.characterName, 'Kai');
     expect(find.byType(StartGateScreen), findsOneWidget);
-    expect(find.text('Kai'), findsOneWidget);
-    expect(find.text('RECRUIT'), findsOneWidget);
-    expect(find.text('LV.1'), findsOneWidget);
   });
 
-  testWidgets('back returns to avatar screen and typed name is discarded', (
+  testWidgets('the typed name creates the character (no avatar step)', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(disableAnimations: true),
-          child: AvatarSelectScreen(
-            draft: _baseDraft,
-            initialSelectedAvatarId: 'avatar_04',
-            onAvatarSelected: (_) async {},
-          ),
-        ),
-      ),
-    );
+    await _pumpNameScreen(tester);
 
-    await tester.tap(find.text('THIS IS ME'));
-    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Nova');
     await tester.pump();
-    tester.state<NavigatorState>(find.byType(Navigator)).pop();
+    await tester.tap(find.text('I AM NOVA'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(AvatarSelectScreen), findsOneWidget);
-
-    await tester.tap(find.text('THIS IS ME'));
-    await tester.pumpAndSettle();
-
-    final field = tester.widget<TextField>(
-      find.byKey(const ValueKey('name_input_field')),
+    expect(find.byType(StartGateScreen), findsOneWidget);
+    expect((await CharacterService().loadActiveCharacter())?.name, 'Nova');
+    // The gender-seeded starter face is mirrored into the profile store.
+    final profile = await ProfileService().loadProfile();
+    expect(
+      profile.avatarSpec,
+      AvatarDefaults.forSex(UserProfileSex.preferNotToSay),
     );
-    expect(field.controller!.text, isEmpty);
+    expect(find.text('Nova'), findsOneWidget);
   });
 }
 
 Future<void> _pumpNameScreen(
   WidgetTester tester, {
-  Future<void> Function(Character character)? onCharacterCreated,
+  CharacterDraft? draft,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
-      // Propagate disableAnimations to pushed routes too (e.g. StartGate).
+      // Propagate disableAnimations to pushed routes (Avatar / Start Gate).
       builder: (context, child) => MediaQuery(
         data: const MediaQueryData(disableAnimations: true),
         child: child!,
       ),
-      home: NameScreen(
-        draft: _baseDraft.copyWith(selectedAvatarId: 'avatar_04'),
-        onCharacterCreated: onCharacterCreated ?? (_) async {},
-      ),
+      home: NameScreen(draft: draft ?? _baseDraft),
     ),
   );
   await tester.pump();

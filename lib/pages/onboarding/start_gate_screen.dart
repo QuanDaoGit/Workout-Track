@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../models/avatar_spec.dart';
 import '../../models/character.dart';
 import '../../models/character_class.dart';
 import '../../theme/app_fonts.dart';
@@ -13,17 +14,24 @@ import '../../widgets/motion/power_on.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/strobe_flash.dart';
+import '../../widgets/avatar/ironbit_avatar.dart';
 import '../../widgets/typewriter_text.dart';
 import '../root_page.dart';
-import 'avatar_select_screen.dart';
 
 /// Final screen of the onboarding body. Unveils the assembled character and
 /// routes the user either into an immediate workout or to Home. Both exits
 /// clear the onboarding stack (root replacement). System back is a no-op.
 class StartGateScreen extends StatefulWidget {
-  const StartGateScreen({super.key, required this.character});
+  const StartGateScreen({
+    super.key,
+    required this.character,
+    this.avatarSpec = AvatarSpec.fallback,
+  });
 
   final Character character;
+
+  /// The starter pixel face (gender-seeded default) revealed on the card.
+  final AvatarSpec avatarSpec;
 
   @override
   State<StartGateScreen> createState() => _StartGateScreenState();
@@ -141,19 +149,9 @@ class _StartGateScreenState extends State<StartGateScreen> {
     );
   }
 
-  String _avatarAssetFor(String id) {
-    return onboardingAvatarOptions
-        .firstWhere(
-          (opt) => opt.id == id,
-          orElse: () => onboardingAvatarOptions.first,
-        )
-        .assetPath;
-  }
-
   @override
   Widget build(BuildContext context) {
     final character = widget.character;
-    final classColor = character.calibration.clazz.themeColor;
     final mq = MediaQuery.of(context);
     final reduceMotion = mq.disableAnimations || mq.accessibleNavigation;
 
@@ -170,7 +168,7 @@ class _StartGateScreenState extends State<StartGateScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildCharacterCard(character, classColor, reduceMotion),
+                    _buildCharacterCard(character, reduceMotion),
                     const SizedBox(height: 40),
                     SizedBox(
                       height: 22,
@@ -257,13 +255,11 @@ class _StartGateScreenState extends State<StartGateScreen> {
     );
   }
 
-  Widget _buildCharacterCard(
-    Character character,
-    Color classColor,
-    bool reduceMotion,
-  ) {
+  Widget _buildCharacterCard(Character character, bool reduceMotion) {
+    final clazz = character.calibration.clazz;
     return Semantics(
-      label: 'Character: ${character.characterName}, Recruit, Level 1',
+      label:
+          'Character: ${character.characterName}, ${clazz.displayName}, Recruit, Level 1',
       container: true,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 180),
@@ -288,17 +284,14 @@ class _StartGateScreenState extends State<StartGateScreen> {
                       width: 96,
                       height: 96,
                       decoration: BoxDecoration(
-                        border: Border.all(color: kBorder),
+                        border: Border.all(color: clazz.themeColor),
                         borderRadius: BorderRadius.circular(kCardRadius),
                         color: kBg,
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(kCardRadius - 1),
-                        child: Image.asset(
-                          _avatarAssetFor(character.selectedAvatarId),
-                          fit: BoxFit.cover,
-                          filterQuality: FilterQuality.none,
-                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      child: Center(
+                        child: IronbitAvatar(
+                          spec: widget.avatarSpec,
+                          size: 80,
                         ),
                       ),
                     ),
@@ -356,9 +349,9 @@ class _StartGateScreenState extends State<StartGateScreen> {
                             borderRadius: BorderRadius.circular(kCardRadius),
                             child: Row(
                               children: [
-                                _IdentityBadge(
+                                const _IdentityBadge(
                                   label: 'RECRUIT',
-                                  color: classColor,
+                                  color: kMutedText,
                                 ),
                                 const SizedBox(width: 8),
                                 const _IdentityBadge(
@@ -391,21 +384,36 @@ class _StartGateScreenState extends State<StartGateScreen> {
               AnimatedOpacity(
                 duration: const Duration(milliseconds: 150),
                 opacity: _countersVisible ? 1.0 : 0.0,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      '0 / 50 XP',
-                      style: AppFonts.shareTechMono(
-                        color: kMutedText,
-                        fontSize: 12,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '0 / 50 XP',
+                          style: AppFonts.shareTechMono(
+                            color: kMutedText,
+                            fontSize: 12,
+                          ),
+                        ),
+                        // Endowed progress: reframe "0 rewards" as a quest already
+                        // in progress (mirrors the `side_first_workout` quest).
+                        Text(
+                          '1 QUEST ACTIVE',
+                          style: AppFonts.shareTechMono(
+                            color: kAmber,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 6),
                     Text(
-                      '0 rewards ready',
+                      '▸ First Forge · log your first workout',
                       style: AppFonts.shareTechMono(
                         color: kMutedText,
-                        fontSize: 12,
+                        fontSize: 11,
                       ),
                     ),
                   ],
@@ -419,8 +427,8 @@ class _StartGateScreenState extends State<StartGateScreen> {
   }
 }
 
-/// RECRUIT (title rank) and LV.1 badges on the character card. Color comes
-/// from the class identity for RECRUIT, neon for the level badge.
+/// RECRUIT (title rank) and LV.1 badges on the character card. RECRUIT uses the
+/// muted title-rank color (matching the in-app rank badge); LV.1 is neon.
 class _IdentityBadge extends StatelessWidget {
   const _IdentityBadge({required this.label, required this.color});
 

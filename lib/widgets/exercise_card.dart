@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/exercise_demos.dart';
 import '../models/workout_models.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
@@ -39,6 +40,7 @@ class ExerciseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final thumb = exerciseThumbAsset(exercise);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: ArcadeTap(
@@ -84,13 +86,13 @@ class ExerciseCard extends StatelessWidget {
                             ),
                           ),
                         )
-                      else if (exercise.imageAssetPath.isEmpty)
+                      else if (thumb.isEmpty)
                         const _NoPhotoPlaceholder()
                       else
                         ArcadeImageFilter(
                           borderRadius: BorderRadius.zero,
                           child: Image.asset(
-                            exercise.imageAssetPath,
+                            thumb,
                             fit: BoxFit.cover,
                             filterQuality: FilterQuality.low,
                             errorBuilder: (context, error, stackTrace) =>

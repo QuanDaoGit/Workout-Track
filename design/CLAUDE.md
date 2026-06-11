@@ -22,7 +22,7 @@ agent doing UI work so screens stay coherent.
 - **Icons:** sharp variants only (`Icons.xxx_sharp`); prefer pixel assets in `assets/icons/control/`.
   Never mix rounded and sharp on one screen. If no `_sharp` exists, ask before using a default.
 - **Body-neutral:** no red/green good-bad on weight/deltas; muted directional indicators only.
-- **Class colors:** Assassin `0xFF4DE5FF`, Bruiser `0xFFFFD700`, Tank `0xFFFF2D55`, Vanguard `0xFFB14DFF`.
+- **Class colors:** Assassin `0xFFB14DFF` (violet), Bruiser `0xFFFF2D55` (red), Tank `0xFF00BFFF` (blue).
 
 ## Common tasks
 - *Review a screen* → check against `ux-guidelines.md` + the rules above; capture before/after into `screenshots/`.

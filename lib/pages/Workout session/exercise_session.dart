@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import '../../theme/app_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../data/exercise_demos.dart';
 import '../../models/overload_models.dart';
+import '../../models/program_models.dart';
+import '../../models/unit_models.dart';
 import '../../models/workout_models.dart';
 import '../../services/progression_settings_service.dart';
 import '../../services/progressive_overload_service.dart';
 import '../../services/rest_timer_service.dart';
+import '../../services/unit_settings_service.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/exercise_demo_cabinet.dart';
 import '../../widgets/motion/arcade_text_field.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/plate_calculator_sheet.dart';
@@ -15,16 +20,41 @@ import '../../widgets/rest_timer_bar.dart';
 import '../../widgets/strobe_flash.dart';
 
 class _SetRow {
-  _SetRow() : weight = TextEditingController(), reps = TextEditingController();
+  _SetRow()
+    : weight = TextEditingController(),
+      reps = TextEditingController(),
+      weightFocus = FocusNode() {
+    weightFocus.addListener(_snapWeightOnBlur);
+  }
 
   final TextEditingController weight;
   final TextEditingController reps;
+  final FocusNode weightFocus;
+
+  /// Snaps a free-typed weight to the nearest 0.5 (in the active display unit)
+  /// once the field loses focus, so logged loads stay gym-plausible.
+  void _snapWeightOnBlur() {
+    if (weightFocus.hasFocus) return;
+    final raw = weight.text.trim().replaceAll(',', '.');
+    final v = double.tryParse(raw);
+    if (v == null) return;
+    final snapped = roundToStep(v, 0.5);
+    final text = fmtNum(snapped);
+    if (text != weight.text) weight.text = text;
+  }
 
   void dispose() {
+    weightFocus.removeListener(_snapWeightOnBlur);
+    weightFocus.dispose();
     weight.dispose();
     reps.dispose();
   }
 }
+
+/// Suggested (TRY) loads render and apply rounded to the nearest 2.5 in the
+/// active display unit, so a clean stored kg never shows as e.g. `159.8 lbs`.
+String _suggestedLoadText(double kg) =>
+    fmtNum(roundToStep(kgToDisplay(kg, Units.weight), 2.5));
 
 class ExerciseSessionPage extends StatefulWidget {
   const ExerciseSessionPage({
@@ -32,11 +62,15 @@ class ExerciseSessionPage extends StatefulWidget {
     required this.exercise,
     this.initialSets = const [],
     this.restSeconds = 90,
+    this.prescription,
   });
 
   final Exercise exercise;
   final List<SetEntry> initialSets;
   final int restSeconds;
+
+  /// Program sets × reps target for this exercise, or null for free logging.
+  final SetRepScheme? prescription;
 
   @override
   State<ExerciseSessionPage> createState() => _ExerciseSessionPageState();
@@ -67,14 +101,19 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       for (final s in widget.initialSets) {
         _rows.add(
           _SetRow()
-            ..weight.text = s.weight.toString()
+            ..weight.text = weightValue(s.weight, Units.weight)
             ..reps.text = s.reps.toString(),
         );
         _rowKeys.add(GlobalKey());
       }
     } else {
-      _rows.add(_SetRow());
-      _rowKeys.add(GlobalKey());
+      // A program prescription pre-builds its set count; manual logging starts
+      // with a single row.
+      final count = widget.prescription?.sets ?? 1;
+      for (var i = 0; i < count; i++) {
+        _rows.add(_SetRow());
+        _rowKeys.add(GlobalKey());
+      }
     }
     _loadOverloadService();
     _loadPlateCalcFlag();
@@ -84,7 +123,12 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   Future<void> _loadOverloadService() async {
     final service = ProgressiveOverloadService();
     await service.load();
-    final suggestion = await service.suggestNext(widget.exercise);
+    final prescription = widget.prescription;
+    final suggestion = await service.suggestNext(
+      widget.exercise,
+      targetRepMin: prescription?.repMin,
+      targetRepMax: prescription?.repMax,
+    );
     if (!mounted) return;
     setState(() {
       _overloadService = service;
@@ -110,7 +154,8 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     final weight = suggestion.weight;
     final reps = suggestion.reps;
     if (weight == null || reps == null) return;
-    row.weight.text = _fmtWeight(weight);
+    // Fill exactly what the TRY chip shows (2.5-rounded display value).
+    row.weight.text = _suggestedLoadText(weight);
     row.reps.text = reps.toString();
     if (!mounted) return;
     setState(() => _prefilledRows.add(0));
@@ -156,7 +201,8 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
 
   void _logSet(int index) {
     final row = _rows[index];
-    final w = double.tryParse(row.weight.text);
+    // Entered in the active unit; store/compute in canonical kg.
+    final w = parseWeightToKg(row.weight.text, Units.weight);
     final r = int.tryParse(row.reps.text);
     if (w == null || w < 0 || r == null || r <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -236,10 +282,6 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     });
   }
 
-  String _fmtWeight(double w) {
-    return w == w.roundToDouble() ? w.toInt().toString() : w.toString();
-  }
-
   Widget _buildDeltaWidget(OverloadDelta d) {
     if (d.weightDiff == 0 && d.repsDiff == 0) return const SizedBox.shrink();
     final spans = <InlineSpan>[];
@@ -248,7 +290,8 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       final color = d.weightDiff > 0 ? kNeon : kDanger;
       spans.add(
         TextSpan(
-          text: '$sign${_fmtWeight(d.weightDiff)} kg',
+          text:
+              '$sign${weightValue(d.weightDiff, Units.weight)} ${Units.weight.label}',
           style: AppFonts.shareTechMono(fontSize: 11, color: color),
         ),
       );
@@ -303,7 +346,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
 
   void _finish() {
     for (final row in _rows) {
-      final w = double.tryParse(row.weight.text);
+      final w = parseWeightToKg(row.weight.text, Units.weight);
       final r = int.tryParse(row.reps.text);
       if (w == null || w < 0 || r == null || r <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -316,7 +359,8 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     Navigator.of(context).pop([
       for (final row in _rows)
         SetEntry(
-          weight: double.parse(row.weight.text),
+          // Stored canonical in kg regardless of the entry unit.
+          weight: parseWeightToKg(row.weight.text, Units.weight)!,
           reps: int.parse(row.reps.text),
         ),
     ]);
@@ -327,109 +371,121 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(title: Text(widget.exercise.name)),
-      body: Column(
-        children: [
-          const RestTimerBar(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(kSpace4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: SizedBox(
-                      height: 180,
-                      width: double.infinity,
-                      child: Image.asset(
-                        widget.exercise.imageAssetPath,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const ColoredBox(
-                          color: kCard,
-                          child: Center(
-                            child: ImageIcon(
-                              AssetImage('assets/icons/control/icon_sword.png'),
-                              color: kBorder,
-                              size: 48,
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            const RestTimerBar(),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(kSpace4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (exerciseDemoFor(widget.exercise.id) case final demo?)
+                      ExerciseDemoCabinet(
+                        demo: demo,
+                        exerciseName: widget.exercise.name,
+                        height: 200,
+                      )
+                    else
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: SizedBox(
+                          height: 180,
+                          width: double.infinity,
+                          child: Image.asset(
+                            widget.exercise.imageAssetPath,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => const ColoredBox(
+                              color: kCard,
+                              child: Center(
+                                child: ImageIcon(
+                                  AssetImage(
+                                    'assets/icons/control/icon_sword.png',
+                                  ),
+                                  color: kBorder,
+                                  size: 48,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
+
+                    const SizedBox(height: kSpace4),
+
+                    Text(
+                      widget.exercise.name,
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ),
-                  ),
 
-                  const SizedBox(height: kSpace4),
-
-                  Text(
-                    widget.exercise.name,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: kSpace1),
-                  Text(
-                    widget.exercise.levelLabel,
-                    style: const TextStyle(color: kMutedText),
-                  ),
-
-                  const SizedBox(height: kSpace5),
-
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 32,
-                        child: Text(
-                          'Set',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          'Weight (kg)',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      const SizedBox(width: kSpace2),
-                      Expanded(
-                        child: Text(
-                          'Reps',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      const SizedBox(width: 56),
+                    if (widget.prescription != null) ...[
+                      const SizedBox(height: kSpace3),
+                      _PrescriptionBanner(scheme: widget.prescription!),
                     ],
-                  ),
 
-                  const SizedBox(height: kSpace2),
+                    const SizedBox(height: kSpace5),
 
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _rows.length,
-                    itemBuilder: (_, index) => _buildRow(index),
-                  ),
-
-                  const SizedBox(height: kSpace2),
-
-                  SizedBox(
-                    width: 132,
-                    child: FilledButton(
-                      onPressed: _addSet,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kCard,
-                        foregroundColor: kNeon,
-                        side: const BorderSide(color: kNeon),
-                      ),
-                      child: const Text('+ ADD SET'),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 32,
+                          child: Text(
+                            'Set',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            'Weight (${Units.weight.label})',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                        const SizedBox(width: kSpace2),
+                        Expanded(
+                          child: Text(
+                            'Reps',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                        const SizedBox(width: 56),
+                      ],
                     ),
-                  ),
 
-                  const SizedBox(height: kSpace5),
+                    const SizedBox(height: kSpace2),
 
-                  PixelButton(label: 'Finish Exercise', onPressed: _finish),
-                ],
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _rows.length,
+                      itemBuilder: (_, index) => _buildRow(index),
+                    ),
+
+                    const SizedBox(height: kSpace2),
+
+                    SizedBox(
+                      width: 132,
+                      child: FilledButton(
+                        onPressed: _addSet,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: kCard,
+                          foregroundColor: kNeon,
+                          side: const BorderSide(color: kNeon),
+                        ),
+                        child: const Text('+ ADD SET'),
+                      ),
+                    ),
+
+                    const SizedBox(height: kSpace5),
+
+                    PixelButton(label: 'Finish Exercise', onPressed: _finish),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -439,7 +495,9 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     final prevSet = _previousSets != null && index < _previousSets!.length
         ? _previousSets![index]
         : null;
-    final weightHint = prevSet != null ? prevSet.weight.toString() : '0';
+    final weightHint = prevSet != null
+        ? weightValue(prevSet.weight, Units.weight)
+        : '0';
     final repsHint = prevSet != null ? prevSet.reps.toString() : '0';
     final isLocked = _lockedSets.contains(index);
     final flashTrigger = _rowFlashTriggers[index] ?? 0;
@@ -490,9 +548,10 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                     Expanded(
                       child: ArcadeTextField(
                         controller: row.weight,
+                        focusNode: row.weightFocus,
                         hintText: weightHint,
                         suffixIcon: Padding(
-                          padding: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.only(right: 2),
                           child: TooltipTheme(
                             data: TooltipTheme.of(context).copyWith(
                               decoration: BoxDecoration(
@@ -518,22 +577,35 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                                 minWidth: 28,
                                 minHeight: 28,
                               ),
-                              icon: const Icon(
-                                Icons.calculate_sharp,
-                                size: 16,
-                                color: kCyan,
+                              icon: Image.asset(
+                                'assets/icons/control/ui/icon_load_calc_pad.png',
+                                width: 18,
+                                height: 18,
+                                fit: BoxFit.contain,
                               ),
                               onPressed: () async {
                                 await _markPlateCalcSeen();
                                 if (!mounted) return;
-                                final entered = double.tryParse(
+                                final entered = parseWeightToKg(
                                   row.weight.text,
+                                  Units.weight,
                                 );
                                 final fallback = prevSet?.weight;
-                                PlateCalculatorSheet.show(
-                                  context,
-                                  initialTargetKg: entered ?? fallback,
-                                );
+                                final resultKg =
+                                    await PlateCalculatorSheet.show(
+                                      context,
+                                      initialTargetKg: entered ?? fallback,
+                                    );
+                                if (resultKg != null && mounted) {
+                                  setState(() {
+                                    row.weight.text = weightValue(
+                                      resultKg,
+                                      Units.weight,
+                                    );
+                                    _interactedRows.add(index);
+                                    _prefilledRows.remove(index);
+                                  });
+                                }
                               },
                             ),
                           ),
@@ -607,7 +679,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                   Padding(
                     padding: const EdgeInsets.only(left: 32, top: 4),
                     child: Text(
-                      'last: ${_fmtWeight(prevSet.weight)} kg × ${prevSet.reps}',
+                      'last: ${weightValue(prevSet.weight, Units.weight)} ${Units.weight.label} × ${prevSet.reps}',
                       style: AppFonts.shareTechMono(
                         fontSize: 11,
                         color: kMutedText,
@@ -661,14 +733,57 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   }
 }
 
+/// Program target banner shown above the set table: "TARGET  3 sets × 8 reps".
+class _PrescriptionBanner extends StatelessWidget {
+  const _PrescriptionBanner({required this.scheme});
+
+  final SetRepScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: kSpace3,
+        vertical: kSpace2,
+      ),
+      decoration: BoxDecoration(
+        color: kNeon.withValues(alpha: 0.10),
+        border: Border.all(color: kNeon),
+        borderRadius: BorderRadius.circular(kCardRadius),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ImageIcon(
+            AssetImage('assets/icons/control/icon_target.png'),
+            size: 14,
+            color: kNeon,
+          ),
+          const SizedBox(width: kSpace2),
+          const Text(
+            'TARGET',
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 8,
+              color: kNeon,
+            ),
+          ),
+          const SizedBox(width: kSpace3),
+          Text(
+            scheme.verboseLabel(),
+            style: AppFonts.shareTechMono(color: kText, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TryLine extends StatelessWidget {
   const _TryLine({required this.suggestion, required this.onTap});
 
   final OverloadSuggestion suggestion;
   final VoidCallback onTap;
-
-  String _fmtWeight(double w) =>
-      w == w.roundToDouble() ? w.toInt().toString() : w.toString();
 
   Color _color() {
     switch (suggestion.reason) {
@@ -702,7 +817,7 @@ class _TryLine extends StatelessWidget {
         ? '—'
         : w == 0
         ? '${r ?? 0} reps'
-        : '${_fmtWeight(w)} kg × ${r ?? 0}';
+        : '${_suggestedLoadText(w)} ${Units.weight.label} × ${r ?? 0}';
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,

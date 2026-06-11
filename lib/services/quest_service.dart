@@ -4,10 +4,16 @@ import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/class_definitions.dart';
+import '../data/loot_registry.dart';
 import '../models/character_class.dart';
+import '../models/loot_item.dart';
 import '../models/quest_models.dart';
+import '../models/unit_models.dart';
 import '../models/workout_models.dart';
 import 'class_service.dart';
+import 'loot_service.dart';
+import 'unit_settings_service.dart';
+import 'gem_service.dart';
 import 'rest_service.dart';
 import 'xp_boost_service.dart';
 import 'xp_service.dart';
@@ -27,9 +33,6 @@ class QuestService {
     final state = await _loadState(currentTime);
     final currentClass = await ClassService().getCurrentClass();
     final stats = _QuestStats.fromSessions(sessions, currentTime, currentClass);
-    final lckMultiplier = XpService.lckXpMultiplier(
-      XpService.lckForSessions(sessions, now: currentTime),
-    );
     final restService = RestService(nowProvider: () => currentTime);
     final currentRecoveryXP = await restService.effectiveRecoveryXP(
       sessions,
@@ -45,39 +48,20 @@ class QuestService {
           potionBonusXP,
       now: currentTime,
     );
-    final recoveryXP = await restService.effectiveRecoveryXP(
-      sessions,
-      now: currentTime,
-    );
-    final baseXP =
-        XpService.calculateTotalXP(sessions) +
-        state.claimedXP +
-        recoveryXP +
-        potionBonusXP;
+    final daily = _buildDailyQuests(state, stats);
+    final weekly = _buildWeeklyQuests(state, stats);
+    final side = _buildSideQuests(state, stats);
 
-    final daily = _buildDailyQuests(state, stats, lckMultiplier);
-    final weekly = _buildWeeklyQuests(state, stats, baseXP, lckMultiplier);
-    final side = _buildSideQuests(state, stats, baseXP, lckMultiplier);
-    final earnedTitles = [
-      for (final quest in side)
-        if (quest.claimed && quest.rewardTitle != null) quest.rewardTitle!,
-    ];
-    final selectedTitle = earnedTitles.contains(state.selectedTitle)
-        ? state.selectedTitle
-        : null;
-
-    if (selectedTitle != state.selectedTitle) {
-      await _saveState(state.copyWith(clearSelectedTitle: true));
-    }
-
+    // Titles are now loot (see LootCategory.titleBadge). The active title is the
+    // equipped loot badge, surfaced by LootService — not tracked here.
     return QuestSummary(
       dailyQuests: daily,
       weeklyQuests: weekly,
       sideQuests: side,
       claimedRewardXP: state.claimedXP,
+      claimedRewardGems: state.claimedGems,
       todayClaimedXP: _claimedXPForDay(state, currentTime),
-      earnedTitles: earnedTitles,
-      selectedTitle: selectedTitle,
+      todayClaimedGems: _claimedGemsForDay(state, currentTime),
     );
   }
 
@@ -92,9 +76,15 @@ class QuestService {
     return _claimedXPForDay(state, currentTime);
   }
 
-  Future<String?> selectedTitle() async {
+  Future<int> claimedRewardGems() async {
     final state = await _loadState(DateTime.now());
-    return state.selectedTitle;
+    return state.claimedGems;
+  }
+
+  Future<int> todayClaimedGems({DateTime? now}) async {
+    final currentTime = now ?? DateTime.now();
+    final state = await _loadState(currentTime);
+    return _claimedGemsForDay(state, currentTime);
   }
 
   Future<void> markManualDone(String claimKey, {DateTime? now}) async {
@@ -103,7 +93,7 @@ class QuestService {
     await _saveState(state.copyWith(manualDoneKeys: updated));
   }
 
-  Future<int> claimReward(
+  Future<QuestClaimResult> claimReward(
     String claimKey,
     List<WorkoutSession> sessions, {
     DateTime? now,
@@ -122,33 +112,52 @@ class QuestService {
       }
     }
 
-    if (quest == null || !quest.claimable) return 0;
+    if (quest == null || !quest.claimable) {
+      return const QuestClaimResult(xp: 0, gems: 0);
+    }
 
     final state = await _loadState(currentTime);
-    if (state.claims.containsKey(claimKey)) return 0;
+    if (state.claims.containsKey(claimKey)) {
+      return const QuestClaimResult(xp: 0, gems: 0);
+    }
 
     final claims = Map<String, QuestClaim>.from(state.claims);
     claims[claimKey] = QuestClaim(
-      xp: quest.rewardXP,
+      xp: 0,
+      gems: quest.rewardGems,
       claimedAt: currentTime,
       title: quest.rewardTitle,
     );
-
-    final selectedTitle = state.selectedTitle ?? quest.rewardTitle;
-    await _saveState(
-      state.copyWith(claims: claims, selectedTitle: selectedTitle),
+    final awardedGems = await GemService().awardQuestGems(
+      claimKey: claimKey,
+      amount: quest.rewardGems,
+      label: quest.title,
+      now: currentTime,
     );
-    return quest.rewardXP;
+
+    await _grantQuestTitle(quest.id);
+    await _saveState(state.copyWith(claims: claims));
+    return QuestClaimResult(xp: 0, gems: awardedGems, title: quest.rewardTitle);
   }
 
-  Future<void> selectTitle(String title) async {
-    final state = await _loadState(DateTime.now());
-    final earned = state.claims.values
-        .map((claim) => claim.title)
-        .whereType<String>()
-        .toSet();
-    if (!earned.contains(title)) return;
-    await _saveState(state.copyWith(selectedTitle: title));
+  /// Grants the loot title that a claimed side quest rewards. The very first
+  /// title a user earns is auto-equipped (the onboarding delight beat). After
+  /// that, titles are added to the collection but never override the user's
+  /// current choice — including an explicit "None". Titles are owned forever
+  /// and freely re-selectable from the Inventory.
+  Future<void> _grantQuestTitle(String questId) async {
+    final lootId = sideQuestTitleLootId[questId];
+    if (lootId == null) return;
+    final loot = LootService();
+    final inventory = await loot.getInventory();
+    final ownedTitlesBefore = inventory
+        .where((i) => i.category == LootCategory.titleBadge && !i.isDefault)
+        .length;
+    await loot.grantItem(lootId);
+    final equipped = await loot.getEquippedItem(LootCategory.titleBadge);
+    if (equipped == null && ownedTitlesBefore == 0) {
+      await loot.equipItem(lootId);
+    }
   }
 
   static String dailyPeriodKey(DateTime date) => _dateKey(date);
@@ -189,6 +198,7 @@ class QuestService {
     if (oldTimeClaim != null && !claims.containsKey(_timeQuestClaimKey)) {
       claims[_timeQuestClaimKey] = QuestClaim(
         xp: oldTimeClaim.xp,
+        gems: oldTimeClaim.gems,
         claimedAt: oldTimeClaim.claimedAt,
         title: _timeTitle,
       );
@@ -197,7 +207,12 @@ class QuestService {
       if (claim.title != _oldTimeTitle) return MapEntry(key, claim);
       return MapEntry(
         key,
-        QuestClaim(xp: claim.xp, claimedAt: claim.claimedAt, title: _timeTitle),
+        QuestClaim(
+          xp: claim.xp,
+          gems: claim.gems,
+          claimedAt: claim.claimedAt,
+          title: _timeTitle,
+        ),
       );
     });
     if (selectedTitle == _oldTimeTitle) {
@@ -218,36 +233,26 @@ class QuestService {
     await prefs.setString(_stateKey, jsonEncode(state.toJson()));
   }
 
-  List<QuestItem> _buildDailyQuests(
-    QuestState state,
-    _QuestStats stats,
-    double lckMultiplier,
-  ) {
+  List<QuestItem> _buildDailyQuests(QuestState state, _QuestStats stats) {
     const templates = [
       _DailyTemplate('show_up', 'Show Up', 'Complete any workout today.', 5),
       _DailyTemplate(
         'class_focus',
         'Class Focus',
         "Train one of your class's primary muscle groups.",
-        10,
+        5,
       ),
       _DailyTemplate(
         'volume_floor',
         'Volume Floor',
         'Log 1,000 kg total volume today.',
-        15,
+        5,
       ),
     ];
 
     return [
       for (final template in templates)
-        _dailyQuestItem(
-          template,
-          state,
-          stats,
-          state.dailyPeriodKey,
-          lckMultiplier,
-        ),
+        _dailyQuestItem(template, state, stats, state.dailyPeriodKey),
     ];
   }
 
@@ -256,7 +261,6 @@ class QuestService {
     QuestState state,
     _QuestStats stats,
     String periodKey,
-    double lckMultiplier,
   ) {
     final claimKey = 'daily:$periodKey:${template.id}';
     final claim = state.claims[claimKey];
@@ -267,9 +271,9 @@ class QuestService {
       claimKey: claimKey,
       category: QuestCategory.daily,
       title: template.title,
-      description: template.description,
-      rewardXP:
-          claim?.xp ?? _applyMultiplier(template.baseRewardXP, lckMultiplier),
+      description: _questDescription(template.id, template.description),
+      rewardXP: claim?.xp ?? 0,
+      rewardGems: claim?.gems ?? template.rewardGems,
       completed: completed,
       claimed: claim != null,
       isManual: false,
@@ -277,31 +281,26 @@ class QuestService {
     );
   }
 
-  List<QuestItem> _buildWeeklyQuests(
-    QuestState state,
-    _QuestStats stats,
-    int baseXP,
-    double lckMultiplier,
-  ) {
+  List<QuestItem> _buildWeeklyQuests(QuestState state, _QuestStats stats) {
     const templates = [
       _WeeklyTemplate(
         'weekly_workout_1',
         'First Quest',
         'Complete 1 workout',
-        2,
+        5,
       ),
       _WeeklyTemplate(
         'weekly_workout_2',
         'Second Quest',
         'Complete 2 workouts',
-        4,
+        5,
       ),
-      _WeeklyTemplate('weekly_sets_10', 'Set Smith', 'Log 10 total sets', 8),
+      _WeeklyTemplate('weekly_sets_10', 'Set Smith', 'Log 10 total sets', 10),
       _WeeklyTemplate(
         'weekly_muscles_2',
         'Balanced Path',
         'Train 2 muscle groups',
-        12,
+        10,
       ),
       _WeeklyTemplate(
         'weekly_minutes_60',
@@ -313,7 +312,7 @@ class QuestService {
 
     return [
       for (final template in templates)
-        _weeklyQuestItem(template, state, stats, baseXP, lckMultiplier),
+        _weeklyQuestItem(template, state, stats),
     ];
   }
 
@@ -321,8 +320,6 @@ class QuestService {
     _WeeklyTemplate template,
     QuestState state,
     _QuestStats stats,
-    int baseXP,
-    double lckMultiplier,
   ) {
     final claimKey = 'weekly:${state.weeklyPeriodKey}:${template.id}';
     final claim = state.claims[claimKey];
@@ -341,12 +338,8 @@ class QuestService {
       category: QuestCategory.weekly,
       title: template.title,
       description: template.description,
-      rewardXP:
-          claim?.xp ??
-          _applyMultiplier(
-            _rewardXP(baseXP, template.percent, 400),
-            lckMultiplier,
-          ),
+      rewardXP: claim?.xp ?? 0,
+      rewardGems: claim?.gems ?? template.rewardGems,
       completed: completed,
       claimed: claim != null,
       isManual: false,
@@ -354,53 +347,47 @@ class QuestService {
     );
   }
 
-  List<QuestItem> _buildSideQuests(
-    QuestState state,
-    _QuestStats stats,
-    int baseXP,
-    double lckMultiplier,
-  ) {
+  List<QuestItem> _buildSideQuests(QuestState state, _QuestStats stats) {
     const templates = [
       _SideTemplate(
         'side_first_workout',
         'First Forge',
         'Complete your first workout',
         'Iron Novice',
-        5,
+        100,
       ),
       _SideTemplate(
         'side_sets_25',
         'Set Smith',
         'Log 25 total sets',
         'Set Smith',
-        8,
+        100,
       ),
       _SideTemplate(
         'side_minutes_300',
         'Time Trial',
         'Train 300 total minutes',
         'Time Keeper',
-        10,
+        100,
       ),
       _SideTemplate(
         'side_all_muscles',
         'Four Guilds',
         'Train Chest, Back, Arms, and Legs',
         'Guild Walker',
-        12,
+        100,
       ),
       _SideTemplate(
         'side_volume_10000',
         'Iron Ledger',
         'Reach 10,000 kg total volume',
         'Volume Knight',
-        15,
+        100,
       ),
     ];
 
     return [
-      for (final template in templates)
-        _sideQuestItem(template, state, stats, baseXP, lckMultiplier),
+      for (final template in templates) _sideQuestItem(template, state, stats),
     ];
   }
 
@@ -408,8 +395,6 @@ class QuestService {
     _SideTemplate template,
     QuestState state,
     _QuestStats stats,
-    int baseXP,
-    double lckMultiplier,
   ) {
     final claimKey = 'side:${template.id}';
     final claim = state.claims[claimKey];
@@ -427,13 +412,9 @@ class QuestService {
       claimKey: claimKey,
       category: QuestCategory.side,
       title: template.title,
-      description: template.description,
-      rewardXP:
-          claim?.xp ??
-          _applyMultiplier(
-            _rewardXP(baseXP, template.percent, 500),
-            lckMultiplier,
-          ),
+      description: _questDescription(template.id, template.description),
+      rewardXP: claim?.xp ?? 0,
+      rewardGems: claim?.gems ?? template.rewardGems,
       completed: completed,
       claimed: claim != null,
       isManual: false,
@@ -451,11 +432,27 @@ class QuestService {
     };
   }
 
+  /// Volume-quest descriptions render their kg threshold in the active unit so
+  /// the copy matches the progress counter (e.g. "Log 2,205 lbs..." / "0 / 2205
+  /// lbs"). Non-volume quests keep their static [fallback] text.
+  String _questDescription(String id, String fallback) {
+    switch (id) {
+      case 'volume_floor':
+        return 'Log ${formatWeight(1000, Units.weight, decimals: 0)} total volume today.';
+      case 'side_volume_10000':
+        return 'Reach ${formatWeight(10000, Units.weight, decimals: 0)} total volume';
+      default:
+        return fallback;
+    }
+  }
+
   String _dailyProgress(String id, _QuestStats stats) {
     return switch (id) {
       'show_up' => '${min(stats.todayCompletedSessions, 1)} / 1',
       'class_focus' => stats.todayClassFocusTrained ? 'DONE' : '0 / 1',
-      'volume_floor' => '${min(stats.todayVolume.round(), 1000)} / 1000 kg',
+      'volume_floor' =>
+        '${weightValue(min(stats.todayVolume, 1000.0), Units.weight, decimals: 0)}'
+            ' / ${formatWeight(1000, Units.weight, decimals: 0)}',
       _ => '',
     };
   }
@@ -480,7 +477,8 @@ class QuestService {
         '${min(stats.lifetimeDurationSeconds ~/ 60, 300)} / 300 min',
       'side_all_muscles' => '${min(stats.lifetimeMuscleGroups, 4)} / 4 groups',
       'side_volume_10000' =>
-        '${min(stats.lifetimeVolume.round(), 10000)} / 10000 kg',
+        '${weightValue(min(stats.lifetimeVolume, 10000.0), Units.weight, decimals: 0)}'
+            ' / ${formatWeight(10000, Units.weight, decimals: 0)}',
       _ => '',
     };
   }
@@ -492,16 +490,12 @@ class QuestService {
         .fold(0, (sum, claim) => sum + claim.xp);
   }
 
-  int _rewardXP(int baseXP, int percent, int cap) {
-    final level = XpService.getLevel(baseXP);
-    final span =
-        XpService.xpForNextLevel(level) - XpService.xpForCurrentLevel(level);
-    final scaled = (max(1, span) * percent / 100).round();
-    return min(cap, max(1, scaled));
+  int _claimedGemsForDay(QuestState state, DateTime day) {
+    final key = _dateKey(day);
+    return state.claims.values
+        .where((claim) => _dateKey(claim.claimedAt) == key)
+        .fold(0, (sum, claim) => sum + claim.gems);
   }
-
-  int _applyMultiplier(int baseXP, double multiplier) =>
-      (baseXP * multiplier).round();
 
   static String _dateKey(DateTime date) {
     final day = DateTime(date.year, date.month, date.day);
@@ -635,26 +629,21 @@ class _QuestStats {
 }
 
 class _DailyTemplate {
-  const _DailyTemplate(
-    this.id,
-    this.title,
-    this.description,
-    this.baseRewardXP,
-  );
+  const _DailyTemplate(this.id, this.title, this.description, this.rewardGems);
 
   final String id;
   final String title;
   final String description;
-  final int baseRewardXP;
+  final int rewardGems;
 }
 
 class _WeeklyTemplate {
-  const _WeeklyTemplate(this.id, this.title, this.description, this.percent);
+  const _WeeklyTemplate(this.id, this.title, this.description, this.rewardGems);
 
   final String id;
   final String title;
   final String description;
-  final int percent;
+  final int rewardGems;
 }
 
 class _SideTemplate {
@@ -663,12 +652,12 @@ class _SideTemplate {
     this.title,
     this.description,
     this.rewardTitle,
-    this.percent,
+    this.rewardGems,
   );
 
   final String id;
   final String title;
   final String description;
   final String rewardTitle;
-  final int percent;
+  final int rewardGems;
 }

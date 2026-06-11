@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workout_track/models/loot_item.dart';
 import 'package:workout_track/models/workout_models.dart';
+import 'package:workout_track/services/gem_service.dart';
 import 'package:workout_track/services/loot_service.dart';
 
 void main() {
@@ -68,6 +70,75 @@ void main() {
       sessions: _sessions(16),
     );
     expect(second, isNot(contains('frame_neon')));
+  });
+
+  test('frames and themes can be purchased with enough gems', () async {
+    final gems = GemService();
+    final service = LootService();
+    await gems.awardQuestGems(claimKey: 'seed', amount: 500, label: 'Seed');
+
+    await service.purchaseItemWithGems('frame_stone');
+    await service.purchaseItemWithGems('theme_stone');
+
+    final owned = (await service.getInventory()).map((item) => item.id);
+    expect(owned, containsAll(['frame_stone', 'theme_stone']));
+    expect(await gems.balance(), 50);
+  });
+
+  test('insufficient gems do not purchase or mutate balance', () async {
+    final gems = GemService();
+    final service = LootService();
+    await gems.awardQuestGems(claimKey: 'seed', amount: 5, label: 'Seed');
+
+    expect(() => service.purchaseItemWithGems('frame_gold'), throwsStateError);
+    expect(await gems.balance(), 5);
+    final owned = (await service.getInventory()).map((item) => item.id);
+    expect(owned, isNot(contains('frame_gold')));
+  });
+
+  test('titles are not purchasable with gems', () async {
+    final service = LootService();
+
+    expect(
+      () => service.purchaseItemWithGems('title_iron_will'),
+      throwsStateError,
+    );
+  });
+
+  test('unequipCategory clears the title but keeps ownership', () async {
+    final service = LootService();
+    await service.grantItem('title_iron_novice');
+    await service.equipItem('title_iron_novice');
+    expect(
+      (await service.getEquippedItem(LootCategory.titleBadge))?.id,
+      'title_iron_novice',
+    );
+
+    await service.unequipCategory(LootCategory.titleBadge);
+    expect(await service.getEquippedItem(LootCategory.titleBadge), isNull);
+
+    // Earned is forever: still owned, freely re-equippable without re-earning.
+    final owned = (await service.getInventory()).map((item) => item.id);
+    expect(owned, contains('title_iron_novice'));
+    await service.equipItem('title_iron_novice');
+    expect(
+      (await service.getEquippedItem(LootCategory.titleBadge))?.id,
+      'title_iron_novice',
+    );
+  });
+
+  test('purchased milestone loot is not re-revealed later', () async {
+    final gems = GemService();
+    final service = LootService();
+    await gems.awardQuestGems(claimKey: 'seed', amount: 500, label: 'Seed');
+    await service.purchaseItemWithGems('frame_stone');
+
+    final unlocked = await service.evaluateUnlocks(
+      stats: const {},
+      sessions: _sessions(4),
+    );
+
+    expect(unlocked, isNot(contains('frame_stone')));
   });
 }
 

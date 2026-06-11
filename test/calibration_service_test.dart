@@ -61,6 +61,12 @@ void main() {
       final stats = await engine(now).calculateAllStats();
       expect(stats['STR'], 650);
       expect(engine(now).getRank(stats['STR']!), 'A');
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString(CalibrationService.calibrationSeedSourceKey),
+        CalibrationService.workoutSeedSource,
+      );
     },
   );
 
@@ -158,6 +164,11 @@ void main() {
       );
       await svc.recordCalibrationWorkout(calibration, catalog: catalog);
 
+      // Establish the board the user sees after calibration (seeded STR) so the
+      // next recompute measures its delta against the already-seeded value —
+      // the seed is a constant in both, so it never shows as a per-session gain.
+      await engine(day1).calculateAllStats();
+
       // A later, unrelated normal session that trains a DIFFERENT stat than the
       // seeded STR — back/row feeds DEF (legs now feed STR, so use row here).
       final later = _session(day2, [
@@ -178,41 +189,71 @@ void main() {
     },
   );
 
-  group('seedFromQuiz (quiz-derived starting stats)', () {
-    test('seeds the volume capability stats and freezes calibration', () async {
+  group('quiz preferences do not seed stats', () {
+    test('saving experience keeps no-workout stats at baseline', () async {
       final now = DateTime(2026, 5, 14, 10);
       final svc = service(now);
 
-      await svc.seedFromQuiz(exp: Experience.advanced);
+      await svc.saveTrainingPreferences(
+        freq: TrainingFreq.mid,
+        exp: Experience.intermediate,
+      );
 
-      final seed = await svc.seedVolumes();
-      expect(seed['STR'], greaterThan(0));
-      expect(seed['DEF'], greaterThan(0));
-      expect(seed['AGI'], greaterThan(0));
+      expect(await svc.trainingFreq(), TrainingFreq.mid);
+      expect(await svc.experience(), Experience.intermediate);
+      expect(await svc.seedVolumes(), isEmpty);
+      expect(await svc.isComplete(), isFalse);
 
-      // The visible capability stats land on the experience tier's rank.
       final stats = await engine(now).calculateAllStats();
-      expect(engine(now).getRank(stats['STR']!), 'A'); // advanced → 650 → A
-      expect(engine(now).getRank(stats['AGI']!), 'A');
+      expect(stats['STR'], StatEngine.baseOutputStatValue);
+      expect(stats['AGI'], StatEngine.baseOutputStatValue);
+      expect(stats['END'], StatEngine.baseOutputStatValue);
+      expect(stats['VIT'], StatEngine.baseOutputStatValue);
+      expect(stats['LCK'], 0);
+    });
+  });
 
-      // Calibration is frozen so later workouts never re-seed.
-      expect(await svc.isComplete(), isTrue);
+  group('auto-calibration on early workouts', () {
+    test('calibrates within the opening session window', () async {
+      final now = DateTime(2026, 5, 14, 10);
+      final session = _session(now, [
+        _log('bench', weight: 100, reps: 5),
+      ], id: 'w1');
+      final svc = service(now);
+      await svc.saveCalibrationInputs(
+        bodyweightKg: 80,
+        sex: UserProfileSex.male,
+      );
+
+      await svc.maybeCalibrateEarlyWorkout(
+        session,
+        completedSessionCount: 1,
+        catalog: catalog,
+      );
+
+      // 100x5 @ 80kg BW -> advanced -> a STR seed is written.
+      expect((await svc.seedVolumes())['STR'], greaterThan(0));
     });
 
-    test('maps each experience level to its starting rank', () async {
+    test('does not seed an established user (beyond the window)', () async {
       final now = DateTime(2026, 5, 14, 10);
+      final session = _session(now, [
+        _log('bench', weight: 100, reps: 5),
+      ], id: 'w');
+      final svc = service(now);
+      await svc.saveCalibrationInputs(
+        bodyweightKg: 80,
+        sex: UserProfileSex.male,
+      );
 
-      Future<String> strRankFor(Experience exp) async {
-        SharedPreferences.setMockInitialValues({});
-        await service(now).seedFromQuiz(exp: exp);
-        final stats = await engine(now).calculateAllStats();
-        return engine(now).getRank(stats['STR']!);
-      }
+      await svc.maybeCalibrateEarlyWorkout(
+        session,
+        completedSessionCount: 50,
+        catalog: catalog,
+      );
 
-      expect(await strRankFor(Experience.novice), 'D'); // untrained 50
-      expect(await strRankFor(Experience.beginner), 'C'); // 120
-      expect(await strRankFor(Experience.intermediate), 'B'); // 420
-      expect(await strRankFor(Experience.advanced), 'A'); // 650
+      // No seed written → no retroactive inflation of earned stats.
+      expect(await svc.seedVolumes(), isEmpty);
     });
   });
 }

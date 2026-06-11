@@ -6,6 +6,8 @@ import '../../theme/app_fonts.dart';
 import '../../data/muscle_groups.dart';
 import '../../models/finish_result.dart';
 import '../../models/loot_drop.dart';
+import '../../models/program_models.dart';
+import '../../models/unit_models.dart';
 import '../../models/workout_models.dart';
 import '../../models/xp_reward_models.dart';
 import '../../services/calibration_service.dart';
@@ -16,7 +18,9 @@ import '../../services/loot_service.dart';
 import '../../services/milestone_service.dart';
 import '../../services/program_service.dart';
 import '../../services/progression_settings_service.dart';
+import '../../services/rest_service.dart';
 import '../../services/stat_engine.dart';
+import '../../services/unit_settings_service.dart';
 import '../../services/workout_storage_service.dart';
 import '../../services/xp_boost_service.dart';
 import '../../services/xp_service.dart';
@@ -33,6 +37,7 @@ import '../../widgets/strobe_flash.dart';
 import '../../widgets/typewriter_text.dart';
 import '../../widgets/xp_level_meter.dart';
 import '../onboarding/rank_assessed_page.dart';
+import 'program_completion_reveal.dart';
 
 class WorkoutSummaryPage extends StatefulWidget {
   const WorkoutSummaryPage({
@@ -98,6 +103,10 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   Map<String, int> _calibratedStats = {};
   FinishResult? _finish;
   FinishSelection? _selection;
+
+  /// Set when this save crosses the active program's session target. Drives the
+  /// dedicated completion reveal pushed from [_goHome] before returning to root.
+  ProgramCompletion? _programCompletion;
 
   // Staged reveal (the finish arc's timed cadence). Each beat shows when
   // `_reducedMotion || _stage >= k`. Started once the save/recompute is done.
@@ -254,15 +263,27 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         );
       }
       final currentClass = await ClassService().getCurrentClass();
+      // Snapshot bodyweight alongside class: frozen on the session so the
+      // stat engine's bodyweight-set credit never changes retroactively.
+      final bodyweightKg = await CalibrationService().bodyweightKg();
       final sessionWithClass = _sessionWithAward(
         classAtSave: currentClass.name,
+        bodyweightKgAtSave: bodyweightKg,
       );
       final existingSessions = await WorkoutStorageService().getSessions();
-      final lck = XpService.lckForSessions([
-        for (final session in existingSessions)
-          if (session.id != sessionWithClass.id) session,
-        sessionWithClass,
-      ], now: sessionWithClass.date);
+      // LCK is the weekly consistency streak (rest-schedule aware). Load state
+      // once and reuse it for both the after- and before-save snapshots.
+      final restService = RestService();
+      final restState = await restService.loadState(now: sessionWithClass.date);
+      final lck = restService.consistencyWeeks(
+        sessions: [
+          for (final session in existingSessions)
+            if (session.id != sessionWithClass.id) session,
+          sessionWithClass,
+        ],
+        state: restState,
+        now: sessionWithClass.date,
+      );
       _rewardEligibility = XpService.rewardEligibility(sessionWithClass);
       if (_rewardEligibility!.eligible) {
         _lckMultiplier = XpService.lckXpMultiplier(lck);
@@ -288,8 +309,12 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       _baseXP = _xpBreakdown!.baseXP;
       _earnedXP = _xpBreakdown!.finalXP;
       _potionBonusXP = _xpBreakdown!.potionBonusXP;
+      // The potions' charges were already spent above; record the realized
+      // bonus into the lifetime running total so getTotalBonusXP stays accurate.
+      await XpBoostService().recordBonusXp(_potionBonusXP);
       final awardedSession = _sessionWithAward(
         classAtSave: currentClass.name,
+        bodyweightKgAtSave: bodyweightKg,
         baseXP: _baseXP,
         lckMultiplier: _lckMultiplier,
         potionMultiplier: _potionMultiplier,
@@ -328,8 +353,9 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
           )
           .toList();
       final oldTotalXP = XpService.calculateTotalXP(priorSessions);
-      final lckBefore = XpService.lckForSessions(
-        priorSessions,
+      final lckBefore = restService.consistencyWeeks(
+        sessions: priorSessions,
+        state: restState,
         now: awardedSession.date,
       );
       final beforeStats = Map<String, int>.from(_combatStats);
@@ -376,6 +402,9 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
 
       if (widget.isProgramWorkout || widget.advanceProgramRestDayOnCompletion) {
         await ProgramService().advanceDay();
+        // Arc-completion check sits on top of the advance: records the finish
+        // once, grants the title, and stages the reveal shown at _goHome.
+        _programCompletion = await ProgramService().evaluateCompletion();
         if (widget.resumeFromSession != null) {
           await ProgramService().clearOngoingProgramSession(
             widget.resumeFromSession!.id,
@@ -408,6 +437,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
 
   WorkoutSession _sessionWithAward({
     String? classAtSave,
+    double? bodyweightKgAtSave,
     int? baseXP,
     double? lckMultiplier,
     double? potionMultiplier,
@@ -433,6 +463,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       lootBonusXP: lootBonusXP,
       awardedXP: awardedXP,
       classAtSave: classAtSave,
+      bodyweightKgAtSave: bodyweightKgAtSave,
     );
   }
 
@@ -490,17 +521,28 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     });
   }
 
-  void _goHome() {
+  Future<void> _goHome() async {
+    final completion = _programCompletion;
+    if (completion != null) {
+      _programCompletion = null;
+      await Navigator.of(context).push<void>(
+        arcadeRoute(
+          (_) => ProgramCompletionRevealScreen(completion: completion),
+          motion: ArcadeRouteMotion.reveal,
+        ),
+      );
+      // The reveal (or Home) consumes the staged fallback; clear it either way
+      // so it can't replay after we return to root.
+      await ProgramService().consumePendingCompletionReveal();
+      if (!mounted) return;
+    }
     Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
-  /// Non-hero visible capability gains (STR/AGI/END that weren't the hero),
-  /// shown as the small "supporting" row.
-  Map<String, int> _supportingDeltas(FinishHero hero) => {
-    for (final stat in kHeroStatCandidates)
-      if (stat != hero.stat && (_statDelta[stat] ?? 0) > 0)
-        stat: _statDelta[stat]!,
-  };
+  /// Visible capability gains shown as the labelled "STAT GAINS" row (pure
+  /// logic lives in [supportingGains] so it's unit-testable).
+  Map<String, int> _supportingDeltas(FinishHero hero) =>
+      supportingGains(_statDelta, hero);
 
   /// Fired by the XP meter each time the bar crosses a level — shakes and
   /// flashes the whole screen. No-op under reduced motion.
@@ -527,7 +569,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _goHome();
+        if (!didPop) unawaited(_goHome());
       },
       child: Scaffold(
         appBar: AppBar(
@@ -540,16 +582,25 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
             children: [
               Positioned.fill(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(kSpace4),
+                  // Add the system nav-bar inset so the "Back to Home" CTA
+                  // clears edge-to-edge; the full-bleed overlays below stay
+                  // full-bleed (so they aren't wrapped in SafeArea).
+                  padding: EdgeInsets.fromLTRB(
+                    kSpace4,
+                    kSpace4,
+                    kSpace4,
+                    kSpace4 + MediaQuery.of(context).viewPadding.bottom,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const SizedBox(height: kSpace4),
-                      const _RevealBeat(
-                        child: ImageIcon(
-                          AssetImage('assets/icons/control/icon_star.png'),
-                          color: kNeon,
-                          size: 72,
+                      _RevealBeat(
+                        child: Image.asset(
+                          'assets/icons/control/ui/icon_session_complete.png',
+                          width: 96,
+                          height: 96,
+                          filterQuality: FilterQuality.none,
                         ),
                       ),
                       const SizedBox(height: kSpace3),
@@ -675,7 +726,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                                 title: Text(log.exerciseName),
                                 subtitle: Text(
                                   '${log.sets.length} sets - '
-                                  '${log.totalVolume.toStringAsFixed(0)} kg total',
+                                  '${weightValue(log.totalVolume, Units.weight, decimals: 0)} ${Units.weight.label} total',
                                   style: const TextStyle(color: kMutedText),
                                 ),
                               ),
@@ -815,7 +866,13 @@ class _HeroBeat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final headline = _HeroHeadline(hero: hero);
+    // Full-width so the headline's internal centering takes effect. Tier-1/2
+    // wrap in StrobeFlash, whose Stack pins a shrink-wrapped child top-left
+    // (left-aligned) without this.
+    final headline = SizedBox(
+      width: double.infinity,
+      child: _HeroHeadline(hero: hero),
+    );
     if (MediaQuery.of(context).disableAnimations) return headline;
     switch (hero.tier) {
       case FinishTier.tier3:
@@ -1171,19 +1228,30 @@ class _SupportingStatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final entries = deltas.entries.toList();
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: kSpace4,
-      runSpacing: kSpace2,
+    return Column(
       children: [
-        // Each gain counts up +0 → +N; the bigger gain ticks longer.
-        for (final entry in entries)
-          FloatingStatNumber(
-            stat: entry.key,
-            value: entry.value,
-            color: kNeon,
-            fontSize: 10,
-          ),
+        // A labelled section (not stray confetti) so the gains stay legible
+        // even when a level-up/rank hero dominates the screen above.
+        Text(
+          'STAT GAINS',
+          style: AppFonts.shareTechMono(color: kMutedText, fontSize: 10),
+        ),
+        const SizedBox(height: kSpace2),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: kSpace4,
+          runSpacing: kSpace2,
+          children: [
+            // Each gain counts up +0 → +N; the bigger gain ticks longer.
+            for (final entry in entries)
+              FloatingStatNumber(
+                stat: entry.key,
+                value: entry.value,
+                color: kNeon,
+                fontSize: 12,
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -1316,9 +1384,9 @@ class _CacheDropCard extends StatelessWidget {
 
   Color _tierColor(LootDropTier tier) => switch (tier) {
     LootDropTier.common => kText,
-    LootDropTier.uncommon => kCyan,
-    LootDropTier.rare => kAmber,
-    LootDropTier.epic => kNeon,
+    LootDropTier.uncommon => kNeon,
+    LootDropTier.rare => kCyan,
+    LootDropTier.epic => const Color(0xFFA66BFF),
   };
 }
 

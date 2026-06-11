@@ -1,3 +1,4 @@
+import '../models/avatar_spec.dart';
 import '../models/character_class.dart';
 
 /// The player's guild. Local-only and single-instance in this build — there is
@@ -71,7 +72,7 @@ class GuildMember {
     required this.lastActiveAt,
     required this.weeklyVolumeKg,
     required this.weeklySessions,
-    this.avatarPath,
+    this.avatarSpec,
     this.isPlayer = false,
     this.isSeededExample = false,
   });
@@ -82,7 +83,10 @@ class GuildMember {
   final DateTime lastActiveAt;
   final int weeklyVolumeKg;
   final int weeklySessions;
-  final String? avatarPath;
+
+  /// NPC pixel face. Null for the player row — the page renders the live
+  /// profile avatar there so it never goes stale.
+  final AvatarSpec? avatarSpec;
   final bool isPlayer;
   final bool isSeededExample;
 
@@ -91,7 +95,7 @@ class GuildMember {
     int? weeklyVolumeKg,
     int? weeklySessions,
     String? displayName,
-    String? avatarPath,
+    AvatarSpec? avatarSpec,
   }) => GuildMember(
     userId: userId,
     displayName: displayName ?? this.displayName,
@@ -99,7 +103,7 @@ class GuildMember {
     lastActiveAt: lastActiveAt ?? this.lastActiveAt,
     weeklyVolumeKg: weeklyVolumeKg ?? this.weeklyVolumeKg,
     weeklySessions: weeklySessions ?? this.weeklySessions,
-    avatarPath: avatarPath ?? this.avatarPath,
+    avatarSpec: avatarSpec ?? this.avatarSpec,
     isPlayer: isPlayer,
     isSeededExample: isSeededExample,
   );
@@ -114,7 +118,7 @@ class GuildMember {
     'lastActiveAt': lastActiveAt.toIso8601String(),
     'weeklyVolumeKg': weeklyVolumeKg,
     'weeklySessions': weeklySessions,
-    if (avatarPath != null) 'avatarPath': avatarPath,
+    if (avatarSpec != null) 'avatarSpec': avatarSpec!.toJson(),
     'isPlayer': isPlayer,
     'isSeededExample': isSeededExample,
   };
@@ -129,7 +133,10 @@ class GuildMember {
         DateTime.now(),
     weeklyVolumeKg: (json['weeklyVolumeKg'] as num?)?.toInt() ?? 0,
     weeklySessions: (json['weeklySessions'] as num?)?.toInt() ?? 0,
-    avatarPath: json['avatarPath'] as String?,
+    // Legacy `avatarPath` image saves decode to null → re-seeded by service.
+    avatarSpec: json['avatarSpec'] is Map
+        ? AvatarSpec.fromJson((json['avatarSpec'] as Map).cast())
+        : null,
     isPlayer: json['isPlayer'] as bool? ?? false,
     isSeededExample: json['isSeededExample'] as bool? ?? false,
   );

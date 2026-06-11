@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
 import '../models/body_metrics_models.dart';
+import '../models/unit_models.dart';
 import '../services/body_metrics_service.dart';
+import '../services/unit_settings_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_loader.dart';
@@ -48,7 +50,7 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
           ),
         ),
         content: Text(
-          '${_formatDate(entry.loggedAt)} \u00B7 ${entry.weightKg.toStringAsFixed(1)} kg',
+          '${_formatDate(entry.loggedAt)} \u00B7 ${formatWeight(entry.weightKg, Units.weight)}',
           style: AppFonts.shareTechMono(color: kText, fontSize: 13),
         ),
         actions: [
@@ -81,6 +83,91 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
     );
     if (confirmed != true) return;
     await BodyMetricsService().deleteEntry(entry.loggedAt);
+    _load();
+  }
+
+  /// Tap an entry to correct a typo. Editing rewrites the value in place — it
+  /// does not grant a potion or change the weekly cadence (see
+  /// [BodyMetricsService.updateEntry]).
+  Future<void> _editEntry(WeightEntry entry) async {
+    final controller = TextEditingController(
+      text: weightValue(entry.weightKg, Units.weight),
+    );
+    final newKg = await showDialog<double>(
+      context: context,
+      builder: (ctx) {
+        String? error;
+        return StatefulBuilder(
+          builder: (ctx, setLocal) => AlertDialog(
+            backgroundColor: kCard,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
+            title: const Text(
+              'EDIT ENTRY',
+              style: TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 10,
+                color: kNeon,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  textAlign: TextAlign.center,
+                  style: AppFonts.shareTechMono(color: kText, fontSize: 20),
+                  decoration: InputDecoration(
+                    suffixText: Units.weight.label,
+                    suffixStyle: AppFonts.shareTechMono(
+                      color: kMutedText,
+                      fontSize: 12,
+                    ),
+                    errorText: error,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'fixes a typo · no new reward',
+                  style: AppFonts.shareTechMono(color: kMutedText, fontSize: 10),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(
+                  'CANCEL',
+                  style: AppFonts.shareTechMono(color: kMutedText),
+                ),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final kg = parseWeightToKg(controller.text, Units.weight);
+                  if (kg == null || !isPlausibleWeightKg(kg)) {
+                    setLocal(() => error = 'enter a valid weight');
+                    return;
+                  }
+                  Navigator.of(ctx).pop(kg);
+                },
+                child: const Text(
+                  'SAVE',
+                  style: TextStyle(fontFamily: 'PressStart2P', fontSize: 9),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    controller.dispose();
+    if (newKg == null) return;
+    await BodyMetricsService().updateEntry(entry.loggedAt, newKg);
     _load();
   }
 
@@ -120,6 +207,7 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
                 final entry = _entries[i];
                 final arrow = _directionArrow(i);
                 return HoldDepress(
+                  onTap: () => _editEntry(entry),
                   onLongPress: () => _confirmDelete(entry),
                   borderRadius: BorderRadius.circular(4),
                   child: Container(
@@ -144,7 +232,7 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
                           ),
                         ),
                         Text(
-                          '${entry.weightKg.toStringAsFixed(1)} kg',
+                          formatWeight(entry.weightKg, Units.weight),
                           style: AppFonts.shareTechMono(
                             color: kText,
                             fontSize: 13,

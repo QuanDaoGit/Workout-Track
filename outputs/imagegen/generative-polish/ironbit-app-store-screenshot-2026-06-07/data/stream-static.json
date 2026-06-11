@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "title": "Creative Production Review",
+    "summary": "Review, select, and hand off generated Creative Production images.",
+    "source": "review_renderer",
+    "itemCount": 1
+  },
+  "items": [
+    {
+      "id": "ironbit-first-quest-polished",
+      "title": "First Quest - polished store screenshot",
+      "caption": "Creative Production generative-polish export with exact app UI and copy.",
+      "tone": "",
+      "prompt": "Generated background only; deterministic text, logo, device frame, and real app screenshot composited after generation.",
+      "imageUrl": "generated/mcp-thumbs/ironbit-first-quest-polished.jpg",
+      "previewImageUrl": "generated/mcp-thumbs/ironbit-first-quest-polished.jpg",
+      "sourceImageUrl": "generated/ironbit-first-quest-polished.png"
+    }
+  ]
+}

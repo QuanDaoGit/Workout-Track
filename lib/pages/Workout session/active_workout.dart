@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_fonts.dart';
 
 import '../../data/muscle_groups.dart';
+import '../../models/program_models.dart';
 import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
 import '../../services/program_service.dart';
@@ -35,6 +36,7 @@ class ActiveWorkoutPage extends StatefulWidget {
     this.isProgramWorkout = false,
     this.advanceProgramRestDayOnCompletion = false,
     this.isCalibration = false,
+    this.prescriptions = const {},
   });
 
   final String muscleGroup;
@@ -49,6 +51,10 @@ class ActiveWorkoutPage extends StatefulWidget {
   /// Onboarding calibration run. Summary and rank reveal are awaited
   /// sequentially so the onboarding flow resumes only after they unwind.
   final bool isCalibration;
+
+  /// Per-exercise sets × reps targets, keyed by exercise id. Empty for manual
+  /// workouts and resumed sessions.
+  final Map<String, SetRepScheme> prescriptions;
 
   @override
   State<ActiveWorkoutPage> createState() => _ActiveWorkoutPageState();
@@ -192,6 +198,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           exercise: exercise,
           initialSets: _loggedSets[exercise.id] ?? const [],
           restSeconds: widget.restSeconds,
+          prescription: widget.prescriptions[exercise.id],
         ),
         motion: ArcadeRouteMotion.flow,
       ),
@@ -608,137 +615,141 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
             ),
           ],
         ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const RestTimerBar(),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        _targetLabel,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'ELAPSED',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 6),
-                      _ElapsedDisplay(
-                        minutes: _elapsedMinutes,
-                        seconds: _elapsedSecondsPart,
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Target: ${widget.durationMinutes} min',
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(color: kMutedText),
+        body: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const RestTimerBar(),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          _targetLabel,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'ELAPSED',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 6),
+                        _ElapsedDisplay(
+                          minutes: _elapsedMinutes,
+                          seconds: _elapsedSecondsPart,
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Target: ${widget.durationMinutes} min',
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(color: kMutedText),
+                              ),
                             ),
-                          ),
-                          Text(
-                            '$_completedExerciseCount/${widget.exercises.length} cleared',
-                            style: AppFonts.shareTechMono(
-                              color: const Color(0xFFE8E8FF),
-                              fontWeight: FontWeight.bold,
+                            Text(
+                              '$_completedExerciseCount/${widget.exercises.length} cleared',
+                              style: AppFonts.shareTechMono(
+                                color: const Color(0xFFE8E8FF),
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ArcadeProgressBar(value: _exerciseProgress, height: 8),
-                    ],
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ArcadeProgressBar(value: _exerciseProgress, height: 8),
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              Text(
-                'EXERCISES',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
+                Text(
+                  'EXERCISES',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
 
-              const SizedBox(height: 12),
+                const SizedBox(height: 12),
 
-              for (final exercise in widget.exercises) ...[
-                Padding(
-                  key: _exerciseKeys[exercise.id],
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: StrobeFlash(
-                    trigger: _flashTriggers[exercise.id],
-                    borderRadius: BorderRadius.circular(4),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: kCard,
-                        border: Border.all(color: kBorder),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: ArcadeTap(
-                        onTap: () => _openExerciseWithRestGuard(exercise),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      exercise.name,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyLarge
-                                          ?.copyWith(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      exercise.levelLabel,
-                                      style: const TextStyle(
-                                        color: kMutedText,
-                                        fontSize: 12,
+                for (final exercise in widget.exercises) ...[
+                  Padding(
+                    key: _exerciseKeys[exercise.id],
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: StrobeFlash(
+                      trigger: _flashTriggers[exercise.id],
+                      borderRadius: BorderRadius.circular(4),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: kCard,
+                          border: Border.all(color: kBorder),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: ArcadeTap(
+                          onTap: () => _openExerciseWithRestGuard(exercise),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        exercise.name,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyLarge
+                                            ?.copyWith(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        exercise.levelLabel,
+                                        style: const TextStyle(
+                                          color: kMutedText,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              _statusWidget(_status[exercise.id]!),
-                            ],
+                                const SizedBox(width: 12),
+                                _statusWidget(_status[exercise.id]!),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
+                ],
+
+                const SizedBox(height: 16),
+
+                PixelButton(
+                  label: 'Finish Workout',
+                  powerOn: true,
+                  onPressed: _allDone ? () => _goToSummary() : null,
                 ),
               ],
-
-              const SizedBox(height: 16),
-
-              PixelButton(
-                label: 'Finish Workout',
-                powerOn: true,
-                onPressed: _allDone ? () => _goToSummary() : null,
-              ),
-            ],
+            ),
           ),
         ),
       ),

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../models/avatar_spec.dart';
 import '../theme/tokens.dart';
+import 'avatar/ironbit_avatar.dart';
 
+/// The standard square identity frame: pixel-face avatar inside a bordered
+/// tile, with an optional equipped loot frame drawn over it.
 class LootAvatarFrame extends StatelessWidget {
-  final String avatarPath;
+  final AvatarSpec avatarSpec;
   final String? framePath;
   final double size;
   final Color borderColor;
@@ -12,7 +16,7 @@ class LootAvatarFrame extends StatelessWidget {
 
   const LootAvatarFrame({
     super.key,
-    required this.avatarPath,
+    required this.avatarSpec,
     this.framePath,
     required this.size,
     this.borderColor = const Color(0xFF3A3A5C),
@@ -35,18 +39,10 @@ class LootAvatarFrame extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
               border: Border.all(color: borderColor),
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: Padding(
-                padding: EdgeInsets.all(size * 0.1),
-                child: Image.asset(
-                  avatarPath,
-                  fit: BoxFit.contain,
-                  filterQuality: FilterQuality.none,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.person_sharp, color: kMutedText),
-                ),
-              ),
+            // Sprite fills the inner tile minus the frame margin (8% each
+            // side), the 1px border, and a small breathing pad.
+            child: Center(
+              child: IronbitAvatar(spec: avatarSpec, size: size * 0.76),
             ),
           ),
           if (framePath != null && framePath!.isNotEmpty)

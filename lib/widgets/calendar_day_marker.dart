@@ -16,6 +16,7 @@ CalendarMarkerKind? calendarMarkerKindFor({
   required bool abandonedOnly,
   required bool isToday,
   required bool isSelected,
+  bool suppressMissed = false,
 }) {
   if (hasWorkout) {
     return abandonedOnly
@@ -25,6 +26,10 @@ CalendarMarkerKind? calendarMarkerKindFor({
 
   return switch (restInfo.kind) {
     RestDayKind.protectedMiss => CalendarMarkerKind.protected,
+    // Days before the user's first-ever session aren't "missed" — there was
+    // no habit to miss yet. Callers suppress to keep a new user's calendar
+    // from opening as a wall of failures.
+    RestDayKind.unplannedMiss when suppressMissed => null,
     RestDayKind.unplannedMiss => CalendarMarkerKind.missed,
     RestDayKind.abandonedOnly => CalendarMarkerKind.abandoned,
     RestDayKind.plannedRest when isToday || isSelected =>
@@ -38,7 +43,10 @@ Color calendarMarkerColor(CalendarMarkerKind? kind, {Color? workoutColor}) {
     CalendarMarkerKind.workout => workoutColor ?? calendarMarkerNeon,
     CalendarMarkerKind.abandoned => calendarMarkerRed,
     CalendarMarkerKind.protected => calendarMarkerNeon,
-    CalendarMarkerKind.missed => calendarMarkerRed,
+    // Muted, not red: a missed day is information, not an alarm. Red also
+    // collided with the Arms muscle color on workout markers. Red stays
+    // reserved for abandoned sessions (a deliberate end, not an absence).
+    CalendarMarkerKind.missed => calendarMarkerMuted,
     CalendarMarkerKind.rest => calendarMarkerCyan,
     null => calendarMarkerMuted,
   };
