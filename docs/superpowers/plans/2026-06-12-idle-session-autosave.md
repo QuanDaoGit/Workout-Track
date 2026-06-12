@@ -1,7 +1,13 @@
 # Idle session auto-save (30-min inactivity) — implementation plan
 
 Status: implemented 2026-06-12 (deep-feature Stage 5). Codex-hardened from the opinion + plan
-reviews. `flutter analyze` clean; `flutter test` 654/654. Code uncommitted pending user.
+reviews, then a diff-grounded Codex review on the commit. `flutter analyze` clean; `flutter test`
+green.
+
+Diff-review fixes (commit 2): (1) checkpoint writes are now drained (`_drainCheckpoint`) on every
+exit path before the final save/discard, so an unawaited read-modify-write can't resurrect the
+ongoing row or clobber the completed save; (2) a zero-set foreground idle session now drops
+silently (matching the cold-reopen path) instead of prompting over an empty session.
 
 ## Context
 

@@ -88,6 +88,10 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   Timer? _idleTimer;
   bool _idleHandling = false;
   bool _programMarked = false;
+  // The most recent in-flight checkpoint write. Exit paths drain it before
+  // writing final state so a late read-modify-write can't resurrect the ongoing
+  // row or clobber the completed save.
+  Future<void>? _checkpointInFlight;
 
   List<String> get _targetMuscleGroups {
     final normalized = normalizeTargetMuscleGroups(widget.targetMuscleGroups);
@@ -322,8 +326,11 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       );
       return;
     }
+    _leaving = true;
     _timer?.cancel();
     _idleTimer?.cancel();
+    await _drainCheckpoint();
+    if (!mounted) return;
     // Idle auto-save credits time only up to the last logged set; a normal
     // finish credits the live elapsed.
     final elapsed = creditedElapsed ?? _elapsedSeconds;
@@ -366,7 +373,20 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _lastActivitySeconds = _elapsedSeconds;
     _idleHandling = false;
     _armIdleTimer();
-    unawaited(_checkpoint());
+    _checkpointInFlight = _checkpoint();
+  }
+
+  /// Awaits any in-flight checkpoint write so a stale read-modify-write can't
+  /// land after the caller's final storage write.
+  Future<void> _drainCheckpoint() async {
+    final pending = _checkpointInFlight;
+    if (pending != null) {
+      try {
+        await pending;
+      } catch (_) {
+        // A failed checkpoint must not block exit.
+      }
+    }
   }
 
   /// Arms (or re-arms) the inactivity timer relative to the last logged set, so
@@ -424,19 +444,25 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     // RootPage on a near-simultaneous resume), stand down.
     if (!IdleSessionGuard.instance.claim(_sessionId)) return;
     _idleHandling = true;
-    await _checkpoint();
+    await _drainCheckpoint();
     if (!mounted) {
       IdleSessionGuard.instance.release(_sessionId);
       return;
     }
-    final hasSets = _totalLoggedSets > 0;
+    // Nothing logged — drop it silently (matching the cold-reopen path) rather
+    // than prompting over an empty session.
+    if (_totalLoggedSets == 0) {
+      IdleSessionGuard.instance.release(_sessionId);
+      await _discardIdleNoReward();
+      return;
+    }
     final idleMinutes = DateTime.now()
         .difference(_lastActivityAt)
         .inMinutes
         .clamp(WorkoutStorageService.idleTimeout.inMinutes, 1 << 30);
     final choice = await showIdleSessionDialog(
       context,
-      hasSets: hasSets,
+      hasSets: true,
       resumeLabel: 'KEEP TRAINING',
       idleMinutes: idleMinutes,
     );
@@ -466,6 +492,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _leaving = true;
     _timer?.cancel();
     _idleTimer?.cancel();
+    await _drainCheckpoint();
     await WorkoutStorageService().deleteSession(_sessionId);
     if (_programMarked) {
       await ProgramService().clearOngoingProgramSession(_sessionId);
@@ -479,6 +506,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _updateElapsed();
     _timer?.cancel();
     _idleTimer?.cancel();
+    await _drainCheckpoint();
     final logs = _buildExerciseLogs();
     await WorkoutStorageService().replaceOngoingSession(
       WorkoutSession(
@@ -522,6 +550,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _updateElapsed();
     _timer?.cancel();
     _idleTimer?.cancel();
+    await _drainCheckpoint();
     RestTimerService.instance.cancel();
     final logs = _buildExerciseLogs();
     final now = DateTime.now();
@@ -562,6 +591,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _updateElapsed();
     _timer?.cancel();
     _idleTimer?.cancel();
+    await _drainCheckpoint();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       arcadeRoute(
