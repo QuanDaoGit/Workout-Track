@@ -59,6 +59,7 @@ class WorkoutSummaryPage extends StatefulWidget {
     this.isProgramWorkout = false,
     this.advanceProgramRestDayOnCompletion = false,
     this.isCalibration = false,
+    this.autoSavedAfterIdle = false,
   });
 
   final String muscleGroup;
@@ -81,6 +82,11 @@ class WorkoutSummaryPage extends StatefulWidget {
   /// Onboarding calibration run — record calibration after save and route to
   /// the rank reveal instead of returning home with the normal stat delta.
   final bool isCalibration;
+
+  /// True when this summary was reached by the 30-minute idle auto-save (rather
+  /// than a manual Finish). Shows a calm cutoff note so the trimmed duration is
+  /// not a silent rewrite.
+  final bool autoSavedAfterIdle;
 
   @override
   State<WorkoutSummaryPage> createState() => _WorkoutSummaryPageState();
@@ -618,6 +624,15 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                         Text(
                           widget.abandonedMessage ??
                               'Time XP only. No mission progress.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                      if (!widget.isAbandoned && widget.autoSavedAfterIdle) ...[
+                        const SizedBox(height: kSpace2),
+                        Text(
+                          'Auto-saved after 30 min idle — time counted up to '
+                          'your last set.',
                           style: Theme.of(context).textTheme.bodySmall,
                           textAlign: TextAlign.center,
                         ),

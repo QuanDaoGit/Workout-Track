@@ -352,6 +352,135 @@ void main() {
     },
   );
 
+  test('lastActivityAt round-trips and defaults to null on legacy JSON', () {
+    final now = DateTime(2026, 5, 14, 9);
+    final withActivity = _session(
+      date: now,
+      isPartial: true,
+      lastActivityAt: now.add(const Duration(minutes: 12)),
+    );
+    final parsed = WorkoutSession.fromJson(withActivity.toJson());
+    expect(parsed.lastActivityAt, now.add(const Duration(minutes: 12)));
+
+    final legacy = _session(date: now).toJson()..remove('lastActivityAt');
+    expect(WorkoutSession.fromJson(legacy).lastActivityAt, isNull);
+  });
+
+  test('copyWith preserves lastActivityAt', () {
+    final now = DateTime(2026, 5, 14, 9);
+    final session = _session(
+      date: now,
+      isPartial: true,
+      lastActivityAt: now.add(const Duration(minutes: 5)),
+    );
+    final copied = session.copyWith(statDelta: {'STR': 1});
+    expect(copied.lastActivityAt, now.add(const Duration(minutes: 5)));
+  });
+
+  group('getIdleTimedOutSession', () {
+    test('trips only at/after the idle threshold', () async {
+      final storage = WorkoutStorageService();
+      final lastSet = DateTime(2026, 5, 14, 9);
+      await storage.checkpointOngoingSession(
+        _session(
+          date: lastSet,
+          id: 'live',
+          isPartial: true,
+          lastActivityAt: lastSet,
+        ),
+      );
+
+      expect(
+        await storage.getIdleTimedOutSession(
+          now: lastSet.add(const Duration(minutes: 29)),
+        ),
+        isNull,
+      );
+      expect(
+        (await storage.getIdleTimedOutSession(
+          now: lastSet.add(const Duration(minutes: 30)),
+        ))?.id,
+        'live',
+      );
+    });
+
+    test('never trips a legacy (null lastActivityAt) ongoing session', () async {
+      final storage = WorkoutStorageService();
+      final start = DateTime(2026, 5, 14, 9);
+      await storage.replaceOngoingSession(
+        _session(date: start, id: 'legacy', isPartial: true),
+      );
+      expect(
+        await storage.getIdleTimedOutSession(
+          now: start.add(const Duration(hours: 5)),
+        ),
+        isNull,
+      );
+    });
+
+    test('excludes explicit Save&Exit (paused) sessions', () async {
+      final storage = WorkoutStorageService();
+      final lastSet = DateTime(2026, 5, 14, 9);
+      await storage.replaceOngoingSession(
+        _session(
+          date: lastSet,
+          id: 'paused',
+          isPartial: true,
+          isPausedForResume: true,
+          pausedAt: lastSet,
+          autoDiscardAt: DateTime(2026, 5, 15),
+          lastActivityAt: lastSet,
+        ),
+      );
+      expect(
+        await storage.getIdleTimedOutSession(
+          now: lastSet.add(const Duration(hours: 2)),
+        ),
+        isNull,
+      );
+    });
+  });
+
+  test('checkpointOngoingSession persists without emitting a change signal', () async {
+    final storage = WorkoutStorageService();
+    final now = DateTime(2026, 5, 14, 9);
+    var emissions = 0;
+    final sub = WorkoutStorageService.changes.listen((_) => emissions++);
+
+    await storage.checkpointOngoingSession(
+      _session(date: now, id: 'live', isPartial: true, lastActivityAt: now),
+    );
+    // Let any queued microtasks/events drain.
+    await Future<void>.delayed(Duration.zero);
+
+    expect(emissions, 0);
+    expect((await storage.getOngoingSession())?.id, 'live');
+    await sub.cancel();
+  });
+
+  test('saveSession replaces the ongoing checkpoint row (no duplicate id)', () async {
+    final storage = WorkoutStorageService();
+    final now = DateTime(2026, 5, 14, 9);
+    await storage.checkpointOngoingSession(
+      _session(
+        date: now,
+        id: 'workout',
+        isPartial: true,
+        setCount: 1,
+        lastActivityAt: now,
+      ),
+    );
+
+    await storage.saveSession(
+      _session(date: now, id: 'workout', setCount: 3, seconds: 1200),
+    );
+
+    final sessions = await storage.getSessions();
+    expect(sessions.where((s) => s.id == 'workout'), hasLength(1));
+    expect(sessions.single.isOngoing, isFalse);
+    expect(await storage.getOngoingSession(), isNull);
+  });
+
   test(
     'auto-ended paused session is abandoned and no longer resumable',
     () async {
@@ -398,6 +527,7 @@ WorkoutSession _session({
   bool isPausedForResume = false,
   DateTime? pausedAt,
   DateTime? autoDiscardAt,
+  DateTime? lastActivityAt,
   int setCount = 3,
   int seconds = 1800,
   int targetMinutes = 30,
@@ -415,6 +545,7 @@ WorkoutSession _session({
     startedAt: startedAt,
     pausedAt: pausedAt,
     autoDiscardAt: autoDiscardAt,
+    lastActivityAt: lastActivityAt,
     muscleGroup: 'Chest',
     targetDurationMinutes: targetMinutes,
     actualDurationSeconds: seconds,

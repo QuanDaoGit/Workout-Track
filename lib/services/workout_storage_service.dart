@@ -15,6 +15,11 @@ class WorkoutStorageService {
   static const String _sessionsKey = 'workout_sessions';
   static const String _lastCompletedDateKey = 'last_completed_date';
   static const String _lastMissionFinishTypeKey = 'last_mission_finish_type';
+
+  /// A live session that goes this long without a new logged set is treated as
+  /// idle and offered for auto-save on the next app open/resume (or by the
+  /// active page's foreground timer). See [getIdleTimedOutSession].
+  static const Duration idleTimeout = Duration(minutes: 30);
   static final StreamController<void> _changes =
       StreamController<void>.broadcast();
 
@@ -31,6 +36,10 @@ class WorkoutStorageService {
 
   Future<void> saveSession(WorkoutSession session) async {
     final sessions = await getSessions();
+    // Incremental autosave leaves an ongoing checkpoint row under this session's
+    // id; the completed save replaces it (otherwise we'd keep both an ongoing and
+    // a completed row with the same id — a duplicate + a lingering resume dock).
+    sessions.removeWhere((s) => s.id == session.id && s.isOngoing);
     sessions.add(session);
     await _writeSessions(sessions);
     if (!session.isPartial) {
@@ -100,6 +109,41 @@ class WorkoutStorageService {
     await _writeSessions(updated);
   }
 
+  /// Incrementally persist the live session (at start and on each set log) so a
+  /// force-kill mid-session no longer loses logged sets, and so idle detection
+  /// has a stored `lastActivityAt`. Writes silently (no change signal): the
+  /// active page is on top, and the RootPage resume dock already refreshes from
+  /// its 1-second poll, so we avoid churning a quest-tab reload on every set.
+  Future<void> checkpointOngoingSession(WorkoutSession session) async {
+    final sessions = await getSessions();
+    final updated = sessions.where((s) => !s.isOngoing).toList()..add(session);
+    await _writeSessions(updated, notify: false);
+  }
+
+  /// The most-idle live session eligible for idle auto-save: ongoing,
+  /// **not** an explicit Save&Exit pause (those use the midnight `autoDiscardAt`
+  /// path), with a trusted `lastActivityAt` at least [idleTimeout] in the past.
+  /// Legacy rows (null `lastActivityAt`) are never auto-timed-out.
+  Future<WorkoutSession?> getIdleTimedOutSession({
+    DateTime? now,
+    Duration? idleTimeout,
+  }) async {
+    final threshold = idleTimeout ?? WorkoutStorageService.idleTimeout;
+    final currentTime = now ?? DateTime.now();
+    final sessions = await getSessions();
+    final timedOut =
+        sessions.where((session) {
+          final last = session.lastActivityAt;
+          return session.isOngoing &&
+              !session.isPausedForResume &&
+              last != null &&
+              !currentTime.isBefore(last.add(threshold));
+        }).toList()..sort(
+          (a, b) => a.lastActivityAt!.compareTo(b.lastActivityAt!),
+        );
+    return timedOut.isEmpty ? null : timedOut.first;
+  }
+
   Future<void> replaceOngoingWithAbandoned(
     WorkoutSession session, {
     bool markMissionFinished = false,
@@ -151,13 +195,16 @@ class WorkoutStorageService {
     return expired.isEmpty ? null : expired.first;
   }
 
-  Future<void> _writeSessions(List<WorkoutSession> sessions) async {
+  Future<void> _writeSessions(
+    List<WorkoutSession> sessions, {
+    bool notify = true,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = jsonEncode(sessions.map((s) => s.toJson()).toList());
     await prefs.setString(_sessionsKey, raw);
     _cachedRaw = raw;
     _sessionCache = List.of(sessions);
-    _emitChanged();
+    if (notify) _emitChanged();
   }
 
   Future<List<WorkoutSession>> getSessions() async {

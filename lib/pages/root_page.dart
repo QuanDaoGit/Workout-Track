@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/program_models.dart';
 import '../models/workout_models.dart';
 import '../services/exercise_catalog_service.dart';
+import '../services/idle_session_guard.dart';
 import '../services/loot_drop_service.dart';
 import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
@@ -12,6 +13,7 @@ import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
+import '../widgets/idle_session_dialog.dart';
 import '../widgets/motion/hold_depress.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
@@ -53,6 +55,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   WorkoutSession? _ongoingSession;
   bool _loadingOngoing = false;
   bool _showingExpiredPausedSummary = false;
+  bool _showingIdleReveal = false;
   bool _hasUnviewedLootDrops = false;
   StreamSubscription<void>? _storageSubscription;
 
@@ -79,6 +82,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showExpiredPausedSummaryIfNeeded();
+      _showIdleRevealIfNeeded();
     });
     if (widget.openWorkoutStarterOnLaunch) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _openFirstSession());
@@ -125,6 +129,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _showExpiredPausedSummaryIfNeeded();
+      _showIdleRevealIfNeeded();
     }
   }
 
@@ -205,6 +210,98 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     );
     if (!mounted) return;
     _showingExpiredPausedSummary = false;
+    _loadOngoingSession();
+    _reloadQuestAwarePages();
+  }
+
+  /// Cold-case idle auto-save: the app was killed/backgrounded mid-session and a
+  /// live workout has gone past the idle window. The active page owns this while
+  /// it is on top (the shell route is not current then); the shell only handles
+  /// it once that page is gone. A timed-out session that logged nothing is
+  /// dropped silently; one with sets offers save / resume / discard.
+  Future<void> _showIdleRevealIfNeeded() async {
+    if (_showingIdleReveal || IdleSessionGuard.instance.isHandling) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    final session = await WorkoutStorageService().getIdleTimedOutSession();
+    if (session == null || !mounted) return;
+
+    final hasSets = session.exercises.any((log) => log.sets.isNotEmpty);
+    if (!hasSets) {
+      await WorkoutStorageService().deleteSession(session.id);
+      if (!mounted) return;
+      _loadOngoingSession();
+      _reloadQuestAwarePages();
+      return;
+    }
+
+    if (!IdleSessionGuard.instance.claim(session.id)) return;
+    _showingIdleReveal = true;
+    final last = session.lastActivityAt;
+    final idleMinutes = last == null
+        ? WorkoutStorageService.idleTimeout.inMinutes
+        : DateTime.now()
+              .difference(last)
+              .inMinutes
+              .clamp(WorkoutStorageService.idleTimeout.inMinutes, 1 << 30);
+    final choice = await showIdleSessionDialog(
+      context,
+      hasSets: true,
+      resumeLabel: 'RESUME WORKOUT',
+      idleMinutes: idleMinutes,
+    );
+    IdleSessionGuard.instance.release(session.id);
+    _showingIdleReveal = false;
+    if (!mounted) return;
+    switch (choice) {
+      case IdleSessionChoice.save:
+        await _saveIdleSession(session);
+      case IdleSessionChoice.resume:
+        await _resumeOngoingSession(session);
+      case IdleSessionChoice.discard:
+        await WorkoutStorageService().deleteSession(session.id);
+        await ProgramService().clearOngoingProgramSession(session.id);
+        if (!mounted) return;
+        _loadOngoingSession();
+        _reloadQuestAwarePages();
+      case null:
+        // Dismissed without choosing — leave it; the next open re-offers.
+        break;
+    }
+  }
+
+  /// Commits an idle-timed-out session as a completed workout through the normal
+  /// summary path (single XP/mission award; `saveSession` clears its ongoing
+  /// checkpoint row). Duration is the credited elapsed captured at the last set.
+  Future<void> _saveIdleSession(WorkoutSession session) async {
+    final programService = ProgramService();
+    final isProgram = await programService.isOngoingProgramSession(session.id);
+    final advanceRest = await programService.isOngoingProgramRestSession(
+      session.id,
+    );
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      arcadeRoute(
+        (_) => WorkoutSummaryPage(
+          muscleGroup: session.muscleGroup,
+          targetMuscleGroups: session.targetMuscleGroups,
+          durationMinutes: session.targetDurationMinutes,
+          elapsedSeconds: session.actualDurationSeconds,
+          exerciseLogs: session.exercises,
+          selectedExerciseIds: session.selectedExerciseIds,
+          sessionId: session.id,
+          isPartial: false,
+          startedAt: session.startedAt,
+          sessionDate: session.date,
+          resumeFromSession: session,
+          isProgramWorkout: isProgram,
+          advanceProgramRestDayOnCompletion: advanceRest,
+          autoSavedAfterIdle: true,
+        ),
+        motion: ArcadeRouteMotion.reveal,
+      ),
+    );
+    if (!mounted) return;
     _loadOngoingSession();
     _reloadQuestAwarePages();
   }

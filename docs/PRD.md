@@ -32,7 +32,9 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 ### Workout logging
 - [x] Start Workout: select muscle group, set duration (scroll picker), pick exercises from a
       curated local catalog (multi-select with favorites).
-- [x] Active session: live timer, per-exercise status, rest timer.
+- [x] Active session: live timer, per-exercise status, rest timer. Each logged set checkpoints
+      to storage (crash-safe), and a 30-min inactivity window offers an idle auto-save reveal
+      (save & finish / keep training / discard) — on the active page or on the next app open.
 - [x] Per-exercise set logging (weight + reps).
 - [x] Post-workout summary: XP awards, stat deltas, calorie breakdown, save to local storage.
 - [x] Workout history (list + calendar) and per-exercise detail.

@@ -7,11 +7,13 @@ import '../../data/muscle_groups.dart';
 import '../../models/program_models.dart';
 import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
+import '../../services/idle_session_guard.dart';
 import '../../services/program_service.dart';
 import '../../services/rest_timer_service.dart';
 import '../../services/workout_storage_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_dialog_button_column.dart';
+import '../../widgets/idle_session_dialog.dart';
 import '../../widgets/arcade_progress_bar.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/arcade_tap.dart';
@@ -37,6 +39,7 @@ class ActiveWorkoutPage extends StatefulWidget {
     this.advanceProgramRestDayOnCompletion = false,
     this.isCalibration = false,
     this.prescriptions = const {},
+    this.idleTimeout = WorkoutStorageService.idleTimeout,
   });
 
   final String muscleGroup;
@@ -56,6 +59,10 @@ class ActiveWorkoutPage extends StatefulWidget {
   /// workouts and resumed sessions.
   final Map<String, SetRepScheme> prescriptions;
 
+  /// Inactivity window before the idle auto-save reveal. Overridable in tests;
+  /// defaults to the production 30-minute constant.
+  final Duration idleTimeout;
+
   @override
   State<ActiveWorkoutPage> createState() => _ActiveWorkoutPageState();
 }
@@ -72,6 +79,15 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   final Map<String, int> _flashTriggers = {};
   bool _leaving = false;
   bool _restPromptOpen = false;
+
+  // Idle auto-save: the wall-clock of the last logged set (drives the 30-min
+  // timeout) and the elapsed seconds captured at that moment (the credited
+  // duration, so an idle gap never inflates time/calorie XP).
+  late DateTime _lastActivityAt;
+  int _lastActivitySeconds = 0;
+  Timer? _idleTimer;
+  bool _idleHandling = false;
+  bool _programMarked = false;
 
   List<String> get _targetMuscleGroups {
     final normalized = normalizeTargetMuscleGroups(widget.targetMuscleGroups);
@@ -107,6 +123,13 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
 
     _updateElapsed();
 
+    // Resuming counts as activity now; a fresh session's last activity is its
+    // start. Credited seconds = elapsed so far (0 fresh; the resumed duration).
+    _lastActivityAt = widget.resumeFromSession != null
+        ? DateTime.now()
+        : _sessionStartTime;
+    _lastActivitySeconds = _elapsedSeconds;
+
     _status = {
       for (final e in widget.exercises)
         e.id: _loggedSets.containsKey(e.id)
@@ -122,6 +145,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       setState(_updateElapsed);
     });
+    _armIdleTimer();
 
     // Auto-scroll to first incomplete exercise on resume
     if (widget.resumeFromSession != null) {
@@ -151,6 +175,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _idleTimer?.cancel();
     super.dispose();
   }
 
@@ -158,6 +183,10 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       setState(_updateElapsed);
+      // The idle timer is suspended while backgrounded; re-arm it relative to
+      // the real last-activity time so a 30-min absence is caught on return
+      // (fires immediately if the window already elapsed).
+      _armIdleTimer();
     }
   }
 
@@ -210,6 +239,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         _status[exercise.id] = _ExerciseStatus.done;
         _flashTriggers[exercise.id] = (_flashTriggers[exercise.id] ?? 0) + 1;
       });
+      _registerActivity();
     } else {
       setState(() => _status[exercise.id] = previousStatus);
     }
@@ -281,7 +311,10 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         ),
   ];
 
-  Future<void> _goToSummary() async {
+  Future<void> _goToSummary({
+    int? creditedElapsed,
+    bool autoSavedAfterIdle = false,
+  }) async {
     _updateElapsed();
     if (_totalLoggedSets == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -290,12 +323,16 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       return;
     }
     _timer?.cancel();
+    _idleTimer?.cancel();
+    // Idle auto-save credits time only up to the last logged set; a normal
+    // finish credits the live elapsed.
+    final elapsed = creditedElapsed ?? _elapsedSeconds;
     final summary = arcadeRoute(
       (_) => WorkoutSummaryPage(
         muscleGroup: widget.muscleGroup,
         targetMuscleGroups: _targetMuscleGroups,
         durationMinutes: widget.durationMinutes,
-        elapsedSeconds: _elapsedSeconds,
+        elapsedSeconds: elapsed,
         exerciseLogs: _buildExerciseLogs(),
         selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
         sessionId: _sessionId,
@@ -306,6 +343,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         advanceProgramRestDayOnCompletion:
             widget.advanceProgramRestDayOnCompletion,
         isCalibration: widget.isCalibration,
+        autoSavedAfterIdle: autoSavedAfterIdle,
       ),
       motion: ArcadeRouteMotion.reveal,
     );
@@ -319,17 +357,135 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     }
   }
 
+  /// Records a fresh activity beat (a logged set): resets the idle window and
+  /// the credited duration to "now", then checkpoints to storage so a crash
+  /// keeps the logged sets.
+  void _registerActivity() {
+    _updateElapsed();
+    _lastActivityAt = DateTime.now();
+    _lastActivitySeconds = _elapsedSeconds;
+    _idleHandling = false;
+    _armIdleTimer();
+    unawaited(_checkpoint());
+  }
+
+  /// Arms (or re-arms) the inactivity timer relative to the last logged set, so
+  /// it fires exactly [WorkoutStorageService.idleTimeout] after that set.
+  void _armIdleTimer() {
+    _idleTimer?.cancel();
+    if (_leaving) return;
+    final remaining =
+        widget.idleTimeout - DateTime.now().difference(_lastActivityAt);
+    _idleTimer = Timer(
+      remaining.isNegative ? Duration.zero : remaining,
+      _onIdleTimeout,
+    );
+  }
+
+  /// Silently persists the live session as an ongoing checkpoint (only once at
+  /// least one set is logged — an empty session has nothing to recover).
+  Future<void> _checkpoint() async {
+    if (_leaving || _loggedSets.isEmpty) return;
+    if ((widget.isProgramWorkout ||
+            widget.advanceProgramRestDayOnCompletion) &&
+        !_programMarked) {
+      _programMarked = true;
+      await ProgramService().markOngoingProgramSession(
+        _sessionId,
+        restDayWorkout: widget.advanceProgramRestDayOnCompletion,
+      );
+    }
+    await WorkoutStorageService().checkpointOngoingSession(
+      WorkoutSession(
+        id: _sessionId,
+        date: DateTime.now(),
+        startedAt: _sessionStartTime,
+        lastActivityAt: _lastActivityAt,
+        muscleGroup: widget.muscleGroup,
+        targetMuscleGroups: _targetMuscleGroups,
+        targetDurationMinutes: widget.durationMinutes,
+        actualDurationSeconds: _lastActivitySeconds,
+        exercises: _buildExerciseLogs(),
+        estimatedCalories: CalorieService.estimateCaloriesForGroups(
+          _targetMuscleGroups,
+          _lastActivitySeconds,
+        ),
+        isPartial: true,
+        selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
+      ),
+    );
+  }
+
+  /// Fired when the session has gone [WorkoutStorageService.idleTimeout] without
+  /// a new set while this page is on top. Offers save / keep training / discard.
+  Future<void> _onIdleTimeout() async {
+    if (!mounted || _leaving || _idleHandling) return;
+    // The page that's on top owns the reveal; if one is already in flight (e.g.
+    // RootPage on a near-simultaneous resume), stand down.
+    if (!IdleSessionGuard.instance.claim(_sessionId)) return;
+    _idleHandling = true;
+    await _checkpoint();
+    if (!mounted) {
+      IdleSessionGuard.instance.release(_sessionId);
+      return;
+    }
+    final hasSets = _totalLoggedSets > 0;
+    final idleMinutes = DateTime.now()
+        .difference(_lastActivityAt)
+        .inMinutes
+        .clamp(WorkoutStorageService.idleTimeout.inMinutes, 1 << 30);
+    final choice = await showIdleSessionDialog(
+      context,
+      hasSets: hasSets,
+      resumeLabel: 'KEEP TRAINING',
+      idleMinutes: idleMinutes,
+    );
+    IdleSessionGuard.instance.release(_sessionId);
+    if (!mounted) return;
+    switch (choice) {
+      case IdleSessionChoice.save:
+        await _goToSummary(
+          creditedElapsed: _lastActivitySeconds,
+          autoSavedAfterIdle: true,
+        );
+      case IdleSessionChoice.discard:
+        await _discardIdleNoReward();
+      case IdleSessionChoice.resume:
+      case null:
+        // Keep training: restart the idle window (credited duration stays at the
+        // last logged set until the next one).
+        _idleHandling = false;
+        _lastActivityAt = DateTime.now();
+        _armIdleTimer();
+    }
+  }
+
+  /// Drops an idle session that logged nothing — no XP, no mission, no history.
+  Future<void> _discardIdleNoReward() async {
+    if (_leaving) return;
+    _leaving = true;
+    _timer?.cancel();
+    _idleTimer?.cancel();
+    await WorkoutStorageService().deleteSession(_sessionId);
+    if (_programMarked) {
+      await ProgramService().clearOngoingProgramSession(_sessionId);
+    }
+    if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
   Future<void> _savePartialAndQuit() async {
     if (_leaving) return;
     _leaving = true;
     _updateElapsed();
     _timer?.cancel();
+    _idleTimer?.cancel();
     final logs = _buildExerciseLogs();
     await WorkoutStorageService().replaceOngoingSession(
       WorkoutSession(
         id: _sessionId,
         date: DateTime.now(),
         startedAt: _sessionStartTime,
+        lastActivityAt: _lastActivityAt,
         muscleGroup: widget.muscleGroup,
         targetMuscleGroups: _targetMuscleGroups,
         targetDurationMinutes: widget.durationMinutes,
@@ -365,6 +521,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _leaving = true;
     _updateElapsed();
     _timer?.cancel();
+    _idleTimer?.cancel();
     RestTimerService.instance.cancel();
     final logs = _buildExerciseLogs();
     final now = DateTime.now();
@@ -375,6 +532,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         startedAt: _sessionStartTime,
         pausedAt: now,
         autoDiscardAt: _nextLocalMidnight(now),
+        lastActivityAt: _lastActivityAt,
         muscleGroup: widget.muscleGroup,
         targetMuscleGroups: _targetMuscleGroups,
         targetDurationMinutes: widget.durationMinutes,
@@ -403,6 +561,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _leaving = true;
     _updateElapsed();
     _timer?.cancel();
+    _idleTimer?.cancel();
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       arcadeRoute(

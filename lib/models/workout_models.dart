@@ -186,6 +186,7 @@ class WorkoutSession {
     DateTime? startedAt,
     this.pausedAt,
     this.autoDiscardAt,
+    this.lastActivityAt,
     this.isPartial = false,
     this.isAbandoned = false,
     this.isPausedForResume = false,
@@ -207,6 +208,13 @@ class WorkoutSession {
   final DateTime startedAt;
   final DateTime? pausedAt;
   final DateTime? autoDiscardAt;
+
+  /// Wall-clock time of the last in-session activity (session start, or the most
+  /// recent set log / resume). Drives the 30-minute idle auto-save detection
+  /// only — duration credit is read from [actualDurationSeconds], which the live
+  /// checkpoint writes at each set log. Null on legacy sessions (and on any row
+  /// written before this field existed); a null is never auto-timed-out.
+  final DateTime? lastActivityAt;
   final String muscleGroup;
   final int targetDurationMinutes;
   final int actualDurationSeconds;
@@ -238,12 +246,14 @@ class WorkoutSession {
   WorkoutSession copyWith({
     List<ExerciseLog>? exercises,
     Map<String, int>? statDelta,
+    DateTime? lastActivityAt,
   }) => WorkoutSession(
     id: id,
     date: date,
     startedAt: startedAt,
     pausedAt: pausedAt,
     autoDiscardAt: autoDiscardAt,
+    lastActivityAt: lastActivityAt ?? this.lastActivityAt,
     muscleGroup: muscleGroup,
     targetMuscleGroups: targetMuscleGroups,
     targetDurationMinutes: targetDurationMinutes,
@@ -287,6 +297,7 @@ class WorkoutSession {
     'startedAt': startedAt.toIso8601String(),
     'pausedAt': pausedAt?.toIso8601String(),
     'autoDiscardAt': autoDiscardAt?.toIso8601String(),
+    if (lastActivityAt != null) 'lastActivityAt': lastActivityAt!.toIso8601String(),
     'muscleGroup': muscleGroup,
     'targetDurationMinutes': targetDurationMinutes,
     'actualDurationSeconds': actualDurationSeconds,
@@ -315,6 +326,7 @@ class WorkoutSession {
         : DateTime.tryParse(startedAtRaw) ?? date;
     final pausedAtRaw = j['pausedAt'] as String?;
     final autoDiscardAtRaw = j['autoDiscardAt'] as String?;
+    final lastActivityAtRaw = j['lastActivityAt'] as String?;
     final rawMuscleGroup = j['muscleGroup'] as String;
 
     return WorkoutSession(
@@ -325,6 +337,9 @@ class WorkoutSession {
       autoDiscardAt: autoDiscardAtRaw == null
           ? null
           : DateTime.tryParse(autoDiscardAtRaw),
+      lastActivityAt: lastActivityAtRaw == null
+          ? null
+          : DateTime.tryParse(lastActivityAtRaw),
       muscleGroup: normalizeMuscleGroup(rawMuscleGroup) ?? rawMuscleGroup,
       targetDurationMinutes: j['targetDurationMinutes'] as int,
       actualDurationSeconds: j['actualDurationSeconds'] as int,
