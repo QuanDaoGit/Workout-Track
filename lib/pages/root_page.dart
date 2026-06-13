@@ -630,8 +630,8 @@ class _TrainNavButtonState extends State<_TrainNavButton>
                     border: Border.all(color: kBg, width: 3),
                     boxShadow: widget.live ? neonGlow() : null,
                   ),
-                  child: const Icon(
-                    Icons.bolt_sharp,
+                  child: const ImageIcon(
+                    AssetImage('assets/icons/control/icon_sword.png'),
                     color: kBg,
                     size: 26,
                   ),
