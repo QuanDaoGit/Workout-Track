@@ -269,7 +269,11 @@ class AdventureService {
       return null;
     }
 
-    final now = _nowProvider();
+    // Monotonic effective clock (max of now and the persisted max-seen time):
+    // a rolled-back wall clock can't reset the weekly dispatch cap or backdate
+    // the return — same max-anchor discipline as the charge grant (Codex diff
+    // review). `_settleIfRevealable` already bumped maxSeenAtIso on `state`.
+    final now = _effectiveNow(state);
     final today = _dateOnly(now);
     final weekIso = GuildService.weekIso(today);
     final weekCount = state.weekIso == weekIso ? state.weekCount : 0;

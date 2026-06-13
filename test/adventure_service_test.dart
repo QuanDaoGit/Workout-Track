@@ -435,6 +435,41 @@ void main() {
       expect(await monSvc.dispatchExpedition('iron_vault'), isNotNull);
       expect((await storedState()).weekCount, 1);
     });
+
+    test('clock rollback cannot reset the weekly cap (monotonic dispatch '
+        'clock — Codex diff review)', () async {
+      Future<void> dayCycle(int day) async {
+        final at = DateTime(2026, 6, day, 18);
+        final svc = service(at: at);
+        await svc.grantChargeForSession(session('w$day', at));
+        await svc.dispatchExpedition('iron_vault');
+        await service(
+          at: DateTime(2026, 6, day + 1, 10),
+        ).settleAndPeekReport();
+      }
+
+      for (var day = 8; day <= 12; day++) {
+        await dayCycle(day); // fill ISO week 24 to the cap
+      }
+      expect((await storedState()).weekCount, 5);
+
+      // Bank a charge Saturday (still week 24, no dispatch).
+      final sat = DateTime(2026, 6, 13, 18);
+      await service(at: sat).grantChargeForSession(session('sat', sat));
+      expect((await storedState()).charges, 1);
+
+      // Roll the wall clock back to an EARLIER ISO week and try to spend the
+      // banked charge. The monotonic effective clock keeps us in week 24, so
+      // the cap still bites — a raw-clock implementation would reset and leak.
+      final rolledBack = DateTime(2026, 6, 1, 12); // ISO week 23
+      expect(
+        await service(at: rolledBack).dispatchExpedition('iron_vault'),
+        isNull,
+      );
+      final s = await storedState();
+      expect(s.weekCount, 5);
+      expect(s.charges, 1); // charge not spent
+    });
   });
 
   group('payout integrity', () {
