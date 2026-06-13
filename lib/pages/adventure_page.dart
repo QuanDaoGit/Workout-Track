@@ -228,7 +228,7 @@ class _AdventurePageState extends State<AdventurePage> {
       children: [
         Expanded(
           child: Text(
-            'EXPEDITION ORDERS',
+            'EXPEDITION ROUTES',
             style: TextStyle(
               fontFamily: 'PressStart2P',
               fontSize: 10,
@@ -245,7 +245,7 @@ class _AdventurePageState extends State<AdventurePage> {
     final String text;
     switch (ui.phase) {
       case AdventurePhase.out:
-        text = 'Your character is out on an expedition. Tap ? for details.';
+        text = 'Your character is out on an expedition.';
       case AdventurePhase.returned:
         text = 'Your character has returned — collect the haul.';
       case AdventurePhase.idle:
@@ -253,9 +253,9 @@ class _AdventurePageState extends State<AdventurePage> {
             ? 'Weekly expedition limit reached — your charges bank for next '
                   'week.'
             : ui.charges > 0
-            ? 'Pick a route and GO. Recovery (VIT) sets how long the haul '
-                  'runs and how rich it pays.'
-            : 'Log a workout to earn an expedition charge.';
+            ? 'Pick a route and GO. Higher recovery (VIT) means a longer, '
+                  'richer haul.'
+            : 'Do a workout to earn a charge.';
     }
     return Text(
       text,
@@ -281,7 +281,7 @@ class _AdventurePageState extends State<AdventurePage> {
           Text(
             ui.weeklyCapped
                 ? 'Weekly limit reached.'
-                : 'Log a workout to earn a charge.',
+                : 'Do a workout to earn a charge.',
             style: AppFonts.shareTechMono(color: kAmber, fontSize: 10),
           ),
         ],
@@ -380,9 +380,8 @@ class _RouteBackdrop extends StatelessWidget {
     }
   }
 
-  // Bottom name strip + SELECT hint.
+  // Bottom name strip + SELECT hint (no reward numbers — anticipation).
   Widget _selectableOverlay() {
-    final base = AdventureService.basePayoutForRank(rank);
     return Padding(
       padding: const EdgeInsets.all(kSpace3),
       child: Column(
@@ -398,7 +397,7 @@ class _RouteBackdrop extends StatelessWidget {
             children: [
               _routeTitle(),
               const SizedBox(height: 2),
-              _pill('${route.statKey} · RANK $rank · ~$base GEMS', kMutedText),
+              _pill('${route.statKey} ROUTE · RANK $rank', kMutedText),
             ],
           ),
         ],
@@ -406,12 +405,10 @@ class _RouteBackdrop extends StatelessWidget {
     );
   }
 
-  // Centered inspect card: payout + duration visible, "?" reveals breakdown.
+  // Centered inspect card: duration + a qualitative "how it works" — never the
+  // gem math (anticipation; the exact payout is revealed only in the report).
   Widget _armedOverlay() {
-    final base = AdventureService.basePayoutForRank(rank);
-    final mult = AdventureService.multiplierForVit(vit);
     final durH = (AdventureService.durationForVit(vit) / 60).round();
-    final est = (base * mult).round();
     return Padding(
       padding: const EdgeInsets.all(kSpace3),
       child: Column(
@@ -421,7 +418,7 @@ class _RouteBackdrop extends StatelessWidget {
           _routeTitle(center: true),
           const SizedBox(height: kSpace1),
           Text(
-            'RANK $rank · ~$est GEMS · ~${durH}H',
+            'RANK $rank · ~${durH}H',
             style: AppFonts.shareTechMono(
               color: kText,
               fontSize: 11,
@@ -433,7 +430,7 @@ class _RouteBackdrop extends StatelessWidget {
           if (showBreakdown) ...[
             const SizedBox(height: 2),
             Text(
-              'VIT $vit → ×${mult.toStringAsFixed(2)} · base $base',
+              'Higher VIT → higher rewards',
               style: AppFonts.shareTechMono(color: kCyan, fontSize: 10),
             ),
           ],
@@ -442,6 +439,8 @@ class _RouteBackdrop extends StatelessWidget {
     );
   }
 
+  // Ongoing: just the state + countdown. No "?" — the user committed to the
+  // route already; details belong before dispatch, not mid-expedition.
   Widget _ongoingOverlay(BuildContext context) {
     final reduceMotion = MediaQuery.of(context).disableAnimations;
     final returnsAt = pending?.returnsAtIso == null
@@ -459,27 +458,8 @@ class _RouteBackdrop extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _pill('ON EXPEDITION', route.accent),
-              GestureDetector(onTap: onToggleBreakdown, child: _qmark()),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (showBreakdown && pending != null) ...[
-                Text(
-                  'RANK ${pending!.rank} · ×${pending!.multiplier.toStringAsFixed(2)} '
-                  '· VIT ${pending!.vitAtDispatch}',
-                  style: AppFonts.shareTechMono(color: kCyan, fontSize: 10),
-                ),
-                const SizedBox(height: 2),
-              ],
-              _pill(back, kText),
-            ],
-          ),
+          _pill('ON EXPEDITION', route.accent),
+          _pill(back, kText),
         ],
       ),
     );
@@ -538,7 +518,7 @@ class _RouteBackdrop extends StatelessWidget {
         _qmark(),
         const SizedBox(width: 4),
         Text(
-          showBreakdown ? 'HIDE' : 'HOW IT PAYS',
+          showBreakdown ? 'HIDE' : 'HOW IT WORKS',
           style: AppFonts.shareTechMono(color: kMutedText, fontSize: 9),
         ),
       ],

@@ -75,7 +75,7 @@ void main() {
     await seed(AdventureState(charges: 0));
     await pumpPage(tester);
 
-    expect(find.textContaining('Log a workout'), findsWidgets);
+    expect(find.textContaining('Do a workout'), findsWidgets);
     expect(find.byType(RouteDiorama), findsNWidgets(3));
     expect(animatingDioramas(tester), 0);
     expect(find.textContaining('GO ON ADVENTURE'), findsNothing);

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../data/adventure_routes.dart';
 import '../../models/adventure_models.dart';
 import '../../services/guild_service.dart';
-import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 
 /// Compact Home callout for Adventure — deliberately static except for a
@@ -64,21 +63,21 @@ class AdventureCard extends StatelessWidget {
             : '${route.name} — back in ~${hrs}h';
       case AdventurePhase.idle:
         title = Text(
-          'NO EXPEDITION',
+          'EXPEDITION',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             fontFamily: 'PressStart2P',
-            fontSize: 8,
+            fontSize: 10,
             height: 1.5,
-            color: kMutedText,
+            color: kText,
           ),
         );
         subtitle = ui.weeklyCapped
-            ? 'Weekly limit reached — back next week.'
+            ? 'Weekly limit reached'
             : ui.charges > 0
-            ? '${ui.charges} charge${ui.charges == 1 ? '' : 's'} ready · tap to dispatch'
-            : 'No expedition is going on · train to earn a charge';
+            ? '${ui.charges} charge${ui.charges == 1 ? '' : 's'} ready'
+            : 'No expedition is going on';
     }
 
     return Material(
@@ -103,15 +102,6 @@ class AdventureCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'ADVENTURE',
-                      style: AppFonts.shareTechMono(
-                        color: kMutedText,
-                        fontSize: 10,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: kSpace1),
                     title,
                     const SizedBox(height: kSpace1),
                     Text(
