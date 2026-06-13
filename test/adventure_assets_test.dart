@@ -29,6 +29,20 @@ void main() {
     }
   });
 
+  test('the generic body sprite frames + generic emblem are bundled', () async {
+    // v3 core surfaces: the 4-frame walk strip and the no-expedition emblem.
+    // A non-recursive pubspec decl or a rename would fail here, not on device.
+    for (var f = 0; f < 4; f++) {
+      final asset = 'assets/adventure/body/frames/walk_$f.png';
+      final data = await rootBundle.load(asset);
+      expect(data.lengthInBytes, greaterThan(0), reason: asset);
+    }
+    final emblem = await rootBundle.load(
+      'assets/adventure/emblem_adventure_mode.png',
+    );
+    expect(emblem.lengthInBytes, greaterThan(0));
+  });
+
   test('flavor pools are non-empty and route ids unique', () {
     final ids = adventureRoutes.map((r) => r.id).toSet();
     expect(ids.length, adventureRoutes.length);

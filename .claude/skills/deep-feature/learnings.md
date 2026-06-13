@@ -38,8 +38,9 @@ event auto-settle first. A blocked/unseen ceremony must never block or burn the 
 ### Asset-dependent core surfaces
 **Rule:** A core surface that newly depends on bundled images needs per-image errorBuilder
 fallbacks AND a manifest test that `rootBundle.load`s every registry path — pubspec misses and
-renames fail in CI, not on device.
-*Seen: Adventure diorama/emblems on Home (2026-06).*
+renames fail in CI, not on device. Flutter asset-dir declarations are **non-recursive**: a new
+`assets/x/sub/` won't bundle just because `assets/x/` is listed — declare each subfolder.
+*Seen: Adventure diorama/emblems on Home; v3 body/ + body/frames/ subfolders (2026-06).*
 
 ### Farmable reward surfaces
 **Rule:** Any new reward path needs an explicit anti-farm bound consistent with existing bars
@@ -52,3 +53,10 @@ cheapest action that triggers this reward repeatedly?"
 per-day timestamp, boot id), it collides once decoupled — and a ledger keyed on it swallows the
 duplicate. Re-base on an independent source (`microsecondsSinceEpoch` + `Random().nextInt(0x7fffffff)`,
 never `1<<32`); test the worst case (same fixed clock). *Seen: Adventure v2 manual dispatch (2026-06).*
+
+### Entity-keyed side-state lifecycle
+**Rule:** Ephemeral state in a sibling store keyed by an entity id (per-session swaps, per-id flags)
+leaks or mis-applies unless cleared **wherever the entity row is removed/finalized in the storage
+layer** — every terminal path, never at UI buttons. Bonus: make a heavily-mutated field a read-only
+projection (no setter) so stray writers fail `analyze`. *Seen: ongoing program-swap store cleared in
+save/delete/abandon; `_selectedExerciseIds` as a getter over `_slots` (selection v2, 2026-06).*

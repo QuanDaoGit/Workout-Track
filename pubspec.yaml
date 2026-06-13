@@ -233,6 +233,8 @@ flutter:
     - assets/exercises/exercises/Zottman_Curl/
     - assets/adventure/
     - assets/adventure/loot/
+    - assets/adventure/body/
+    - assets/adventure/body/frames/
     - assets/icons/control/
     - assets/icons/control/ui/
     - assets/icons/economy/

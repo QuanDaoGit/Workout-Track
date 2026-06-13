@@ -4,11 +4,12 @@ import '../../models/avatar_spec.dart';
 import '../../models/character_class.dart';
 import '../avatar/ironbit_avatar.dart';
 
-/// The traveling character: the user's own procedural pixel face on a
-/// code-drawn chibi body, in the avatar grid language (zero image assets, so
-/// all ~8,100 faces work automatically). Two leg frames + a 1px head bob
-/// read as "walking" in pixel dialect; [frame] is driven by the diorama's
-/// clock. Class color tints the gear band.
+/// The traveling character: the user's own procedural pixel face stacked on
+/// the shared **generic body sprite** (a 4-frame 24×42 walk strip authored at
+/// `assets/adventure/body/`). The face is per-user (identity hook); the body
+/// is generic (no per-avatar skin recolor). [frame] (0–3) is driven by the
+/// diorama clock. If the body sheet is missing, it degrades to the code-drawn
+/// chibi body (errorBuilder) so a face always walks.
 class PixelWalker extends StatelessWidget {
   const PixelWalker({
     super.key,
@@ -21,47 +22,53 @@ class PixelWalker extends StatelessWidget {
   final AvatarSpec spec;
   final CharacterClass? characterClass;
 
-  /// 0 or 1 — alternating stride frames.
+  /// 0–3 — walk-cycle frame index.
   final int frame;
 
-  /// Head width in logical pixels; the body scales from it.
+  /// Head width in logical pixels; the 24×42 body canvas scales from it.
   final double size;
 
   @override
   Widget build(BuildContext context) {
-    final cell = size / 20; // one sprite pixel
-    final bodyHeight = cell * _bodyRows;
-    final bob = frame.isEven ? 0.0 : cell;
+    final cell = size / 20; // one sprite pixel (head is 20px wide)
+    final canvasW = 24 * cell;
+    final canvasH = 42 * cell;
+    // Freeze the walk frame under reduced motion (the diorama also stops, but
+    // PixelWalker may render in static contexts too).
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final f = reduceMotion ? 0 : (frame % 4);
+    final trim = characterClass?.themeColor ?? const Color(0xFF4D4D72);
     return SizedBox(
-      width: size,
-      // Head overlaps the body's top row so the neck seam stays hidden
-      // through the bob.
-      height: size + bodyHeight - cell + cell,
+      width: canvasW,
+      height: canvasH,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Positioned(
-            top: size - cell,
-            left: 0,
-            child: CustomPaint(
-              size: Size(size, bodyHeight),
-              painter: _WalkerBodyPainter(
-                frame: frame,
-                trim: characterClass?.themeColor ?? const Color(0xFF4D4D72),
+          // Generic body sprite — fills the 24×42 canvas; feet at row 40.
+          Positioned.fill(
+            child: Image.asset(
+              'assets/adventure/body/frames/walk_$f.png',
+              filterQuality: FilterQuality.none,
+              fit: BoxFit.fill,
+              errorBuilder: (_, _, _) => Padding(
+                // Code-body fallback sits below the head anchor (rows ~15+).
+                padding: EdgeInsets.only(top: 15 * cell),
+                child: CustomPaint(
+                  painter: _WalkerBodyPainter(frame: f, trim: trim),
+                ),
               ),
             ),
           ),
+          // The user's procedural face stacks at the rig head anchor (x+2, y0).
           Positioned(
-            top: bob,
-            left: 0,
+            left: 2 * cell,
+            top: 0,
             child: IronbitAvatar(spec: spec, size: size),
           ),
         ],
       ),
     );
   }
-
-  static const _bodyRows = 10;
 }
 
 class _WalkerBodyPainter extends CustomPainter {

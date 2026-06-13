@@ -306,3 +306,59 @@ class ExpeditionReport {
   /// the explainer + CHANGE ORDERS CTA).
   final bool classDefaultOrders;
 }
+
+/// Presentation phase of the Adventure surface, derived purely from state +
+/// clock. `armed` is page-local UI on top of `idle` and is not modeled here.
+enum AdventurePhase { idle, out, returned }
+
+/// One shared UI view-model consumed by BOTH the Home card and the Adventure
+/// page (Codex: a bare 3-value phase would collapse the blocked states into
+/// `idle` at the call sites, re-enabling dispatch UI for users who should only
+/// inspect). Same inputs + same clock ⇒ the two surfaces can never disagree,
+/// especially in the returned-but-unsettled window.
+class AdventureUiState {
+  const AdventureUiState({
+    required this.phase,
+    required this.charges,
+    required this.weeklyCapped,
+  });
+
+  final AdventurePhase phase;
+  final int charges;
+  final bool weeklyCapped;
+
+  /// True only when a fresh expedition may be dispatched right now.
+  bool get canDispatch =>
+      phase == AdventurePhase.idle && charges > 0 && !weeklyCapped;
+}
+
+/// Pure derivation of [AdventureUiState]. [currentWeekIso] is supplied by the
+/// caller (`GuildService.weekIso(now)`) so this model stays service-free; a
+/// stale stored `weekIso` (last week's) therefore reads as not-capped.
+AdventureUiState adventureUiStateOf(
+  AdventureState state,
+  DateTime now, {
+  required String currentWeekIso,
+  int weeklyCap = 5,
+}) {
+  final pending = state.pending;
+  final AdventurePhase phase;
+  if (pending == null) {
+    phase = AdventurePhase.idle;
+  } else {
+    final returnsAt = pending.returnsAtIso == null
+        ? null
+        : DateTime.tryParse(pending.returnsAtIso!);
+    // Null returnsAt (legacy v1 pending) ⇒ already returned (collectable).
+    phase = (returnsAt == null || !now.isBefore(returnsAt))
+        ? AdventurePhase.returned
+        : AdventurePhase.out;
+  }
+  final cappedThisWeek =
+      state.weekIso == currentWeekIso && state.weekCount >= weeklyCap;
+  return AdventureUiState(
+    phase: phase,
+    charges: state.charges,
+    weeklyCapped: cappedThisWeek,
+  );
+}

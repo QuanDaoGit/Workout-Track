@@ -8,21 +8,22 @@ import '../models/avatar_spec.dart';
 import '../models/character_class.dart';
 import '../services/adventure_service.dart';
 import '../services/class_service.dart';
+import '../services/guild_service.dart';
 import '../services/profile_service.dart';
 import '../services/stat_engine.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
-import '../widgets/adventure/adventure_card.dart';
 import '../widgets/adventure/route_diorama.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/pixel_loader.dart';
 import 'expedition_report_page.dart';
 
-/// The Adventure area (v2): a console-style stage-select. With a charge in
-/// hand you arm one of the three stat-keyed routes (the other two dim and
-/// lock), confirm with DISPATCH, and the diorama comes alive while your
-/// character is out on a VIT-scaled 4–8h haul. The report greets you on
-/// return — collected here or on the next Home open.
+/// The Adventure area (v3): a console **stage-select**. Three framed route
+/// backdrops stack vertically. With a charge you tap one to arm it (it dims,
+/// shows its payout, and comes alive — no sprite yet); GO ON ADVENTURE spends
+/// the charge and the chosen route brightens with your walking character while
+/// the other two lock. The report greets you on return — collected here or on
+/// the next Home open. Presentation only: the service/state machine is v2.
 class AdventurePage extends StatefulWidget {
   const AdventurePage({super.key});
 
@@ -30,9 +31,14 @@ class AdventurePage extends StatefulWidget {
   State<AdventurePage> createState() => _AdventurePageState();
 }
 
+/// The role a single backdrop plays in the current screen state — drives its
+/// animate / sprite / darken / tap behavior so exactly one tile ever animates.
+enum _TileRole { selectable, armed, activeOut, activeReturned, locked }
+
 class _AdventurePageState extends State<AdventurePage> {
   bool _loading = true;
   bool _busy = false;
+  bool _showBreakdown = false;
   AdventureState _state = AdventureState();
   AvatarSpec _avatar = AvatarSpec.fallback;
   CharacterClass? _class;
@@ -68,29 +74,24 @@ class _AdventurePageState extends State<AdventurePage> {
     _syncTicker();
   }
 
-  /// A coarse 30s tick refreshes the countdown and catches the return
-  /// transition; only runs while an expedition is genuinely out.
+  AdventureUiState get _ui => adventureUiStateOf(
+    _state,
+    DateTime.now(),
+    currentWeekIso: GuildService.weekIso(DateTime.now()),
+  );
+
+  /// A coarse logic timer (NOT an animation) that recomputes the phase so an
+  /// expedition flips out→returned even under reduced motion, where the
+  /// diorama clock is frozen. Only runs while genuinely out.
   void _syncTicker() {
     _ticker?.cancel();
-    final pending = _state.pending;
-    if (pending != null && !_isReturned(pending)) {
+    if (_ui.phase == AdventurePhase.out) {
       _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
         if (!mounted) return;
         setState(() {});
-        if (_state.pending != null && _isReturned(_state.pending!)) {
-          _ticker?.cancel();
-        }
+        if (_ui.phase != AdventurePhase.out) _ticker?.cancel();
       });
     }
-  }
-
-  DateTime? _returnsAt(Expedition e) =>
-      e.returnsAtIso == null ? null : DateTime.tryParse(e.returnsAtIso!);
-
-  bool _isReturned(Expedition e) {
-    final returnsAt = _returnsAt(e);
-    if (returnsAt == null) return true;
-    return !DateTime.now().isBefore(returnsAt);
   }
 
   int get _vit => _stats['VIT'] ?? 0;
@@ -103,6 +104,7 @@ class _AdventurePageState extends State<AdventurePage> {
     setState(() {
       _busy = false;
       _armedRouteId = null;
+      _showBreakdown = false;
     });
     if (expedition == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -123,9 +125,7 @@ class _AdventurePageState extends State<AdventurePage> {
     if (_busy) return;
     setState(() => _busy = true);
     final report = await AdventureService().settleAndPeekReport();
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     if (report != null) {
       await Navigator.of(context).push(
         arcadeRoute(
@@ -144,22 +144,26 @@ class _AdventurePageState extends State<AdventurePage> {
     await _load();
   }
 
+  _TileRole _roleFor(AdventureRouteDef route) {
+    final ui = _ui;
+    final pendingRouteId = _state.pending?.routeId;
+    if (ui.phase == AdventurePhase.out || ui.phase == AdventurePhase.returned) {
+      if (route.id == pendingRouteId) {
+        return ui.phase == AdventurePhase.out
+            ? _TileRole.activeOut
+            : _TileRole.activeReturned;
+      }
+      return _TileRole.locked;
+    }
+    return _armedRouteId == route.id ? _TileRole.armed : _TileRole.selectable;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(body: Center(child: PixelLoader()));
     }
-    final pending = _state.pending;
-    final out = pending != null && !_isReturned(pending);
-    final returned = pending != null && _isReturned(pending);
-
-    final armedRoute = _armedRouteId == null
-        ? null
-        : adventureRouteById(_armedRouteId);
-    final activeRoute = armedRoute ??
-        (pending != null
-            ? adventureRouteById(pending.routeId)
-            : adventureRouteById(_state.standingOrderRouteId));
+    final ui = _ui;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Adventure')),
@@ -168,20 +172,36 @@ class _AdventurePageState extends State<AdventurePage> {
         child: ListView(
           padding: const EdgeInsets.all(kSpace4),
           children: [
-            RouteDiorama(
-              route: activeRoute,
-              avatarSpec: _avatar,
-              characterClass: _class,
-              height: 200,
-              animate: out,
-            ),
+            _header(ui),
             const SizedBox(height: kSpace2),
-            if (out)
-              _outPanel(pending)
-            else if (returned)
-              _returnedPanel(pending)
-            else
-              _stageSelect(activeRoute),
+            _statusLine(ui),
+            const SizedBox(height: kSpace3),
+            for (final route in adventureRoutes) ...[
+              _RouteBackdrop(
+                route: route,
+                role: _roleFor(route),
+                avatar: _avatar,
+                characterClass: _class,
+                rank: StatEngine().getRank(_stats[route.statKey] ?? 0),
+                vit: _vit,
+                pending: _state.pending,
+                showBreakdown: _showBreakdown,
+                onToggleBreakdown: () =>
+                    setState(() => _showBreakdown = !_showBreakdown),
+                onTap: ui.phase == AdventurePhase.idle
+                    ? () => setState(() {
+                        _armedRouteId = _armedRouteId == route.id
+                            ? null
+                            : route.id;
+                        _showBreakdown = false;
+                      })
+                    : null,
+                onCollect: _busy ? null : _collect,
+              ),
+              const SizedBox(height: kSpace3),
+            ],
+            if (ui.phase == AdventurePhase.idle && _armedRouteId != null)
+              _dispatchBar(ui),
             const SizedBox(height: kSpace3),
             if (_state.history.isNotEmpty) ...[
               Text(
@@ -203,198 +223,358 @@ class _AdventurePageState extends State<AdventurePage> {
     );
   }
 
-  // ---- OUT (counting down) ------------------------------------------------
-
-  Widget _outPanel(Expedition pending) {
-    final route = adventureRouteById(pending.routeId);
-    final reduceMotion = MediaQuery.of(context).disableAnimations;
-    final returnsAt = _returnsAt(pending);
-    final remaining = returnsAt == null
-        ? Duration.zero
-        : returnsAt.difference(DateTime.now());
-    final flavor = route
-        .flavorLines[pending.flavorIdx % route.flavorLines.length];
-    final back = reduceMotion
-        ? 'BACK IN ~${(remaining.inMinutes / 60).ceil()}H'
-        : 'BACK IN ${_fmtCountdown(remaining)}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _header(AdventureUiState ui) {
+    return Row(
       children: [
-        Text(
-          'ON ADVENTURE · ${route.name}',
-          style: TextStyle(
-            fontFamily: 'PressStart2P',
-            fontSize: 9,
-            height: 1.5,
-            color: route.accent,
+        Expanded(
+          child: Text(
+            'EXPEDITION ORDERS',
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 10,
+              color: kText,
+            ),
           ),
         ),
-        const SizedBox(height: kSpace2),
-        Text(
-          flavor,
-          style: AppFonts.shareTechMono(
-            color: kMutedText,
-            fontSize: 11,
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: kSpace3),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            vertical: kSpace3,
-            horizontal: kSpace3,
-          ),
-          decoration: BoxDecoration(
-            color: kBg.withValues(alpha: 0.5),
-            border: Border.all(color: route.accent.withValues(alpha: 0.6)),
-            borderRadius: BorderRadius.circular(kCardRadius),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.schedule_sharp, size: 16, color: route.accent),
-              const SizedBox(width: kSpace2),
-              Text(
-                back,
-                style: AppFonts.shareTechMono(
-                  color: kText,
-                  fontSize: 16,
-                  letterSpacing: 1.4,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: kSpace2),
-        const _DisabledCollect(),
+        if (ui.phase == AdventurePhase.idle) _ChargePips(charges: ui.charges),
       ],
     );
   }
 
-  // ---- RETURNED (collectable) ---------------------------------------------
+  Widget _statusLine(AdventureUiState ui) {
+    final String text;
+    switch (ui.phase) {
+      case AdventurePhase.out:
+        text = 'Your character is out on an expedition. Tap ? for details.';
+      case AdventurePhase.returned:
+        text = 'Your character has returned — collect the haul.';
+      case AdventurePhase.idle:
+        text = ui.weeklyCapped
+            ? 'Weekly expedition limit reached — your charges bank for next '
+                  'week.'
+            : ui.charges > 0
+            ? 'Pick a route and GO. Recovery (VIT) sets how long the haul '
+                  'runs and how rich it pays.'
+            : 'Log a workout to earn an expedition charge.';
+    }
+    return Text(
+      text,
+      style: Theme.of(
+        context,
+      ).textTheme.bodySmall?.copyWith(color: kMutedText, height: 1.4),
+    );
+  }
 
-  Widget _returnedPanel(Expedition pending) {
-    final route = adventureRouteById(pending.routeId);
+  Widget _dispatchBar(AdventureUiState ui) {
+    final route = adventureRouteById(_armedRouteId);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'RETURNED FROM ${route.name}',
-          style: TextStyle(
-            fontFamily: 'PressStart2P',
-            fontSize: 9,
-            height: 1.5,
-            color: kNeon,
-          ),
-        ),
-        const SizedBox(height: kSpace1),
-        Text(
-          'Your character is back with the haul.',
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: kMutedText, height: 1.4),
-        ),
-        const SizedBox(height: kSpace3),
         SizedBox(
           width: double.infinity,
           child: FilledButton(
-            onPressed: _busy ? null : _collect,
-            child: const Text('COLLECT REPORT'),
+            onPressed: (ui.canDispatch && !_busy) ? () => _dispatch(route) : null,
+            child: Text('GO ON ADVENTURE · ${route.name}'),
+          ),
+        ),
+        if (!ui.canDispatch) ...[
+          const SizedBox(height: kSpace1),
+          Text(
+            ui.weeklyCapped
+                ? 'Weekly limit reached.'
+                : 'Log a workout to earn a charge.',
+            style: AppFonts.shareTechMono(color: kAmber, fontSize: 10),
+          ),
+        ],
+        const SizedBox(height: kSpace1),
+        TextButton(
+          onPressed: _busy
+              ? null
+              : () => setState(() {
+                  _armedRouteId = null;
+                  _showBreakdown = false;
+                }),
+          child: Text(
+            '✕ CANCEL',
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 10),
           ),
         ),
       ],
     );
   }
+}
 
-  // ---- IDLE (stage select) ------------------------------------------------
+/// A framed route backdrop tile that plays one of the [_TileRole]s. Hosts the
+/// diorama (animate/sprite/darken per role) plus the role-appropriate overlay.
+class _RouteBackdrop extends StatelessWidget {
+  const _RouteBackdrop({
+    required this.route,
+    required this.role,
+    required this.avatar,
+    required this.characterClass,
+    required this.rank,
+    required this.vit,
+    required this.pending,
+    required this.showBreakdown,
+    required this.onToggleBreakdown,
+    required this.onTap,
+    required this.onCollect,
+  });
 
-  Widget _stageSelect(AdventureRouteDef activeRoute) {
-    final charges = _state.charges;
-    final weekCount = _state.weekCount;
-    final capHit = weekCount >= AdventureService.weeklyCap;
-    final canDispatch = charges > 0 && !capHit;
+  final AdventureRouteDef route;
+  final _TileRole role;
+  final AvatarSpec avatar;
+  final CharacterClass? characterClass;
+  final String rank;
+  final int vit;
+  final Expedition? pending;
+  final bool showBreakdown;
+  final VoidCallback onToggleBreakdown;
+  final VoidCallback? onTap;
+  final VoidCallback? onCollect;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+  bool get _animate => role == _TileRole.armed || role == _TileRole.activeOut;
+  bool get _showWalker =>
+      role == _TileRole.activeOut || role == _TileRole.activeReturned;
+  bool get _darkened => role == _TileRole.armed || role == _TileRole.locked;
+
+  @override
+  Widget build(BuildContext context) {
+    final tappable = onTap != null &&
+        (role == _TileRole.selectable || role == _TileRole.armed);
+    return GestureDetector(
+      onTap: tappable ? onTap : null,
+      child: SizedBox(
+        height: 132,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Expanded(
-              child: Text(
-                'EXPEDITION ORDERS',
-                style: TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 10,
-                  color: kText,
-                ),
-              ),
+            RouteDiorama(
+              route: route,
+              avatarSpec: avatar,
+              characterClass: characterClass,
+              height: 132,
+              animate: _animate,
+              showWalker: _showWalker,
+              framed: true,
+              darkened: _darkened,
             ),
-            _ChargePips(charges: charges),
+            Positioned.fill(child: _overlay(context)),
           ],
         ),
-        const SizedBox(height: kSpace2),
-        Text(
-          canDispatch
-              ? 'Pick a route and DISPATCH to spend a charge. Recovery (VIT) '
-                    'sets how long the haul runs and how rich it pays.'
-              : capHit
-              ? 'Weekly expedition limit reached — your charges bank for next '
-                    'week.'
-              : 'Log a workout to earn an expedition charge.',
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: kMutedText, height: 1.4),
-        ),
-        const SizedBox(height: kSpace3),
-        for (final route in adventureRoutes) ...[
-          _RouteStageCard(
-            route: route,
-            rank: StatEngine().getRank(_stats[route.statKey] ?? 0),
-            vit: _vit,
-            armed: _armedRouteId == route.id,
-            dimmed: _armedRouteId != null && _armedRouteId != route.id,
-            enabled: canDispatch,
-            onTap: !canDispatch
-                ? null
-                : () => setState(
-                    () => _armedRouteId =
-                        _armedRouteId == route.id ? null : route.id,
-                  ),
-          ),
-          const SizedBox(height: kSpace2),
-        ],
-        if (_armedRouteId != null && canDispatch) ...[
-          const SizedBox(height: kSpace1),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _busy
-                  ? null
-                  : () => _dispatch(adventureRouteById(_armedRouteId)),
-              child: Text('DISPATCH · ${adventureRouteById(_armedRouteId).name}'),
-            ),
-          ),
-          const SizedBox(height: kSpace1),
-          Center(
-            child: TextButton(
-              onPressed: _busy ? null : () => setState(() => _armedRouteId = null),
-              child: Text(
-                'CHANGE ROUTE',
-                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 10),
-              ),
-            ),
-          ),
-        ],
-        const SizedBox(height: kSpace2),
-        Text(
-          'THIS WEEK: ${weekCount.clamp(0, AdventureService.weeklyCap)}/'
-          '${AdventureService.weeklyCap}',
-          style: AppFonts.shareTechMono(color: kMutedText, fontSize: 10),
-        ),
-      ],
+      ),
     );
   }
+
+  Widget _overlay(BuildContext context) {
+    switch (role) {
+      case _TileRole.selectable:
+        return _selectableOverlay();
+      case _TileRole.armed:
+        return _armedOverlay();
+      case _TileRole.activeOut:
+        return _ongoingOverlay(context);
+      case _TileRole.activeReturned:
+        return _returnedOverlay();
+      case _TileRole.locked:
+        return _lockedOverlay();
+    }
+  }
+
+  // Bottom name strip + SELECT hint.
+  Widget _selectableOverlay() {
+    final base = AdventureService.basePayoutForRank(rank);
+    return Padding(
+      padding: const EdgeInsets.all(kSpace3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Align(
+            alignment: Alignment.topRight,
+            child: _pill('TAP TO SELECT', kNeon),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _routeTitle(),
+              const SizedBox(height: 2),
+              _pill('${route.statKey} · RANK $rank · ~$base GEMS', kMutedText),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Centered inspect card: payout + duration visible, "?" reveals breakdown.
+  Widget _armedOverlay() {
+    final base = AdventureService.basePayoutForRank(rank);
+    final mult = AdventureService.multiplierForVit(vit);
+    final durH = (AdventureService.durationForVit(vit) / 60).round();
+    final est = (base * mult).round();
+    return Padding(
+      padding: const EdgeInsets.all(kSpace3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _routeTitle(center: true),
+          const SizedBox(height: kSpace1),
+          Text(
+            'RANK $rank · ~$est GEMS · ~${durH}H',
+            style: AppFonts.shareTechMono(
+              color: kText,
+              fontSize: 11,
+              letterSpacing: 1.1,
+            ),
+          ),
+          const SizedBox(height: kSpace1),
+          _detailToggle(),
+          if (showBreakdown) ...[
+            const SizedBox(height: 2),
+            Text(
+              'VIT $vit → ×${mult.toStringAsFixed(2)} · base $base',
+              style: AppFonts.shareTechMono(color: kCyan, fontSize: 10),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _ongoingOverlay(BuildContext context) {
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    final returnsAt = pending?.returnsAtIso == null
+        ? null
+        : DateTime.tryParse(pending!.returnsAtIso!);
+    final remaining = returnsAt == null
+        ? Duration.zero
+        : returnsAt.difference(DateTime.now());
+    final back = reduceMotion
+        ? 'BACK IN ~${(remaining.inMinutes / 60).ceil()}H'
+        : 'BACK IN ${_fmtCountdown(remaining)}';
+    return Padding(
+      padding: const EdgeInsets.all(kSpace3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _pill('ON EXPEDITION', route.accent),
+              GestureDetector(onTap: onToggleBreakdown, child: _qmark()),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (showBreakdown && pending != null) ...[
+                Text(
+                  'RANK ${pending!.rank} · ×${pending!.multiplier.toStringAsFixed(2)} '
+                  '· VIT ${pending!.vitAtDispatch}',
+                  style: AppFonts.shareTechMono(color: kCyan, fontSize: 10),
+                ),
+                const SizedBox(height: 2),
+              ],
+              _pill(back, kText),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _returnedOverlay() {
+    return Padding(
+      padding: const EdgeInsets.all(kSpace3),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'RETURNED',
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 10,
+              color: kNeon,
+            ),
+          ),
+          const SizedBox(height: kSpace2),
+          FilledButton(
+            onPressed: onCollect,
+            child: const Text('COLLECT'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _lockedOverlay() {
+    return Padding(
+      padding: const EdgeInsets.all(kSpace3),
+      child: Align(
+        alignment: Alignment.bottomLeft,
+        child: _pill(route.name, kMutedText),
+      ),
+    );
+  }
+
+  Widget _routeTitle({bool center = false}) => Text(
+    route.name,
+    textAlign: center ? TextAlign.center : TextAlign.start,
+    style: TextStyle(
+      fontFamily: 'PressStart2P',
+      fontSize: 9,
+      height: 1.4,
+      color: route.accent,
+    ),
+  );
+
+  Widget _detailToggle() => GestureDetector(
+    onTap: onToggleBreakdown,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _qmark(),
+        const SizedBox(width: 4),
+        Text(
+          showBreakdown ? 'HIDE' : 'HOW IT PAYS',
+          style: AppFonts.shareTechMono(color: kMutedText, fontSize: 9),
+        ),
+      ],
+    ),
+  );
+
+  Widget _qmark() => Container(
+    width: 16,
+    height: 16,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: kBg.withValues(alpha: 0.6),
+      border: Border.all(color: kMutedText, width: 1),
+      borderRadius: BorderRadius.circular(kCardRadius),
+    ),
+    child: Text(
+      '?',
+      style: AppFonts.shareTechMono(color: kMutedText, fontSize: 10),
+    ),
+  );
+
+  Widget _pill(String text, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+    decoration: BoxDecoration(
+      color: kBg.withValues(alpha: 0.62),
+      borderRadius: BorderRadius.circular(kCardRadius),
+    ),
+    child: Text(
+      text,
+      style: AppFonts.shareTechMono(
+        color: color,
+        fontSize: 10,
+        letterSpacing: 1.1,
+      ),
+    ),
+  );
 
   String _fmtCountdown(Duration d) {
     if (d.isNegative || d == Duration.zero) return '0M';
@@ -434,170 +614,6 @@ class _ChargePips extends StatelessWidget {
           style: AppFonts.shareTechMono(color: kText, fontSize: 10),
         ),
       ],
-    );
-  }
-}
-
-class _DisabledCollect extends StatelessWidget {
-  const _DisabledCollect();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton(
-        onPressed: null,
-        child: Text(
-          'OUT ON EXPEDITION',
-          style: AppFonts.shareTechMono(
-            color: kMutedText,
-            fontSize: 12,
-            letterSpacing: 1.2,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A selectable route stage tile. When armed it expands to a payout preview
-/// (rank → pay, VIT → duration + multiplier, est total); the other tiles dim
-/// and lock. Reuses [AdventureEmblem] with its code-drawn fallback.
-class _RouteStageCard extends StatelessWidget {
-  const _RouteStageCard({
-    required this.route,
-    required this.rank,
-    required this.vit,
-    required this.armed,
-    required this.dimmed,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final AdventureRouteDef route;
-  final String rank;
-  final int vit;
-  final bool armed;
-  final bool dimmed;
-  final bool enabled;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final base = AdventureService.basePayoutForRank(rank);
-    final multiplier = AdventureService.multiplierForVit(vit);
-    final durationMin = AdventureService.durationForVit(vit);
-    final est = (base * multiplier).round();
-    final borderColor = armed ? route.accent : kBorder;
-
-    return Opacity(
-      opacity: dimmed ? 0.35 : 1,
-      child: IgnorePointer(
-        ignoring: dimmed,
-        child: Material(
-          color: kCard,
-          borderRadius: BorderRadius.circular(kCardRadius),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(kCardRadius),
-            child: Container(
-              padding: const EdgeInsets.all(kSpace3),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: borderColor,
-                  width: armed
-                      ? kPrimaryCardBorderWidth + 0.6
-                      : kPrimaryCardBorderWidth,
-                ),
-                borderRadius: BorderRadius.circular(kCardRadius),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      AdventureEmblem(route: route, size: 44),
-                      const SizedBox(width: kSpace3),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              route.name,
-                              style: TextStyle(
-                                fontFamily: 'PressStart2P',
-                                fontSize: 8,
-                                height: 1.4,
-                                color: armed ? route.accent : kText,
-                              ),
-                            ),
-                            const SizedBox(height: kSpace1),
-                            Text(
-                              '${route.statKey} ROUTE · RANK $rank · ~$base GEMS',
-                              style: AppFonts.shareTechMono(
-                                color: kMutedText,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: kSpace2),
-                      Text(
-                        armed ? 'ARMED' : 'SELECT',
-                        style: AppFonts.shareTechMono(
-                          color: armed ? route.accent : kNeon,
-                          fontSize: 10,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (armed) ...[
-                    const SizedBox(height: kSpace2),
-                    Container(height: 1, color: kBorder),
-                    const SizedBox(height: kSpace2),
-                    _previewRow(
-                      'BACK IN',
-                      '~${(durationMin / 60).round()}H',
-                      route.accent,
-                    ),
-                    _previewRow(
-                      'VIT $vit',
-                      '×${multiplier.toStringAsFixed(2)}',
-                      kCyan,
-                    ),
-                    _previewRow('EST PAYOUT', '~$est GEMS', kNeon),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _previewRow(String label, String value, Color valueColor) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppFonts.shareTechMono(color: kMutedText, fontSize: 10),
-            ),
-          ),
-          Text(
-            value,
-            style: AppFonts.shareTechMono(
-              color: valueColor,
-              fontSize: 11,
-              letterSpacing: 1.1,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

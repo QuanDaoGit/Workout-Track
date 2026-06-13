@@ -26,13 +26,30 @@ class RouteDiorama extends StatefulWidget {
     this.characterClass,
     this.height = 200,
     this.animate = true,
+    this.showWalker = true,
+    this.framed = false,
+    this.darkened = false,
   });
 
   final AdventureRouteDef route;
   final AvatarSpec avatarSpec;
   final CharacterClass? characterClass;
   final double height;
+
+  /// Scroll the parallax layers + particles. Exactly one diorama on a screen
+  /// should animate at a time (the armed or active route).
   final bool animate;
+
+  /// Render the traveling character. Decoupled from [animate] so a selection
+  /// backdrop can scroll *without* a sprite (armed preview), and the active
+  /// route can scroll *with* it (on expedition).
+  final bool showWalker;
+
+  /// Draw a decorative pixel frame (border + corner ticks) around the scene.
+  final bool framed;
+
+  /// Dim the scene with a scrim (locked / inspect states).
+  final bool darkened;
 
   // Native art dimensions.
   static const _nativeW = 480.0;
@@ -61,11 +78,24 @@ class _RouteDioramaState extends State<RouteDiorama>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _syncClock(); // handles reduced-motion / MediaQuery changes
+  }
+
+  @override
+  void didUpdateWidget(RouteDiorama old) {
+    super.didUpdateWidget(old);
+    // `animate` is a widget prop, so a parent flipping the single animation
+    // owner (re-arm A→B, armed→out) must restart/stop the clock here —
+    // didChangeDependencies does NOT fire on a prop change (Codex plan #2).
+    if (old.animate != widget.animate) _syncClock();
+  }
+
+  void _syncClock() {
     final reduceMotion = MediaQuery.of(context).disableAnimations;
     if (widget.animate && !reduceMotion) {
       if (!_clock.isAnimating) _clock.repeat();
     } else {
-      _clock.stop();
+      if (_clock.isAnimating) _clock.stop();
     }
   }
 
@@ -96,8 +126,9 @@ class _RouteDioramaState extends State<RouteDiorama>
                 final seconds = t / 1000.0;
                 final groundShift = seconds * route.scrollSpeed * scale;
                 final farShift = groundShift * 0.3;
-                // Walk cycle: ~3 strides/second reads right at this scale.
-                final frame = (seconds * 3).floor() % 2;
+                // Walk cycle: advance one of 4 frames per ~13px ground scroll
+                // (rig cadence), so the feet stay synced to the moving ground.
+                final frame = (groundShift / 13).floor() % 4;
                 return Stack(
                   fit: StackFit.expand,
                   children: [
@@ -128,17 +159,19 @@ class _RouteDioramaState extends State<RouteDiorama>
                       fallbackTop: kCard,
                       fallbackBottom: kBg,
                     ),
-                    // The traveler, planted on the ground line.
-                    Positioned(
-                      left: w * 0.3,
-                      bottom: groundH * 0.72,
-                      child: PixelWalker(
-                        spec: widget.avatarSpec,
-                        characterClass: widget.characterClass,
-                        frame: frame,
-                        size: 40 * scale.clamp(0.8, 1.6),
+                    // The traveler, planted on the ground line (only when this
+                    // diorama owns the sprite — selection backdrops hide it).
+                    if (widget.showWalker)
+                      Positioned(
+                        left: w * 0.3,
+                        bottom: groundH * 0.55,
+                        child: PixelWalker(
+                          spec: widget.avatarSpec,
+                          characterClass: widget.characterClass,
+                          frame: frame,
+                          size: 40 * scale.clamp(0.8, 1.6),
+                        ),
                       ),
-                    ),
                     // Route particles (embers / motes / rune dust).
                     Positioned.fill(
                       child: IgnorePointer(
@@ -157,6 +190,24 @@ class _RouteDioramaState extends State<RouteDiorama>
                         child: CustomPaint(painter: _ScanlinePainter()),
                       ),
                     ),
+                    // Dim scrim for locked / inspect states.
+                    if (widget.darkened)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: ColoredBox(
+                            color: kBg.withValues(alpha: 0.62),
+                          ),
+                        ),
+                      ),
+                    // Decorative frame (border + corner ticks).
+                    if (widget.framed)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _FramePainter(route.accent),
+                          ),
+                        ),
+                      ),
                   ],
                 );
               },
@@ -316,4 +367,53 @@ class _ScanlinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ScanlinePainter oldDelegate) => false;
+}
+
+/// A pixel frame: a thin inset border in the route accent plus brighter
+/// L-shaped corner ticks — reads as an arcade cabinet bezel and separates the
+/// three stacked backdrops.
+class _FramePainter extends CustomPainter {
+  _FramePainter(this.accent);
+
+  final Color accent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const inset = 0.75;
+    final rect = Rect.fromLTWH(
+      inset,
+      inset,
+      size.width - inset * 2,
+      size.height - inset * 2,
+    );
+    final border = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..isAntiAlias = false
+      ..color = accent.withValues(alpha: 0.5);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(kCardRadius)),
+      border,
+    );
+
+    final tick = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..isAntiAlias = false
+      ..color = accent.withValues(alpha: 0.9);
+    const len = 10.0;
+    final l = rect.left, t = rect.top, r = rect.right, b = rect.bottom;
+    // Four corner brackets.
+    canvas.drawLine(Offset(l, t + len), Offset(l, t), tick);
+    canvas.drawLine(Offset(l, t), Offset(l + len, t), tick);
+    canvas.drawLine(Offset(r - len, t), Offset(r, t), tick);
+    canvas.drawLine(Offset(r, t), Offset(r, t + len), tick);
+    canvas.drawLine(Offset(l, b - len), Offset(l, b), tick);
+    canvas.drawLine(Offset(l, b), Offset(l + len, b), tick);
+    canvas.drawLine(Offset(r - len, b), Offset(r, b), tick);
+    canvas.drawLine(Offset(r, b - len), Offset(r, b), tick);
+  }
+
+  @override
+  bool shouldRepaint(covariant _FramePainter old) => old.accent != accent;
 }
