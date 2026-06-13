@@ -23,6 +23,7 @@ class ExerciseCard extends StatelessWidget {
     this.onFavoriteToggle,
     this.onCheckboxToggle,
     this.onInfoPressed,
+    this.trailing,
   });
 
   final Exercise exercise;
@@ -37,6 +38,10 @@ class ExerciseCard extends StatelessWidget {
   final VoidCallback? onFavoriteToggle;
   final VoidCallback? onCheckboxToggle;
   final VoidCallback? onInfoPressed;
+
+  /// Optional trailing controls (e.g. the loadout's Replace/remove actions),
+  /// rendered after the name column and before any info/favorite/checkbox slot.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +154,8 @@ class ExerciseCard extends StatelessWidget {
                   ],
                 ),
               ),
+              // Trailing controls (loadout Replace/remove)
+              ?trailing,
               // Info icon (picker only)
               if (showInfoIcon)
                 IconButton(

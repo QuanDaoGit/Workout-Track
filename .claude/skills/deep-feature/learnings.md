@@ -12,9 +12,12 @@ on every exit path before the final write.
 *Seen: idle checkpoint racing `saveSession` (2026-06, idle auto-save diff review).*
 
 ### Dual-path divergence
-**Rule:** When two code paths handle the same event (foreground vs cold-reopen, manual vs auto,
-timer vs lifecycle), pin their edge-case behavior to one written rule and test both paths.
-*Seen: zero-set idle prompted on the foreground path but dropped silently on reopen (2026-06).*
+**Rule:** When two+ code paths handle the same event OR seed the same state field (foreground vs
+cold-reopen; manual vs auto; resume vs repeat vs history-default), pin edge cases to one written
+rule and give shared state an explicit, once-only precedence plus a "user touched it → never
+auto-reseed" guard. Test every path.
+*Seen: zero-set idle prompted on foreground but silent on reopen; exercise-selection default
+loadout could clobber a resumed/repeat selection without precedence (2026-06).*
 
 ### Legacy-data cliffs
 **Rule:** A new nullable field used in a threshold or comparison must define the null (legacy)

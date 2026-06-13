@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/curated_exercises.dart';
+import '../../data/exercise_alternatives.dart';
 import '../../data/exercise_demos.dart';
 import '../../data/muscle_groups.dart';
 import '../../data/programs_library.dart';
@@ -19,6 +20,7 @@ import '../../widgets/arcade_chip.dart';
 import '../../widgets/arcade_image_filter.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/exercise_card.dart';
+import '../../widgets/exercise_replace_sheet.dart';
 import '../../widgets/level_badge.dart';
 import '../../widgets/motion/arcade_text_field.dart';
 import '../../widgets/pixel_button.dart';
@@ -103,10 +105,15 @@ class StartWorkoutPage extends StatefulWidget {
     this.isProgramWorkout = false,
     this.advanceProgramRestDayOnCompletion = false,
     this.initialSelectedExerciseIds,
+    this.catalogOverride,
   });
 
   final String? initialMuscleGroup;
   final List<String>? initialMuscleGroups;
+
+  /// Test seam: supply an in-memory exercise catalog instead of loading
+  /// `assets/exercises.json` (matches the codebase's injectable-override idiom).
+  final List<Exercise>? catalogOverride;
 
   /// Pre-selected exercise ids ("repeat workout" from a past session).
   /// Consumed once: after the first preselection pass, changing the muscle
@@ -135,6 +142,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   final TextEditingController _searchController = TextEditingController();
 
   Future<List<Exercise>>? _exerciseCatalogFuture;
+  List<Exercise>? _catalog;
   List<String> _selectedMuscleGroups = const [];
   Set<String> _selectedExerciseIds = {};
   Set<String> _favoriteExerciseIds = {};
@@ -145,10 +153,25 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   int _durationMinutes = WorkoutDefaultsService.defaultDurationMinutes;
   int _restSeconds = 90;
 
+  /// Manual-path UI state. The muscle target step collapses behind a "Focus"
+  /// affordance once a default loadout exists; the full curated picker hides
+  /// behind "ADD EXERCISE" (See All). `_userTouchedSelection` guards the
+  /// history default from re-clobbering a manual edit (Codex plan-review F2).
+  bool _targetExpanded = false;
+  bool _seeAllExpanded = false;
+  bool _userTouchedSelection = false;
+  _SeedSource _seedSource = _SeedSource.none;
+
+  /// Minimum live exercises a history seed must yield to become the front-door
+  /// default (Codex plan-review F3 quality gate). Below this → chip-first.
+  static const int _minSeedSize = 3;
+
   bool get _programMode => widget.isProgramWorkout;
 
   Future<List<Exercise>> get _safeExerciseCatalogFuture {
-    return _exerciseCatalogFuture ??= ExerciseCatalogService().getFullCatalog();
+    return _exerciseCatalogFuture ??= widget.catalogOverride != null
+        ? Future.value(widget.catalogOverride)
+        : ExerciseCatalogService().getFullCatalog();
   }
 
   @override
@@ -158,13 +181,83 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       widget.initialMuscleGroups ??
           [if (widget.initialMuscleGroup != null) widget.initialMuscleGroup!],
     );
+    // A preset target (program day or repeat-workout) keeps the chips visible;
+    // a plain manual quick-start tries the front-door default first.
+    _targetExpanded = _selectedMuscleGroups.isNotEmpty;
     _loadDefaults();
     _loadFavoriteExerciseIds();
-    if (_selectedMuscleGroups.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _refreshHistoryPreselection();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initSeed());
+  }
+
+  /// Resolves the catalog once, then applies the right pre-selection per the
+  /// precedence order (Codex plan-review F2): program / preset target / repeat
+  /// run the existing target seeding; a plain manual start gets the front-door
+  /// "usual" default.
+  Future<void> _initSeed() async {
+    final catalog = await _safeExerciseCatalogFuture;
+    if (!mounted) return;
+    setState(() => _catalog = catalog);
+    if (_programMode ||
+        _selectedMuscleGroups.isNotEmpty ||
+        widget.initialSelectedExerciseIds != null) {
+      await _refreshHistoryPreselection();
+    } else {
+      await _applyFrontDoorDefault(catalog);
+    }
+  }
+
+  /// Plain manual quick-start: seed the screen with the user's frequency-ranked
+  /// "usual" lifts across all training. Accept only if ≥[_minSeedSize] live
+  /// exercises survive AND their muscle groups resolve (so START and the curated
+  /// See-All stay coherent); otherwise fall back to the chip-first flow.
+  Future<void> _applyFrontDoorDefault(List<Exercise> catalog) async {
+    if (_userTouchedSelection || _selectedExerciseIds.isNotEmpty) return;
+    final seed = await WorkoutStorageService().topExerciseIds(catalog, limit: 5);
+    if (!mounted || _userTouchedSelection || _selectedExerciseIds.isNotEmpty) {
+      return;
+    }
+    final groups = _groupsForIds(seed, catalog);
+    if (seed.length >= _minSeedSize && groups.isNotEmpty) {
+      setState(() {
+        _selectedExerciseIds = seed.toSet();
+        _selectedMuscleGroups = groups;
+        _seedSource = _SeedSource.usual;
+        _targetExpanded = false;
+        _seeAllExpanded = false;
+      });
+    } else {
+      setState(() {
+        _targetExpanded = true;
+        _seeAllExpanded = true;
+        _seedSource = _SeedSource.none;
       });
     }
+  }
+
+  /// Canonical muscle group for an exercise (primary-muscle bucket, else the
+  /// stored group). Null when neither resolves.
+  String? _groupForExercise(Exercise? exercise) {
+    if (exercise == null) return null;
+    final primary = exercise.primaryMuscle;
+    if (primary != null) {
+      final bucket = muscleGroupForDetailed(primary);
+      if (bucket != null) return bucket;
+    }
+    final group = exercise.muscleGroup;
+    if (group != null) return normalizeMuscleGroup(group);
+    return null;
+  }
+
+  /// Deduped, normalized canonical groups implied by a set of exercise ids —
+  /// used to derive the target focus from a history-seeded loadout.
+  List<String> _groupsForIds(Iterable<String> ids, List<Exercise> catalog) {
+    final byId = {for (final exercise in catalog) exercise.id: exercise};
+    final groups = <String>[];
+    for (final id in ids) {
+      final group = _groupForExercise(byId[id]);
+      if (group != null) groups.add(group);
+    }
+    return normalizeTargetMuscleGroups(groups);
   }
 
   @override
@@ -200,6 +293,8 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       }
       _selectedMuscleGroups = normalizeTargetMuscleGroups(selected);
       _selectedExerciseIds = {};
+      // A deliberate focus change re-seeds the loadout for the new target.
+      _userTouchedSelection = false;
     });
     _refreshHistoryPreselection();
   }
@@ -214,6 +309,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     }
 
     final catalog = await _safeExerciseCatalogFuture;
+    if (mounted && _catalog == null) setState(() => _catalog = catalog);
 
     final initialIds = widget.initialSelectedExerciseIds;
     if (initialIds != null && !_initialSelectionConsumed) {
@@ -221,22 +317,42 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       final catalogIds = {for (final exercise in catalog) exercise.id};
       final valid = initialIds.where(catalogIds.contains).toSet();
       if (valid.isNotEmpty && mounted) {
-        setState(() => _selectedExerciseIds = valid);
+        setState(() {
+          _selectedExerciseIds = valid;
+          _seedSource = _SeedSource.repeat;
+        });
         return;
       }
     }
-    // Program mode pre-selects today's full prescribed loadout (not a top-3
-    // slice) so "show today's exercises in selected state" holds. Manual mode
-    // keeps the history-based top-3 seed.
-    final topIds = _programMode && widget.programCuratedExerciseIds != null
-        ? widget.programCuratedExerciseIds!
-        : await WorkoutStorageService().topExerciseIdsForTargets(
-            targets,
-            catalog,
-            limit: 3,
-          );
+
+    // Program mode pre-selects today's full prescribed loadout (not a slice).
+    if (_programMode && widget.programCuratedExerciseIds != null) {
+      final ids = widget.programCuratedExerciseIds!;
+      if (!mounted || !_sameTargets(targets, _selectedMuscleGroups)) return;
+      setState(() => _selectedExerciseIds = ids.toSet());
+      return;
+    }
+
+    // Manual target: the frequency "usual" for this focus, else the curated
+    // starter head so a never-trained target still yields a non-empty default.
+    final topIds = await WorkoutStorageService().topExerciseIdsForTargets(
+      targets,
+      catalog,
+      limit: 5,
+    );
     if (!mounted || !_sameTargets(targets, _selectedMuscleGroups)) return;
-    setState(() => _selectedExerciseIds = topIds.toSet());
+    if (topIds.isNotEmpty) {
+      setState(() {
+        _selectedExerciseIds = topIds.toSet();
+        _seedSource = _SeedSource.target;
+      });
+    } else {
+      final starter = curatedExerciseIdsForMuscleGroups(targets).take(5).toList();
+      setState(() {
+        _selectedExerciseIds = starter.toSet();
+        _seedSource = starter.isEmpty ? _SeedSource.none : _SeedSource.curated;
+      });
+    }
   }
 
   bool _sameTargets(List<String> a, List<String> b) {
@@ -256,6 +372,51 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
         next.add(id);
       }
       _selectedExerciseIds = next;
+      _userTouchedSelection = true;
+    });
+  }
+
+  /// Swap one loadout slot for an alternative (or open See All). Preserves the
+  /// slot's position by mapping the id in place across the ordered selection.
+  Future<void> _replaceExercise(Exercise replaced) async {
+    final catalog = _catalog ?? await _safeExerciseCatalogFuture;
+    if (!mounted) return;
+    final byId = {for (final exercise in catalog) exercise.id: exercise};
+    final group = _groupForExercise(replaced);
+    final pool = group == null
+        ? const <Exercise>[]
+        : [
+            for (final id in curatedExerciseIdsForMuscleGroups([group]))
+              if (byId[id] != null) byId[id]!,
+          ];
+    final alternatives = alternativesFor(replaced, pool, _selectedExerciseIds);
+    final result = await showExerciseReplaceSheet(
+      context,
+      replaced: replaced,
+      alternatives: alternatives,
+    );
+    if (!mounted || result == null) return;
+    if (result.seeAll) {
+      setState(() => _seeAllExpanded = true);
+      return;
+    }
+    final replacement = result.replacement!;
+    setState(() {
+      _selectedExerciseIds = {
+        for (final id in _selectedExerciseIds)
+          if (id == replaced.id) replacement.id else id,
+      };
+      _userTouchedSelection = true;
+    });
+  }
+
+  void _removeExercise(String id) {
+    setState(() {
+      _selectedExerciseIds = {
+        for (final existing in _selectedExerciseIds)
+          if (existing != id) existing,
+      };
+      _userTouchedSelection = true;
     });
   }
 
@@ -491,66 +652,9 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
               padding: const EdgeInsets.all(kSpace4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const _StepHeader(label: '1. CHOOSE TARGET'),
-                  const SizedBox(height: kSpace2),
-                  if (_programMode)
-                    _ProgramTargetSummary(
-                      label: widget.programDayLabel ?? targetLabel,
-                      summary:
-                          widget.programFocusSummary ??
-                          'Program workout selected.',
-                    )
-                  else ...[
-                    Text(
-                      _selectedMuscleGroups.isEmpty
-                          ? 'Tap one target to begin. Add more only if needed.'
-                          : targetLabel,
-                      style: AppFonts.shareTechMono(
-                        color: _selectedMuscleGroups.isEmpty
-                            ? kMutedText
-                            : kText,
-                        fontSize: 14,
-                        fontWeight: _selectedMuscleGroups.isEmpty
-                            ? FontWeight.w400
-                            : FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: kSpace4),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        for (final muscleGroup in canonicalMuscleGroups)
-                          ArcadeChip(
-                            label: muscleGroup,
-                            selected: _selectedMuscleGroups.contains(
-                              muscleGroup,
-                            ),
-                            onTap: () => _toggleMuscleGroup(muscleGroup),
-                          ),
-                      ],
-                    ),
-                  ],
-                  if (_selectedMuscleGroups.isNotEmpty) ...[
-                    const SizedBox(height: kSpace5),
-                    const _StepHeader(label: '2. PICK EXERCISES'),
-                    const SizedBox(height: kSpace2),
-                    Text(
-                      _selectedExerciseIds.isEmpty
-                          ? 'Choose at least one exercise.'
-                          : '${_selectedExerciseIds.length} selected',
-                      style: AppFonts.shareTechMono(
-                        color: kMutedText,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: kSpace3),
-                    _buildSearchAndFilters(),
-                    const SizedBox(height: kSpace3),
-                    _buildExerciseList(),
-                  ],
-                ],
+                children: _programMode
+                    ? _buildProgramSections(targetLabel)
+                    : _buildManualSections(targetLabel),
               ),
             ),
           ),
@@ -564,6 +668,134 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
         ],
       ),
     );
+  }
+
+  List<Widget> _buildProgramSections(String targetLabel) {
+    return [
+      const _StepHeader(label: '1. CHOOSE TARGET'),
+      const SizedBox(height: kSpace2),
+      _ProgramTargetSummary(
+        label: widget.programDayLabel ?? targetLabel,
+        summary: widget.programFocusSummary ?? 'Program workout selected.',
+      ),
+      if (_selectedMuscleGroups.isNotEmpty) ...[
+        const SizedBox(height: kSpace5),
+        const _StepHeader(label: '2. PICK EXERCISES'),
+        const SizedBox(height: kSpace2),
+        Text(
+          _selectedExerciseIds.isEmpty
+              ? 'Choose at least one exercise.'
+              : '${_selectedExerciseIds.length} selected',
+          style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
+        ),
+        const SizedBox(height: kSpace3),
+        _buildSearchAndFilters(),
+        const SizedBox(height: kSpace3),
+        _buildExerciseList(),
+      ],
+    ];
+  }
+
+  List<Widget> _buildManualSections(String targetLabel) {
+    final hasLoadout = _selectedExerciseIds.isNotEmpty;
+    return [
+      const _StepHeader(label: '1. CHOOSE TARGET'),
+      const SizedBox(height: kSpace2),
+      if (_targetExpanded) ...[
+        Text(
+          _selectedMuscleGroups.isEmpty
+              ? 'Tap one target to begin. Add more only if needed.'
+              : targetLabel,
+          style: AppFonts.shareTechMono(
+            color: _selectedMuscleGroups.isEmpty ? kMutedText : kText,
+            fontSize: 14,
+            fontWeight: _selectedMuscleGroups.isEmpty
+                ? FontWeight.w400
+                : FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: kSpace4),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final muscleGroup in canonicalMuscleGroups)
+              ArcadeChip(
+                label: muscleGroup,
+                selected: _selectedMuscleGroups.contains(muscleGroup),
+                onTap: () => _toggleMuscleGroup(muscleGroup),
+              ),
+          ],
+        ),
+      ] else
+        _FocusSummary(
+          label: targetLabel,
+          onChange: () => setState(() => _targetExpanded = true),
+        ),
+      if (_selectedMuscleGroups.isNotEmpty) ...[
+        const SizedBox(height: kSpace5),
+        _StepHeader(label: hasLoadout ? '2. YOUR LOADOUT' : '2. PICK EXERCISES'),
+        const SizedBox(height: kSpace2),
+        if (hasLoadout) ...[
+          if (_seedSource.label != null) ...[
+            Text(
+              _seedSource.label!,
+              style: AppFonts.shareTechMono(color: kNeon, fontSize: 12),
+            ),
+            const SizedBox(height: kSpace2),
+          ],
+          ..._buildLoadoutCards(),
+          const SizedBox(height: kSpace2),
+          _AddExerciseButton(
+            expanded: _seeAllExpanded,
+            onTap: () => setState(() => _seeAllExpanded = !_seeAllExpanded),
+          ),
+        ] else
+          Text(
+            'Choose at least one exercise.',
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
+          ),
+        if (_seeAllExpanded || !hasLoadout) ...[
+          const SizedBox(height: kSpace3),
+          _buildSearchAndFilters(),
+          const SizedBox(height: kSpace3),
+          _buildExerciseList(),
+        ],
+      ],
+    ];
+  }
+
+  List<Widget> _buildLoadoutCards() {
+    final catalog = _catalog;
+    if (catalog == null) {
+      return [
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: kSpace4),
+          child: Center(child: PixelLoader()),
+        ),
+      ];
+    }
+    final byId = {for (final exercise in catalog) exercise.id: exercise};
+    final cards = <Widget>[];
+    for (final id in _selectedExerciseIds) {
+      final exercise = byId[id];
+      if (exercise == null) continue;
+      cards.add(
+        ExerciseCard(
+          exercise: exercise,
+          showCheckbox: false,
+          showFavorite: false,
+          isSelected: true,
+          isCustom: exercise.isCustom,
+          onTap: () => _replaceExercise(exercise),
+          trailing: _LoadoutActions(
+            onReplace: () => _replaceExercise(exercise),
+            onRemove: () => _removeExercise(exercise.id),
+          ),
+        ),
+      );
+    }
+    return cards;
   }
 
   Widget _buildSearchAndFilters() {
@@ -806,6 +1038,112 @@ class _StepHeader extends StatelessWidget {
         fontSize: 8,
         color: kNeon,
       ),
+    );
+  }
+}
+
+/// Where the manual default loadout came from — drives an honest source label
+/// (Codex plan-review F3) so a history-seeded default is never presented as if
+/// the user hand-picked it.
+enum _SeedSource { none, usual, target, curated, repeat }
+
+extension _SeedSourceLabel on _SeedSource {
+  String? get label => switch (this) {
+    _SeedSource.usual => 'YOUR USUAL LIFTS',
+    _SeedSource.target => 'RECENT FOR THIS FOCUS',
+    _SeedSource.curated => 'STARTER SET',
+    _SeedSource.repeat => 'REPEAT OF LAST WORKOUT',
+    _SeedSource.none => null,
+  };
+}
+
+/// Collapsed muscle-target row shown once a default loadout exists — keeps the
+/// focus/stat cue visible (Codex F5) while hiding the chips behind CHANGE.
+class _FocusSummary extends StatelessWidget {
+  const _FocusSummary({required this.label, required this.onChange});
+
+  final String label;
+  final VoidCallback onChange;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: kCard,
+        border: Border.all(color: kBorder),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'FOCUS: ${label.toUpperCase()}',
+              style: AppFonts.shareTechMono(
+                color: kText,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: onChange,
+            child: Text(
+              'CHANGE',
+              style: AppFonts.shareTechMono(color: kNeon, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Loadout card trailing controls: swap (Replace sheet) and remove.
+class _LoadoutActions extends StatelessWidget {
+  const _LoadoutActions({required this.onReplace, required this.onRemove});
+
+  final VoidCallback onReplace;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          constraints: const BoxConstraints(),
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          onPressed: onReplace,
+          tooltip: 'Replace',
+          icon: const Icon(Icons.swap_horiz_sharp, size: 20, color: kNeon),
+        ),
+        IconButton(
+          constraints: const BoxConstraints(),
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          onPressed: onRemove,
+          tooltip: 'Remove',
+          icon: const Icon(Icons.close_sharp, size: 18, color: kMutedText),
+        ),
+      ],
+    );
+  }
+}
+
+/// Demotes the full curated picker to "the exception": toggles See All.
+class _AddExerciseButton extends StatelessWidget {
+  const _AddExerciseButton({required this.expanded, required this.onTap});
+
+  final bool expanded;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return PixelButton(
+      label: expanded ? 'HIDE EXERCISE LIST' : 'ADD EXERCISE',
+      secondary: true,
+      onPressed: onTap,
     );
   }
 }

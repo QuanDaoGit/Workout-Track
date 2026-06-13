@@ -243,7 +243,32 @@ class WorkoutStorageService {
   }) async {
     final targets = normalizeTargetMuscleGroups(targetGroups).toSet();
     if (targets.isEmpty || limit <= 0) return const [];
+    return _rankedExerciseIds(catalog, limit: limit, targets: targets);
+  }
 
+  /// All-targets twin of [topExerciseIdsForTargets]: the user's most-trained
+  /// exercises across *every* completed session (program days included),
+  /// ranked frequency → recency → curated order. Skips partial/abandoned and
+  /// drops ids no longer in [catalog]. Powers the manual quick-start default
+  /// loadout when no muscle target is chosen yet. No fallback/top-up here —
+  /// the StartWorkoutPage layer applies the quality gate and curated fallback.
+  Future<List<String>> topExerciseIds(
+    List<Exercise> catalog, {
+    int limit = 5,
+  }) async {
+    if (limit <= 0) return const [];
+    return _rankedExerciseIds(catalog, limit: limit, targets: null);
+  }
+
+  /// Shared frequency/recency counting core for the two public helpers above.
+  /// [targets] `null` means no muscle filter (all-targets); a non-null set
+  /// applies the exact same [_exerciseMatchesTargets] filter the targeted
+  /// helper has always used, so that path stays behavior-compatible.
+  Future<List<String>> _rankedExerciseIds(
+    List<Exercise> catalog, {
+    required int limit,
+    required Set<String>? targets,
+  }) async {
     final catalogById = {for (final exercise in catalog) exercise.id: exercise};
     final curatedOrder = <String, int>{};
     for (final exercise in catalog) {
@@ -257,7 +282,10 @@ class WorkoutStorageService {
       final seenThisSession = <String>{};
       for (final log in session.exercises) {
         if (!seenThisSession.add(log.exerciseId)) continue;
-        if (!_exerciseMatchesTargets(
+        if (targets == null) {
+          // All-targets: still require a live catalog id so dead ids drop.
+          if (!catalogById.containsKey(log.exerciseId)) continue;
+        } else if (!_exerciseMatchesTargets(
           log.exerciseId,
           session,
           catalogById,

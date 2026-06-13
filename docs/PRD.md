@@ -30,8 +30,11 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 ## Shipped Features
 
 ### Workout logging
-- [x] Start Workout: select muscle group, set duration (scroll picker), pick exercises from a
-      curated local catalog (multi-select with favorites).
+- [x] Start Workout: a returning user opens straight onto their frequency-ranked "usual" loadout
+      (one tap to START), with the muscle-target step collapsed behind a Focus affordance and
+      card-level Replace (swap a lift for ~4 alternatives) demoting the full curated picker to a
+      "See All" escape. A new user — or one below the history threshold — gets the curated
+      chip-first picker (multi-select with favorites). Duration set via scroll picker.
 - [x] Active session: live timer, per-exercise status, rest timer. Each logged set checkpoints
       to storage (crash-safe), and a 30-min inactivity window offers an idle auto-save reveal
       (save & finish / keep training / discard) — on the active page or on the next app open.
