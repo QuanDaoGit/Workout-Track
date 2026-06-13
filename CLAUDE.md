@@ -82,7 +82,7 @@ RPG-gamified workout tracker. Flutter app, Android-only. All persistence uses `S
 
 **Workout session flow** (all in `lib/pages/Workout session/`):
 1. `StartWorkoutPage` — muscle group chips, time picker, exercise picker bottom sheet (multi-select with favorites).
-2. `ActiveWorkoutPage` — live timer, per-exercise status tracking, rest timer. Tapping exercise pushes `ExerciseSessionPage`, awaits `List<SetEntry>`. All-done enables "Finish Workout".
+2. `ActiveWorkoutPage` — live timer, per-exercise status tracking, rest timer. Tapping exercise pushes `ExerciseSessionPage`, awaits `List<SetEntry>`. All-done enables "Finish Workout". Each logged set silently checkpoints the ongoing session to storage (`checkpointOngoingSession`, no change-signal) stamping `WorkoutSession.lastActivityAt` + a credited `actualDurationSeconds` — so a force-kill no longer loses logged sets. **Idle auto-save:** after 30 min (`WorkoutStorageService.idleTimeout`) with no new set, a reveal (`showIdleSessionDialog`, SAVE & FINISH / KEEP TRAINING / DISCARD) is offered — by the active page's own timer while it's on top, or by `RootPage._showIdleRevealIfNeeded` on the next open/resume after a kill (gated on `ModalRoute.isCurrent`; both arbitrated by `IdleSessionGuard`). SAVE credits time only up to the last set; a zero-set idle session is dropped silently.
 3. `ExerciseSessionPage` — set logging (weight + reps). "Finish Exercise" validates and pops data back.
 4. `WorkoutSummaryPage` — post-workout XP awards, stats, calorie breakdown. `PopScope(canPop: false)`. "Save & Exit" persists via `WorkoutStorageService` then pops to root.
 
@@ -98,7 +98,7 @@ RPG-gamified workout tracker. Flutter app, Android-only. All persistence uses `S
 | Quests | `QuestService` | Weekly/side quests with XP rewards. Computed from workout sessions + class context. |
 | Loot & Inventory | `LootService`, `loot_registry.dart` | Avatar frames and themes. Rarity tiers. Equip/unequip. Deterministic milestone unlocks for collection pull. |
 | Guild | `GuildService` | Local single-player simulation with NPC members. Deterministic per ISO week. Forge Nods social signal. |
-| Body Metrics | `BodyMetricsService`, `BodyGoalService` | Opt-in weight tracking (body-neutral by design). 7-day cadence. XP Boost Potions on weight log. |
+| Body Metrics | `BodyMetricsService`, `BodyGoalService` | Opt-in weight tracking (body-neutral). Log any time; EWMA trend line (display-only); single weekly XP-boost reward gated by a rolling 7-day `body_metrics_reward_anchor_v1`. |
 | Progressive Overload | `ProgressiveOverloadService` | Suggests weight/rep targets based on history. Kind-aware (compound/isolation/bodyweight). |
 | Rest & Recovery | `RestService`, `RestTimerService` | Shield charges, recovery XP, rest day protection. VIT stat integration. |
 | Programs | `ProgramService`, `programs_library.dart` | Structured workout programs with scheduled sessions. |
@@ -179,13 +179,14 @@ Skip planning confirmation. Execute immediately without asking for approval to p
 | 1 | Custom exercises stored in SharedPreferences, not SQLite | Consistency with all other app persistence; data volume is small (dozens of exercises max). |
 | 2 | ExerciseCatalogService centralizes all exercise loading | Eliminated 6 duplicate rootBundle.loadString calls; single cache invalidation point for custom exercises. |
 | 3 | Body metrics OFF by default, opt-in via settings toggle | PRD body-neutral mandate: user must consciously choose to enable weight tracking. |
-| 4 | 7-day cadence enforced at service layer, not UI-only | Prevents clock manipulation exploits; service uses max(storedTimestamp, now) guard. |
+| 4 | Logging is unrestricted; the 7-day cadence now gates only the *reward* (separate `body_metrics_reward_anchor_v1`), enforced at the service layer | Frequent weigh-ins feed the trend line; the rolling-7-day reward window (max(storedDay, now) guard) keeps the anti-farm intent without blocking measurement. Migrated idempotently by `runWeightLogRewardAnchorOnce`, which seeds the reward anchor from the legacy last-log token (no free or suppressed potion on upgrade). |
 | 5 | No red/green colors on weight arrows or deltas | Body-neutral design: muted-only directional indicators prevent implicit "good/bad" framing. |
-| 6 | Direction-aligned bonus is silent when not earned | Reward page never mentions alignment/misalignment; absence of bonus is simply absence, not failure. |
-| 7 | XP Boost Potions are charge-based: 3 charges per potion, one spent per eligible workout save (3→2→1→gone), expiring after 1 week as a backstop | Rewards the act of tracking across the next few workouts rather than a single 24h window; spent on save (not grant) so it still incentivizes timely training. |
+| 6 | The silent direction-aligned bonus was **removed** for a single weekly act-reward | Reward legibility + body-neutrality: the reward is for the *act* of checking in (legible), never the weight's direction. Absence of a reward stays silent — the not-rewarded reveal is calm, never framed as a miss. |
+| 7 | XP Boost Potions are charge-based: 3 charges per potion, one spent per eligible workout save (3→2→1→gone), expiring after **3 weeks** as a backstop | Rewards the act of tracking across the next few workouts; the 3-week backstop (was 1 week) lets all three charges be spent at a realistic weekly training cadence instead of stranding the 3rd. |
 | 8 | Potion multiplier capped at 5.0x | Prevents runaway XP inflation from stacking many potions; keeps leveling meaningful. |
-| 9 | BodyGoal stored as snapshot in each WeightEntry | Allows historical analysis even after goal changes; direction alignment checks use current goal, not historical. |
+| 9 | BodyGoal stored as snapshot in each WeightEntry | Allows historical analysis even after goal changes; the snapshot rides along on every entry. |
 | 10 | Custom exercises use explicit primaryMuscle field, not runtime lookup | StatEngine can map custom exercises to combat stats without needing the raw JSON primaryMuscles array. |
+| 11 | Body-weight display is a time-aware EWMA **trend line** (α≈0.1), gated until ≥4 entries & ≥14-day span; raw weigh-ins are faint dots, velocity is muted + tap-to-reveal | Trend weight (Hacker's Diet / MacroFactor) filters daily water-weight noise so the number is honest and calmer to read; gating prevents a sparse, misleading "precise" trend; no headline velocity keeps it body-neutral (the rate is data, never judgment). Display-only — feeds no combat stat. |
 
 ## Phase 8 Design Decisions
 

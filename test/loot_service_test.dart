@@ -72,17 +72,16 @@ void main() {
     expect(second, isNot(contains('frame_neon')));
   });
 
-  test('frames and themes can be purchased with enough gems', () async {
+  test('frames can be purchased with enough gems', () async {
     final gems = GemService();
     final service = LootService();
     await gems.awardQuestGems(claimKey: 'seed', amount: 500, label: 'Seed');
 
     await service.purchaseItemWithGems('frame_stone');
-    await service.purchaseItemWithGems('theme_stone');
 
     final owned = (await service.getInventory()).map((item) => item.id);
-    expect(owned, containsAll(['frame_stone', 'theme_stone']));
-    expect(await gems.balance(), 50);
+    expect(owned, contains('frame_stone'));
+    expect(await gems.balance(), 350);
   });
 
   test('insufficient gems do not purchase or mutate balance', () async {

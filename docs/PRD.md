@@ -68,6 +68,12 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
       defeat grants the Shadowbane title + Spectral Frame (identity only — never XP/gems);
       a decaying high-water floor blocks rewards for beating a rested-away baseline. See
       `docs/stats-mechanics.md` → "The Shadow".
+- [x] Adventure (`AdventureService`) — workout-fueled expeditions: the first completed workout of
+      the day dispatches the character to a stat-keyed route (IRON VAULT/STR, SKY TRACER/AGI,
+      INFINI MAZE/END); the report greets the next app sitting with a parallax pixel diorama and
+      a gem payout set by the route stat's rank (8/12/18/26/40 base, ±30% roll at dispatch).
+      One/day, 5/ISO-week, idempotent ledger awards, occasional no-power flavor finds. See
+      `docs/superpowers/plans/2026-06-12-adventure-design.md`.
 - [x] Body metrics (`BodyMetricsService`) — opt-in, body-neutral weight tracking: log any time, an
       EWMA **trend line** smooths the noise, and a single weekly XP-boost reward (rolling 7-day
       window) rewards the act of checking in.

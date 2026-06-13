@@ -76,8 +76,10 @@ makes the number satisfying. *Artifact: findings grouped per problem, with links
 ## Stage 3 — Opinion
 
 Synthesize a recommendation with explicit tensions/tradeoffs (accuracy vs hook is this app's
-recurring axis). Separate engineering calls (yours) from intent calls (the user's). State what
-you would change, what you would keep, and why. *Artifact: the opinion section.*
+recurring axis). Separate engineering calls (yours) from intent calls (the user's). Before
+writing, read `.claude/skills/deep-feature/learnings.md` (if present) and check the
+recommendation against every category that applies. State what you would change, what you would
+keep, and why. *Artifact: the opinion section.*
 
 ## Stage 4 — Codex adversarial review (opinion, then plan)
 
@@ -87,7 +89,8 @@ foreground via the codex plugin (`/codex:adversarial-review` flow). Stable rules
 - Carry the full design context (current behavior + proposal) **in the prompt** — never assume
   the reviewer can read the repo.
 - End the prompt with a numbered **CHALLENGE** list naming the weakest assumptions: migration
-  cliffs, exploit surfaces, hook regressions, missing-data fallbacks.
+  cliffs, exploit surfaces, hook regressions, missing-data fallbacks — plus every
+  `.claude/skills/deep-feature/learnings.md` category that applies to the change.
 - Treat findings as design input, not a gate to argue past — revise the design before planning.
   (The stat rework reversed its core mechanism — bounded e1RM tiers → cumulative intensity
   currency — because of this step.)
@@ -108,5 +111,10 @@ foreground via the codex plugin (`/codex:adversarial-review` flow). Stable rules
    automatic gate may be weaker than it looks on this machine).
 4. Update the affected docs (`docs/stats-mechanics.md`, `docs/PRD.md`) in the same change —
    reconcile against code before writing, per `docs/CLAUDE.md`.
+5. **Reflect:** after the final review verdict, distill any finding that is a *generalizable*
+   failure mode (not feature-specific) into `.claude/skills/deep-feature/learnings.md` —
+   update an existing category over adding a near-duplicate, and respect that file's line cap.
+   Feature-specific findings stay in the plan doc as before.
 
-*Artifacts: approved plan; analyze/test output; review verdict.*
+*Artifacts: approved plan; analyze/test output; review verdict; learnings.md updated or
+"no generalizable findings" noted.*

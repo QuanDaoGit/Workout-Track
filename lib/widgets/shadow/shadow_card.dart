@@ -20,49 +20,24 @@ class ShadowCard extends StatelessWidget {
   final AvatarSpec avatarSpec;
   final VoidCallback? onTap;
 
-  ({String title, String subtitle, Color accent}) get _copy {
+  ({String title, Color accent}) get _copy {
     switch (evaluation.status) {
       case ShadowStatus.locked:
-        return (
-          title: 'SOMETHING IS FORMING…',
-          subtitle: 'Keep training.',
-          accent: kMutedText,
-        );
+        return (title: 'SOMETHING IS FORMING…', accent: kMutedText);
       case ShadowStatus.forming:
-        return (
-          title: 'YOUR SHADOW IS TAKING SHAPE',
-          subtitle: 'It needs a month of you.',
-          accent: kCyan,
-        );
+        return (title: 'YOUR SHADOW IS TAKING SHAPE', accent: kCyan);
       case ShadowStatus.contest:
-        if (evaluation.headline != null) {
-          return (
-            title: evaluation.headline!,
-            subtitle: evaluation.gapClosing
-                ? 'Gap closing — keep pushing.'
-                : 'Out-train your past month to pull ahead.',
-            accent: kDanger,
-          );
+        if (evaluation.gapClosing) {
+          return (title: 'GAP CLOSING — KEEP PUSHING', accent: kAmber);
         }
-        return (
-          title: 'DEAD HEAT WITH YOUR SHADOW',
-          subtitle: 'Hold the pace.',
-          accent: kCyan,
-        );
+        if (evaluation.headline != null) {
+          return (title: evaluation.headline!, accent: kDanger);
+        }
+        return (title: 'DEAD HEAT WITH YOUR SHADOW', accent: kCyan);
       case ShadowStatus.defeated:
-        return (
-          title: 'SHADOW BESTED',
-          subtitle: evaluation.provisional
-              ? 'Forming baseline held — keep building it.'
-              : 'Every axis held against your past month.',
-          accent: kNeon,
-        );
+        return (title: 'SHADOW DEFEATED', accent: kNeon);
       case ShadowStatus.faded:
-        return (
-          title: 'YOUR SHADOW HAS FADED',
-          subtitle: 'Rebuild — it remembers more of you.',
-          accent: kMutedText,
-        );
+        return (title: 'YOUR SHADOW HAS FADED', accent: kMutedText);
     }
   }
 
@@ -112,15 +87,6 @@ class ShadowCard extends StatelessWidget {
                         height: 1.5,
                         color: copy.accent,
                       ),
-                    ),
-                    const SizedBox(height: kSpace1),
-                    Text(
-                      copy.subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: kMutedText),
                     ),
                   ],
                 ),

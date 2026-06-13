@@ -118,7 +118,6 @@ class _InventoryPageState extends State<InventoryPage> {
                 children: [
                   _buildVisualSection(LootCategory.avatarFrame),
                   _buildTitleSection(),
-                  _buildVisualSection(LootCategory.homeTheme),
                 ],
               ),
             ),
@@ -233,7 +232,7 @@ class _EmptyInventoryHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = category == LootCategory.avatarFrame ? 'frames' : 'themes';
+    const label = 'frames';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(kSpace3),

@@ -20,7 +20,6 @@ void main() {
     expect(find.text('LOOT INVENTORY'), findsOneWidget);
     expect(find.text('Iron Frame'), findsOneWidget);
     expect(find.text('Recruit'), findsOneWidget);
-    expect(find.text('Default Arcade'), findsOneWidget);
 
     expect(find.text('GEM WALLET'), findsNothing);
     expect(find.text('Stone Frame'), findsNothing);
@@ -34,7 +33,6 @@ void main() {
 
     expect(find.text('GEM SHOP'), findsOneWidget);
     expect(find.text('Stone Frame'), findsOneWidget);
-    expect(find.text('Stone Crypt'), findsOneWidget);
     expect(find.text('The Grinder'), findsNothing);
     expect(find.text('FEATURED'), findsNothing);
     expect(find.text('BUNDLES'), findsNothing);
@@ -84,7 +82,6 @@ void main() {
 
     expect(find.text('Stone Frame'), findsOneWidget);
     expect(find.text('Bronze Frame'), findsNothing);
-    expect(find.text('Stone Crypt'), findsNothing);
   });
 
   testWidgets('buying a shop frame spends gems and moves it to inventory', (
@@ -196,22 +193,6 @@ void main() {
     expect(find.byType(LootAvatarFrame), findsWidgets);
   });
 
-  testWidgets('purchase sheet shows live theme preview', (tester) async {
-    await _pumpShop(tester);
-
-    await _openStoneCryptInShop(tester);
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const ValueKey('shop_live_preview_homeTheme')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('shop_theme_live_preview')),
-      findsOneWidget,
-    );
-  });
-
   testWidgets('shop cards and filters use micro-motion widgets', (
     tester,
   ) async {
@@ -285,16 +266,5 @@ Future<void> _openStoneFrameInShop(WidgetTester tester) async {
     scrollable: find.byType(Scrollable).first,
   );
   await tester.tap(stoneFrame);
-  await tester.pumpAndSettle();
-}
-
-Future<void> _openStoneCryptInShop(WidgetTester tester) async {
-  final stoneCrypt = find.text('Stone Crypt');
-  await tester.scrollUntilVisible(
-    stoneCrypt,
-    160,
-    scrollable: find.byType(Scrollable).first,
-  );
-  await tester.tap(stoneCrypt);
   await tester.pumpAndSettle();
 }

@@ -299,7 +299,7 @@ forming."); < 3 sessions in the chronic window → forming; 6–11 sessions →
 provisional (labeled experimental, no permanent reward); ≥ 12 sessions →
 mature.
 
-**Defeat and the faded floor:** the Shadow is bested when every sufficient
+**Defeat and the faded floor:** the Shadow is defeated when every sufficient
 axis is ahead. A per-axis chronic high-water (decaying ~2%/week) guards
 against under-training: if the current baseline has decayed well below its
 high-water, the Shadow is *faded* — out-pacing it reads as rebuilding and
@@ -312,6 +312,18 @@ tab arena (ghost avatar = the user's own pixel face desaturated/tinted, dual
 radar with the Shadow as the dashed reference ring, per-axis reads, reward
 state). Week-over-week mean-ratio comparison drives a "gap closing"
 encouragement while behind.
+
+## Adventure (rank consumption)
+
+Adventure (`AdventureService`, key `adventure_state_v1`) is the economy consumer of absolute
+ranks: a completed workout dispatches an expedition whose gem payout is set by `getRank` on the
+chosen route's stat (D/C/B/A/S → 8/12/18/26/40 base, ±30% rolled **at dispatch**, seeded by the
+expedition id so a reopen can never reroll). Rank is captured at dispatch and stored. Adventure
+is strictly read-only over the stat board, XP, and workout history; its only writes are its own
+state key and idempotent gem-ledger entries (`adventure:<expeditionId>`). Caps: one dispatch per
+day, five per ISO week, max-anchored against clock rollback; clock-forward manipulation is an
+accepted offline trust boundary (consistent with quests/LCK) that still costs one real logged
+workout (≥1 set with reps) per dispatch.
 
 ## Rules-Version Migration (Grandfather Floor)
 
@@ -433,3 +445,4 @@ Important stat-related local keys:
 | `workout_sessions` | saved workout history |
 | `rest_state_v1` | recovery schedule, shields, rest claims |
 | `shadow_state_v1` | Shadow high-water floor, weekly ratio, defeat marker |
+| `adventure_state_v1` | Adventure orders, pending expedition, day/week caps, report history |

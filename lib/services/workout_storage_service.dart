@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/muscle_groups.dart';
 import '../models/workout_models.dart';
+import 'adventure_service.dart';
 import 'calibration_service.dart';
 import 'rest_service.dart';
 import 'stat_engine.dart';
@@ -61,6 +62,10 @@ class WorkoutStorageService {
       await StatEngine().calculateAllStats();
       await RestService().refreshWeeklyShieldProgress(sessions);
       if (!session.isAbandoned) {
+        // Adventure dispatch — awaited (never fire-and-forget) and after the
+        // stat recompute so the expedition captures a fresh rank. The service
+        // swallows its own failures: an adventure can never break a save.
+        await AdventureService().dispatchForSession(session);
         await markMissionFinished(session.date, MissionFinishState.completed);
       }
     }
@@ -131,16 +136,13 @@ class WorkoutStorageService {
     final threshold = idleTimeout ?? WorkoutStorageService.idleTimeout;
     final currentTime = now ?? DateTime.now();
     final sessions = await getSessions();
-    final timedOut =
-        sessions.where((session) {
-          final last = session.lastActivityAt;
-          return session.isOngoing &&
-              !session.isPausedForResume &&
-              last != null &&
-              !currentTime.isBefore(last.add(threshold));
-        }).toList()..sort(
-          (a, b) => a.lastActivityAt!.compareTo(b.lastActivityAt!),
-        );
+    final timedOut = sessions.where((session) {
+      final last = session.lastActivityAt;
+      return session.isOngoing &&
+          !session.isPausedForResume &&
+          last != null &&
+          !currentTime.isBefore(last.add(threshold));
+    }).toList()..sort((a, b) => a.lastActivityAt!.compareTo(b.lastActivityAt!));
     return timedOut.isEmpty ? null : timedOut.first;
   }
 

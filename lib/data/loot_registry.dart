@@ -2,7 +2,6 @@ import '../models/loot_item.dart';
 import '../models/loot_unlock_rule.dart';
 
 const String unlockFramePath = 'assets/unlocks/frames';
-const String unlockThemePath = 'assets/unlocks/themes';
 
 const List<LootItem> lootRegistry = [
   LootItem(
@@ -99,7 +98,7 @@ const List<LootItem> lootRegistry = [
   LootItem(
     id: 'frame_spectral',
     name: 'Spectral Frame',
-    description: 'Ghost-light border left behind by a bested Shadow.',
+    description: 'Ghost-light border left behind by a defeated Shadow.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.epic,
     // Asset deferred — LootAvatarFrame's errorBuilder renders the colorValue
@@ -322,52 +321,6 @@ const List<LootItem> lootRegistry = [
     category: LootCategory.titleBadge,
     rarity: LootRarity.rare,
     assetPath: '',
-  ),
-  LootItem(
-    id: 'theme_default',
-    name: 'Default Arcade',
-    description: 'Current dark arcade cards.',
-    category: LootCategory.homeTheme,
-    rarity: LootRarity.common,
-    assetPath: '$unlockThemePath/theme_default.png',
-    colorValue: 0xFF1A1A2E,
-    isDefault: true,
-  ),
-  LootItem(
-    id: 'theme_stone',
-    name: 'Stone Crypt',
-    description: 'Dark grey stone card tint. 12 completed sessions.',
-    category: LootCategory.homeTheme,
-    rarity: LootRarity.uncommon,
-    assetPath: '$unlockThemePath/theme_stone.png',
-    colorValue: 0xFF2A2A3E,
-    gemPrice: 300,
-    unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 12),
-  ),
-  LootItem(
-    id: 'theme_forest',
-    name: 'Dark Forest',
-    description: 'Deep green card tint. 32 completed sessions.',
-    category: LootCategory.homeTheme,
-    rarity: LootRarity.rare,
-    assetPath: '$unlockThemePath/theme_forest.png',
-    colorValue: 0xFF123A2A,
-    gemPrice: 1200,
-    unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 32),
-  ),
-  LootItem(
-    id: 'theme_inferno',
-    name: 'Inferno Depths',
-    description: 'Dark ember card tint.',
-    category: LootCategory.homeTheme,
-    rarity: LootRarity.epic,
-    assetPath: '$unlockThemePath/theme_inferno.png',
-    colorValue: 0xFF3A1717,
-    gemPrice: 3500,
-    unlockRule: LootUnlockRule(
-      kind: UnlockKind.lifetimeVolume,
-      threshold: 180000,
-    ),
   ),
 ];
 

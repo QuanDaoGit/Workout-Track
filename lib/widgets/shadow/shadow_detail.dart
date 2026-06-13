@@ -187,10 +187,10 @@ class ShadowDetail extends StatelessWidget {
     final eval = evaluation;
     final (line, color) = switch (eval.status) {
       ShadowStatus.defeated when eval.titleEarnedNow => (
-        'SHADOW BESTED — TITLE EARNED: SHADOWBANE',
+        'SHADOW DEFEATED — TITLE EARNED: SHADOWBANE',
         kNeon,
       ),
-      ShadowStatus.defeated => ('SHADOW BESTED THIS WEEK', kNeon),
+      ShadowStatus.defeated => ('SHADOW DEFEATED THIS WEEK', kNeon),
       ShadowStatus.faded => (
         'YOUR SHADOW HAS FADED — REBUILD. IT REMEMBERS MORE OF YOU.',
         kMutedText,

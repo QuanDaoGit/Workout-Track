@@ -6,13 +6,17 @@ import '../theme/app_fonts.dart';
 
 import '../data/muscle_groups.dart';
 import '../data/programs_library.dart';
+import '../models/adventure_models.dart';
+import '../models/character_class.dart';
 import '../models/loot_item.dart';
 import '../models/program_models.dart';
 import '../models/profile_models.dart';
 import '../models/rest_models.dart';
 import '../models/shadow_models.dart';
 import '../models/workout_models.dart';
+import '../services/adventure_service.dart';
 import '../services/calorie_service.dart';
+import '../services/class_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/gem_service.dart';
 import '../services/loot_service.dart';
@@ -28,6 +32,7 @@ import '../services/workout_storage_service.dart';
 import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/adventure/adventure_card.dart';
 import '../widgets/arcade_dialog_button_column.dart';
 import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
@@ -47,6 +52,8 @@ import '../widgets/screen_shake.dart';
 import '../widgets/shadow/shadow_card.dart';
 import '../widgets/strobe_flash.dart';
 import '../widgets/rest_icon.dart';
+import 'adventure_page.dart';
+import 'expedition_report_page.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
 
@@ -170,6 +177,11 @@ class HomePageState extends State<HomePage> {
   ProgramDay? _programDay;
   ProgramDaySnapshot? _programCompletedToday;
   ShadowEvaluation? _shadowEval;
+  AdventureState? _adventureState;
+  CharacterClass? _characterClass;
+  // Single-flight guard for the on-open expedition reveal (Home can load
+  // twice in quick succession: initState + the storage-change listener).
+  bool _expeditionRevealInFlight = false;
   StreamSubscription<void>? _storageSubscription;
 
   @override
@@ -243,6 +255,8 @@ class HomePageState extends State<HomePage> {
     final missionFinishState =
         await WorkoutStorageService.missionFinishStateToday();
     final shadowEval = await ShadowService().evaluate();
+    final adventureState = await _loadAdventureStateSafely();
+    final characterClass = await ClassService().getCurrentClass();
     if (!mounted) return;
 
     final completed = all.where((s) => !s.isPartial).toList();
@@ -361,12 +375,72 @@ class HomePageState extends State<HomePage> {
       _programDay = programDay;
       _programCompletedToday = programCompletedToday;
       _shadowEval = shadowEval;
+      _adventureState = adventureState;
+      _characterClass = characterClass;
       _lckMultiplier = lckMultiplier;
       _lck = lck;
       _gemBalance = gemBalance;
       _vitality = vitality;
       _loading = false;
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeRevealExpeditionReport();
+    });
+  }
+
+  /// On-open ceremony precedence (one per load, never stacked): the
+  /// idle-session dialog and any other modal win — this only fires when
+  /// Home is the current route and no ongoing session needs attention.
+  /// Settlement is only consumed once the reveal can actually show.
+  Future<AdventureState?> _loadAdventureStateSafely() async {
+    try {
+      return await AdventureService().loadState();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _maybeRevealExpeditionReport() async {
+    if (!mounted || _expeditionRevealInFlight) return;
+    if (_ongoingSessions.isNotEmpty) return; // idle-session flow first
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return;
+    _expeditionRevealInFlight = true;
+    try {
+      final report = await AdventureService().settleAndTakeReport();
+      if (report == null || !mounted) return;
+      final currentRoute = ModalRoute.of(context);
+      if (currentRoute == null || !currentRoute.isCurrent) return;
+      await Navigator.of(context).push(
+        arcadeRoute(
+          (_) => ExpeditionReportPage(
+            report: report,
+            avatarSpec: _profile.avatarSpec,
+            characterClass: _characterClass,
+          ),
+          motion: ArcadeRouteMotion.fade,
+        ),
+      );
+      if (mounted) await _loadData();
+    } catch (_) {
+      // Adventure is optional Home chrome; a report failure must never hide
+      // the dashboard after the primary data has loaded.
+    } finally {
+      _expeditionRevealInFlight = false;
+    }
+  }
+
+  void _openAdventure() {
+    Navigator.of(context)
+        .push(
+          arcadeRoute(
+            (_) => const AdventurePage(),
+            motion: ArcadeRouteMotion.fade,
+          ),
+        )
+        .then((_) {
+          if (mounted) _loadData();
+        });
   }
 
   Color _rankColor() {
@@ -377,12 +451,6 @@ class HomePageState extends State<HomePage> {
       'Squire' => kNeon,
       _ => kMutedText,
     };
-  }
-
-  Color _themedCardColor(Color fallback) {
-    final theme = _equippedLoot[LootCategory.homeTheme];
-    if (theme == null || theme.id == 'theme_default') return fallback;
-    return Color.lerp(fallback, theme.color, 0.32) ?? fallback;
   }
 
   Widget _homeCard({
@@ -399,7 +467,7 @@ class HomePageState extends State<HomePage> {
       width: double.infinity,
       padding: padding ?? const EdgeInsets.all(kCardPadding),
       decoration: BoxDecoration(
-        color: _themedCardColor(background).withValues(alpha: backgroundAlpha),
+        color: background.withValues(alpha: backgroundAlpha),
         border: Border.all(
           color: borderColor.withValues(alpha: borderAlpha),
           width: borderWidth,
@@ -1725,7 +1793,7 @@ class HomePageState extends State<HomePage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: _themedCardColor(kCard),
+            color: kCard,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Row(
@@ -1934,6 +2002,13 @@ class HomePageState extends State<HomePage> {
                       evaluation: _shadowEval!,
                       avatarSpec: _profile.avatarSpec,
                       onTap: widget.onViewGuild,
+                    ),
+                  ],
+                  if (_adventureState != null) ...[
+                    const SizedBox(height: kSpace2),
+                    AdventureCard(
+                      state: _adventureState!,
+                      onTap: _openAdventure,
                     ),
                   ],
                   const SizedBox(height: kSectionGap),

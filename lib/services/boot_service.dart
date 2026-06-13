@@ -28,6 +28,7 @@ class BootService {
       await MigrationService.runTitleUnificationOnce();
       await MigrationService.runAvatarSpecSeedOnce();
       await MigrationService.runWeightLogRewardAnchorOnce();
+      await MigrationService.runThemeLootCleanupOnce();
       await MigrationService.runStatsRecomputeIfRulesChanged();
       await StatEngine().applyDecayIfNeeded();
       await ClassMigrationService().migrateIfNeeded();

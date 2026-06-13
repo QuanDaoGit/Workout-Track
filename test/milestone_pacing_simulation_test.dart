@@ -20,9 +20,11 @@ void main() {
       expect(_lootIdsForWeek(weeks, 5), contains('title_iron_warden'));
       expect(_kindsForWeek(weeks, 6), contains(MilestoneKind.levelUp));
       expect(_lootIdsForWeek(weeks, 7), contains('title_iron_will'));
-      expect(_lootIdsForWeek(weeks, 8), contains('theme_forest'));
 
-      for (var week = 4; week <= 8; week++) {
+      // Weeks 4–7 each surface a non-stat reward beat. Week 8 (~32 sessions)
+      // used to be filled by the `theme_forest` unlock; with themes removed it
+      // is a stat-only valley until the next frame/title threshold is reached.
+      for (var week = 4; week <= 7; week++) {
         expect(_nonStatEventsForWeek(weeks, week), isNotEmpty);
       }
     },
@@ -38,12 +40,12 @@ void main() {
     );
     expect(
       _lootIdsThroughWeek(low, 11),
-      containsAll(['frame_neon', 'theme_forest']),
+      contains('frame_neon'),
     );
 
     expect(
       _lootIdsThroughWeek(high, 7),
-      containsAll(['frame_neon', 'theme_forest']),
+      contains('frame_neon'),
     );
     expect(_lootIdsThroughWeek(high, 7), contains('title_iron_will'));
   });

@@ -110,9 +110,7 @@ class LootService {
       throw StateError('Unknown loot item: $itemId');
     }
     final price = item.gemPrice;
-    if (price == null ||
-        (item.category != LootCategory.avatarFrame &&
-            item.category != LootCategory.homeTheme)) {
+    if (price == null || item.category != LootCategory.avatarFrame) {
       throw StateError('Item is not purchasable with gems.');
     }
 

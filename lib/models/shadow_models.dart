@@ -16,10 +16,10 @@ enum ShadowStatus {
   /// yet (or no axis clears the sufficiency floor).
   forming,
 
-  /// Live contest: at least one sufficient axis, not currently bested.
+  /// Live contest: at least one sufficient axis, not currently defeated.
   contest,
 
-  /// Every sufficient axis held at full strength — the Shadow is bested.
+  /// Every sufficient axis held at full strength — the Shadow is defeated.
   defeated,
 
   /// The chronic baseline has decayed well below its high-water: the Shadow

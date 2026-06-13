@@ -5,7 +5,7 @@ import 'unit_models.dart';
 
 enum LootRarity { common, uncommon, rare, epic, legendary }
 
-enum LootCategory { avatarFrame, titleBadge, homeTheme }
+enum LootCategory { avatarFrame, titleBadge }
 
 extension LootRarityInfo on LootRarity {
   String get label {
@@ -46,8 +46,6 @@ extension LootCategoryInfo on LootCategory {
         return 'FRAMES';
       case LootCategory.titleBadge:
         return 'TITLES';
-      case LootCategory.homeTheme:
-        return 'THEMES';
     }
   }
 
@@ -57,8 +55,6 @@ extension LootCategoryInfo on LootCategory {
         return 'frame';
       case LootCategory.titleBadge:
         return 'title';
-      case LootCategory.homeTheme:
-        return 'theme';
     }
   }
 }

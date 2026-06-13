@@ -5,6 +5,7 @@ import '../data/class_definitions.dart';
 import '../data/loot_registry.dart';
 import '../models/body_goal_models.dart';
 import '../models/body_metrics_models.dart';
+import '../models/weight_trend.dart';
 import '../models/loot_item.dart';
 import '../models/unit_models.dart';
 import '../widgets/pixel_button.dart';
@@ -84,6 +85,7 @@ class ProfilePageState extends State<ProfilePage> {
   bool _soundEnabled = true;
   BodyGoalState? _bodyGoalState;
   WeightEntry? _lastWeightEntry;
+  List<WeightEntry> _weightEntries = const [];
   bool _canEarnReward = false;
   int _daysUntilNextReward = 0;
   String? _activeBoostLabel;
@@ -139,12 +141,14 @@ class ProfilePageState extends State<ProfilePage> {
     final heightCm = await CalibrationService().heightCm();
     BodyGoalState? bodyGoalState;
     WeightEntry? lastWeightEntry;
+    List<WeightEntry> weightEntries = const [];
     bool canEarnReward = false;
     int daysUntilNextReward = 0;
     String? activeBoostLabel;
     if (bodyMetricsEnabled) {
       bodyGoalState = await BodyGoalService().getGoalState();
-      lastWeightEntry = await metricsService.getLastEntry();
+      weightEntries = await metricsService.getEntries();
+      lastWeightEntry = weightEntries.isEmpty ? null : weightEntries.last;
       canEarnReward = await metricsService.canEarnReward();
       daysUntilNextReward = await metricsService.daysUntilNextReward();
       activeBoostLabel = await XpBoostService().getActiveBoostLabel();
@@ -173,6 +177,7 @@ class ProfilePageState extends State<ProfilePage> {
       _soundEnabled = soundEnabled;
       _bodyGoalState = bodyGoalState;
       _lastWeightEntry = lastWeightEntry;
+      _weightEntries = weightEntries;
       _canEarnReward = canEarnReward;
       _daysUntilNextReward = daysUntilNextReward;
       _activeBoostLabel = activeBoostLabel;
@@ -1147,6 +1152,10 @@ class ProfilePageState extends State<ProfilePage> {
           checkInLabel,
           style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
         ),
+        if (trendIsReady(_weightEntries)) ...[
+          const SizedBox(height: 12),
+          _TrendSparkline(_weightEntries),
+        ],
         if (goal != null) ...[
           const SizedBox(height: 8),
           HoldDepress(
@@ -2533,4 +2542,66 @@ class _RespecOption extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A tiny, muted preview of the body-weight trend for the Profile Body card.
+/// Shown only once [trendIsReady]; the full neon chart lives behind VIEW TREND.
+class _TrendSparkline extends StatelessWidget {
+  const _TrendSparkline(this.entries);
+
+  final List<WeightEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final trend = computeTrend(entries);
+    if (trend.length < 2) return const SizedBox.shrink();
+    return SizedBox(
+      height: 32,
+      width: double.infinity,
+      child: CustomPaint(painter: _SparklinePainter(trend)),
+    );
+  }
+}
+
+class _SparklinePainter extends CustomPainter {
+  _SparklinePainter(this.trend);
+
+  final List<TrendPoint> trend;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final xs = [for (final p in trend) p.at.millisecondsSinceEpoch.toDouble()];
+    final ys = [for (final p in trend) p.trendKg];
+    final minX = xs.first;
+    final maxX = xs.last;
+    final minY = ys.reduce((a, b) => a < b ? a : b);
+    final maxY = ys.reduce((a, b) => a > b ? a : b);
+    final spanX = maxX - minX == 0 ? 1.0 : maxX - minX;
+    final spanY = maxY - minY == 0 ? 1.0 : maxY - minY;
+
+    final path = Path();
+    for (var i = 0; i < trend.length; i++) {
+      final dx = (xs[i] - minX) / spanX * size.width;
+      // Inset vertically so the 1.5px stroke is never clipped at the edges.
+      final dy = size.height - 1.5 - (ys[i] - minY) / spanY * (size.height - 3);
+      if (i == 0) {
+        path.moveTo(dx, dy);
+      } else {
+        path.lineTo(dx, dy);
+      }
+    }
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = kMutedText
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SparklinePainter old) => old.trend != trend;
 }

@@ -48,6 +48,33 @@ class GemService {
     return amount;
   }
 
+  /// Awards an expedition's gem payout. Idempotent by expedition id — a
+  /// settle retried after a crash (or raced from two paths) can never
+  /// double-credit.
+  Future<int> awardAdventureGems({
+    required String expeditionId,
+    required int amount,
+    required String label,
+    DateTime? now,
+  }) async {
+    if (amount <= 0) return 0;
+    final id = 'adventure:$expeditionId';
+    final entries = await ledger();
+    if (entries.any((entry) => entry.id == id)) return 0;
+    await _save([
+      ...entries,
+      GemLedgerEntry(
+        id: id,
+        amount: amount,
+        sourceKind: GemLedgerSourceKind.adventure,
+        sourceId: expeditionId,
+        label: label,
+        createdAt: now ?? DateTime.now(),
+      ),
+    ]);
+    return amount;
+  }
+
   Future<int> awardDemoGems({
     required String packId,
     required int amount,

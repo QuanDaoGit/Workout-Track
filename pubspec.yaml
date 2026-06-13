@@ -231,6 +231,8 @@ flutter:
     - assets/exercises/exercises/Wide-Grip_Lat_Pulldown/
     - assets/exercises/exercises/Zercher_Squats/
     - assets/exercises/exercises/Zottman_Curl/
+    - assets/adventure/
+    - assets/adventure/loot/
     - assets/icons/control/
     - assets/icons/control/ui/
     - assets/icons/economy/

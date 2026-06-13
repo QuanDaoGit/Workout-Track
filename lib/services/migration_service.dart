@@ -26,6 +26,8 @@ class MigrationService {
   static const _titleUnificationDoneKey = 'migration_v_title_unification_done';
   static const _weightLogRewardAnchorDoneKey =
       'migration_v_weightlog_reward_anchor_done';
+  static const _themeLootCleanupDoneKey =
+      'migration_v_theme_loot_cleanup_done';
 
   static const _deadKeys = <String>[
     // Battle / dungeon / scrap
@@ -65,6 +67,36 @@ class MigrationService {
     }
 
     await prefs.setBool(_doneKey, true);
+  }
+
+  /// One-shot: strips the removed theme cosmetics from persisted loot — the
+  /// `theme` equipped-slot key and any `theme_*` owned-inventory ids. The load
+  /// paths already skip unknown keys/ids, so this only keeps stored data tidy.
+  static Future<void> runThemeLootCleanupOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_themeLootCleanupDoneKey) == true) return;
+
+    final equippedRaw = prefs.getString('equipped_loot');
+    if (equippedRaw != null && equippedRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(equippedRaw) as Map<String, dynamic>;
+        if (decoded.remove('theme') != null) {
+          await prefs.setString('equipped_loot', jsonEncode(decoded));
+        }
+      } catch (_) {
+        // Malformed JSON — leave it; the loader already tolerates it.
+      }
+    }
+
+    final owned = prefs.getStringList('loot_inventory');
+    if (owned != null) {
+      final cleaned = owned.where((id) => !id.startsWith('theme_')).toList();
+      if (cleaned.length != owned.length) {
+        await prefs.setStringList('loot_inventory', cleaned);
+      }
+    }
+
+    await prefs.setBool(_themeLootCleanupDoneKey, true);
   }
 
   static Future<void> runEndStatBackfillOnce() async {

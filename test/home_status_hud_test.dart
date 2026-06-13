@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/pages/home.dart';
 import 'package:workout_track/theme/tokens.dart';
+import 'package:workout_track/widgets/pixel_loader.dart';
 import 'package:workout_track/widgets/radar_stat_icon.dart';
 
 void main() {
@@ -169,8 +170,21 @@ void main() {
         .dy;
 
     expect(find.byKey(const ValueKey('home_status_hud')), findsOneWidget);
+    expect(find.byType(PixelLoader), findsNothing);
     expect(find.text("TODAY'S MISSION"), findsWidgets);
+    // The quests card sits below the Shadow/Adventure callouts now — scroll
+    // it into the lazily-built sliver viewport before asserting it exists.
+    await tester.scrollUntilVisible(
+      find.text('WEEKLY QUESTS'),
+      240,
+      scrollable: find.descendant(
+        of: find.byType(CustomScrollView),
+        matching: find.byType(Scrollable),
+      ),
+    );
     expect(find.text('WEEKLY QUESTS'), findsOneWidget);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 600));
+    await tester.pumpAndSettle();
     expect(find.text('Ironbit'), findsOneWidget);
     expect(find.byKey(const ValueKey('home_status_class_icon')), findsNothing);
     expect(find.byKey(const ValueKey('home_status_lck_icon')), findsOneWidget);

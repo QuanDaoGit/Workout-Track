@@ -15,7 +15,7 @@ import '../widgets/motion/phosphor_tap.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/loot_avatar_frame.dart';
 
-enum _ShopFilter { all, frames, themes, affordable }
+enum _ShopFilter { all, frames, affordable }
 
 class _DemoGemPack {
   const _DemoGemPack({
@@ -102,8 +102,7 @@ class _ShopPageState extends State<ShopPage> {
 
   bool _isShopItem(LootItem item) {
     return item.gemPrice != null &&
-        (item.category == LootCategory.avatarFrame ||
-            item.category == LootCategory.homeTheme);
+        item.category == LootCategory.avatarFrame;
   }
 
   List<LootItem> _shopItems() {
@@ -114,7 +113,6 @@ class _ShopPageState extends State<ShopPage> {
           return switch (_filter) {
             _ShopFilter.all => true,
             _ShopFilter.frames => item.category == LootCategory.avatarFrame,
-            _ShopFilter.themes => item.category == LootCategory.homeTheme,
             _ShopFilter.affordable => (item.gemPrice ?? 0) <= _gemBalance,
           };
         })
@@ -568,11 +566,6 @@ class _FilterRail extends StatelessWidget {
           label: 'FRAMES',
           selected: selected == _ShopFilter.frames,
           onTap: () => onChanged(_ShopFilter.frames),
-        ),
-        _FilterChipButton(
-          label: 'THEMES',
-          selected: selected == _ShopFilter.themes,
-          onTap: () => onChanged(_ShopFilter.themes),
         ),
         _FilterChipButton(
           label: 'AFFORDABLE',
@@ -1049,82 +1042,20 @@ class _LiveShopPreview extends StatelessWidget {
         border: Border.all(color: kBorder),
         borderRadius: BorderRadius.circular(kCardRadius),
       ),
+      // scaleDown keeps the preview at natural size when it fits and only
+      // shrinks it when the box is too short — so an undersized host (the
+      // UNLOCKED dialog) can never overflow, while the roomier call sites are
+      // visually unchanged.
       child: Center(
-        child: item.category == LootCategory.avatarFrame
-            ? LootAvatarFrame(
-                avatarSpec: avatarSpec,
-                framePath: item.assetPath,
-                size: expanded ? 180 : 128,
-                borderColor: kBorderVariant,
-              )
-            : _ThemeLivePreview(item: item, expanded: expanded),
-      ),
-    );
-  }
-}
-
-class _ThemeLivePreview extends StatelessWidget {
-  const _ThemeLivePreview({required this.item, required this.expanded});
-
-  final LootItem item;
-  final bool expanded;
-
-  @override
-  Widget build(BuildContext context) {
-    final themedCard = Color.lerp(kCard, item.color, 0.32) ?? kCard;
-    final width = expanded ? 220.0 : 180.0;
-    return Container(
-      key: const ValueKey('shop_theme_live_preview'),
-      width: width,
-      padding: const EdgeInsets.all(kSpace3),
-      decoration: BoxDecoration(
-        color: kBg,
-        border: Border.all(color: item.color.withValues(alpha: 0.72)),
-        borderRadius: BorderRadius.circular(kCardRadius),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'IRONBIT',
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: expanded ? 9 : 7,
-              color: kNeon,
-            ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: LootAvatarFrame(
+            avatarSpec: avatarSpec,
+            framePath: item.assetPath,
+            size: expanded ? 180 : 128,
+            borderColor: kBorderVariant,
           ),
-          const SizedBox(height: kSpace3),
-          Container(
-            height: expanded ? 88 : 64,
-            padding: const EdgeInsets.all(kSpace3),
-            decoration: BoxDecoration(
-              color: themedCard,
-              border: Border.all(color: kBorder),
-              borderRadius: BorderRadius.circular(kCardRadius),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(width: 74, height: 6, color: kNeon),
-                const SizedBox(height: kSpace2),
-                Container(width: 120, height: 5, color: kMutedText),
-                const SizedBox(height: kSpace2),
-                Container(width: 92, height: 5, color: item.color),
-              ],
-            ),
-          ),
-          const SizedBox(height: kSpace3),
-          Row(
-            children: [
-              Expanded(child: Container(height: 5, color: kNeon)),
-              const SizedBox(width: 5),
-              Expanded(child: Container(height: 5, color: kBorderVariant)),
-              const SizedBox(width: 5),
-              Expanded(child: Container(height: 5, color: item.color)),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1368,7 +1299,7 @@ class _PurchaseRevealDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: kSpace4),
-            _LiveShopPreview(item: item, avatarSpec: avatarSpec, height: 130),
+            _LiveShopPreview(item: item, avatarSpec: avatarSpec, height: 160),
             const SizedBox(height: kSpace4),
             Text(
               item.name.toUpperCase(),
