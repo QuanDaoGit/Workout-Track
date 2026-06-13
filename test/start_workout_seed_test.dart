@@ -130,4 +130,30 @@ void main() {
     expect(find.text('DB Press'), findsOneWidget);
     expect(find.text('Bench'), findsNothing);
   });
+
+  testWidgets('repeat ids WITHOUT a preset target still apply (no empty screen)', (
+    tester,
+  ) async {
+    // Regression for diff-review #1: a targetless repeat caller must get its
+    // loadout (focus derived from the ids), not fall through to an empty state.
+    SharedPreferences.setMockInitialValues({
+      'workout_sessions': jsonEncode([
+        _completed('s1', const ['Barbell_Bench_Press_-_Medium_Grip', 'Dumbbell_Flyes', 'Cable_Crossover']).toJson(),
+      ]),
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: StartWorkoutPage(
+          catalogOverride: _catalog,
+          initialSelectedExerciseIds: ['Dumbbell_Bench_Press'],
+        ),
+      ),
+    );
+    await _settleSeed(tester);
+
+    expect(find.text('REPEAT OF LAST WORKOUT'), findsOneWidget);
+    expect(find.text('DB Press'), findsOneWidget); // the repeat lift, resolved
+    expect(find.text('YOUR USUAL LIFTS'), findsNothing);
+  });
 }

@@ -189,17 +189,40 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _initSeed());
   }
 
-  /// Resolves the catalog once, then applies the right pre-selection per the
-  /// precedence order (Codex plan-review F2): program / preset target / repeat
-  /// run the existing target seeding; a plain manual start gets the front-door
+  /// Resolves the catalog once, then applies pre-selection by precedence:
+  /// repeat/resume ids win first (handled here, target or not), then program /
+  /// preset-target seeding, else a plain manual start gets the front-door
   /// "usual" default.
   Future<void> _initSeed() async {
     final catalog = await _safeExerciseCatalogFuture;
     if (!mounted) return;
     setState(() => _catalog = catalog);
-    if (_programMode ||
-        _selectedMuscleGroups.isNotEmpty ||
-        widget.initialSelectedExerciseIds != null) {
+
+    // Repeat-workout / resume ids win over any history default, independent of
+    // whether a muscle target was preset — handled in ONE place so a targetless
+    // caller still gets its loadout instead of an empty screen (diff-review #1).
+    if (!_programMode &&
+        widget.initialSelectedExerciseIds != null &&
+        !_initialSelectionConsumed) {
+      _initialSelectionConsumed = true;
+      final catalogIds = {for (final exercise in catalog) exercise.id};
+      final valid = widget.initialSelectedExerciseIds!
+          .where(catalogIds.contains)
+          .toList();
+      if (valid.isNotEmpty) {
+        setState(() {
+          _selectedExerciseIds = valid.toSet();
+          if (_selectedMuscleGroups.isEmpty) {
+            _selectedMuscleGroups = _groupsForIds(valid, catalog);
+            _targetExpanded = false;
+          }
+          _seedSource = _SeedSource.repeat;
+        });
+        return;
+      }
+    }
+
+    if (_programMode || _selectedMuscleGroups.isNotEmpty) {
       await _refreshHistoryPreselection();
     } else {
       await _applyFrontDoorDefault(catalog);
@@ -311,19 +334,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     final catalog = await _safeExerciseCatalogFuture;
     if (mounted && _catalog == null) setState(() => _catalog = catalog);
 
-    final initialIds = widget.initialSelectedExerciseIds;
-    if (initialIds != null && !_initialSelectionConsumed) {
-      _initialSelectionConsumed = true;
-      final catalogIds = {for (final exercise in catalog) exercise.id};
-      final valid = initialIds.where(catalogIds.contains).toSet();
-      if (valid.isNotEmpty && mounted) {
-        setState(() {
-          _selectedExerciseIds = valid;
-          _seedSource = _SeedSource.repeat;
-        });
-        return;
-      }
-    }
+    // (Repeat/resume ids are applied once in _initSeed, ahead of this.)
 
     // Program mode pre-selects today's full prescribed loadout (not a slice).
     if (_programMode && widget.programCuratedExerciseIds != null) {
@@ -340,7 +351,14 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       catalog,
       limit: 5,
     );
-    if (!mounted || !_sameTargets(targets, _selectedMuscleGroups)) return;
+    // Bail if the target changed OR the user edited the selection while this
+    // ranking was in flight — the history default must never clobber a manual
+    // edit (diff-review #2).
+    if (!mounted ||
+        !_sameTargets(targets, _selectedMuscleGroups) ||
+        _userTouchedSelection) {
+      return;
+    }
     if (topIds.isNotEmpty) {
       setState(() {
         _selectedExerciseIds = topIds.toSet();
