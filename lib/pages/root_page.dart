@@ -390,7 +390,11 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
 
   /// Center Train action. Re-reads the ongoing session at tap time so a tap that
   /// lands before the periodic refresh resolves can never misroute (Codex #2):
-  /// an existing session resumes; otherwise we confirm, then start fresh.
+  /// - a paused session past its auto-discard deadline is force-summarized via
+  ///   the shell's own handler, never reopened (Codex post-impl #1);
+  /// - any other live/saved session resumes (mirrors Home's SAVED card and
+  ///   `start_workout._continueOngoingSession`);
+  /// - otherwise we confirm, then start fresh.
   Future<void> _onTrainTapped() async {
     if (_trainTapInFlight) return;
     _trainTapInFlight = true;
@@ -398,7 +402,13 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       final session = await WorkoutStorageService().getOngoingSession();
       if (!mounted) return;
       if (session != null) {
-        _resumeOngoingSession(session);
+        final expired = await WorkoutStorageService().getExpiredPausedSession();
+        if (!mounted) return;
+        if (expired != null) {
+          _showExpiredPausedSummaryIfNeeded();
+        } else {
+          _resumeOngoingSession(session);
+        }
         return;
       }
       final start = await showStartTrainingDialog(context);
