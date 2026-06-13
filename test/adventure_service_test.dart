@@ -126,7 +126,7 @@ void main() {
       await service().dispatchForSession(session('s1', now));
       // Settle the pending so it can't be the blocker, then roll back a day.
       final yesterday = now.subtract(const Duration(days: 1));
-      await service(at: yesterday, boot: 'boot-B').settleAndTakeReport();
+      await service(at: yesterday, boot: 'boot-B').settleAndPeekReport();
       await service(
         at: yesterday,
         boot: 'boot-B',
@@ -142,19 +142,19 @@ void main() {
     test('pending is not revealable in the dispatching sitting', () async {
       final svc = service();
       await svc.dispatchForSession(session('s1', now));
-      final report = await svc.settleAndTakeReport();
+      final report = await svc.settleAndPeekReport();
       expect(report, isNull);
       expect((await storedState()).pending, isNotNull);
     });
 
     test(
-      'process restart settles, awards gems once, and reveals once',
+      'process restart settles, awards gems once, reveals once after ack',
       () async {
         await service(boot: 'boot-A').dispatchForSession(session('s1', now));
         final pendingPayout = (await storedState()).pending!.payout;
 
         final reopened = service(boot: 'boot-B');
-        final report = await reopened.settleAndTakeReport();
+        final report = await reopened.settleAndPeekReport();
         expect(report, isNotNull);
         expect(report!.expedition.payout, pendingPayout);
         expect(report.classDefaultOrders, isTrue);
@@ -163,8 +163,9 @@ void main() {
         final ledger = await GemService().ledger();
         expect(ledger.single.sourceKind, GemLedgerSourceKind.adventure);
 
-        // Second take: nothing left unviewed, no double award.
-        final again = await reopened.settleAndTakeReport();
+        // Acknowledge (ceremony shown) → no longer revealable; no re-award.
+        await reopened.acknowledgeReport(report.expedition.id);
+        final again = await reopened.settleAndPeekReport();
         expect(again, isNull);
         expect(await GemService().balance(), pendingPayout);
 
@@ -181,7 +182,7 @@ void main() {
       final report = await service(
         at: tomorrow,
         boot: 'boot-A',
-      ).settleAndTakeReport();
+      ).settleAndPeekReport();
       expect(report, isNotNull);
     });
 
@@ -189,12 +190,41 @@ void main() {
       await service(boot: 'boot-A').dispatchForSession(session('s1', now));
       final reopened = service(boot: 'boot-B');
       final results = await Future.wait([
-        reopened.settleAndTakeReport(),
-        reopened.settleAndTakeReport(),
-        reopened.settleAndTakeReport(),
+        reopened.settleAndPeekReport(),
+        reopened.settleAndPeekReport(),
+        reopened.settleAndPeekReport(),
       ]);
+      // Peek is non-consuming, so all three see the same unviewed report —
+      // the money invariant is that settlement awarded EXACTLY ONCE.
       final reports = results.whereType<ExpeditionReport>().toList();
-      expect(reports, hasLength(1));
+      expect(reports, hasLength(3));
+      expect(reports.map((r) => r.expedition.id).toSet(), hasLength(1));
+      expect((await GemService().ledger()), hasLength(1));
+      expect(
+        await GemService().balance(),
+        (await storedState()).history.single.payout,
+      );
+    });
+
+    test('peek without acknowledge never burns the ceremony (Codex)', () async {
+      await service(boot: 'boot-A').dispatchForSession(session('s1', now));
+      final reopened = service(boot: 'boot-B');
+
+      // Home takes the report but bails before showing it (route not current).
+      final first = await reopened.settleAndPeekReport();
+      expect(first, isNotNull);
+      expect((await storedState()).history.single.viewed, isFalse);
+
+      // Next valid open still finds the same unviewed report.
+      final second = await reopened.settleAndPeekReport();
+      expect(second!.expedition.id, first!.expedition.id);
+
+      // Only acknowledge consumes it (idempotent).
+      await reopened.acknowledgeReport(first.expedition.id);
+      await reopened.acknowledgeReport(first.expedition.id);
+      expect((await storedState()).history.single.viewed, isTrue);
+      expect(await reopened.settleAndPeekReport(), isNull);
+      // Gems were awarded exactly once across all of the above.
       expect((await GemService().ledger()), hasLength(1));
     });
 
@@ -233,7 +263,7 @@ void main() {
       expect(pending.payout, lessThanOrEqualTo((base * 1.3).round() + 1));
 
       // Settle on a different boot: awarded amount == stored roll.
-      final report = await service(boot: 'boot-B').settleAndTakeReport();
+      final report = await service(boot: 'boot-B').settleAndPeekReport();
       expect(report!.expedition.payout, pending.payout);
     });
 
@@ -270,7 +300,7 @@ void main() {
       final state = await storedState();
       expect(state.standingOrderRouteId, 'infini_maze');
       expect(state.ordersConfirmed, isTrue);
-      final report = await service(boot: 'boot-B').settleAndTakeReport();
+      final report = await service(boot: 'boot-B').settleAndPeekReport();
       expect(report!.classDefaultOrders, isFalse);
       expect(report.expedition.routeId, 'infini_maze');
     });
@@ -339,7 +369,7 @@ void main() {
         ),
       });
       await service(boot: 'boot-A').dispatchForSession(session('s1', now));
-      await service(boot: 'boot-B').settleAndTakeReport();
+      await service(boot: 'boot-B').settleAndPeekReport();
       final state = await storedState();
       expect(state.history.length, AdventureService.historyCap);
       expect(state.history.first.id, contains('s1'));
@@ -356,7 +386,7 @@ void main() {
           'workout_sessions': sessionsRaw,
         });
         await service(boot: 'boot-A').dispatchForSession(session('s1', now));
-        await service(boot: 'boot-B').settleAndTakeReport();
+        await service(boot: 'boot-B').settleAndPeekReport();
         final prefs = await SharedPreferences.getInstance();
         expect(
           prefs.getString('combat_stats'),
@@ -404,7 +434,7 @@ void main() {
       final state = await storedState();
       expect(state.pending, isNotNull);
       // Same process bootId → the report is not revealable in this sitting.
-      final report = await svc.settleAndTakeReport();
+      final report = await svc.settleAndPeekReport();
       expect(report, isNull);
       expect((await storedState()).pending, isNotNull);
     });

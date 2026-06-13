@@ -93,33 +93,50 @@ class AdventureService {
   // Settlement + reveal
   // ---------------------------------------------------------------------
 
-  /// Settles a revealable pending expedition (award + history) if any, then
-  /// returns the oldest unviewed report — marked viewed — or null. The ONLY
-  /// entry point the reveal UI uses; single-flight, so two Home loads can
-  /// never double-award or double-take.
-  Future<ExpeditionReport?> settleAndTakeReport() => _serial(() async {
+  /// Settles a revealable pending expedition (award gems + move to history,
+  /// unviewed) if any, then returns the oldest still-unviewed report — WITHOUT
+  /// marking it viewed — or null. Settlement is durable and idempotent; the
+  /// report is only *acknowledged* (marked viewed) once the UI has actually
+  /// shown it, via [acknowledgeReport]. This split means a Home that takes the
+  /// report but then bails (route no longer current, unmounted) can never burn
+  /// the ceremony — the gems are already safe, and the unviewed report simply
+  /// reveals on the next valid open.
+  Future<ExpeditionReport?> settleAndPeekReport() => _serial(() async {
     final prefs = await SharedPreferences.getInstance();
     var state = _decode(prefs.getString(stateKey));
     state = await _settleIfRevealable(state);
-
-    Expedition? unviewed;
-    for (var i = state.history.length - 1; i >= 0; i--) {
-      if (!state.history[i].viewed) unviewed = state.history[i];
-    }
-    if (unviewed == null) {
-      await _save(prefs, state);
-      return null;
-    }
-    final updatedHistory = [
-      for (final e in state.history)
-        if (e.id == unviewed.id) e.copyWith(viewed: true) else e,
-    ];
-    state = state.copyWith(history: updatedHistory);
     await _save(prefs, state);
-    return ExpeditionReport(
-      expedition: unviewed,
-      classDefaultOrders: !state.ordersConfirmed,
-    );
+
+    // Oldest unviewed first — drains a backlog one ceremony per open.
+    for (final expedition in state.history.reversed) {
+      if (!expedition.viewed) {
+        return ExpeditionReport(
+          expedition: expedition,
+          classDefaultOrders: !state.ordersConfirmed,
+        );
+      }
+    }
+    return null;
+  });
+
+  /// Marks a settled expedition's report viewed — call only after the reveal
+  /// ceremony has actually been presented. Single-flight + idempotent.
+  Future<void> acknowledgeReport(String expeditionId) => _serial(() async {
+    final prefs = await SharedPreferences.getInstance();
+    final state = _decode(prefs.getString(stateKey));
+    var changed = false;
+    final history = [
+      for (final e in state.history)
+        if (e.id == expeditionId && !e.viewed)
+          (() {
+            changed = true;
+            return e.copyWith(viewed: true);
+          })()
+        else
+          e,
+    ];
+    if (!changed) return;
+    await _save(prefs, state.copyWith(history: history));
   });
 
   /// A pending expedition becomes revealable after a process restart or a

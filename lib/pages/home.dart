@@ -407,7 +407,10 @@ class HomePageState extends State<HomePage> {
     if (route == null || !route.isCurrent) return;
     _expeditionRevealInFlight = true;
     try {
-      final report = await AdventureService().settleAndTakeReport();
+      // Peek only — settlement (gems + history) is durable, but the report
+      // stays unviewed until we've actually shown the ceremony, so bailing
+      // here never burns it.
+      final report = await AdventureService().settleAndPeekReport();
       if (report == null || !mounted) return;
       final currentRoute = ModalRoute.of(context);
       if (currentRoute == null || !currentRoute.isCurrent) return;
@@ -421,6 +424,8 @@ class HomePageState extends State<HomePage> {
           motion: ArcadeRouteMotion.fade,
         ),
       );
+      // Acknowledge only now that the report was presented and dismissed.
+      await AdventureService().acknowledgeReport(report.expedition.id);
       if (mounted) await _loadData();
     } catch (_) {
       // Adventure is optional Home chrome; a report failure must never hide
