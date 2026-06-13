@@ -116,14 +116,32 @@ class _ExpeditionReportPageState extends State<ExpeditionReportPage>
                     _staged(
                       1,
                       5,
-                      Text(
-                        '${route.name} · ${route.statKey} ROUTE · '
-                        'RANK ${expedition.rank}',
-                        style: AppFonts.shareTechMono(
-                          color: kMutedText,
-                          fontSize: 11,
-                          letterSpacing: 1.1,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${route.name} · ${route.statKey} ROUTE · '
+                            'RANK ${expedition.rank}',
+                            style: AppFonts.shareTechMono(
+                              color: kMutedText,
+                              fontSize: 11,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                          if (expedition.durationMinutes > 0) ...[
+                            const SizedBox(height: kSpace1),
+                            Text(
+                              '${(expedition.durationMinutes / 60).round()}H '
+                              'HAUL · ×${expedition.multiplier.toStringAsFixed(2)} '
+                              '· VIT ${expedition.vitAtDispatch}',
+                              style: AppFonts.shareTechMono(
+                                color: kMutedText,
+                                fontSize: 10,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     const SizedBox(height: kSpace3),

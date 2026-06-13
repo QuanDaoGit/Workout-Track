@@ -10,6 +10,16 @@ import 'package:workout_track/services/adventure_service.dart';
 import 'package:workout_track/services/gem_service.dart';
 import 'package:workout_track/services/stat_engine.dart';
 
+/// A StatEngine whose stored-stats read always throws — used to prove the
+/// single-flight queue recovers after a failed mutation (Codex plan finding #1).
+class _BoomEngine extends StatEngine {
+  _BoomEngine() : super();
+
+  @override
+  Future<Map<String, int>> getStoredStats() async =>
+      throw StateError('boom');
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -17,7 +27,13 @@ void main() {
 
   const catalog = {'bench': 'chest'};
 
-  WorkoutSession session(String id, DateTime date, {int sets = 3}) {
+  WorkoutSession session(
+    String id,
+    DateTime date, {
+    int sets = 3,
+    bool partial = false,
+    bool abandoned = false,
+  }) {
     return WorkoutSession(
       id: id,
       date: date,
@@ -25,6 +41,8 @@ void main() {
       targetDurationMinutes: 45,
       actualDurationSeconds: 2700,
       estimatedCalories: 200,
+      isPartial: partial,
+      isAbandoned: abandoned,
       exercises: [
         ExerciseLog(
           exerciseId: 'bench',
@@ -52,226 +70,390 @@ void main() {
     );
   }
 
+  /// Earns one charge then dispatches it on [routeId]; returns the expedition.
+  Future<Expedition> earnAndDispatch(
+    String routeId, {
+    DateTime? at,
+  }) async {
+    final svc = service(at: at);
+    await svc.grantChargeForSession(session('w', at ?? now));
+    final e = await svc.dispatchExpedition(routeId);
+    return e!;
+  }
+
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  group('dispatch eligibility', () {
-    test('first completed workout of the day dispatches', () async {
-      await service().dispatchForSession(session('s1', now));
-      final state = await storedState();
-      expect(state.pending, isNotNull);
-      expect(state.weekCount, 1);
-      expect(state.lastDispatchDay, '2026-06-12');
-      // Default standing order resolved (class default).
-      expect(state.standingOrderRouteId, isNotNull);
-    });
-
-    test('second same-day save does not re-dispatch', () async {
-      final svc = service();
-      await svc.dispatchForSession(session('s1', now));
-      await svc.dispatchForSession(
-        session('s2', now.add(const Duration(hours: 2))),
+  group('VIT mapping', () {
+    // VIT floors at 10 (docs/stats-mechanics.md), so the real domain is
+    // [10,100] → [4h,8h] / [1.0×,1.4×].
+    test('durationForVit spans 4h–8h across VIT [10,100], monotonic, clamped',
+        () {
+      expect(AdventureService.durationForVit(10), 240); // floor → 4h
+      expect(AdventureService.durationForVit(100), 480); // 8h
+      expect(AdventureService.durationForVit(55), 360); // midpoint → 6h
+      expect(AdventureService.durationForVit(0), 240); // clamp to floor
+      expect(AdventureService.durationForVit(250), 480); // clamp high
+      expect(
+        AdventureService.durationForVit(75),
+        greaterThan(AdventureService.durationForVit(25)),
       );
-      final state = await storedState();
-      expect(state.weekCount, 1);
-      expect(state.pending!.id, contains('s1'));
     });
 
-    test('partial, abandoned, and empty sessions never dispatch', () async {
-      final svc = service();
-      await svc.dispatchForSession(
-        WorkoutSession(
-          id: 'p',
-          date: now,
-          muscleGroup: 'Chest',
-          targetDurationMinutes: 45,
-          actualDurationSeconds: 100,
-          estimatedCalories: 10,
-          exercises: const [],
-          isPartial: true,
-        ),
-      );
-      await svc.dispatchForSession(session('empty', now, sets: 0));
-      final state = await storedState();
-      expect(state.pending, isNull);
-      expect(state.weekCount, 0);
-    });
-
-    test('weekly cap of 5 holds and resets on a new ISO week', () async {
-      // 5 dispatches Mon-Fri (resolve pending across days via day boundary).
-      for (var day = 8; day <= 12; day++) {
-        final at = DateTime(2026, 6, day, 18);
-        await service(at: at).dispatchForSession(session('d$day', at));
-      }
-      var state = await storedState();
-      expect(state.weekCount, 5);
-
-      // Saturday: capped.
-      final sat = DateTime(2026, 6, 13, 10);
-      await service(at: sat).dispatchForSession(session('sat', sat));
-      state = await storedState();
-      expect(state.weekCount, 5);
-      expect(state.lastDispatchDay, isNot('2026-06-13'));
-
-      // Monday next week: resets.
-      final mon = DateTime(2026, 6, 15, 10);
-      await service(at: mon).dispatchForSession(session('mon', mon));
-      state = await storedState();
-      expect(state.weekCount, 1);
-      expect(state.lastDispatchDay, '2026-06-15');
-    });
-
-    test('clock rollback cannot earn a second dispatch (max anchor)', () async {
-      await service().dispatchForSession(session('s1', now));
-      // Settle the pending so it can't be the blocker, then roll back a day.
-      final yesterday = now.subtract(const Duration(days: 1));
-      await service(at: yesterday, boot: 'boot-B').settleAndPeekReport();
-      await service(
-        at: yesterday,
-        boot: 'boot-B',
-      ).dispatchForSession(session('rollback', yesterday));
-      final state = await storedState();
-      // Anchored "today" is still 2026-06-12 — same day, no new dispatch.
-      expect(state.pending, isNull);
-      expect(state.weekCount, 1);
+    test('multiplierForVit spans 1.0–1.4 across VIT [10,100], monotonic, '
+        'clamped', () {
+      expect(AdventureService.multiplierForVit(10), 1.0); // floor
+      expect(AdventureService.multiplierForVit(100), closeTo(1.4, 1e-9));
+      expect(AdventureService.multiplierForVit(55), closeTo(1.2, 1e-9));
+      expect(AdventureService.multiplierForVit(0), 1.0); // clamp to floor
+      expect(AdventureService.multiplierForVit(180), closeTo(1.4, 1e-9));
     });
   });
 
-  group('settlement and reveal', () {
-    test('pending is not revealable in the dispatching sitting', () async {
-      final svc = service();
-      await svc.dispatchForSession(session('s1', now));
-      final report = await svc.settleAndPeekReport();
-      expect(report, isNull);
-      expect((await storedState()).pending, isNotNull);
+  group('charge grant', () {
+    test('a qualifying workout grants exactly one charge (never dispatches)',
+        () async {
+      await service().grantChargeForSession(session('w', now));
+      final s = await storedState();
+      expect(s.charges, 1);
+      expect(s.lastChargeDay, '2026-06-12');
+      expect(s.pending, isNull);
     });
 
-    test(
-      'process restart settles, awards gems once, reveals once after ack',
-      () async {
-        await service(boot: 'boot-A').dispatchForSession(session('s1', now));
-        final pendingPayout = (await storedState()).pending!.payout;
-
-        final reopened = service(boot: 'boot-B');
-        final report = await reopened.settleAndPeekReport();
-        expect(report, isNotNull);
-        expect(report!.expedition.payout, pendingPayout);
-        expect(report.classDefaultOrders, isTrue);
-
-        expect(await GemService().balance(), pendingPayout);
-        final ledger = await GemService().ledger();
-        expect(ledger.single.sourceKind, GemLedgerSourceKind.adventure);
-
-        // Acknowledge (ceremony shown) → no longer revealable; no re-award.
-        await reopened.acknowledgeReport(report.expedition.id);
-        final again = await reopened.settleAndPeekReport();
-        expect(again, isNull);
-        expect(await GemService().balance(), pendingPayout);
-
-        final state = await storedState();
-        expect(state.pending, isNull);
-        expect(state.history.single.viewed, isTrue);
-      },
-    );
-
-    test('day boundary makes the same-boot pending revealable', () async {
+    test('at most one charge per day (max-anchored)', () async {
       final svc = service();
-      await svc.dispatchForSession(session('s1', now));
+      await svc.grantChargeForSession(session('w1', now));
+      await svc.grantChargeForSession(
+        session('w2', now.add(const Duration(hours: 3))),
+      );
+      expect((await storedState()).charges, 1);
+    });
+
+    test('charges bank up to the cap of 3', () async {
+      for (var day = 9; day <= 13; day++) {
+        final at = DateTime(2026, 6, day, 18);
+        await service(at: at).grantChargeForSession(session('w$day', at));
+      }
+      expect((await storedState()).charges, AdventureState.chargeCap);
+    });
+
+    test('partial, abandoned, and empty sessions grant nothing', () async {
+      final svc = service();
+      await svc.grantChargeForSession(session('p', now, partial: true));
+      await svc.grantChargeForSession(session('a', now, abandoned: true));
+      await svc.grantChargeForSession(session('empty', now, sets: 0));
+      expect((await storedState()).charges, 0);
+    });
+
+    test('clock rollback cannot re-earn a charge for the same day', () async {
+      await service().grantChargeForSession(session('w', now)); // day 06-12
+      final yesterday = now.subtract(const Duration(days: 1));
+      await service(
+        at: yesterday,
+      ).grantChargeForSession(session('rb', yesterday));
+      expect((await storedState()).charges, 1); // anchored day still 06-12
+    });
+  });
+
+  group('manual dispatch', () {
+    test('spends a charge and sends one expedition out with frozen timing',
+        () async {
+      final svc = service();
+      await svc.grantChargeForSession(session('w', now));
+      final e = await svc.dispatchExpedition('iron_vault');
+      expect(e, isNotNull);
+
+      final s = await storedState();
+      expect(s.charges, 0);
+      expect(s.pending!.id, e!.id);
+      expect(s.weekCount, 1);
+      expect(s.standingOrderRouteId, 'iron_vault');
+      expect(s.ordersConfirmed, isTrue);
+
+      // Timing + multiplier are derived from the captured VIT and frozen.
+      final dispatchedAt = DateTime.parse(e.dispatchedAtIso!);
+      final returnsAt = DateTime.parse(e.returnsAtIso!);
+      expect(e.durationMinutes, AdventureService.durationForVit(e.vitAtDispatch));
+      expect(returnsAt.difference(dispatchedAt).inMinutes, e.durationMinutes);
+      expect(e.multiplier, AdventureService.multiplierForVit(e.vitAtDispatch));
+
+      // Payout sits in the base × multiplier × ±30% band.
+      final base = AdventureService.basePayoutForRank(e.rank);
+      expect(
+        e.payout,
+        greaterThanOrEqualTo((base * e.multiplier * 0.7).round() - 1),
+      );
+      expect(
+        e.payout,
+        lessThanOrEqualTo((base * e.multiplier * 1.3).round() + 1),
+      );
+    });
+
+    test('dispatch needs a charge', () async {
+      final e = await service().dispatchExpedition('iron_vault');
+      expect(e, isNull);
+      expect((await storedState()).pending, isNull);
+    });
+
+    test('only one expedition out at a time', () async {
+      final svc = service();
+      await svc.grantChargeForSession(session('w', now));
+      await svc.dispatchExpedition('iron_vault');
+      final second = await svc.dispatchExpedition('sky_tracer');
+      expect(second, isNull);
+      expect((await storedState()).pending!.routeId, 'iron_vault');
+    });
+
+    test('concurrent dispatches cannot double-spend a charge (single-flight)',
+        () async {
+      final svc = service();
+      await svc.grantChargeForSession(session('w', now));
+      final results = await Future.wait([
+        svc.dispatchExpedition('iron_vault'),
+        svc.dispatchExpedition('iron_vault'),
+      ]);
+      expect(results.whereType<Expedition>().toList(), hasLength(1));
+      final s = await storedState();
+      expect(s.charges, 0);
+      expect(s.weekCount, 1);
+    });
+
+    test('same-day dispatches get distinct ids despite an identical clock',
+        () async {
+      // Bank two charges (1/day), then dispatch twice at the SAME fixed `now`
+      // — the worst case for id collision. Distinctness must come from the
+      // random suffix, not the (identical) microsecond clock.
+      await service(at: DateTime(2026, 6, 11, 18)).grantChargeForSession(
+        session('a', DateTime(2026, 6, 11, 18)),
+      );
+      final svc = service(); // now = 2026-06-12 18:00 (fixed)
+      await svc.grantChargeForSession(session('b', now));
+      final e1 = await svc.dispatchExpedition('iron_vault');
+      // Clear the pending so a second dispatch is allowed.
+      final after = DateTime.parse(e1!.returnsAtIso!).add(
+        const Duration(minutes: 1),
+      );
+      await service(at: after).settleAndPeekReport();
+      final e2 = await svc.dispatchExpedition('iron_vault');
+      expect(e2, isNotNull);
+      expect(e1.id, isNot(e2!.id));
+    });
+
+    test('a thrown mutation does not strand the serial queue (Codex #1)',
+        () async {
+      final boom = AdventureService(
+        nowProvider: () => now,
+        statEngine: _BoomEngine(),
+      );
+      await boom.grantChargeForSession(session('w', now)); // charge granted
+      await expectLater(
+        boom.dispatchExpedition('iron_vault'), // throws in getStoredStats
+        throwsA(anything),
+      );
+      // A later queued mutation still runs (queue not poisoned).
       final tomorrow = now.add(const Duration(days: 1));
-      final report = await service(
-        at: tomorrow,
-        boot: 'boot-A',
-      ).settleAndPeekReport();
+      await service(at: tomorrow).grantChargeForSession(
+        session('w2', tomorrow),
+      );
+      expect((await storedState()).charges, 2);
+    });
+  });
+
+  group('settlement and reveal (timed)', () {
+    test('not revealable before returnsAt, revealable after; awards once',
+        () async {
+      final e = await earnAndDispatch('iron_vault');
+      final returnsAt = DateTime.parse(e.returnsAtIso!);
+
+      final before = returnsAt.subtract(const Duration(minutes: 1));
+      expect(await service(at: before).settleAndPeekReport(), isNull);
+      expect((await storedState()).pending, isNotNull);
+
+      final after = returnsAt.add(const Duration(minutes: 1));
+      final report = await service(at: after).settleAndPeekReport();
       expect(report, isNotNull);
+      expect(report!.expedition.id, e.id);
+      expect(await GemService().balance(), e.payout);
+      final ledger = await GemService().ledger();
+      expect(ledger.single.sourceKind, GemLedgerSourceKind.adventure);
+    });
+
+    test('peek without acknowledge never burns the ceremony', () async {
+      final e = await earnAndDispatch('iron_vault');
+      final after = DateTime.parse(e.returnsAtIso!).add(
+        const Duration(minutes: 1),
+      );
+      final reopened = service(at: after);
+
+      final first = await reopened.settleAndPeekReport();
+      expect(first, isNotNull);
+      expect((await storedState()).history.single.viewed, isFalse);
+
+      final second = await reopened.settleAndPeekReport();
+      expect(second!.expedition.id, first!.expedition.id);
+
+      await reopened.acknowledgeReport(first.expedition.id);
+      await reopened.acknowledgeReport(first.expedition.id); // idempotent
+      expect((await storedState()).history.single.viewed, isTrue);
+      expect(await reopened.settleAndPeekReport(), isNull);
+      expect(await GemService().ledger(), hasLength(1));
     });
 
     test('single-flight: concurrent settles award exactly once', () async {
-      await service(boot: 'boot-A').dispatchForSession(session('s1', now));
-      final reopened = service(boot: 'boot-B');
+      final e = await earnAndDispatch('iron_vault');
+      final after = DateTime.parse(e.returnsAtIso!).add(
+        const Duration(minutes: 1),
+      );
+      final reopened = service(at: after);
       final results = await Future.wait([
         reopened.settleAndPeekReport(),
         reopened.settleAndPeekReport(),
         reopened.settleAndPeekReport(),
       ]);
-      // Peek is non-consuming, so all three see the same unviewed report —
-      // the money invariant is that settlement awarded EXACTLY ONCE.
       final reports = results.whereType<ExpeditionReport>().toList();
       expect(reports, hasLength(3));
       expect(reports.map((r) => r.expedition.id).toSet(), hasLength(1));
-      expect((await GemService().ledger()), hasLength(1));
-      expect(
-        await GemService().balance(),
-        (await storedState()).history.single.payout,
+      expect(await GemService().ledger(), hasLength(1));
+    });
+
+    test('max-seen clock is monotonic; rollback cannot un-settle or '
+        'double-award', () async {
+      final e = await earnAndDispatch('iron_vault');
+      final returnsAt = DateTime.parse(e.returnsAtIso!);
+
+      final after = returnsAt.add(const Duration(hours: 2));
+      await service(at: after).settleAndPeekReport();
+      final s1 = await storedState();
+      expect(s1.pending, isNull);
+      expect(s1.history.single.id, e.id);
+      final maxSeen1 = DateTime.parse(s1.maxSeenAtIso!);
+      expect(maxSeen1.isBefore(after), isFalse);
+
+      // Roll the clock far back and settle again: no second award, history
+      // intact, and the max-seen clock never regresses.
+      await service(
+        at: returnsAt.subtract(const Duration(days: 2)),
+      ).settleAndPeekReport();
+      final s2 = await storedState();
+      expect(await GemService().ledger(), hasLength(1));
+      expect(s2.history.single.id, e.id);
+      expect(DateTime.parse(s2.maxSeenAtIso!).isBefore(maxSeen1), isFalse);
+    });
+
+    test('a returned pending auto-settles when the next workout grants a '
+        'charge (settlement before earn)', () async {
+      final e = await earnAndDispatch('iron_vault');
+      final returnsAt = DateTime.parse(e.returnsAtIso!);
+      final nextDay = DateTime(
+        returnsAt.year,
+        returnsAt.month,
+        returnsAt.day + 1,
+        18,
       );
+      await service(at: nextDay).grantChargeForSession(
+        session('w2', nextDay),
+      );
+      final s = await storedState();
+      expect(s.pending, isNull); // old expedition settled
+      expect(s.history.single.id, e.id);
+      expect(s.charges, greaterThanOrEqualTo(1)); // and a fresh charge earned
+      expect(await GemService().balance(), e.payout);
+      expect(s.history.single.viewed, isFalse); // report still waits to reveal
     });
 
-    test('peek without acknowledge never burns the ceremony (Codex)', () async {
-      await service(boot: 'boot-A').dispatchForSession(session('s1', now));
-      final reopened = service(boot: 'boot-B');
+    test('legacy v1 pending (no returnsAtIso) settles exactly once', () async {
+      final legacyPending = Expedition(
+        id: 'exp_legacy_1',
+        routeId: 'iron_vault',
+        day: '2026-06-11',
+        bootId: 'old-boot',
+        rank: 'C',
+        payout: 12,
+        flavorIdx: 0,
+        // No dispatchedAtIso/returnsAtIso → revealable now (legacy rule).
+      );
+      SharedPreferences.setMockInitialValues({
+        AdventureService.stateKey: jsonEncode(
+          AdventureState(
+            pending: legacyPending,
+            standingOrderRouteId: 'iron_vault',
+            ordersConfirmed: true,
+            lastDispatchDay: '2026-06-11',
+            weekCount: 1,
+          ).toJson(),
+        ),
+      });
+      final svc = service();
+      final report = await svc.settleAndPeekReport();
+      expect(report, isNotNull);
+      expect(report!.expedition.id, 'exp_legacy_1');
+      expect(await GemService().balance(), 12);
 
-      // Home takes the report but bails before showing it (route not current).
-      final first = await reopened.settleAndPeekReport();
-      expect(first, isNotNull);
-      expect((await storedState()).history.single.viewed, isFalse);
+      await svc.acknowledgeReport('exp_legacy_1');
+      expect(await svc.settleAndPeekReport(), isNull);
+      expect(await GemService().balance(), 12); // no double award
+      expect((await storedState()).pending, isNull);
 
-      // Next valid open still finds the same unviewed report.
-      final second = await reopened.settleAndPeekReport();
-      expect(second!.expedition.id, first!.expedition.id);
-
-      // Only acknowledge consumes it (idempotent).
-      await reopened.acknowledgeReport(first.expedition.id);
-      await reopened.acknowledgeReport(first.expedition.id);
-      expect((await storedState()).history.single.viewed, isTrue);
-      expect(await reopened.settleAndPeekReport(), isNull);
-      // Gems were awarded exactly once across all of the above.
-      expect((await GemService().ledger()), hasLength(1));
+      // The first v2 dispatch is not wedged by the legacy fields.
+      await svc.grantChargeForSession(session('w', now));
+      expect(await svc.dispatchExpedition('iron_vault'), isNotNull);
     });
+  });
 
-    test(
-      'settle-before-dispatch: a revealable pending never costs the day',
-      () async {
-        // Day 1: dispatch.
-        await service(boot: 'boot-A').dispatchForSession(session('s1', now));
-        // Day 2, new boot: the user trains BEFORE any Home reveal ran.
-        final day2 = now.add(const Duration(days: 1));
+  group('weekly budget', () {
+    test('cap of 5 holds within an ISO week (banked charges cannot exceed it) '
+        'and resets next ISO week', () async {
+      Future<void> dayCycle(int day) async {
+        final at = DateTime(2026, 6, day, 18);
+        final svc = service(at: at);
+        await svc.grantChargeForSession(session('w$day', at));
+        await svc.dispatchExpedition('iron_vault');
+        // Settle next morning so the pending clears for the next day.
         await service(
-          at: day2,
-          boot: 'boot-B',
-        ).dispatchForSession(session('s2', day2));
-        final state = await storedState();
-        // Old expedition settled to history; new one dispatched today.
-        expect(state.history, hasLength(1));
-        expect(state.pending, isNotNull);
-        expect(state.pending!.day, '2026-06-13');
-        expect(state.weekCount, 2);
-        // Settled gems already in the ledger; report still unviewed.
-        expect(await GemService().balance(), state.history.single.payout);
-        expect(state.history.single.viewed, isFalse);
-      },
-    );
+          at: DateTime(2026, 6, day + 1, 10),
+        ).settleAndPeekReport();
+      }
+
+      for (var day = 8; day <= 12; day++) {
+        await dayCycle(day); // Mon–Fri, ISO week 24
+      }
+      expect((await storedState()).weekCount, 5);
+
+      // Saturday (same ISO week): a charge is earned but dispatch is capped.
+      final sat = DateTime(2026, 6, 13, 18);
+      final satSvc = service(at: sat);
+      await satSvc.grantChargeForSession(session('sat', sat));
+      expect(await satSvc.dispatchExpedition('iron_vault'), isNull);
+      expect((await storedState()).weekCount, 5);
+      expect((await storedState()).charges, 1); // charge banks for next week
+
+      // Monday next ISO week (25): resets and dispatches.
+      final mon = DateTime(2026, 6, 15, 18);
+      final monSvc = service(at: mon);
+      await monSvc.grantChargeForSession(session('mon', mon));
+      expect(await monSvc.dispatchExpedition('iron_vault'), isNotNull);
+      expect((await storedState()).weekCount, 1);
+    });
   });
 
   group('payout integrity', () {
-    test('payout is rolled at dispatch within the rank band and never '
-        'rerolled', () async {
-      await service().dispatchForSession(session('s1', now));
-      final state = await storedState();
-      final pending = state.pending!;
-      final base = AdventureService.basePayoutForRank(pending.rank);
-      expect(pending.payout, greaterThanOrEqualTo((base * 0.7).round() - 1));
-      expect(pending.payout, lessThanOrEqualTo((base * 1.3).round() + 1));
-
-      // Settle on a different boot: awarded amount == stored roll.
-      final report = await service(boot: 'boot-B').settleAndPeekReport();
-      expect(report!.expedition.payout, pending.payout);
+    test('new user dispatches at D-rank base', () async {
+      final e = await earnAndDispatch('iron_vault');
+      expect(e.rank, 'D');
+      expect(AdventureService.basePayoutForRank(e.rank), 8);
     });
 
-    test('new user dispatches at D-rank base', () async {
-      await service().dispatchForSession(session('s1', now));
-      final pending = (await storedState()).pending!;
-      expect(pending.rank, 'D');
-      expect(AdventureService.basePayoutForRank(pending.rank), 8);
+    test('rank is captured at dispatch from the stored board', () async {
+      SharedPreferences.setMockInitialValues({
+        'combat_stats': '{"STR":350,"AGI":80,"END":120,"VIT":50,"LCK":2}',
+        'workout_sessions': jsonEncode([session('h', now).toJson()]),
+      });
+      final svc = service();
+      await svc.grantChargeForSession(session('w', now));
+      final e = await svc.dispatchExpedition('iron_vault');
+      expect(e!.rank, 'B'); // STR 350 → B (300–599)
+      expect(AdventureService.basePayoutForRank('B'), 18);
     });
 
     test('award is idempotent by expedition id at the ledger', () async {
@@ -293,14 +475,19 @@ void main() {
   });
 
   group('orders', () {
-    test('setStandingOrder confirms orders and later reports drop the '
-        'class-default flag', () async {
-      await AdventureService().setStandingOrder('infini_maze');
-      await service().dispatchForSession(session('s1', now));
-      final state = await storedState();
-      expect(state.standingOrderRouteId, 'infini_maze');
-      expect(state.ordersConfirmed, isTrue);
-      final report = await service(boot: 'boot-B').settleAndPeekReport();
+    test('manual dispatch confirms orders; the report is not class-default',
+        () async {
+      final svc = service();
+      await svc.grantChargeForSession(session('w', now));
+      final e = await svc.dispatchExpedition('infini_maze');
+      final s = await storedState();
+      expect(s.standingOrderRouteId, 'infini_maze');
+      expect(s.ordersConfirmed, isTrue);
+
+      final after = DateTime.parse(e!.returnsAtIso!).add(
+        const Duration(minutes: 1),
+      );
+      final report = await service(at: after).settleAndPeekReport();
       expect(report!.classDefaultOrders, isFalse);
       expect(report.expedition.routeId, 'infini_maze');
     });
@@ -311,16 +498,14 @@ void main() {
   });
 
   group('defensive persistence', () {
-    test(
-      'default constructor loads fresh state without a boot override',
-      () async {
-        expect(() => AdventureService(), returnsNormally);
-
-        final state = await AdventureService().loadState();
-        expect(state.pending, isNull);
-        expect(state.history, isEmpty);
-      },
-    );
+    test('default constructor loads fresh state without a boot override',
+        () async {
+      expect(() => AdventureService(), returnsNormally);
+      final state = await AdventureService().loadState();
+      expect(state.pending, isNull);
+      expect(state.history, isEmpty);
+      expect(state.charges, 0);
+    });
 
     test('malformed state decodes fresh and never throws', () async {
       SharedPreferences.setMockInitialValues({
@@ -328,14 +513,16 @@ void main() {
       });
       final state = await AdventureService().loadState();
       expect(state.pending, isNull);
-      expect(state.history, isEmpty);
-      await service().dispatchForSession(session('s1', now));
-      expect((await storedState()).pending, isNotNull);
+      expect(state.charges, 0);
+      final svc = service();
+      await svc.grantChargeForSession(session('w', now));
+      expect(await svc.dispatchExpedition('iron_vault'), isNotNull);
     });
 
     test('malformed expedition records are dropped, not fatal', () {
       final state = AdventureState.fromJson({
-        'version': 1,
+        'version': 2,
+        'charges': 99, // clamped to the cap
         'history': [
           {'id': 'good', 'routeId': 'iron_vault', 'day': '2026-06-01'},
           {'id': 42},
@@ -345,10 +532,10 @@ void main() {
       });
       expect(state.history, hasLength(1));
       expect(state.pending, isNull);
+      expect(state.charges, AdventureState.chargeCap);
     });
 
     test('history is capped', () async {
-      // Seed a state with a full history, then settle one more.
       final history = [
         for (var i = 0; i < AdventureService.historyCap; i++)
           Expedition(
@@ -368,48 +555,38 @@ void main() {
           AdventureState(history: history).toJson(),
         ),
       });
-      await service(boot: 'boot-A').dispatchForSession(session('s1', now));
-      await service(boot: 'boot-B').settleAndPeekReport();
+      final svc = service();
+      await svc.grantChargeForSession(session('w', now));
+      final e = await svc.dispatchExpedition('iron_vault');
+      final after = DateTime.parse(e!.returnsAtIso!).add(
+        const Duration(minutes: 1),
+      );
+      await service(at: after).settleAndPeekReport();
       final state = await storedState();
       expect(state.history.length, AdventureService.historyCap);
-      expect(state.history.first.id, contains('s1'));
+      expect(state.history.first.id, e.id);
     });
 
-    test(
-      'adventure flows never touch board stats or workout history',
-      () async {
-        // Realistic fixture: dispatch always follows a session save, so
-        // history exists and the rank read takes StatEngine's cached path.
-        final sessionsRaw = jsonEncode([session('h', now).toJson()]);
-        SharedPreferences.setMockInitialValues({
-          'combat_stats': '{"STR":250,"AGI":80,"END":120,"VIT":50,"LCK":2}',
-          'workout_sessions': sessionsRaw,
-        });
-        await service(boot: 'boot-A').dispatchForSession(session('s1', now));
-        await service(boot: 'boot-B').settleAndPeekReport();
-        final prefs = await SharedPreferences.getInstance();
-        expect(
-          prefs.getString('combat_stats'),
-          '{"STR":250,"AGI":80,"END":120,"VIT":50,"LCK":2}',
-        );
-        expect(prefs.getString('workout_sessions'), sessionsRaw);
-      },
-    );
-
-    test('rank captured at dispatch uses the stored board', () async {
+    test('adventure flows never touch board stats or workout history',
+        () async {
+      final sessionsRaw = jsonEncode([session('h', now).toJson()]);
       SharedPreferences.setMockInitialValues({
-        'combat_stats': '{"STR":350,"AGI":80,"END":120,"VIT":50,"LCK":2}',
-        'workout_sessions': jsonEncode([session('h', now).toJson()]),
+        'combat_stats': '{"STR":250,"AGI":80,"END":120,"VIT":50,"LCK":2}',
+        'workout_sessions': sessionsRaw,
       });
-      await AdventureService(
-        nowProvider: () => now,
-        statEngine: StatEngine(catalog: catalog, nowProvider: () => now),
-        bootIdOverride: 'boot-A',
-      ).setStandingOrder('iron_vault');
-      await service().dispatchForSession(session('s1', now));
-      final pending = (await storedState()).pending!;
-      expect(pending.rank, 'B'); // STR 350 → B (300-599)
-      expect(AdventureService.basePayoutForRank('B'), 18);
+      final svc = service();
+      await svc.grantChargeForSession(session('w', now));
+      final e = await svc.dispatchExpedition('iron_vault');
+      final after = DateTime.parse(e!.returnsAtIso!).add(
+        const Duration(minutes: 1),
+      );
+      await service(at: after).settleAndPeekReport();
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString('combat_stats'),
+        '{"STR":250,"AGI":80,"END":120,"VIT":50,"LCK":2}',
+      );
+      expect(prefs.getString('workout_sessions'), sessionsRaw);
     });
   });
 
@@ -417,26 +594,23 @@ void main() {
   // constructor — the path production (and Home) actually uses — once threw
   // during static `bootId` init (`Random().nextInt(1 << 32)` → `nextInt(0)`
   // on web). Every other test injects `bootIdOverride`, so the real path was
-  // uncovered. The VM can't reproduce the web int-overflow itself (JS int
-  // semantics), so the user-facing guard is Home's fail-soft load; this group
-  // covers the constructor/`bootId` flow the VM *can* exercise.
+  // uncovered.
   group('default-constructor path (no bootIdOverride)', () {
     test('static bootId is a usable non-empty id', () {
       expect(AdventureService.bootId, isNotEmpty);
     });
 
-    test('default-constructed service constructs and dispatches', () async {
+    test('default-constructed service grants and dispatches', () async {
       final svc = AdventureService(
         nowProvider: () => now,
         statEngine: StatEngine(catalog: catalog, nowProvider: () => now),
       );
-      await svc.dispatchForSession(session('s1', now));
-      final state = await storedState();
-      expect(state.pending, isNotNull);
-      // Same process bootId → the report is not revealable in this sitting.
-      final report = await svc.settleAndPeekReport();
-      expect(report, isNull);
+      await svc.grantChargeForSession(session('w', now));
+      final e = await svc.dispatchExpedition('iron_vault');
+      expect(e, isNotNull);
       expect((await storedState()).pending, isNotNull);
+      // Freshly dispatched → returns hours from now → not revealable yet.
+      expect(await svc.settleAndPeekReport(), isNull);
     });
   });
 }

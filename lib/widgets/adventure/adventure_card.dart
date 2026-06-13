@@ -17,11 +17,34 @@ class AdventureCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final route = adventureRouteById(state.standingOrderRouteId);
-    final out = state.pending != null;
-    final title = out ? 'CHARACTER IS OUT' : 'EXPEDITION ORDERS';
-    final subtitle = out
-        ? '${route.name} — report on your return.'
-        : '${route.name} · ${route.statKey} route';
+    final pending = state.pending;
+    final returnsAt = pending?.returnsAtIso == null
+        ? null
+        : DateTime.tryParse(pending!.returnsAtIso!);
+    final returned =
+        pending != null && (returnsAt == null || !DateTime.now().isBefore(returnsAt));
+    final out = pending != null && !returned;
+    final charges = state.charges;
+
+    final String title;
+    final Color titleColor;
+    final String subtitle;
+    if (returned) {
+      title = 'RETURNED';
+      titleColor = kNeon;
+      subtitle = 'Tap to collect the haul.';
+    } else if (out) {
+      title = 'CHARACTER IS OUT';
+      titleColor = kCyan;
+      final remaining = returnsAt!.difference(DateTime.now());
+      subtitle = '${route.name} — back in ~${(remaining.inMinutes / 60).ceil()}h';
+    } else {
+      title = 'EXPEDITION ORDERS';
+      titleColor = route.accent;
+      subtitle = charges > 0
+          ? '$charges charge${charges == 1 ? '' : 's'} ready · tap to dispatch'
+          : 'Train to earn a charge · ${route.statKey} route';
+    }
     return Material(
       color: kCard,
       borderRadius: BorderRadius.circular(kCardRadius),
@@ -36,7 +59,7 @@ class AdventureCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              _Emblem(route: route, dimmed: out),
+              _Emblem(route: route, dimmed: out || returned),
               const SizedBox(width: kSpace3),
               Expanded(
                 child: Column(
@@ -59,7 +82,7 @@ class AdventureCard extends StatelessWidget {
                         fontFamily: 'PressStart2P',
                         fontSize: 8,
                         height: 1.5,
-                        color: out ? kCyan : route.accent,
+                        color: titleColor,
                       ),
                     ),
                     const SizedBox(height: kSpace1),

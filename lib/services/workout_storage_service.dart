@@ -62,10 +62,11 @@ class WorkoutStorageService {
       await StatEngine().calculateAllStats();
       await RestService().refreshWeeklyShieldProgress(sessions);
       if (!session.isAbandoned) {
-        // Adventure dispatch — awaited (never fire-and-forget) and after the
-        // stat recompute so the expedition captures a fresh rank. The service
-        // swallows its own failures: an adventure can never break a save.
-        await AdventureService().dispatchForSession(session);
+        // Adventure charge grant — awaited (never fire-and-forget) and after
+        // the stat recompute. The instant workout payoff; the user spends the
+        // charge later. The service swallows its own failures: an adventure
+        // can never break a save.
+        await AdventureService().grantChargeForSession(session);
         await markMissionFinished(session.date, MissionFinishState.completed);
       }
     }

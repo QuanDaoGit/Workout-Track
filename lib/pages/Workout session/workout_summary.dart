@@ -5,11 +5,13 @@ import '../../theme/app_fonts.dart';
 
 import '../../data/muscle_groups.dart';
 import '../../models/finish_result.dart';
+import '../../models/adventure_models.dart';
 import '../../models/loot_drop.dart';
 import '../../models/program_models.dart';
 import '../../models/unit_models.dart';
 import '../../models/workout_models.dart';
 import '../../models/xp_reward_models.dart';
+import '../../services/adventure_service.dart';
 import '../../services/calibration_service.dart';
 import '../../services/calorie_service.dart';
 import '../../services/class_service.dart';
@@ -104,6 +106,8 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   SessionRewardEligibility? _rewardEligibility;
   SessionXpBreakdown? _xpBreakdown;
   LootDrop? _cacheDrop;
+  bool _chargeGranted = false;
+  int _chargeBalance = 0;
   Map<String, int> _statDelta = {};
   Map<String, int> _combatStats = {};
   Map<String, int> _calibratedStats = {};
@@ -327,7 +331,13 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         lootBonusXP: _lootBonusXP,
         awardedXP: _earnedXP,
       );
+      // Adventure charge is granted inside saveSession — snapshot before/after
+      // so the summary can surface "+1 CHARGE" as the instant workout payoff.
+      final chargesBefore = (await AdventureService().loadState()).charges;
       await WorkoutStorageService().saveSession(awardedSession);
+      final advState = await AdventureService().loadState();
+      _chargeGranted = advState.charges > chargesBefore;
+      _chargeBalance = advState.charges;
       final engine = StatEngine();
       if (widget.isCalibration) {
         // Convert this real workout into a calibration seed, then recompute so
@@ -765,6 +775,13 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                           _RevealBeat(
                             delayMs: 120,
                             child: _CacheDropCard(drop: _cacheDrop!),
+                          ),
+                        ],
+                        if (_chargeGranted) ...[
+                          const SizedBox(height: kSpace3),
+                          _RevealBeat(
+                            delayMs: 140,
+                            child: _ChargeGrantedCard(balance: _chargeBalance),
                           ),
                         ],
                         const SizedBox(height: kSpace5),
@@ -1330,6 +1347,52 @@ class _XpReceiptCard extends StatelessWidget {
               style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The instant Adventure payoff: a workout earned an expedition charge. The
+/// expedition (gems) is the optional second layer the user spends later.
+class _ChargeGrantedCard extends StatelessWidget {
+  const _ChargeGrantedCard({required this.balance});
+
+  final int balance;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(kSpace3),
+      decoration: BoxDecoration(
+        color: kNeon.withValues(alpha: 0.10),
+        border: Border.all(color: kNeon),
+        borderRadius: BorderRadius.circular(kCardRadius),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.explore_sharp, size: 16, color: kNeon),
+              const SizedBox(width: kSpace2),
+              Text(
+                '+1 EXPEDITION CHARGE',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 9,
+                  color: kNeon,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Your party is rested — $balance/${AdventureState.chargeCap} ready '
+            'to send out on an adventure.',
+            textAlign: TextAlign.center,
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
         ],
       ),
     );

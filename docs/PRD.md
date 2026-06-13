@@ -71,12 +71,20 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
       defeat grants the Shadowbane title + Spectral Frame (identity only — never XP/gems);
       a decaying high-water floor blocks rewards for beating a rested-away baseline. See
       `docs/stats-mechanics.md` → "The Shadow".
-- [x] Adventure (`AdventureService`) — workout-fueled expeditions: the first completed workout of
-      the day dispatches the character to a stat-keyed route (IRON VAULT/STR, SKY TRACER/AGI,
-      INFINI MAZE/END); the report greets the next app sitting with a parallax pixel diorama and
-      a gem payout set by the route stat's rank (8/12/18/26/40 base, ±30% roll at dispatch).
-      One/day, 5/ISO-week, idempotent ledger awards, occasional no-power flavor finds. See
-      `docs/superpowers/plans/2026-06-12-adventure-design.md`.
+- [x] Adventure (`AdventureService`) — workout-fueled expeditions. Each completed workout grants one
+      expedition **charge** (max 1/day, banked up to 3) — the instant payoff, surfaced on the workout
+      summary. The user spends a charge to send the character out on a chosen stat-keyed route (IRON
+      VAULT/STR, SKY TRACER/AGI, INFINI MAZE/END) via a console-style stage-select ceremony (tap to
+      arm → the other two lock → DISPATCH). Recovery (**VIT**) scales the haul: duration 4–8h and a
+      1.0–1.4× gem multiplier, both frozen at dispatch. Payout = rank base (8/12/18/26/40) × VIT
+      multiplier × ±30% roll. The report greets the user once the haul returns (wall-clock
+      `returnsAt`, monotonic max-seen rollback guard; collected on the page or auto-revealed on the
+      next Home open). One expedition out at a time; ≤5 dispatch/ISO-week (weekly gem budget = 5 ×
+      base × [1.0–1.4×]). Idempotent ledger awards, occasional no-power flavor finds. **The 4–8h
+      gated wait is a deliberate, eyes-open exception to the no-idle-loop doctrine:** gems are
+      cosmetic-only, the wait is never punished (no expiry/withering, calm collection), and a
+      clock-forward skip only bypasses the wait, never the charge cost (a real logged workout). See
+      `docs/superpowers/plans/2026-06-12-adventure-design.md` (+ the v2 addendum).
 - [x] Body metrics (`BodyMetricsService`) — opt-in, body-neutral weight tracking: log any time, an
       EWMA **trend line** smooths the noise, and a single weekly XP-boost reward (rolling 7-day
       window) rewards the act of checking in.

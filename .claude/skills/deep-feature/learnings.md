@@ -46,3 +46,9 @@ renames fail in CI, not on device.
 (the 1-set Finish bar, rolling reward anchors, decaying high-water floors). Ask "what is the
 cheapest action that triggers this reward repeatedly?"
 *Seen: stat-engine intensity rework; body-metrics weekly reward anchor (2026).*
+
+### Decoupled id sources
+**Rule:** When an id's uniqueness silently rode on a correlate you're removing (session id,
+per-day timestamp, boot id), it collides once decoupled — and a ledger keyed on it swallows the
+duplicate. Re-base on an independent source (`microsecondsSinceEpoch` + `Random().nextInt(0x7fffffff)`,
+never `1<<32`); test the worst case (same fixed clock). *Seen: Adventure v2 manual dispatch (2026-06).*

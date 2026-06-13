@@ -15,11 +15,16 @@ class Expedition {
     required this.id,
     required this.routeId,
     required this.day,
-    required this.bootId,
+    this.bootId,
     required this.rank,
     required this.payout,
     this.findId,
     required this.flavorIdx,
+    this.dispatchedAtIso,
+    this.returnsAtIso,
+    this.durationMinutes = 0,
+    this.multiplier = 1.0,
+    this.vitAtDispatch = 0,
     this.settledAtIso,
     this.viewed = false,
   });
@@ -30,14 +35,14 @@ class Expedition {
   /// Dispatch day, `yyyy-mm-dd` (date-only).
   final String day;
 
-  /// Per-process boot UUID at dispatch — drives the revealable rule
-  /// (a report never pops in the same app sitting that dispatched it).
-  final String bootId;
+  /// Per-process boot UUID at dispatch (v1) — retained for forensic parity
+  /// only; the v2 revealable rule is wall-clock ([returnsAtIso]), not boot.
+  final String? bootId;
 
   /// Rank letter (D/C/B/A/S) on the route's stat, captured at dispatch.
   final String rank;
 
-  /// Gems, already rolled (base ±30%) at dispatch.
+  /// Gems, rolled at dispatch (base × VIT multiplier × ±30% roll).
   final int payout;
 
   /// Find registry id, or null (most expeditions find nothing).
@@ -45,6 +50,22 @@ class Expedition {
 
   /// Index into the route's flavor-line pool (rolled at dispatch).
   final int flavorIdx;
+
+  /// Dispatch wall-clock (ISO-8601), set when the party is sent out.
+  final String? dispatchedAtIso;
+
+  /// When the expedition returns (ISO-8601) = dispatch + [durationMinutes].
+  /// Null on a legacy v1 pending ⇒ treated as already returned (revealable).
+  final String? returnsAtIso;
+
+  /// Expedition length in minutes (VIT-scaled), captured at dispatch.
+  final int durationMinutes;
+
+  /// Payout multiplier from VIT at dispatch (1.0–1.4), captured & frozen.
+  final double multiplier;
+
+  /// VIT (recovery meter) at dispatch — shown in the report for legibility.
+  final int vitAtDispatch;
 
   /// Set when gems were awarded and the expedition moved to history.
   final String? settledAtIso;
@@ -61,6 +82,11 @@ class Expedition {
     payout: payout,
     findId: findId,
     flavorIdx: flavorIdx,
+    dispatchedAtIso: dispatchedAtIso,
+    returnsAtIso: returnsAtIso,
+    durationMinutes: durationMinutes,
+    multiplier: multiplier,
+    vitAtDispatch: vitAtDispatch,
     settledAtIso: settledAtIso ?? this.settledAtIso,
     viewed: viewed ?? this.viewed,
   );
@@ -74,6 +100,11 @@ class Expedition {
     'payout': payout,
     'findId': findId,
     'flavorIdx': flavorIdx,
+    'dispatchedAtIso': dispatchedAtIso,
+    'returnsAtIso': returnsAtIso,
+    'durationMinutes': durationMinutes,
+    'multiplier': multiplier,
+    'vitAtDispatch': vitAtDispatch,
     'settledAtIso': settledAtIso,
     'viewed': viewed,
   };
@@ -92,12 +123,27 @@ class Expedition {
       id: id,
       routeId: routeId,
       day: day,
-      bootId: json['bootId'] is String ? json['bootId'] as String : '',
+      bootId: json['bootId'] is String ? json['bootId'] as String : null,
       rank: json['rank'] is String ? json['rank'] as String : 'D',
       payout: json['payout'] is num ? (json['payout'] as num).toInt() : 0,
       findId: json['findId'] is String ? json['findId'] as String : null,
       flavorIdx: json['flavorIdx'] is num
           ? (json['flavorIdx'] as num).toInt()
+          : 0,
+      dispatchedAtIso: json['dispatchedAtIso'] is String
+          ? json['dispatchedAtIso'] as String
+          : null,
+      returnsAtIso: json['returnsAtIso'] is String
+          ? json['returnsAtIso'] as String
+          : null,
+      durationMinutes: json['durationMinutes'] is num
+          ? (json['durationMinutes'] as num).toInt()
+          : 0,
+      multiplier: json['multiplier'] is num
+          ? (json['multiplier'] as num).toDouble()
+          : 1.0,
+      vitAtDispatch: json['vitAtDispatch'] is num
+          ? (json['vitAtDispatch'] as num).toInt()
           : 0,
       settledAtIso: json['settledAtIso'] is String
           ? json['settledAtIso'] as String
@@ -115,13 +161,20 @@ class AdventureState {
     this.standingOrderRouteId,
     this.ordersConfirmed = false,
     this.pending,
+    this.charges = 0,
+    this.lastChargeDay,
     this.lastDispatchDay,
+    this.maxSeenAtIso,
     this.weekIso,
     this.weekCount = 0,
     List<Expedition>? history,
   }) : history = history ?? [];
 
-  static const currentVersion = 1;
+  static const currentVersion = 2;
+
+  /// Max banked, user-spendable charges. The storage cap; the service grant
+  /// path clamps to this.
+  static const chargeCap = 3;
 
   final int version;
 
@@ -135,8 +188,18 @@ class AdventureState {
   /// The expedition currently out, if any (unsettled).
   final Expedition? pending;
 
-  /// Max-anchored one-per-day guard (`yyyy-mm-dd`).
+  /// Banked, user-spendable expedition charges (0–[chargeCap]).
+  final int charges;
+
+  /// Max-anchored one-charge-per-day grant guard (`yyyy-mm-dd`).
+  final String? lastChargeDay;
+
+  /// Max-anchored last manual dispatch day (legacy v1 field; retained).
   final String? lastDispatchDay;
+
+  /// Highest wall-clock ever observed (ISO-8601) — the rollback guard for the
+  /// expedition return check (a returned expedition can't un-return).
+  final String? maxSeenAtIso;
 
   /// ISO week of [weekCount].
   final String? weekIso;
@@ -152,7 +215,10 @@ class AdventureState {
     bool? ordersConfirmed,
     Expedition? pending,
     bool clearPending = false,
+    int? charges,
+    String? lastChargeDay,
     String? lastDispatchDay,
+    String? maxSeenAtIso,
     String? weekIso,
     int? weekCount,
     List<Expedition>? history,
@@ -161,7 +227,10 @@ class AdventureState {
     standingOrderRouteId: standingOrderRouteId ?? this.standingOrderRouteId,
     ordersConfirmed: ordersConfirmed ?? this.ordersConfirmed,
     pending: clearPending ? null : (pending ?? this.pending),
+    charges: charges ?? this.charges,
+    lastChargeDay: lastChargeDay ?? this.lastChargeDay,
     lastDispatchDay: lastDispatchDay ?? this.lastDispatchDay,
+    maxSeenAtIso: maxSeenAtIso ?? this.maxSeenAtIso,
     weekIso: weekIso ?? this.weekIso,
     weekCount: weekCount ?? this.weekCount,
     history: history ?? this.history,
@@ -172,7 +241,10 @@ class AdventureState {
     'standingOrderRouteId': standingOrderRouteId,
     'ordersConfirmed': ordersConfirmed,
     'pending': pending?.toJson(),
+    'charges': charges,
+    'lastChargeDay': lastChargeDay,
     'lastDispatchDay': lastDispatchDay,
+    'maxSeenAtIso': maxSeenAtIso,
     'weekIso': weekIso,
     'weekCount': weekCount,
     'history': [for (final e in history) e.toJson()],
@@ -199,8 +271,17 @@ class AdventureState {
           ? json['ordersConfirmed'] as bool
           : false,
       pending: Expedition.fromJson(json['pending']),
+      charges: json['charges'] is num
+          ? (json['charges'] as num).toInt().clamp(0, chargeCap)
+          : 0,
+      lastChargeDay: json['lastChargeDay'] is String
+          ? json['lastChargeDay'] as String
+          : null,
       lastDispatchDay: json['lastDispatchDay'] is String
           ? json['lastDispatchDay'] as String
+          : null,
+      maxSeenAtIso: json['maxSeenAtIso'] is String
+          ? json['maxSeenAtIso'] as String
           : null,
       weekIso: json['weekIso'] is String ? json['weekIso'] as String : null,
       weekCount: json['weekCount'] is num

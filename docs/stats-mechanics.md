@@ -143,6 +143,13 @@ This logarithmic scaling prevents END from capping for every normal 20-session h
 
 VIT is a rolling recovery-balance meter over the last 14 days.
 
+> **Outward use (Adventure, shipped 2026-06-13):** VIT is the only stat that scales an Adventure
+> expedition. Captured & frozen at dispatch, it maps across its real [10,100] domain to the haul's
+> **duration (4–8h)** and **gem multiplier (1.0–1.4×)** — well-recovered characters roam longer and
+> pay richer. See `AdventureService.durationForVit` / `multiplierForVit`. (STR/AGI/END set the
+> route's rank/base pay; VIT scales the haul on top.)
+
+
 It rewards:
 
 - completing scheduled training days

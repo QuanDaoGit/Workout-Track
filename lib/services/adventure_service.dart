@@ -6,29 +6,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/adventure_routes.dart';
 import '../models/adventure_models.dart';
 import '../models/workout_models.dart';
-import 'class_service.dart';
 import 'gem_service.dart';
 import 'guild_service.dart';
 import 'stat_engine.dart';
 
 /// "Adventure" — workout-fueled expeditions that pay gems scaled by stat
-/// rank. The only fuel is a real completed workout: the first qualifying
-/// save of the day dispatches the character to the standing-order route;
-/// the report greets the user on their next app sitting.
+/// rank. The only fuel is a real completed workout: each qualifying save
+/// grants ONE expedition charge (max one/day, banked up to the cap). The user
+/// then spends a charge to send the character out on a chosen route for a
+/// VIT-scaled 4–8h haul; the report greets them once it returns.
 ///
 /// Invariants (Codex-hardened):
 /// - Everything is rolled AT DISPATCH, seeded by the expedition id —
-///   reopening can never reroll a payout, and rank drift between dispatch
+///   reopening can never reroll a payout, and rank/VIT drift between dispatch
 ///   and reveal is irrelevant (reconstructed-value rule).
 /// - Settlement (award gems, move to history) is separated from reveal
-///   (the ceremony). Dispatch auto-settles a revealable pending first, so a
-///   pending expedition can never cost the user a dispatch day.
+///   (the ceremony). Both grant and dispatch auto-settle a revealable pending
+///   first, so a returned expedition can never block the next earn.
 /// - Every state mutation runs through a single-flight serial queue; the
 ///   gem award is additionally idempotent by ledger id.
-/// - Day/week bookkeeping is max-anchored (clock rollback can't re-dispatch).
-///   Clock-FORWARD manipulation is an accepted offline trust boundary
-///   (consistent with quests/LCK) — it still costs a real logged workout
-///   with at least one non-empty set per dispatch.
+/// - Reveal is wall-clock (`returnsAt`) guarded by a monotonic max-seen time
+///   so a clock rollback can't un-return an expedition; charge grants are
+///   max-anchored per day. Clock-FORWARD is an accepted offline trust boundary
+///   (consistent with quests/LCK): it only skips the wait, never the cost —
+///   every dispatch still spends a charge earned by a real logged workout,
+///   capped at one/day and [weeklyCap]/ISO-week.
 class AdventureService {
   AdventureService({
     DateTime Function()? nowProvider,
@@ -49,9 +51,31 @@ class AdventureService {
   /// expected value = base. Deliberately not a jackpot shape.
   static const payoutVariance = 0.3;
 
+  /// Manual dispatches allowed per ISO week (the gem-budget bound; v1 parity).
   static const weeklyCap = 5;
   static const findChance = 0.35;
   static const historyCap = 30;
+
+  /// VIT-scaled expedition duration bounds (minutes) and payout multiplier.
+  static const minDurationMinutes = 240; // 4h
+  static const maxDurationMinutes = 480; // 8h
+  static const maxVitMultiplier = 1.4;
+
+  /// Maps a VIT (recovery) value across its real [10,100] domain to [0,1].
+  /// VIT floors at 10 (see docs/stats-mechanics.md), so a fresh/low-recovery
+  /// user lands exactly at the 4h / 1.0× floor, a fully-recovered one at 8h /
+  /// 1.4×. Shared by the page preview and dispatch so they can never drift.
+  static double _vitFraction(int vit) => (vit.clamp(10, 100) - 10) / 90.0;
+
+  /// Expedition length for a VIT value — 4h…8h.
+  static int durationForVit(int vit) =>
+      (minDurationMinutes +
+              _vitFraction(vit) * (maxDurationMinutes - minDurationMinutes))
+          .round();
+
+  /// Payout multiplier for a VIT value — 1.0…1.4.
+  static double multiplierForVit(int vit) =>
+      1.0 + _vitFraction(vit) * (maxVitMultiplier - 1.0);
 
   /// Cumulative rarity weights for the find roll (common→legendary).
   static const _rarityWeights = [50, 25, 15, 8, 2];
@@ -139,33 +163,48 @@ class AdventureService {
     await _save(prefs, state.copyWith(history: history));
   });
 
-  /// A pending expedition becomes revealable after a process restart or a
-  /// day boundary — never in the sitting that dispatched it.
-  bool _isRevealable(Expedition pending) {
-    if (pending.bootId != _bootId) return true;
-    return _dayKey(_dateOnly(_nowProvider())) != pending.day;
+  /// Highest of wall-clock now and the persisted max-seen time — the rollback
+  /// guard, so a returned expedition can't be hidden again by a clock rollback.
+  /// (Clock-FORWARD remains the accepted offline trust boundary.)
+  DateTime _effectiveNow(AdventureState state) {
+    final now = _nowProvider();
+    final stored = state.maxSeenAtIso == null
+        ? null
+        : DateTime.tryParse(state.maxSeenAtIso!);
+    return (stored != null && stored.isAfter(now)) ? stored : now;
   }
 
-  /// Award + move to history (unviewed). Idempotent: the ledger dedupes by
-  /// expedition id, and a re-entry with the same pending is harmless.
+  /// A pending expedition is revealable once its return time has passed.
+  /// A null [Expedition.returnsAtIso] (legacy v1 pending) ⇒ revealable now.
+  bool _isRevealable(Expedition pending, DateTime effectiveNow) {
+    final returnsAt = pending.returnsAtIso == null
+        ? null
+        : DateTime.tryParse(pending.returnsAtIso!);
+    if (returnsAt == null) return true;
+    return !effectiveNow.isBefore(returnsAt);
+  }
+
+  /// Stamps the monotonic max-seen clock, then (if the pending has returned)
+  /// awards gems + moves it to history (unviewed). Idempotent: the ledger
+  /// dedupes by expedition id, and a re-entry with the same pending is harmless.
   Future<AdventureState> _settleIfRevealable(AdventureState state) async {
-    final pending = state.pending;
-    if (pending == null || !_isRevealable(pending)) return state;
+    final effNow = _effectiveNow(state);
+    final next = state.copyWith(maxSeenAtIso: effNow.toIso8601String());
+    final pending = next.pending;
+    if (pending == null || !_isRevealable(pending, effNow)) return next;
     final route = adventureRouteById(pending.routeId);
     await _gemService.awardAdventureGems(
       expeditionId: pending.id,
       amount: pending.payout,
       label: 'Expedition · ${route.name}',
-      now: _nowProvider(),
+      now: effNow,
     );
-    final settled = pending.copyWith(
-      settledAtIso: _nowProvider().toIso8601String(),
-    );
-    final history = [settled, ...state.history];
+    final settled = pending.copyWith(settledAtIso: effNow.toIso8601String());
+    final history = [settled, ...next.history];
     if (history.length > historyCap) {
       history.removeRange(historyCap, history.length);
     }
-    return state.copyWith(clearPending: true, history: history);
+    return next.copyWith(clearPending: true, history: history);
   }
 
   // ---------------------------------------------------------------------
@@ -173,93 +212,122 @@ class AdventureService {
   // ---------------------------------------------------------------------
 
   /// Called (awaited) from the completed-workout save path. Settles any
-  /// revealable pending first, then dispatches if eligible. Never throws
+  /// revealable pending first, then grants ONE expedition charge (the instant
+  /// workout payoff) — at most one per day, banked up to [AdventureState.chargeCap].
+  /// The user spends charges manually via [dispatchExpedition]. Never throws
   /// into the save path.
-  Future<void> dispatchForSession(WorkoutSession session) => _serial(() async {
-    try {
-      if (session.isPartial || session.isAbandoned) return;
-      // Anti-empty-save bar: dispatch costs at least one real logged set.
-      final hasRealSet = session.exercises.any(
-        (log) => log.sets.any((set) => set.reps > 0),
-      );
-      if (!hasRealSet) return;
+  Future<void> grantChargeForSession(WorkoutSession session) =>
+      _serial(() async {
+        try {
+          if (session.isPartial || session.isAbandoned) return;
+          // Anti-empty-save bar: a charge costs at least one real logged set.
+          final hasRealSet = session.exercises.any(
+            (log) => log.sets.any((set) => set.reps > 0),
+          );
+          if (!hasRealSet) return;
 
-      final prefs = await SharedPreferences.getInstance();
-      var state = _decode(prefs.getString(stateKey));
-      state = await _settleIfRevealable(state);
+          final prefs = await SharedPreferences.getInstance();
+          var state = _decode(prefs.getString(stateKey));
+          state = await _settleIfRevealable(state);
 
-      if (state.pending != null) {
-        // Still out (dispatched earlier this sitting/day) — one at a time.
-        await _save(prefs, state);
-        return;
-      }
+          // Max-anchored "today": a rolled-back clock can't re-earn a charge
+          // for a day that already granted one.
+          final wallToday = _dateOnly(_nowProvider());
+          final anchor = _parseDay(state.lastChargeDay);
+          final today = (anchor != null && anchor.isAfter(wallToday))
+              ? anchor
+              : wallToday;
+          final todayKey = _dayKey(today);
 
-      // Max-anchored "today": a rolled-back clock can't earn a second
-      // dispatch for a day that already had one.
-      final wallToday = _dateOnly(_nowProvider());
-      final anchor = _parseDay(state.lastDispatchDay);
-      final today = (anchor != null && anchor.isAfter(wallToday))
-          ? anchor
-          : wallToday;
-      final todayKey = _dayKey(today);
+          if (state.lastChargeDay == todayKey) {
+            await _save(prefs, state); // already granted today
+            return;
+          }
 
-      if (state.lastDispatchDay == todayKey) {
-        await _save(prefs, state);
-        return; // one expedition per day
-      }
+          final charges = (state.charges + 1).clamp(0, AdventureState.chargeCap);
+          await _save(
+            prefs,
+            state.copyWith(charges: charges, lastChargeDay: todayKey),
+          );
+        } catch (_) {
+          // Adventure must never break a workout save.
+        }
+      });
 
-      var weekIso = GuildService.weekIso(today);
-      var weekCount = state.weekIso == weekIso ? state.weekCount : 0;
-      if (weekCount >= weeklyCap) {
-        await _save(
-          prefs,
-          state.copyWith(weekIso: weekIso, weekCount: weekCount),
-        );
-        return;
-      }
+  /// Manually spend a charge to send the character out on [routeId]. Settles
+  /// any revealable pending first. Returns the dispatched [Expedition], or null
+  /// if ineligible (no charge, one already out, or the weekly cap is reached).
+  /// Everything (payout, duration, multiplier, find, flavor) is rolled ONCE
+  /// here, seeded by the expedition id — a reopen can never reroll.
+  Future<Expedition?> dispatchExpedition(String routeId) => _serial(() async {
+    final prefs = await SharedPreferences.getInstance();
+    var state = _decode(prefs.getString(stateKey));
+    state = await _settleIfRevealable(state);
 
-      // Resolve orders (class default until the user confirms their own).
-      var routeId = state.standingOrderRouteId;
-      if (routeId == null) {
-        final cls = await ClassService().getCurrentClass();
-        routeId = defaultRouteForClass(cls).id;
-      }
-      final route = adventureRouteById(routeId);
+    if (state.charges <= 0 || state.pending != null) {
+      await _save(prefs, state);
+      return null;
+    }
 
-      // Rank at dispatch — captured, never re-derived.
-      final stats = await _statEngine.getStoredStats();
-      final rank = _statEngine.getRank(stats[route.statKey] ?? 0);
+    final now = _nowProvider();
+    final today = _dateOnly(now);
+    final weekIso = GuildService.weekIso(today);
+    final weekCount = state.weekIso == weekIso ? state.weekCount : 0;
+    if (weekCount >= weeklyCap) {
+      await _save(prefs, state.copyWith(weekIso: weekIso, weekCount: weekCount));
+      return null;
+    }
 
-      // Roll everything now, seeded by the expedition id (deterministic:
-      // a reopen can never reroll).
-      final id = 'exp_${today.millisecondsSinceEpoch}_${session.id}';
-      final rng = Random(id.hashCode);
-      final base = basePayoutForRank(rank);
-      final roll = 1 - payoutVariance + rng.nextDouble() * 2 * payoutVariance;
-      final payout = max(1, (base * roll).round());
-      final findId = _rollFind(rng);
-      final flavorIdx = rng.nextInt(route.flavorLines.length);
+    final route = adventureRouteById(routeId);
+    final stats = await _statEngine.getStoredStats();
+    final rank = _statEngine.getRank(stats[route.statKey] ?? 0);
+    final vit = (stats['VIT'] ?? 0).clamp(0, 100).toInt();
 
-      state = state.copyWith(
-        standingOrderRouteId: routeId,
-        pending: Expedition(
-          id: id,
-          routeId: route.id,
-          day: todayKey,
-          bootId: _bootId,
-          rank: rank,
-          payout: payout,
-          findId: findId,
-          flavorIdx: flavorIdx,
-        ),
-        lastDispatchDay: todayKey,
+    // Collision-resistant id (dispatch is decoupled from any session now):
+    // microsecond clock + random. Deliberately 0x7fffffff, never 1<<32 (web
+    // RangeError). The ledger keys on this id, so a same-day collision would
+    // silently suppress a payout.
+    final id =
+        'exp_${now.microsecondsSinceEpoch}_${Random().nextInt(0x7fffffff)}';
+    final rng = Random(id.hashCode);
+    final base = basePayoutForRank(rank);
+    final multiplier = multiplierForVit(vit);
+    final variance = 1 - payoutVariance + rng.nextDouble() * 2 * payoutVariance;
+    final payout = max(1, (base * multiplier * variance).round());
+    final durationMinutes = durationForVit(vit);
+    final returnsAt = now.add(Duration(minutes: durationMinutes));
+    final findId = _rollFind(rng);
+    final flavorIdx = rng.nextInt(route.flavorLines.length);
+
+    final expedition = Expedition(
+      id: id,
+      routeId: route.id,
+      day: _dayKey(today),
+      bootId: _bootId, // forensic stamp only
+      rank: rank,
+      payout: payout,
+      findId: findId,
+      flavorIdx: flavorIdx,
+      dispatchedAtIso: now.toIso8601String(),
+      returnsAtIso: returnsAt.toIso8601String(),
+      durationMinutes: durationMinutes,
+      multiplier: multiplier,
+      vitAtDispatch: vit,
+    );
+
+    await _save(
+      prefs,
+      state.copyWith(
+        standingOrderRouteId: route.id,
+        ordersConfirmed: true,
+        pending: expedition,
+        charges: state.charges - 1,
+        lastDispatchDay: _dayKey(today),
         weekIso: weekIso,
         weekCount: weekCount + 1,
-      );
-      await _save(prefs, state);
-    } catch (_) {
-      // Adventure must never break a workout save.
-    }
+      ),
+    );
+    return expedition;
   });
 
   String? _rollFind(Random rng) {
