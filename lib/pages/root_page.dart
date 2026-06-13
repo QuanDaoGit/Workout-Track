@@ -14,6 +14,7 @@ import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/idle_session_dialog.dart';
 import '../widgets/start_training_dialog.dart';
+import '../widgets/train_nav_button.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
 import 'Workout session/workout_summary.dart';
@@ -435,16 +436,28 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final ongoing = _ongoingSession;
     return Scaffold(
       body: IndexedStack(index: _destination.index, children: _pages),
       bottomNavigationBar: _BottomNavBar(
         destination: _destination,
-        sessionLive: _ongoingSession != null,
+        sessionLive: ongoing != null,
+        elapsedLabel: ongoing == null ? null : _fmtElapsed(ongoing),
         showLootBadge: _hasUnviewedLootDrops,
         onSelect: goTo,
         onTrainTap: _onTrainTapped,
       ),
     );
+  }
+
+  String _fmtElapsed(WorkoutSession session) {
+    final total = session.elapsedSecondsForDisplay(DateTime.now());
+    final h = total ~/ 3600;
+    final m = (total % 3600) ~/ 60;
+    final s = total % 60;
+    final mm = m.toString().padLeft(2, '0');
+    final ss = s.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
   }
 }
 
@@ -454,6 +467,7 @@ class _BottomNavBar extends StatelessWidget {
   const _BottomNavBar({
     required this.destination,
     required this.sessionLive,
+    required this.elapsedLabel,
     required this.showLootBadge,
     required this.onSelect,
     required this.onTrainTap,
@@ -461,6 +475,7 @@ class _BottomNavBar extends StatelessWidget {
 
   final AppDestination destination;
   final bool sessionLive;
+  final String? elapsedLabel;
   final bool showLootBadge;
   final ValueChanged<AppDestination> onSelect;
   final VoidCallback onTrainTap;
@@ -492,7 +507,13 @@ class _BottomNavBar extends StatelessWidget {
                 showBadge: showLootBadge,
                 onTap: () => onSelect(AppDestination.inventory),
               ),
-              _TrainNavButton(live: sessionLive, onTap: onTrainTap),
+              Expanded(
+                child: TrainNavButton(
+                  live: sessionLive,
+                  elapsedLabel: elapsedLabel,
+                  onTap: onTrainTap,
+                ),
+              ),
               _NavItem(
                 iconPath: 'assets/icons/control/ui/icon_nav_guild.png',
                 label: 'Guild',
@@ -550,103 +571,6 @@ class _NavItem extends StatelessWidget {
                 fontFamily: 'PressStart2P',
                 fontSize: 7,
                 color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The center Train action — elevated above the bar, pulsing while a session is
-/// live (the dock's replacement). The pulse freezes under reduced motion.
-class _TrainNavButton extends StatefulWidget {
-  const _TrainNavButton({required this.live, required this.onTap});
-
-  final bool live;
-  final VoidCallback onTap;
-
-  @override
-  State<_TrainNavButton> createState() => _TrainNavButtonState();
-}
-
-class _TrainNavButtonState extends State<_TrainNavButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1300),
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _syncPulse();
-  }
-
-  @override
-  void didUpdateWidget(_TrainNavButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.live != widget.live) _syncPulse();
-  }
-
-  void _syncPulse() {
-    final reduceMotion = MediaQuery.of(context).disableAnimations;
-    if (widget.live && !reduceMotion) {
-      _controller.repeat(reverse: true);
-    } else {
-      _controller.stop();
-      _controller.value = 0;
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ScaleTransition(
-              scale: Tween<double>(begin: 1, end: 1.12).animate(
-                CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-              ),
-              child: Transform.translate(
-                offset: const Offset(0, -10),
-                child: Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: kNeon,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: kBg, width: 3),
-                    boxShadow: widget.live ? neonGlow() : null,
-                  ),
-                  child: const ImageIcon(
-                    AssetImage('assets/icons/control/icon_sword.png'),
-                    color: kBg,
-                    size: 26,
-                  ),
-                ),
-              ),
-            ),
-            Transform.translate(
-              offset: const Offset(0, -6),
-              child: const Text(
-                'TRAIN',
-                style: TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 7,
-                  color: kNeon,
-                ),
               ),
             ),
           ],

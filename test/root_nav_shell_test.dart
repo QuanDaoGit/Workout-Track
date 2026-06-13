@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/pages/root_page.dart';
 import 'package:workout_track/widgets/start_training_dialog.dart';
+import 'package:workout_track/widgets/train_nav_button.dart';
 
 /// Base restructure contract: the 4-places + center-Train shell. The confirm
 /// gate is unit-pumped on its own; the shell smoke-test asserts the new nav
@@ -82,6 +83,44 @@ void main() {
       });
       await tester.pump();
       expect(find.text('START TRAINING?'), findsOneWidget);
+    });
+  });
+
+  group('TrainNavButton states', () {
+    testWidgets('live swaps the sword for the mm:ss timer', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: TrainNavButton(
+                live: true,
+                elapsedLabel: '12:34',
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('12:34'), findsOneWidget);
+      expect(find.text('TRAIN'), findsOneWidget);
+      expect(find.byType(ImageIcon), findsNothing); // sword swapped out
+    });
+
+    testWidgets('idle shows the sword, no timer, and settles', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: Scaffold(
+              body: Center(child: TrainNavButton(live: false, onTap: () {})),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle(); // reduced motion + idle → no perpetual ticker
+      expect(find.byType(ImageIcon), findsOneWidget); // the sword
+      expect(find.text('TRAIN'), findsOneWidget);
     });
   });
 }
