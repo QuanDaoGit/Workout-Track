@@ -24,11 +24,6 @@ loadout could clobber a resumed/repeat selection without precedence (2026-06).*
 behavior explicitly — default to "never triggers", and add a legacy-fixture test.
 *Seen: null `lastActivityAt` would have instantly timed out every pre-existing session (2026-06).*
 
-### Reconstructed-value inflation
-**Rule:** Credit/reward values must be captured at the moment of the event and stored, never
-re-derived later from timestamp arithmetic — resumes and backgrounding inflate the derived value.
-*Seen: idle credited duration originally computed as `lastActivityAt - startedAt` (2026-06).*
-
 ### Settlement/presentation coupling
 **Rule:** When a reward resolves on a *later* surface (pending-reveal patterns), settle the data
 (award, persist, mark unviewed) independently of showing the ceremony — and make the next earn
@@ -54,9 +49,26 @@ per-day timestamp, boot id), it collides once decoupled — and a ledger keyed o
 duplicate. Re-base on an independent source (`microsecondsSinceEpoch` + `Random().nextInt(0x7fffffff)`,
 never `1<<32`); test the worst case (same fixed clock). *Seen: Adventure v2 manual dispatch (2026-06).*
 
+### Advisory/derived numbers — bound to anchor, quantize to a settable value
+**Rule:** A computed value shown to the user (warm-up, target, suggested load) must (a) be validated
+against its own anchor and **suppressed when the relationship inverts** (a "warm-up" ≥ the work set is
+not a warm-up), and (b) be **quantized to a real actuatable value in the user's display unit** — never a
+raw % or kg round-trip that lands off-grid. Compute in the display unit; don't assume one equipment/
+context's constant (bar weight, plate size) applies to all. *Seen: warm-up suggestion — suppress unless
+< work, EZ bar ≠ Olympic bar, 55% rounded to a real stack pin (2026-06).*
+
 ### Entity-keyed side-state lifecycle
 **Rule:** Ephemeral state in a sibling store keyed by an entity id (per-session swaps, per-id flags)
 leaks or mis-applies unless cleared **wherever the entity row is removed/finalized in the storage
 layer** — every terminal path, never at UI buttons. Bonus: make a heavily-mutated field a read-only
 projection (no setter) so stray writers fail `analyze`. *Seen: ongoing program-swap store cleared in
 save/delete/abandon; `_selectedExerciseIds` as a getter over `_slots` (selection v2, 2026-06).*
+
+### Navigation restructure: positional + always-present assumptions
+**Rule:** Remapping nav slots, converting tabs→pushed routes, or removing a persistent shell surface
+silently breaks hidden contracts: positional index callers misroute (migrate to a **semantic
+destination** API before remapping), reload-on-tab-switch stops (re-run the affected reloads **on pop**),
+and modal gating that assumed the shell route is current gets starved (re-arm pending reveals on pop).
+Back any removed always-visible affordance with a safety net. *Seen: 4-places+center-Train shell —
+index→AppDestination, reload + idle/expired reveal re-fired on pop in `_pushFaded`, dock→pulse + idle
+backstop (2026-06).*

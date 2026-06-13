@@ -102,6 +102,35 @@ class WorkoutPageState extends State<WorkoutPage>
   }
 }
 
+/// Focused **LOGS** view (workout history / calendar / analytics) — the old
+/// Workout tab's LOGS half, re-homed under Home in the area restructure. Pushed
+/// as its own page so Home surfaces only the log, never the library.
+class WorkoutLogsPage extends StatelessWidget {
+  const WorkoutLogsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Logs')),
+      body: const _LogsTab(reloadToken: 0),
+    );
+  }
+}
+
+/// Focused **LIBRARY** view (Programs ⇄ Exercises) — the old Workout tab's
+/// LIBRARY half, re-homed under Labs.
+class WorkoutLibraryPage extends StatelessWidget {
+  const WorkoutLibraryPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Library')),
+      body: const _LibraryTab(reloadToken: 0),
+    );
+  }
+}
+
 // ── Logs Tab — single scroll ─────────────────────────────────────────────────
 // One surface, no sub-tabs: streak hero + week strip → stat trio → XP card →
 // session list (PR badges) → analytics. Replaces the old HISTORY/TRENDS split

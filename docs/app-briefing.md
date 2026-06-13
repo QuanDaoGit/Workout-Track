@@ -323,17 +323,18 @@ always opens to the main shell.
 
 ## 10. Navigation & screen map (use this to read the screenshots)
 
-The app is a **5-tab bottom-navigation shell**:
+The app is a **4-destination bottom-nav shell with an elevated center Train action**
+(**Home · Inventory · ⟨Train⟩ · Guild · Labs**):
 
-| Tab | What it shows / which systems surface |
+| Slot | What it shows / which systems surface |
 |---|---|
-| **Home** | Character avatar/frame, level + title, build/status stats with ranks, last-session deltas, today's mission/quest nudge, class. |
-| **Workout** | History (list + calendar) of past sessions; tap a day → session detail. |
-| **Quests** | Daily/weekly auto-evaluated objectives with claimable gems. |
+| **Home** | Character avatar/frame, level + title, build/status stats with ranks, last-session deltas, today's mission, class. Quests, Adventure, and workout **history/calendar** are reached from here (pushed pages). |
+| **Inventory** | Loot inventory + the gem Shop; the new-loot badge lives on this icon. |
+| **Train** *(center action — not a page)* | Confirm → start a session; **resumes** if one is already live. The button **pulses** while a session is live (it replaced the old always-visible active-workout dock). |
 | **Guild** | The local guild simulation — NPC members, weekly social signal. |
-| **Profile** | Avatar/name/class, full stat card, inventory/loot, settings (incl. opt-in body metrics, progressive-overload toggle), progress charts. |
+| **Labs** | Avatar/name/class, full stat card, settings (opt-in body metrics, progressive-overload toggle), progress charts, and the Programs/Exercise **library**. |
 
-**The workout-logging flow** (its own stack, launched from Home/Workout):
+**The workout-logging flow** (its own stack, launched from the center Train action or the Home mission):
 
 ```
 Start Workout (pick muscle group → duration → pick exercises)

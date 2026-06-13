@@ -53,6 +53,7 @@ import 'goal_selection_page.dart';
 import 'inventory_page.dart';
 import 'log_weight_page.dart';
 import 'shop_page.dart';
+import 'workout_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, this.onProfileChanged});
@@ -268,6 +269,19 @@ class ProfilePageState extends State<ProfilePage> {
   Future<void> _openShop() async {
     await Navigator.of(context).push(
       arcadeRoute((_) => const ShopPage(), motion: ArcadeRouteMotion.fade),
+    );
+    await reload();
+    widget.onProfileChanged?.call();
+  }
+
+  /// Programs + Exercise library, re-homed under Labs from the dropped Workout
+  /// tab (the area restructure). Reused wholesale via [WorkoutLibraryPage].
+  Future<void> _openLibrary() async {
+    await Navigator.of(context).push(
+      arcadeRoute(
+        (_) => const WorkoutLibraryPage(),
+        motion: ArcadeRouteMotion.fade,
+      ),
     );
     await reload();
     widget.onProfileChanged?.call();
@@ -1292,6 +1306,15 @@ class ProfilePageState extends State<ProfilePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const _SectionHeader(title: 'TRAINING'),
+        const SizedBox(height: 10),
+        _SettingsRow(
+          iconPath: 'assets/icons/control/icon_sword.png',
+          title: 'Training Library',
+          subtitle: 'Programs and exercises.',
+          onTap: _openLibrary,
+        ),
+        const SizedBox(height: kSpace4),
         const _SectionHeader(title: 'PLAYER SETUP'),
         const SizedBox(height: 10),
         _SettingsToggleRow(

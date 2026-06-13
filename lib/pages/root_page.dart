@@ -11,15 +11,15 @@ import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
-import '../widgets/arcade_progress_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/idle_session_dialog.dart';
-import '../widgets/motion/hold_depress.dart';
+import '../widgets/start_training_dialog.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
 import 'Workout session/workout_summary.dart';
 import 'guild_page.dart';
 import 'home.dart';
+import 'inventory_page.dart';
 import 'profile_page.dart';
 import 'quests_page.dart';
 import 'shop_page.dart';
@@ -36,6 +36,11 @@ StartWorkoutPage buildFirstSessionStarter(ProgramDay? day) {
   return programDayStarter(day);
 }
 
+/// The four browseable destinations in the restructured shell. Train is NOT a
+/// destination — it is the center *action* that launches (or resumes) a live
+/// session. Persisted nowhere; the shell is the single source of truth.
+enum AppDestination { home, inventory, guild, labs }
+
 class RootPage extends StatefulWidget {
   const RootPage({super.key, this.openWorkoutStarterOnLaunch = false});
 
@@ -50,18 +55,17 @@ class RootPage extends StatefulWidget {
 }
 
 class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
-  int _currentIndex = 0;
+  AppDestination _destination = AppDestination.home;
   Timer? _dockTimer;
   WorkoutSession? _ongoingSession;
   bool _loadingOngoing = false;
   bool _showingExpiredPausedSummary = false;
   bool _showingIdleReveal = false;
   bool _hasUnviewedLootDrops = false;
+  bool _trainTapInFlight = false;
   StreamSubscription<void>? _storageSubscription;
 
   final _homeKey = GlobalKey<HomePageState>();
-  final _workoutKey = GlobalKey<WorkoutPageState>();
-  final _questsKey = GlobalKey<QuestsPageState>();
   final _guildKey = GlobalKey<GuildPageState>();
   final _profileKey = GlobalKey<ProfilePageState>();
 
@@ -133,21 +137,26 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     }
   }
 
-  void _selectTab(int index) {
-    if (index == 0) _homeKey.currentState?.reload();
-    if (index == 1) _workoutKey.currentState?.reload();
-    if (index == 2) _questsKey.currentState?.reload();
-    if (index == 3) _guildKey.currentState?.reload();
-    if (index == 4) _profileKey.currentState?.reload();
+  /// Switch the active destination. Semantic (not index-based) so callers never
+  /// couple to a numeric slot — remapping the bar can't silently misroute.
+  void goTo(AppDestination destination) {
+    switch (destination) {
+      case AppDestination.home:
+        _homeKey.currentState?.reload();
+      case AppDestination.inventory:
+        break; // InventoryPage reloads itself on init.
+      case AppDestination.guild:
+        _guildKey.currentState?.reload();
+      case AppDestination.labs:
+        _profileKey.currentState?.reload();
+    }
     _loadOngoingSession();
-    setState(() => _currentIndex = index);
+    setState(() => _destination = destination);
     _loadLootBadge();
   }
 
   void _reloadQuestAwarePages() {
     _homeKey.currentState?.reload();
-    _workoutKey.currentState?.reload();
-    _questsKey.currentState?.reload();
     _guildKey.currentState?.reload();
     _profileKey.currentState?.reload();
     _loadOngoingSession();
@@ -353,89 +362,285 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     });
   }
 
-  int _liveElapsedSeconds(WorkoutSession session) {
-    return session.elapsedSecondsForDisplay(DateTime.now());
-  }
-
   void _openShop() {
-    Navigator.of(context).push(
-      arcadeRoute((_) => const ShopPage(), motion: ArcadeRouteMotion.fade),
-    );
+    _pushFaded((_) => const ShopPage());
   }
 
+  void _pushQuests() {
+    _pushFaded((_) => QuestsPage(onQuestChanged: _reloadQuestAwarePages));
+  }
+
+  void _pushLogs() {
+    _pushFaded((_) => const WorkoutLogsPage());
+  }
+
+  /// Push a top-level surface from the shell, then on return refresh the
+  /// quest-aware destinations and re-arm the idle/expired reveals — pushed pages
+  /// no longer get reload-on-tab-switch, and while one is open the shell route is
+  /// not current so a reveal would otherwise be starved (Codex #4, #5).
+  Future<void> _pushFaded(WidgetBuilder builder) async {
+    await Navigator.of(
+      context,
+    ).push(arcadeRoute(builder, motion: ArcadeRouteMotion.fade));
+    if (!mounted) return;
+    _reloadQuestAwarePages();
+    _showExpiredPausedSummaryIfNeeded();
+    _showIdleRevealIfNeeded();
+  }
+
+  /// Center Train action. Re-reads the ongoing session at tap time so a tap that
+  /// lands before the periodic refresh resolves can never misroute (Codex #2):
+  /// an existing session resumes; otherwise we confirm, then start fresh.
+  Future<void> _onTrainTapped() async {
+    if (_trainTapInFlight) return;
+    _trainTapInFlight = true;
+    try {
+      final session = await WorkoutStorageService().getOngoingSession();
+      if (!mounted) return;
+      if (session != null) {
+        _resumeOngoingSession(session);
+        return;
+      }
+      final start = await showStartTrainingDialog(context);
+      if (start == true && mounted) await _openFirstSession();
+    } finally {
+      _trainTapInFlight = false;
+    }
+  }
+
+  /// Indexed by [AppDestination] order: home, inventory, guild, labs.
   late final List<Widget> _pages = [
     HomePage(
       key: _homeKey,
-      onViewQuests: () => _selectTab(2),
-      onViewProfile: () => _selectTab(4),
-      onViewWorkouts: () => _selectTab(1),
+      onViewQuests: _pushQuests,
+      onViewProfile: () => goTo(AppDestination.labs),
+      onViewWorkouts: _pushLogs,
       onOpenShop: _openShop,
-      onViewGuild: () => _selectTab(3),
+      onViewGuild: () => goTo(AppDestination.guild),
     ),
-    WorkoutPage(key: _workoutKey),
-    QuestsPage(key: _questsKey, onQuestChanged: _reloadQuestAwarePages),
+    const InventoryPage(),
     GuildPage(key: _guildKey),
     ProfilePage(key: _profileKey, onProfileChanged: _reloadQuestAwarePages),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final ongoing = _ongoingSession;
     return Scaffold(
-      body: Column(
-        children: [
-          Expanded(
-            child: IndexedStack(index: _currentIndex, children: _pages),
-          ),
-          if (ongoing != null && !ongoing.isPausedForResume)
-            _ActiveWorkoutDock(
-              session: ongoing,
-              elapsedSeconds: _liveElapsedSeconds(ongoing),
-              onTap: () => _resumeOngoingSession(ongoing),
-            ),
-        ],
+      body: IndexedStack(index: _destination.index, children: _pages),
+      bottomNavigationBar: _BottomNavBar(
+        destination: _destination,
+        sessionLive: _ongoingSession != null,
+        showLootBadge: _hasUnviewedLootDrops,
+        onSelect: goTo,
+        onTrainTap: _onTrainTapped,
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        type: BottomNavigationBarType.fixed,
-        onTap: _selectTab,
-        items: [
-          const BottomNavigationBarItem(
-            icon: ImageIcon(AssetImage('assets/icons/control/icon_map.png')),
-            label: 'Home',
+    );
+  }
+}
+
+/// The restructured bottom bar: four browseable corners flanking one elevated
+/// center Train *action*. Tokens-only; reuses already-declared pixel icons.
+class _BottomNavBar extends StatelessWidget {
+  const _BottomNavBar({
+    required this.destination,
+    required this.sessionLive,
+    required this.showLootBadge,
+    required this.onSelect,
+    required this.onTrainTap,
+  });
+
+  final AppDestination destination;
+  final bool sessionLive;
+  final bool showLootBadge;
+  final ValueChanged<AppDestination> onSelect;
+  final VoidCallback onTrainTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: kCard,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          height: 64,
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: kBorder)),
           ),
-          const BottomNavigationBarItem(
-            icon: ImageIcon(AssetImage('assets/icons/control/icon_sword.png')),
-            label: 'Workout',
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _NavItem(
+                iconPath: 'assets/icons/control/icon_map.png',
+                label: 'Home',
+                active: destination == AppDestination.home,
+                onTap: () => onSelect(AppDestination.home),
+              ),
+              _NavItem(
+                iconPath: 'assets/icons/control/icon_bag.png',
+                label: 'Items',
+                active: destination == AppDestination.inventory,
+                showBadge: showLootBadge,
+                onTap: () => onSelect(AppDestination.inventory),
+              ),
+              _TrainNavButton(live: sessionLive, onTap: onTrainTap),
+              _NavItem(
+                iconPath: 'assets/icons/control/ui/icon_nav_guild.png',
+                label: 'Guild',
+                active: destination == AppDestination.guild,
+                onTap: () => onSelect(AppDestination.guild),
+              ),
+              _NavItem(
+                iconPath: 'assets/icons/control/icon_character.png',
+                label: 'Labs',
+                active: destination == AppDestination.labs,
+                onTap: () => onSelect(AppDestination.labs),
+              ),
+            ],
           ),
-          const BottomNavigationBarItem(
-            icon: ImageIcon(
-              AssetImage('assets/icons/control/ui/icon_nav_quests.png'),
+        ),
+      ),
+    );
+  }
+}
+
+/// One corner destination: pixel icon + label, neon when active, with an
+/// optional amber badge dot (the loot drop signal, relocated to Inventory).
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.iconPath,
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.showBadge = false,
+  });
+
+  final String iconPath;
+  final String label;
+  final bool active;
+  final bool showBadge;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? kNeon : kMutedText;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _LootBadgeIcon(
+              showBadge: showBadge,
+              child: ImageIcon(AssetImage(iconPath), size: 22, color: color),
             ),
-            activeIcon: ImageIcon(
-              AssetImage('assets/icons/control/ui/icon_nav_quests_active.png'),
-            ),
-            label: 'Quests',
-          ),
-          const BottomNavigationBarItem(
-            icon: ImageIcon(
-              AssetImage('assets/icons/control/ui/icon_nav_guild.png'),
-            ),
-            activeIcon: ImageIcon(
-              AssetImage('assets/icons/control/ui/icon_nav_guild_active.png'),
-            ),
-            label: 'Guild',
-          ),
-          BottomNavigationBarItem(
-            icon: _LootBadgeIcon(
-              showBadge: _hasUnviewedLootDrops,
-              child: const ImageIcon(
-                AssetImage('assets/icons/control/icon_character.png'),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 7,
+                color: color,
               ),
             ),
-            label: 'Profile',
-          ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The center Train action — elevated above the bar, pulsing while a session is
+/// live (the dock's replacement). The pulse freezes under reduced motion.
+class _TrainNavButton extends StatefulWidget {
+  const _TrainNavButton({required this.live, required this.onTap});
+
+  final bool live;
+  final VoidCallback onTap;
+
+  @override
+  State<_TrainNavButton> createState() => _TrainNavButtonState();
+}
+
+class _TrainNavButtonState extends State<_TrainNavButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1300),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncPulse();
+  }
+
+  @override
+  void didUpdateWidget(_TrainNavButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.live != widget.live) _syncPulse();
+  }
+
+  void _syncPulse() {
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    if (widget.live && !reduceMotion) {
+      _controller.repeat(reverse: true);
+    } else {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ScaleTransition(
+              scale: Tween<double>(begin: 1, end: 1.12).animate(
+                CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+              ),
+              child: Transform.translate(
+                offset: const Offset(0, -10),
+                child: Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: kNeon,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: kBg, width: 3),
+                    boxShadow: widget.live ? neonGlow() : null,
+                  ),
+                  child: const Icon(
+                    Icons.bolt_sharp,
+                    color: kBg,
+                    size: 26,
+                  ),
+                ),
+              ),
+            ),
+            Transform.translate(
+              offset: const Offset(0, -6),
+              child: const Text(
+                'TRAIN',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 7,
+                  color: kNeon,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -468,110 +673,6 @@ class _LootBadgeIcon extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _ActiveWorkoutDock extends StatelessWidget {
-  const _ActiveWorkoutDock({
-    required this.session,
-    required this.elapsedSeconds,
-    required this.onTap,
-  });
-
-  final WorkoutSession session;
-  final int elapsedSeconds;
-  final VoidCallback onTap;
-
-  int get _completedExercises =>
-      session.exercises.where((log) => log.sets.isNotEmpty).length;
-
-  int get _totalExercises {
-    final total = session.selectedExerciseIds.isNotEmpty
-        ? session.selectedExerciseIds.length
-        : session.exercises.length;
-    return total <= 0 ? 1 : total;
-  }
-
-  double get _progress => _totalExercises <= 0
-      ? 0.0
-      : (_completedExercises / _totalExercises).clamp(0.0, 1.0).toDouble();
-
-  String _fmt(int seconds) {
-    final minutes = seconds ~/ 60;
-    final secs = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:'
-        '${secs.toString().padLeft(2, '0')}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: kBg,
-      child: HoldDepress(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(0),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: kCard,
-            border: Border(top: BorderSide(color: kBorder)),
-          ),
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  const ImageIcon(
-                    AssetImage('assets/icons/control/icon_time.png'),
-                    size: 20,
-                    color: kNeon,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      session.isPausedForResume
-                          ? '${session.targetMuscleLabel.toUpperCase()} SAVED'
-                          : session.targetMuscleLabel.toUpperCase(),
-                      style: const TextStyle(
-                        fontFamily: 'PressStart2P',
-                        fontSize: 9,
-                        color: kText,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    _fmt(elapsedSeconds),
-                    style: const TextStyle(
-                      fontFamily: 'PressStart2P',
-                      fontSize: 12,
-                      color: kNeon,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: ArcadeProgressBar(value: _progress, height: 6),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '$_completedExercises/$_totalExercises CLEARED',
-                    style: const TextStyle(
-                      fontFamily: 'PressStart2P',
-                      fontSize: 8,
-                      color: kMutedText,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
