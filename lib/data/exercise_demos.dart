@@ -15,10 +15,13 @@ class ExerciseDemo {
 
 const String _demoDir = 'assets/exercises/demos';
 
-/// Curated motion demos, keyed by exercise id (the FULL BODY A / Day-1 lifts).
-/// Only a handful of exercises have a demo; every consumer falls back to the
-/// catalog photo when [exerciseDemoFor] returns null.
+/// Curated motion demos, keyed by exercise id. Covers the 15 preset-program
+/// lifts wired so far — every chest and back lift across Full Body / Upper-Lower
+/// / PPL plus the squat/curl/pushdown staples; legs and the remaining arm lifts
+/// have no clip yet. Every consumer falls back to the catalog photo when
+/// [exerciseDemoFor] returns null.
 const Map<String, ExerciseDemo> _demos = {
+  // FULL BODY A (Day-1) lifts.
   'Barbell_Bench_Press_-_Medium_Grip': ExerciseDemo(
     '$_demoDir/barbell_bench_press.mp4',
     '$_demoDir/barbell_bench_press_poster.webp',
@@ -38,6 +41,48 @@ const Map<String, ExerciseDemo> _demos = {
   'Triceps_Pushdown': ExerciseDemo(
     '$_demoDir/triceps_pushdown.mp4',
     '$_demoDir/triceps_pushdown_poster.webp',
+  ),
+  // Remaining chest lifts (Full Body / Upper-Lower / PPL).
+  'Dumbbell_Bench_Press': ExerciseDemo(
+    '$_demoDir/dumbbell_bench_press.mp4',
+    '$_demoDir/dumbbell_bench_press_poster.webp',
+  ),
+  'Incline_Dumbbell_Press': ExerciseDemo(
+    '$_demoDir/incline_dumbbell_press.mp4',
+    '$_demoDir/incline_dumbbell_press_poster.webp',
+  ),
+  'Barbell_Incline_Bench_Press_-_Medium_Grip': ExerciseDemo(
+    '$_demoDir/barbell_incline_bench_press.mp4',
+    '$_demoDir/barbell_incline_bench_press_poster.webp',
+  ),
+  'Cable_Crossover': ExerciseDemo(
+    '$_demoDir/cable_crossover.mp4',
+    '$_demoDir/cable_crossover_poster.webp',
+  ),
+  'Dumbbell_Flyes': ExerciseDemo(
+    '$_demoDir/dumbbell_flyes.mp4',
+    '$_demoDir/dumbbell_flyes_poster.webp',
+  ),
+  // Back lifts (Full Body / Upper-Lower / PPL).
+  'One-Arm_Dumbbell_Row': ExerciseDemo(
+    '$_demoDir/one_arm_dumbbell_row.mp4',
+    '$_demoDir/one_arm_dumbbell_row_poster.webp',
+  ),
+  'Seated_Cable_Rows': ExerciseDemo(
+    '$_demoDir/seated_cable_rows.mp4',
+    '$_demoDir/seated_cable_rows_poster.webp',
+  ),
+  'Close-Grip_Front_Lat_Pulldown': ExerciseDemo(
+    '$_demoDir/close_grip_lat_pulldown.mp4',
+    '$_demoDir/close_grip_lat_pulldown_poster.webp',
+  ),
+  'Bent_Over_Barbell_Row': ExerciseDemo(
+    '$_demoDir/bent_over_barbell_row.mp4',
+    '$_demoDir/bent_over_barbell_row_poster.webp',
+  ),
+  'Straight-Arm_Pulldown': ExerciseDemo(
+    '$_demoDir/straight_arm_pulldown.mp4',
+    '$_demoDir/straight_arm_pulldown_poster.webp',
   ),
 };
 

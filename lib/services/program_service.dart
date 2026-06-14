@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/programs_library.dart';
 import '../models/program_models.dart';
 import 'loot_service.dart';
+import 'ongoing_program_swap_service.dart';
 import 'program_customization_service.dart';
 import 'rest_service.dart';
 
@@ -283,7 +284,15 @@ class ProgramService {
       progress.programId,
       day,
     );
-    return effective.prescription;
+    // Apply this session's ephemeral swaps on top of the effective (persistently
+    // customized) prescriptions so a resumed in-session swap keeps its sets×reps
+    // (Codex plan-review F4 composition: persistent first, then session).
+    final sessionSwaps = await OngoingProgramSwapService().swapsFor(sessionId);
+    if (sessionSwaps.isEmpty) return effective.prescription;
+    return {
+      for (final entry in effective.prescription.entries)
+        sessionSwaps[entry.key] ?? entry.key: entry.value,
+    };
   }
 
   Future<void> clearOngoingProgramSession(String sessionId) async {

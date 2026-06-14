@@ -37,7 +37,13 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Finder chip(String label) => find.widgetWithText(PhosphorTap, label);
+  // Scope to the plate-chip Wrap: the bar selector now renders chips with the
+  // same numeric labels (20/15/10 kg, 45/35/25 lb), so an unscoped finder would
+  // collide.
+  Finder chip(String label) => find.descendant(
+    of: find.byKey(const ValueKey('plate_chips')),
+    matching: find.widgetWithText(PhosphorTap, label),
+  );
 
   // Chip taps flash an 80ms phosphor halo; plate removal animates for 120ms
   // before the entry is deleted. 200ms settles both.
@@ -61,7 +67,8 @@ void main() {
     expect(find.text('PLATES>TOTAL'), findsOneWidget);
     // 60 kg on a 20 kg bar = one 20 per side; labeled plate + caption.
     expect(find.text('20 kg per side'), findsOneWidget);
-    expect(find.text('20'), findsNWidgets(3)); // bar field + 2 mirrored plates
+    // Olympic bar chip ('20') + 2 mirrored plate visuals.
+    expect(find.text('20'), findsNWidgets(3));
     expect(find.text('APPLY'), findsOneWidget);
   });
 
@@ -315,5 +322,93 @@ void main() {
     await tester.pump();
     expect(removablePlates(), findsNothing);
     expect(find.text('TOTAL  20 kg', findRichText: true), findsOneWidget);
+  });
+
+  // --- Bar selector (replaces the old free-text BAR field) -----------------
+
+  Finder customBarField() => find.descendant(
+    of: find.byKey(const ValueKey('custom_bar_field')),
+    matching: find.byType(TextField),
+  );
+
+  testWidgets('bar selector defaults to Olympic (20 kg) — no field, plates from 20', (
+    tester,
+  ) async {
+    await openSheet(tester, initialTargetKg: 60);
+
+    // Four chips present; the Custom free-entry field stays hidden until chosen.
+    expect(find.byKey(const ValueKey('bar_olympic')), findsOneWidget);
+    expect(find.byKey(const ValueKey('bar_custom')), findsOneWidget);
+    expect(find.text('OLYMPIC'), findsOneWidget); // type tag over the weight
+    expect(find.text('CUSTOM BAR'), findsNothing);
+    // Olympic 20 kg bar: (60 - 20) / 2 = 20 per side.
+    expect(find.text('20 kg per side'), findsOneWidget);
+  });
+
+  testWidgets("selecting Women's recomputes plates from a 15 kg bar", (tester) async {
+    await openSheet(tester, initialTargetKg: 60);
+
+    await tester.tap(find.byKey(const ValueKey('bar_womens')));
+    await tester.pumpAndSettle();
+
+    // 15 kg bar: (60 - 15) / 2 = 22.5 per side.
+    expect(find.text('22.5 kg per side'), findsOneWidget);
+  });
+
+  testWidgets('CUSTOM reveals a free-entry bar field that feeds the calc', (
+    tester,
+  ) async {
+    await openSheet(tester, initialTargetKg: 60);
+
+    expect(find.text('CUSTOM BAR'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('bar_custom')));
+    await tester.pumpAndSettle();
+    expect(find.text('CUSTOM BAR'), findsOneWidget);
+
+    await tester.enterText(customBarField(), '10');
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Custom 10 kg bar: (60 - 10) / 2 = 25 per side.
+    expect(find.text('25 kg per side'), findsOneWidget);
+  });
+
+  testWidgets('the chosen bar is shared across both modes', (tester) async {
+    await openSheet(tester);
+
+    await tester.tap(find.byKey(const ValueKey('bar_womens')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('PLATES>TOTAL'));
+    await tester.pumpAndSettle();
+
+    // Empty stack in reverse mode → TOTAL equals the carried 15 kg bar.
+    expect(find.text('TOTAL  15 kg', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('preset bar labels follow the active unit (lbs)', (tester) async {
+    Units.weight = WeightUnit.lbs;
+    await openSheet(tester);
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('bar_olympic')),
+        matching: find.text('45'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('bar_womens')),
+        matching: find.text('35'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('bar_ez')),
+        matching: find.text('25'),
+      ),
+      findsOneWidget,
+    );
   });
 }

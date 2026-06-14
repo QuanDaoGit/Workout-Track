@@ -8,6 +8,7 @@ import '../../models/program_models.dart';
 import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
 import '../../services/idle_session_guard.dart';
+import '../../services/ongoing_program_swap_service.dart';
 import '../../services/program_service.dart';
 import '../../services/rest_timer_service.dart';
 import '../../services/workout_storage_service.dart';
@@ -39,6 +40,7 @@ class ActiveWorkoutPage extends StatefulWidget {
     this.advanceProgramRestDayOnCompletion = false,
     this.isCalibration = false,
     this.prescriptions = const {},
+    this.programSwaps,
     this.idleTimeout = WorkoutStorageService.idleTimeout,
   });
 
@@ -58,6 +60,11 @@ class ActiveWorkoutPage extends StatefulWidget {
   /// Per-exercise sets × reps targets, keyed by exercise id. Empty for manual
   /// workouts and resumed sessions.
   final Map<String, SetRepScheme> prescriptions;
+
+  /// Ephemeral program-day swaps (effectiveOriginalId → replacementId) recorded
+  /// at START so a force-kill resume can re-key prescriptions; persisted to
+  /// [OngoingProgramSwapService] on a fresh start. Null for manual/resume.
+  final Map<String, String>? programSwaps;
 
   /// Inactivity window before the idle auto-save reveal. Overridable in tests;
   /// defaults to the production 30-minute constant.
@@ -112,13 +119,24 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         widget.resumeFromSession?.id ??
         DateTime.now().microsecondsSinceEpoch.toString();
 
+    // Persist this session's ephemeral program swaps so a force-kill resume can
+    // re-pair sets×reps (fresh start only; a resume reuses the stored map).
+    if (widget.resumeFromSession == null &&
+        widget.programSwaps != null &&
+        widget.programSwaps!.isNotEmpty) {
+      OngoingProgramSwapService().setSwaps(_sessionId, widget.programSwaps!);
+    }
+
     if (widget.resumeFromSession != null) {
       _sessionStartTime = widget.resumeFromSession!.resumeStartTime(
         DateTime.now(),
       );
       for (final log in widget.resumeFromSession!.exercises) {
-        if (log.sets.isNotEmpty) {
-          _loggedSets[log.exerciseId] = log.sets;
+        // Recombine working + warm-up sets into the single flagged list the
+        // session page round-trips, so a force-kill resume never drops the
+        // logged warm-up sets (and with them, the bonus eligibility).
+        if (log.sets.isNotEmpty || log.warmupSets.isNotEmpty) {
+          _loggedSets[log.exerciseId] = [...log.sets, ...log.warmupSets];
         }
       }
     } else {
@@ -212,8 +230,12 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
             .clamp(0.0, 1.0)
             .toDouble();
 
-  int get _totalLoggedSets =>
-      _loggedSets.values.fold<int>(0, (sum, sets) => sum + sets.length);
+  // Counts working sets only — a warm-up-only session has nothing to finish or
+  // checkpoint, so warm-up sets never satisfy the "log a set" gate.
+  int get _totalLoggedSets => _loggedSets.values.fold<int>(
+    0,
+    (sum, sets) => sum + sets.where((s) => !s.isWarmup).length,
+  );
 
   String get _elapsedMinutes =>
       (_elapsedSeconds ~/ 60).toString().padLeft(2, '0');
@@ -305,13 +327,17 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     await _openExercise(exercise);
   }
 
+  // Splits the session page's single flagged set list into working vs. warm-up
+  // sets — the one boundary where warm-up sets are partitioned out so every
+  // stat/XP/overload consumer reading [ExerciseLog.sets] stays working-only.
   List<ExerciseLog> _buildExerciseLogs() => [
     for (final e in widget.exercises)
       if (_loggedSets[e.id] != null)
         ExerciseLog(
           exerciseId: e.id,
           exerciseName: e.name,
-          sets: _loggedSets[e.id]!,
+          sets: [for (final s in _loggedSets[e.id]!) if (!s.isWarmup) s],
+          warmupSets: [for (final s in _loggedSets[e.id]!) if (s.isWarmup) s],
         ),
   ];
 

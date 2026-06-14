@@ -1535,8 +1535,9 @@ class HomePageState extends State<HomePage> {
       detail: _targetLineFromSummary(programDayFocusSummary(day)),
       middle: _programArcMeter(progress),
       nextUp: _programNextUp(progress, todayConsumed: false),
-      primaryLabel: 'START WORKOUT',
-      onPrimary: () => _startProgramWorkout(day),
+      // The big START button is gone — the center Train action is the primary
+      // "start today's mission" now (the card would just duplicate it). The
+      // Manual-workout escape stays for a free-form pick.
       secondaryLabel: 'Manual workout',
       onSecondary: () => _startWorkout(trainAnyway: true),
     );

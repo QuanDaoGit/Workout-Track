@@ -1,6 +1,7 @@
-"""Normalize the Day-1 form-demo clips into app-ready mp4s + poster stills.
+"""Normalize the form-demo clips into app-ready mp4s + poster stills.
 
-The 5 FULL BODY A lifts each have a short source .mp4 in
+The curated program lifts (FULL BODY A Day-1 lifts plus the chest/back lifts
+across Full Body / Upper-Lower / PPL) each have a short source .mp4 in
 assets/exercises/animated-videos/. The app plays them with the video_player
 plugin (ExoPlayer — hardware-decoded, pausable), so each source produces two
 outputs in assets/exercises/demos/:
@@ -27,11 +28,23 @@ OUT_DIR = os.path.join(REPO_ROOT, "assets", "exercises", "demos")
 
 # source filename -> output slug (matches lib/data/exercise_demos.dart)
 CLIPS = {
+    # FULL BODY A (Day-1) lifts.
     "barbell-bench-press.mp4": "barbell_bench_press",
     "WideGripLatPullDown (2).mp4": "wide_grip_lat_pulldown",
     "barbell-back-squat.mp4": "barbell_squat",
     "DumbbellBicepCurl (2).mp4": "dumbbell_bicep_curl",
     "TricepPushDown (2).mp4": "triceps_pushdown",
+    # Remaining chest + back program lifts (Full Body / Upper-Lower / PPL).
+    "dumbbell-bench-press.mp4": "dumbbell_bench_press",
+    "InclineDumbbellBenchPress.mp4": "incline_dumbbell_press",
+    "InclineBarbellBenchPress.mp4": "barbell_incline_bench_press",
+    "CableCrossover.mp4": "cable_crossover",
+    "DumbbellFlye.mp4": "dumbbell_flyes",
+    "OneArmDumbbellRow.mp4": "one_arm_dumbbell_row",
+    "SeatedCableRow.mp4": "seated_cable_rows",
+    "CloseGripLatPulldown.mp4": "close_grip_lat_pulldown",
+    "BentOverBarbellRow.mp4": "bent_over_barbell_row",
+    "StraightArmPulldown.mp4": "straight_arm_pulldown",
 }
 
 # 480p H.264 keeps form legible at small file size; -an strips audio;
@@ -57,6 +70,13 @@ def main():
 
         video_out = os.path.join(OUT_DIR, f"{slug}.mp4")
         poster_out = os.path.join(OUT_DIR, f"{slug}_poster.webp")
+
+        # Idempotent: skip clips already generated so a re-run only produces the
+        # new pairs and leaves committed demo binaries byte-stable.
+        if os.path.isfile(video_out) and os.path.isfile(poster_out):
+            print(f"{src_name} -> {slug}: skip (exists)")
+            continue
+
         print(f"{src_name} -> {slug}.mp4 + {slug}_poster.webp")
 
         # Normalized, muted, streamable mp4.

@@ -7,8 +7,10 @@ import '../data/muscle_groups.dart';
 import '../models/workout_models.dart';
 import 'adventure_service.dart';
 import 'calibration_service.dart';
+import 'ongoing_program_swap_service.dart';
 import 'rest_service.dart';
 import 'stat_engine.dart';
+import 'warmup_reward_service.dart';
 
 enum MissionFinishState { none, completed, endedEarly }
 
@@ -44,6 +46,9 @@ class WorkoutStorageService {
     sessions.add(session);
     await _writeSessions(sessions);
     if (!session.isPartial) {
+      // A finalized session can never be resumed — drop its ephemeral program
+      // swaps (Codex plan-review F3 lifecycle).
+      await OngoingProgramSwapService().clear(session.id);
       if (!session.isAbandoned) {
         // Auto-calibrate from the first few real workouts (measured 1RM → tier →
         // seed), before the recompute so the seed lands. Gated to the opening
@@ -67,6 +72,9 @@ class WorkoutStorageService {
         // charge later. The service swallows its own failures: an adventure
         // can never break a save.
         await AdventureService().grantChargeForSession(session);
+        // Warm-up gem bonus — awaited, gated to a real warmed-up session, and
+        // idempotent once/day. Swallows its own errors (never breaks a save).
+        await WarmupRewardService().grantForSession(session);
         await markMissionFinished(session.date, MissionFinishState.completed);
       }
     }
@@ -156,6 +164,7 @@ class WorkoutStorageService {
         sessions.where((s) => !s.isOngoing && s.id != session.id).toList()
           ..add(session);
     await _writeSessions(updated);
+    await OngoingProgramSwapService().clear(session.id);
     if (markMissionFinished) {
       await WorkoutStorageService.markMissionFinished(
         session.date,
@@ -342,6 +351,7 @@ class WorkoutStorageService {
     final sessions = await getSessions();
     final updated = sessions.where((s) => s.id != id).toList();
     await _writeSessions(updated);
+    await OngoingProgramSwapService().clear(id);
   }
 
   /// Replace a stored session by id (set edits from the session detail page).

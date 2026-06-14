@@ -134,15 +134,34 @@ class Exercise {
 }
 
 class SetEntry {
-  const SetEntry({required this.weight, required this.reps});
+  const SetEntry({required this.weight, required this.reps, this.isWarmup = false});
 
   final double weight;
   final int reps;
 
-  Map<String, dynamic> toJson() => {'weight': weight, 'reps': reps};
+  /// True for a warm-up (ramp-up) set. Warm-up sets are stored apart from
+  /// working sets on [ExerciseLog] and feed **no** volume/stat/XP/overload path
+  /// — they exist only to mark that the user warmed up (the once-per-day gem
+  /// bonus). Default/legacy false; JSON omits it when false (no cliff).
+  final bool isWarmup;
 
-  factory SetEntry.fromJson(Map<String, dynamic> j) =>
-      SetEntry(weight: (j['weight'] as num).toDouble(), reps: j['reps'] as int);
+  Map<String, dynamic> toJson() => {
+    'weight': weight,
+    'reps': reps,
+    if (isWarmup) 'warmup': true,
+  };
+
+  factory SetEntry.fromJson(Map<String, dynamic> j) => SetEntry(
+    weight: (j['weight'] as num).toDouble(),
+    reps: j['reps'] as int,
+    isWarmup: j['warmup'] as bool? ?? false,
+  );
+
+  SetEntry copyWith({double? weight, int? reps, bool? isWarmup}) => SetEntry(
+    weight: weight ?? this.weight,
+    reps: reps ?? this.reps,
+    isWarmup: isWarmup ?? this.isWarmup,
+  );
 }
 
 class ExerciseLog {
@@ -150,18 +169,32 @@ class ExerciseLog {
     required this.exerciseId,
     required this.exerciseName,
     required this.sets,
+    this.warmupSets = const [],
   });
 
   final String exerciseId;
   final String exerciseName;
+
+  /// Working sets only — the volume/stat/XP/overload truth. Warm-up sets live
+  /// in [warmupSets] so every downstream aggregator stays correct without
+  /// having to filter.
   final List<SetEntry> sets;
 
+  /// Logged warm-up (ramp-up) sets. Persisted for display and to mark that the
+  /// user warmed up, but deliberately excluded from [totalVolume] and all
+  /// stat/XP/overload computation. Default/legacy empty (no cliff).
+  final List<SetEntry> warmupSets;
+
   double get totalVolume => sets.fold(0, (sum, s) => sum + s.weight * s.reps);
+
+  bool get hasWarmupSet => warmupSets.isNotEmpty;
 
   Map<String, dynamic> toJson() => {
     'exerciseId': exerciseId,
     'exerciseName': exerciseName,
     'sets': sets.map((s) => s.toJson()).toList(),
+    if (warmupSets.isNotEmpty)
+      'warmupSets': warmupSets.map((s) => s.toJson()).toList(),
   };
 
   factory ExerciseLog.fromJson(Map<String, dynamic> j) => ExerciseLog(
@@ -169,6 +202,10 @@ class ExerciseLog {
     exerciseName: j['exerciseName'] as String,
     sets: [
       for (final s in j['sets'] as List<dynamic>)
+        SetEntry.fromJson(s as Map<String, dynamic>),
+    ],
+    warmupSets: [
+      for (final s in (j['warmupSets'] as List<dynamic>? ?? const []))
         SetEntry.fromJson(s as Map<String, dynamic>),
     ],
   );
@@ -240,6 +277,11 @@ class WorkoutSession {
   final Map<String, int> statDelta;
 
   bool get isOngoing => isPartial && !isAbandoned;
+
+  /// True when any logged exercise carries a warm-up set — the observable
+  /// signal that the user warmed up. Derived (not stored): drives the
+  /// once-per-day gem bonus at save and the calm summary reveal.
+  bool get warmedUp => exercises.any((e) => e.hasWarmupSet);
 
   /// Copy with replaced exercise logs and/or stat delta. Deliberately narrow:
   /// identity, timing, and XP fields are immutable once a session is saved.

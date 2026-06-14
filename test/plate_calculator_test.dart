@@ -3,6 +3,31 @@ import 'package:workout_track/models/unit_models.dart';
 import 'package:workout_track/services/plate_calculator.dart';
 
 void main() {
+  group('PlateCalculator.usesPlates', () {
+    test('true for plate-loaded bars (case/space tolerant)', () {
+      expect(PlateCalculator.usesPlates('barbell'), isTrue);
+      expect(PlateCalculator.usesPlates('Barbell'), isTrue);
+      expect(PlateCalculator.usesPlates('e-z curl bar'), isTrue);
+      expect(PlateCalculator.usesPlates('  E-Z Curl Bar '), isTrue);
+    });
+
+    test('false for stacks, fixed free weights, bodyweight, and null', () {
+      for (final eq in const [
+        'dumbbell',
+        'kettlebells',
+        'cable',
+        'machine',
+        'body only',
+        'bands',
+        'other',
+        '',
+        null,
+      ]) {
+        expect(PlateCalculator.usesPlates(eq), isFalse, reason: 'eq=$eq');
+      }
+    });
+  });
+
   group('PlateCalculator.platesPerSide', () {
     test('60 kg on a 20 kg bar = 20 kg per side', () {
       expect(PlateCalculator.platesPerSide(60), [20]);

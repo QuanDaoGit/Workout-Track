@@ -11,8 +11,10 @@ import '../../models/program_models.dart';
 import '../../models/unit_models.dart';
 import '../../models/workout_models.dart';
 import '../../models/xp_reward_models.dart';
+import '../../models/gem_ledger_entry.dart';
 import '../../services/adventure_service.dart';
 import '../../services/calibration_service.dart';
+import '../../services/gem_service.dart';
 import '../../services/calorie_service.dart';
 import '../../services/class_service.dart';
 import '../../services/loot_drop_service.dart';
@@ -108,6 +110,8 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   LootDrop? _cacheDrop;
   bool _chargeGranted = false;
   int _chargeBalance = 0;
+  bool _warmupBonusGranted = false;
+  int _warmupBonusAmount = 0;
   Map<String, int> _statDelta = {};
   Map<String, int> _combatStats = {};
   Map<String, int> _calibratedStats = {};
@@ -334,10 +338,18 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       // Adventure charge is granted inside saveSession — snapshot before/after
       // so the summary can surface "+1 CHARGE" as the instant workout payoff.
       final chargesBefore = (await AdventureService().loadState()).charges;
+      // Warm-up bonus also lands inside saveSession (once/day). Isolate the
+      // warmup-source ledger delta so an Adventure expedition settling on this
+      // same save can't be mistaken for the warm-up bonus.
+      final gemService = GemService();
+      final warmupGemsBefore = _warmupGemTotal(await gemService.ledger());
       await WorkoutStorageService().saveSession(awardedSession);
       final advState = await AdventureService().loadState();
       _chargeGranted = advState.charges > chargesBefore;
       _chargeBalance = advState.charges;
+      _warmupBonusAmount =
+          _warmupGemTotal(await gemService.ledger()) - warmupGemsBefore;
+      _warmupBonusGranted = _warmupBonusAmount > 0;
       final engine = StatEngine();
       if (widget.isCalibration) {
         // Convert this real workout into a calibration seed, then recompute so
@@ -450,6 +462,10 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       if (mounted) Navigator.of(context).pop();
     }
   }
+
+  int _warmupGemTotal(List<GemLedgerEntry> ledger) => ledger
+      .where((e) => e.sourceKind == GemLedgerSourceKind.warmup)
+      .fold<int>(0, (sum, e) => sum + e.amount);
 
   WorkoutSession _sessionWithAward({
     String? classAtSave,
@@ -782,6 +798,13 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                           _RevealBeat(
                             delayMs: 140,
                             child: _ChargeGrantedCard(balance: _chargeBalance),
+                          ),
+                        ],
+                        if (_warmupBonusGranted) ...[
+                          const SizedBox(height: kSpace3),
+                          _RevealBeat(
+                            delayMs: 160,
+                            child: _WarmupBonusCard(amount: _warmupBonusAmount),
                           ),
                         ],
                         const SizedBox(height: kSpace5),
@@ -1390,6 +1413,57 @@ class _ChargeGrantedCard extends StatelessWidget {
           Text(
             'Your party is rested — $balance/${AdventureState.chargeCap} ready '
             'to send out on an adventure.',
+            textAlign: TextAlign.center,
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The warm-up payoff: the user did the opt-in warm-up before this session, so
+/// it earned a small gem bonus (once/day). Calm and positive — its absence is
+/// always silent (no "you skipped" framing anywhere).
+class _WarmupBonusCard extends StatelessWidget {
+  const _WarmupBonusCard({required this.amount});
+
+  final int amount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(kSpace3),
+      decoration: BoxDecoration(
+        color: kNeon.withValues(alpha: 0.10),
+        border: Border.all(color: kNeon),
+        borderRadius: BorderRadius.circular(kCardRadius),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                'assets/icons/economy/icon_gem_reward.png',
+                width: 16,
+                height: 16,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(width: kSpace2),
+              Text(
+                'WARM-UP BONUS +$amount',
+                style: const TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 9,
+                  color: kNeon,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'You warmed up before training — primed lifts, and a few gems for the ritual.',
             textAlign: TextAlign.center,
             style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
           ),

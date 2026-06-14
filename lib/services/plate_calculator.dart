@@ -12,6 +12,20 @@ class PlateCalculator {
   static const List<double> defaultPlates = [25, 20, 15, 10, 5, 2.5, 1.25];
   static const double defaultBarKg = 20;
 
+  /// Whether [equipment] is loaded with plates on a bar — the only model this
+  /// calculator computes. True for barbell and E-Z curl bar; false for stacks
+  /// (cable/machine — indistinguishable from selectorized in the catalog),
+  /// fixed free weights, and bodyweight.
+  static bool usesPlates(String? equipment) {
+    switch ((equipment ?? '').trim().toLowerCase()) {
+      case 'barbell':
+      case 'e-z curl bar':
+        return true;
+      default:
+        return false;
+    }
+  }
+
   /// Greedy fill. `targetKg` is the total weight including the bar.
   /// Returns plates per side in descending order.
   static List<double> platesPerSide(

@@ -9,11 +9,11 @@ import '../services/idle_session_guard.dart';
 import '../services/loot_drop_service.dart';
 import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
+import '../services/workout_draft_controller.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/idle_session_dialog.dart';
-import '../widgets/start_training_dialog.dart';
 import '../widgets/train_nav_button.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
@@ -64,6 +64,10 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   bool _showingIdleReveal = false;
   bool _hasUnviewedLootDrops = false;
   bool _trainTapInFlight = false;
+  // Pre-start exercise-selection draft (in-shell). Survives tab nav, not kill.
+  final WorkoutDraftController _draft = WorkoutDraftController();
+  bool _viewingSelection = false;
+  int _draftEpoch = 0;
   StreamSubscription<void>? _storageSubscription;
 
   final _homeKey = GlobalKey<HomePageState>();
@@ -74,6 +78,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _draft.addListener(_onDraftChanged);
     _loadOngoingSession();
     _loadLootBadge();
     _dockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -94,11 +99,10 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     }
   }
 
-  /// Onboarding "START WORKOUT" finale. If the user chose a program, drop them
-  /// into a **pre-filled Day 1** (program-mode [StartWorkoutPage] auto-selects
-  /// the day's curated lifts) instead of a blank picker — the activation spine.
-  /// Manual-path users (no program) or the defensive rest-day case fall back to
-  /// the generic picker. Always pushed on top of RootPage so exit → Home.
+  /// Onboarding "START WORKOUT" finale. If the user chose a program, open a
+  /// **pre-filled Day 1** draft (the day's curated lifts pre-selected); manual or
+  /// rest-day users get a blank draft. Routes through the same in-shell
+  /// [openWorkoutDraft] entry as the center Train tap (Codex #3 — one entry API).
   Future<void> _openFirstSession() async {
     if (!mounted) return;
     final progress = await ProgramService().getActiveProgress();
@@ -112,14 +116,11 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
           )
         : day;
     if (!mounted) return;
-    final starter = buildFirstSessionStarter(effective);
-    await Navigator.push(
-      context,
-      arcadeRoute((_) => starter, motion: ArcadeRouteMotion.flow),
+    openWorkoutDraft(
+      (effective != null && effective.isWorkout)
+          ? workoutDraftSeedForProgramDay(effective)
+          : const WorkoutDraftSeed.manual(),
     );
-    if (!mounted) return;
-    _loadOngoingSession();
-    _reloadQuestAwarePages();
   }
 
   @override
@@ -127,7 +128,46 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _dockTimer?.cancel();
     _storageSubscription?.cancel();
+    _draft.removeListener(_onDraftChanged);
+    _draft.dispose();
     super.dispose();
+  }
+
+  void _onDraftChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Single entry point for opening exercise selection in-shell (manual Train
+  /// tap, Home program day, onboarding finale). The draft surface replaces the
+  /// body while the nav bar persists; the draft survives tab navigation.
+  void openWorkoutDraft(WorkoutDraftSeed seed) {
+    setState(() {
+      _draftEpoch++;
+      _viewingSelection = true;
+    });
+    _draft.begin(seed);
+  }
+
+  void _cancelDraft() {
+    _draft.clear();
+    setState(() => _viewingSelection = false);
+  }
+
+  /// Fired by the embedded selection right after it launches the live session.
+  void _onDraftCommitted() {
+    _draft.clear();
+    setState(() => _viewingSelection = false);
+    _loadOngoingSession();
+  }
+
+  TrainButtonMode _trainMode() {
+    if (_ongoingSession != null) return TrainButtonMode.live;
+    if (_draft.active) {
+      return _draft.isValid
+          ? TrainButtonMode.armedReady
+          : TrainButtonMode.armedLocked;
+    }
+    return TrainButtonMode.idle;
   }
 
   @override
@@ -152,7 +192,10 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
         _profileKey.currentState?.reload();
     }
     _loadOngoingSession();
-    setState(() => _destination = destination);
+    setState(() {
+      _destination = destination;
+      _viewingSelection = false; // leave the selection view; the draft persists
+    });
     _loadLootBadge();
   }
 
@@ -185,6 +228,12 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       setState(() => _ongoingSession = session);
     } else {
       _ongoingSession = session;
+    }
+    // A live/paused session takes precedence over a pre-start draft — drop the
+    // draft so Train never shows armed on top of a real session (Codex #2).
+    if (session != null && _draft.active) {
+      _viewingSelection = false;
+      _draft.clear();
     }
   }
 
@@ -389,13 +438,15 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     _showIdleRevealIfNeeded();
   }
 
-  /// Center Train action. Re-reads the ongoing session at tap time so a tap that
-  /// lands before the periodic refresh resolves can never misroute (Codex #2):
-  /// - a paused session past its auto-discard deadline is force-summarized via
-  ///   the shell's own handler, never reopened (Codex post-impl #1);
-  /// - any other live/saved session resumes (mirrors Home's SAVED card and
-  ///   `start_workout._continueOngoingSession`);
-  /// - otherwise we confirm, then start fresh.
+  /// Center Train action. Re-reads session state at tap time (Codex #2):
+  /// - any live/saved session → resume; a paused session past its auto-discard
+  ///   deadline is force-summarized, never reopened (Codex post-impl #1);
+  /// - a draft we are already viewing → commit (the embedded page's existing
+  ///   confirm + launch; validity re-checked synchronously by the controller);
+  /// - a draft on another tab → return to the selection surface;
+  /// - otherwise → open **today's mission** (the active program day if any, else
+  ///   a manual draft) in-shell. No front confirm — the single confirm is at the
+  ///   commit. This is what makes the Home card's START button redundant.
   Future<void> _onTrainTapped() async {
     if (_trainTapInFlight) return;
     _trainTapInFlight = true;
@@ -412,8 +463,15 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
         }
         return;
       }
-      final start = await showStartTrainingDialog(context);
-      if (start == true && mounted) await _openFirstSession();
+      if (_draft.active) {
+        if (_viewingSelection) {
+          _draft.requestCommit();
+        } else {
+          setState(() => _viewingSelection = true);
+        }
+        return;
+      }
+      await _openFirstSession();
     } finally {
       _trainTapInFlight = false;
     }
@@ -437,15 +495,39 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final ongoing = _ongoingSession;
-    return Scaffold(
-      body: IndexedStack(index: _destination.index, children: _pages),
-      bottomNavigationBar: _BottomNavBar(
-        destination: _destination,
-        sessionLive: ongoing != null,
-        elapsedLabel: ongoing == null ? null : _fmtElapsed(ongoing),
-        showLootBadge: _hasUnviewedLootDrops,
-        onSelect: goTo,
-        onTrainTap: _onTrainTapped,
+    final inSelection = _viewingSelection && _draft.active;
+    return PopScope(
+      // While viewing selection, back cancels the draft instead of leaving the
+      // shell. The draft itself is kept alive offstage when on another tab.
+      canPop: !inSelection,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && inSelection) _cancelDraft();
+      },
+      child: Scaffold(
+        body: IndexedStack(
+          index: inSelection ? 1 : 0,
+          children: [
+            IndexedStack(index: _destination.index, children: _pages),
+            // Kept mounted whenever a draft exists (even when a tab is shown) so
+            // the in-progress selection survives tab navigation.
+            _draft.active
+                ? _SelectionSurface(
+                    epoch: _draftEpoch,
+                    draft: _draft,
+                    onCancel: _cancelDraft,
+                    onCommitted: _onDraftCommitted,
+                  )
+                : const SizedBox.shrink(),
+          ],
+        ),
+        bottomNavigationBar: _BottomNavBar(
+          destination: _destination,
+          trainMode: _trainMode(),
+          elapsedLabel: ongoing == null ? null : _fmtElapsed(ongoing),
+          showLootBadge: _hasUnviewedLootDrops,
+          onSelect: goTo,
+          onTrainTap: _onTrainTapped,
+        ),
       ),
     );
   }
@@ -461,12 +543,97 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   }
 }
 
+/// The in-shell exercise-selection surface: a slim header + the embedded
+/// [StartWorkoutPage] (kept alive across tab nav by a stable epoch key) + the
+/// ready hint. The shell's center Train button is the commit control.
+class _SelectionSurface extends StatelessWidget {
+  const _SelectionSurface({
+    required this.epoch,
+    required this.draft,
+    required this.onCancel,
+    required this.onCommitted,
+  });
+
+  final int epoch;
+  final WorkoutDraftController draft;
+  final VoidCallback onCancel;
+  final VoidCallback onCommitted;
+
+  @override
+  Widget build(BuildContext context) {
+    final seed = draft.seed ?? const WorkoutDraftSeed.manual();
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          _SelectionHeader(onCancel: onCancel),
+          Expanded(
+            child: StartWorkoutPage(
+              key: ValueKey('draft_$epoch'),
+              embedded: true,
+              draftController: draft,
+              onCommitted: onCommitted,
+              initialMuscleGroups: seed.initialMuscleGroups,
+              initialSelectedExerciseIds: seed.initialSelectedExerciseIds,
+              programDayLabel: seed.programDayLabel,
+              programFocusSummary: seed.programFocusSummary,
+              programCuratedExerciseIds: seed.programCuratedExerciseIds,
+              programPrescriptions: seed.programPrescriptions,
+              isProgramWorkout: seed.isProgramWorkout,
+              advanceProgramRestDayOnCompletion:
+                  seed.advanceProgramRestDayOnCompletion,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Slim header for the selection surface — title + a cancel ✕ that discards the
+/// draft (the back gesture does the same via the shell PopScope).
+class _SelectionHeader extends StatelessWidget {
+  const _SelectionHeader({required this.onCancel});
+
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: kCard,
+        border: Border(bottom: BorderSide(color: kBorder)),
+      ),
+      padding: const EdgeInsets.fromLTRB(kSpace4, 12, kSpace2, 12),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'SELECT WORKOUT',
+              style: TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 11,
+                color: kText,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onCancel,
+            icon: const Icon(Icons.close_sharp, color: kMutedText),
+            tooltip: 'Discard',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The restructured bottom bar: four browseable corners flanking one elevated
 /// center Train *action*. Tokens-only; reuses already-declared pixel icons.
 class _BottomNavBar extends StatelessWidget {
   const _BottomNavBar({
     required this.destination,
-    required this.sessionLive,
+    required this.trainMode,
     required this.elapsedLabel,
     required this.showLootBadge,
     required this.onSelect,
@@ -474,7 +641,7 @@ class _BottomNavBar extends StatelessWidget {
   });
 
   final AppDestination destination;
-  final bool sessionLive;
+  final TrainButtonMode trainMode;
   final String? elapsedLabel;
   final bool showLootBadge;
   final ValueChanged<AppDestination> onSelect;
@@ -509,7 +676,7 @@ class _BottomNavBar extends StatelessWidget {
               ),
               Expanded(
                 child: TrainNavButton(
-                  live: sessionLive,
+                  mode: trainMode,
                   elapsedLabel: elapsedLabel,
                   onTap: onTrainTap,
                 ),

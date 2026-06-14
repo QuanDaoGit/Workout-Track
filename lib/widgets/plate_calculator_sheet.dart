@@ -16,6 +16,39 @@ String _fmtKg(double v) => fmtNum(v, decimals: 2);
 
 enum _CalcMode { target, plates }
 
+/// The bar the plate math loads onto. Presets cover the bars this calculator is
+/// gated to (barbell + E-Z curl); [custom] reveals a free-entry field for the
+/// long tail (EZ bars alone span ~7-16 kg, plus home/specialty bars).
+enum _BarChoice { olympic, womens, ez, custom }
+
+/// Preset bar weight in the active unit's own numbers, or null for [custom].
+/// Kept per-unit (no kg<->lb conversion) so the chips read as clean, settable
+/// numbers — 20/15/10 kg, 45/35/25 lb — with no round-trip noise. The EZ value
+/// is an approximate convenience default for a variable bar; Custom is the exact
+/// corrector.
+double? _presetBarValueFor(_BarChoice choice, WeightUnit unit) => switch (choice) {
+  _BarChoice.olympic => unit == WeightUnit.kg ? 20 : 45,
+  _BarChoice.womens => unit == WeightUnit.kg ? 15 : 35,
+  _BarChoice.ez => unit == WeightUnit.kg ? 10 : 25,
+  _BarChoice.custom => null,
+};
+
+/// Spoken name for the chip's accessibility label.
+String _barChoiceName(_BarChoice choice) => switch (choice) {
+  _BarChoice.olympic => 'Olympic',
+  _BarChoice.womens => "Women's",
+  _BarChoice.ez => 'EZ curl',
+  _BarChoice.custom => 'Custom',
+};
+
+/// Short uppercase tag shown above the weight on each chip.
+String _barChoiceTag(_BarChoice choice) => switch (choice) {
+  _BarChoice.olympic => 'OLYMPIC',
+  _BarChoice.womens => "WOMEN'S",
+  _BarChoice.ez => 'EZ',
+  _BarChoice.custom => 'CUSTOM',
+};
+
 /// A plate instance on the reverse-mode bar. The id keys the widget so only
 /// newly added plates animate in and equal weights stay distinguishable.
 class _LoadedPlate {
@@ -57,6 +90,7 @@ class _PlateCalculatorSheetState extends State<PlateCalculatorSheet> {
   late final TextEditingController _targetCtrl;
   late final TextEditingController _barCtrl;
   _CalcMode _mode = _CalcMode.target;
+  _BarChoice _barChoice = _BarChoice.olympic;
 
   /// Reverse-mode stack: plates loaded per side, kept sorted descending.
   final List<_LoadedPlate> _stack = [];
@@ -92,6 +126,16 @@ class _PlateCalculatorSheetState extends State<PlateCalculatorSheet> {
     final cleaned = raw.trim().replaceAll(',', '.');
     if (cleaned.isEmpty) return null;
     return double.tryParse(cleaned);
+  }
+
+  /// The single source of truth for the bar weight, in display units. BOTH
+  /// modes read this so they can never disagree. Custom falls back to the unit
+  /// default when empty/unparseable — forgiving, as the old free-text field was.
+  double _effectiveBarDisplay(WeightUnit unit) {
+    if (_barChoice == _BarChoice.custom) {
+      return _parse(_barCtrl.text) ?? defaultBarFor(unit);
+    }
+    return _presetBarValueFor(_barChoice, unit) ?? defaultBarFor(unit);
   }
 
   void _addPlate(double plate) {
@@ -208,7 +252,7 @@ class _PlateCalculatorSheetState extends State<PlateCalculatorSheet> {
   List<Widget> _buildTargetMode(WeightUnit unit) {
     final plateSet = plateSetFor(unit);
     final target = _parse(_targetCtrl.text);
-    final bar = _parse(_barCtrl.text) ?? defaultBarFor(unit);
+    final bar = _effectiveBarDisplay(unit);
     final plates = target == null
         ? const <double>[]
         : PlateCalculator.platesPerSide(target, barKg: bar, plates: plateSet);
@@ -217,26 +261,19 @@ class _PlateCalculatorSheetState extends State<PlateCalculatorSheet> {
     final perSideTotal = plates.fold<double>(0, (sum, plate) => sum + plate);
 
     return [
-      Row(
-        children: [
-          Expanded(
-            child: _NumberField(
-              label: 'TARGET',
-              suffix: unit.label,
-              controller: _targetCtrl,
-              onChanged: (_) => setState(() {}),
-            ),
-          ),
-          const SizedBox(width: kSpace3),
-          Expanded(
-            child: _NumberField(
-              label: 'BAR',
-              suffix: unit.label,
-              controller: _barCtrl,
-              onChanged: (_) => setState(() {}),
-            ),
-          ),
-        ],
+      _NumberField(
+        label: 'TARGET',
+        suffix: unit.label,
+        controller: _targetCtrl,
+        onChanged: (_) => setState(() {}),
+      ),
+      const SizedBox(height: kSpace3),
+      _BarSelector(
+        selected: _barChoice,
+        unit: unit,
+        customController: _barCtrl,
+        onSelect: (choice) => setState(() => _barChoice = choice),
+        onCustomChanged: (_) => setState(() {}),
       ),
       const SizedBox(height: kSpace4),
       if (plates.isNotEmpty)
@@ -279,7 +316,7 @@ class _PlateCalculatorSheetState extends State<PlateCalculatorSheet> {
 
   List<Widget> _buildPlatesMode(WeightUnit unit, {required bool reduceMotion}) {
     final plateSet = plateSetFor(unit);
-    final bar = _parse(_barCtrl.text) ?? defaultBarFor(unit);
+    final bar = _effectiveBarDisplay(unit);
     // Plates animating off no longer count — the total updates on tap, not
     // when the pop-off animation finishes.
     final effective = [
@@ -289,61 +326,52 @@ class _PlateCalculatorSheetState extends State<PlateCalculatorSheet> {
     final total = PlateCalculator.totalWeight(effective, barKg: bar);
 
     return [
+      _BarSelector(
+        selected: _barChoice,
+        unit: unit,
+        customController: _barCtrl,
+        onSelect: (choice) => setState(() => _barChoice = choice),
+        onCustomChanged: (_) => setState(() {}),
+      ),
+      const SizedBox(height: kSpace4),
       Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
-            child: _NumberField(
-              label: 'BAR',
-              suffix: unit.label,
-              controller: _barCtrl,
-              onChanged: (_) => setState(() {}),
-            ),
-          ),
-          const SizedBox(width: kSpace3),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: effective.isNotEmpty
-                    ? PhosphorTap(
-                        onTap: () => setState(() {
-                          _stack.clear();
-                          _removingIds.clear();
-                        }),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: kSpace2,
-                            vertical: 2,
-                          ),
-                          child: Text(
-                            'CLEAR',
-                            style: AppFonts.shareTechMono(
-                              color: kMutedText,
-                              fontSize: 11,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
+            child: Text(
+              'TAP TO ADD · PER SIDE',
+              style: AppFonts.shareTechMono(
+                color: kMutedText,
+                fontSize: 10,
+                letterSpacing: 1.2,
               ),
             ),
           ),
+          if (effective.isNotEmpty)
+            PhosphorTap(
+              onTap: () => setState(() {
+                _stack.clear();
+                _removingIds.clear();
+              }),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: kSpace2,
+                  vertical: 2,
+                ),
+                child: Text(
+                  'CLEAR',
+                  style: AppFonts.shareTechMono(
+                    color: kMutedText,
+                    fontSize: 11,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+            ),
         ],
-      ),
-      const SizedBox(height: kSpace4),
-      Text(
-        'TAP TO ADD · PER SIDE',
-        style: AppFonts.shareTechMono(
-          color: kMutedText,
-          fontSize: 10,
-          letterSpacing: 1.2,
-        ),
       ),
       const SizedBox(height: kSpace2),
       Wrap(
+        key: const ValueKey('plate_chips'),
         spacing: kSpace2,
         runSpacing: kSpace2,
         children: [
@@ -577,6 +605,160 @@ class _NumberField extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Segmented bar picker: a one-tap row of standard bars (glyph + weight) plus a
+/// CUSTOM chip that reveals a free-entry field. Replaces the old free-text BAR
+/// field; the parent's [_BarChoice] selection is the single source of truth for
+/// the bar weight, shared across both calculator modes.
+class _BarSelector extends StatelessWidget {
+  const _BarSelector({
+    required this.selected,
+    required this.unit,
+    required this.customController,
+    required this.onSelect,
+    required this.onCustomChanged,
+  });
+
+  final _BarChoice selected;
+  final WeightUnit unit;
+  final TextEditingController customController;
+  final ValueChanged<_BarChoice> onSelect;
+  final ValueChanged<String> onCustomChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'BAR',
+          style: AppFonts.shareTechMono(
+            color: kMutedText,
+            fontSize: 10,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: kSpace2),
+        Row(
+          children: [
+            for (var i = 0; i < _BarChoice.values.length; i++) ...[
+              if (i > 0) const SizedBox(width: kSpace2),
+              Expanded(
+                child: _BarChip(
+                  key: ValueKey('bar_${_BarChoice.values[i].name}'),
+                  choice: _BarChoice.values[i],
+                  unit: unit,
+                  selected: _BarChoice.values[i] == selected,
+                  onTap: () => onSelect(_BarChoice.values[i]),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (selected == _BarChoice.custom) ...[
+          const SizedBox(height: kSpace3),
+          KeyedSubtree(
+            key: const ValueKey('custom_bar_field'),
+            child: _NumberField(
+              label: 'CUSTOM BAR',
+              suffix: unit.label,
+              controller: customController,
+              onChanged: onCustomChanged,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// One bar option: a small uppercase type tag over the weight (or a centered
+/// "CUSTOM"). The whole chip is a single semantic button so screen readers
+/// announce e.g. "Olympic bar, 20 kg, selected". Selected reads via border +
+/// text + faint fill + glow — never color-alpha alone.
+class _BarChip extends StatelessWidget {
+  const _BarChip({
+    super.key,
+    required this.choice,
+    required this.unit,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _BarChoice choice;
+  final WeightUnit unit;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isCustom = choice == _BarChoice.custom;
+    final value = _presetBarValueFor(choice, unit);
+    final a11y = isCustom
+        ? 'Custom bar'
+        : '${_barChoiceName(choice)} bar, ${fmtNum(value!)} ${unit.label}';
+
+    final accent = selected ? kNeon : kMutedText;
+    final numberColor = selected ? kNeon : kText;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: a11y,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: PhosphorTap(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 46),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? kNeon.withValues(alpha: 0.12) : Colors.transparent,
+            border: Border.all(
+              color: selected ? kNeon : kBorder,
+              width: selected ? 1.2 : 1,
+            ),
+            borderRadius: BorderRadius.circular(4),
+            boxShadow: selected ? neonGlow(opacity: 0.18, blur: 10) : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: isCustom
+                ? [
+                    Text(
+                      'CUSTOM',
+                      style: AppFonts.shareTechMono(
+                        color: numberColor,
+                        fontSize: 12,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ]
+                : [
+                    Text(
+                      _barChoiceTag(choice),
+                      style: AppFonts.shareTechMono(
+                        color: accent,
+                        fontSize: 9,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      fmtNum(value!),
+                      style: AppFonts.shareTechMono(
+                        color: numberColor,
+                        fontSize: 17,
+                      ),
+                    ),
+                  ],
+          ),
+        ),
+      ),
     );
   }
 }

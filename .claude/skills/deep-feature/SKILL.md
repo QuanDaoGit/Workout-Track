@@ -34,7 +34,7 @@ from the session list, skip it with a note, never block on it.
 | Task signal | Capability → current best skill |
 |---|---|
 | Vague/new feature, unclear requirements | Brainstorming → `superpowers:brainstorming` (fires before everything else) |
-| UI / visual / screen work | Design critique → `design:design-critique`; UI/UX reference → `ui-ux-pro-max` (Flutter stack); Accessibility → `design:accessibility-review`; In-app copy → `design:ux-copy` |
+| UI / visual / motion / copy / screen work | App design language → `ironbit-design` — the **single** owner of all UI/UX here (visual, layout, motion/transitions, micro-interactions, typography, icons, in-app copy, accessibility, and design critique). It supersedes the generic `ui-ux-pro-max` / `design:*` skills; do not also route to those. |
 | Bug fix / unexpected behavior | Root-cause discipline → `superpowers:systematic-debugging` |
 | Implementation phase | TDD → `superpowers:test-driven-development`; Done-claims → `superpowers:verification-before-completion` |
 | Stuck / second implementation opinion | `codex:rescue` |
@@ -43,7 +43,10 @@ Known-incompatible with this app/environment (do not route to these; reasons che
 `uxaudit` (needs a browser-drivable running app; Flutter web preview cannot render/screenshot
 here), `mobile-observability` (pre-launch, no telemetry backend), `brand-voice` / `marketing:*`
 (they serve the `marketing/` folder, not app code), `figma:*` (no Figma sources in this repo),
-`huggingface:*` (no ML).
+`huggingface:*` (no ML). **Superseded for this app:** the generic UI/UX skills — `ui-ux-pro-max` and
+`design:design-critique` / `ux-copy` / `accessibility-review` / `design-system` — are replaced by
+`ironbit-design`; they emit catalog styles/palettes/components that fight the locked pixel-arcade
+language. Route UI/UX work to `ironbit-design` only.
 
 *Artifact: one line per selected skill, or "none apply" + reason.*
 
@@ -111,10 +114,12 @@ foreground via the codex plugin (`/codex:adversarial-review` flow). Stable rules
    automatic gate may be weaker than it looks on this machine).
 4. Update the affected docs (`docs/stats-mechanics.md`, `docs/PRD.md`) in the same change —
    reconcile against code before writing, per `docs/CLAUDE.md`.
-5. **Reflect:** after the final review verdict, distill any finding that is a *generalizable*
-   failure mode (not feature-specific) into `.claude/skills/deep-feature/learnings.md` —
-   update an existing category over adding a near-duplicate, and respect that file's line cap.
-   Feature-specific findings stay in the plan doc as before.
+5. **Reflect:** after the final review verdict, distill any *generalizable* failure mode (not
+   feature-specific) into the right learnings file — engineering/mechanics findings →
+   `.claude/skills/deep-feature/learnings.md`; **UI/UX/motion/copy findings →
+   `.claude/skills/ironbit-design/learnings.md`** (through the `ironbit-design` skill). Update an
+   existing category over a near-duplicate, and respect each file's line cap. Feature-specific
+   findings stay in the plan doc as before.
 
 *Artifacts: approved plan; analyze/test output; review verdict; learnings.md updated or
 "no generalizable findings" noted.*

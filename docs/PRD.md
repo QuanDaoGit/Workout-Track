@@ -30,15 +30,32 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 ## Shipped Features
 
 ### Workout logging
-- [x] Start Workout: a returning user opens straight onto their frequency-ranked "usual" loadout
-      (one tap to START), with the muscle-target step collapsed behind a Focus affordance and
-      card-level Replace (swap a lift for ~4 alternatives) demoting the full curated picker to a
-      "See All" escape. A new user — or one below the history threshold — gets the curated
-      chip-first picker (multi-select with favorites). Duration set via scroll picker.
+- [x] Start Workout: muscle-target chips drive the loadout — each selected target adds two default
+      exercises (your top-2 history for it, else curated) and deselecting cleanly removes them; a
+      returning user opens with the last session's targets pre-selected (one-tap START). Card-level
+      Replace swaps a lift for ~4 same-muscle alternatives; the full curated picker hides behind
+      "ADD EXERCISE". Program days show the prescribed lifts with Replace (ephemeral, sets×reps
+      preserved across a force-kill) and no chips. Duration set via scroll picker.
+- [x] Optional **warm-up sets**: a demoted warm-up sub-section in the exercise screen logs
+      ramp-up sets — one-tap **LOG IT** from the advisory warm-up suggestion, or a manual
+      **+ WARM-UP SET**. Warm-up sets are stored apart from working sets and feed **no**
+      volume/stat/XP/overload — they only mark that the user warmed up, which earns a small
+      once-per-day **gem** bonus (anchored to the completed real workout, revealed calmly on the
+      summary, capped per calendar day via an idempotent gem-ledger entry so it can't be farmed).
+      Integrity comes from logging an *actual* set (an observable act), not a self-reported toggle;
+      skipping is always silent (no nag). A separate optional **mobility guide** (RAMP light-cardio
+      raise + muscle-tailored dynamic drills) is reachable from Start as unrewarded reference.
 - [x] Active session: live timer, per-exercise status, rest timer. Each logged set checkpoints
       to storage (crash-safe), and a 30-min inactivity window offers an idle auto-save reveal
       (save & finish / keep training / discard) — on the active page or on the next app open.
-- [x] Per-exercise set logging (weight + reps).
+- [x] Per-exercise set logging (weight + reps). A single advisory **warm-up suggestion** sits above
+      the set table — one non-adjustable, never-logged prep set whose load is equipment-aware
+      (barbell bar+plate-pairs / dumbbell-kettlebell steps / cable-machine stack pins) and derived
+      from the lift's working weight, always sanitized to a settable number; absent for bodyweight
+      and when no working weight is known. A plate calculator (pre-fillable from the warm-up or any
+      set's weight) is shown only for plate-loaded lifts (barbell / E-Z curl bar), not stacks,
+      dumbbells, or bodyweight; inside it the bar weight is a one-tap preset selector
+      (Olympic / Women's / EZ) with a Custom fallback, not a typed field.
 - [x] Post-workout summary: XP awards, stat deltas, calorie breakdown, save to local storage.
 - [x] Workout history (list + calendar) and per-exercise detail.
 
@@ -93,6 +110,12 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 - [x] Programs (`ProgramService`) — structured workout programs (PPL, Full Body, Upper/Lower).
 - [x] Onboarding — cinematic sequence: cold open → problem → solution → calibration quiz →
       avatar → name → class reveal → rank assessed → start gate.
+- [x] Companion mascot **BIT** — an in-world pixel "drone core" that is the system's faceless voice
+      through onboarding and **embodies** at the start gate, greeting the user by name for the first
+      time ("What should we do first, {name}?"). Subordinate to the user-hero (never on the identity
+      card); see `lib/widgets/companion/`. Address register: name (intimate) / "warrior" (ceremony) /
+      "recruit" (pre-embodiment), with "warrior" as the fallback for an unusable name. The interview
+      voice + in-app presence are planned follow-ups.
 
 ---
 

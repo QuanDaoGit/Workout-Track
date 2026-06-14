@@ -40,7 +40,7 @@ Built via `/deep-feature`; Codex reviewed the design → REVISE (6 findings, all
   via the streak/history affordance) and `WorkoutLibraryPage` (→ Labs "Training Library")
   ([workout_page.dart](../../../lib/pages/workout_page.dart)).
 - **Quests tab dropped**; reached by push from Home.
-- New [start_training_dialog.dart](../../../lib/widgets/start_training_dialog.dart).
+- A front "Start training?" confirm on the nav tap (later removed in Phase 2 — see below).
 
 ## Deferred to per-area phases (NOT in the base)
 Character-in-room **scene Home** (equipped cosmetics, furniture); native integration of history into
@@ -53,6 +53,29 @@ Per the user, **pulse replaces the dock**. Codex rated dock-removal high-risk: o
 pages the pulse is not visible, so the idle/expired safety net is the sole backstop against a stranded
 session there. Accepted with that backstop; a thin "session live · resume" AppBar chip on pushed pages
 is the cheap hedge if it proves a problem in use.
+
+## Phase 2 — Train-as-commit (in-shell selection), shipped
+The start flow is unified on the Train button. Exercise selection is now an **in-shell surface**
+(nav stays visible) rather than a pushed full-screen route, and the in-progress pick **persists as a
+draft across tab navigation** (in-memory; survives tab-nav, not app kill).
+- New shell-owned [WorkoutDraftController](../../../lib/services/workout_draft_controller.dart) +
+  `WorkoutDraftSeed`; `RootPage.openWorkoutDraft(seed)` is the **single entry** (center Train tap +
+  onboarding finale route through it).
+- [StartWorkoutPage](../../../lib/pages/Workout%20session/start_workout.dart) gains an `embedded`
+  mode (no own Scaffold/selection bar; reports validity to the controller; registers its existing
+  confirm+launch as the committer).
+- **Train gains two more states** (idle → **armedLocked** (draft, 0 lifts) → **armedReady** (valid
+  draft, breathing glow lure) → live). Precedence: a live/paused/expired session always wins and
+  clears the draft. Tapping armed Train on the selection surface commits via the existing
+  **"START THIS WORKOUT?"** confirm — so the flow now has **one** confirm at the irreversible launch
+  (the Phase-1 front "Start training?" dialog was removed). A non-motion "READY · TAP TRAIN TO START"
+  / "PICK AT LEAST ONE EXERCISE" hint + Semantics labels keep it accessible (Codex #5).
+- Codex design review → REVISE (5 findings, all folded in: draft lifecycle, session precedence,
+  single entry API, synchronous validity at commit, a11y affordance).
+- **Remaining full-screen entries (documented exception):** the Home mission/program-day start and
+  "repeat workout" still push the standalone (non-embedded) `StartWorkoutPage`. They don't touch the
+  shell draft (no desync) and preserve Home's pre/post XP-gain capture; migrating them to in-shell is
+  a follow-up.
 
 ## Out of scope
 No mechanics/persistence changes. Adventure / Quests / Shop / Guild internals untouched — only entry

@@ -75,6 +75,33 @@ class GemService {
     return amount;
   }
 
+  /// Awards the general warm-up bonus. Idempotent by **day** — the id is
+  /// `warmup:<dayKey>`, so at most one warm-up reward lands per calendar day no
+  /// matter how many sessions are saved (the daily cap is the dedup itself).
+  Future<int> awardWarmupGems({
+    required String dayKey,
+    required int amount,
+    required String label,
+    DateTime? now,
+  }) async {
+    if (amount <= 0) return 0;
+    final id = 'warmup:$dayKey';
+    final entries = await ledger();
+    if (entries.any((entry) => entry.id == id)) return 0;
+    await _save([
+      ...entries,
+      GemLedgerEntry(
+        id: id,
+        amount: amount,
+        sourceKind: GemLedgerSourceKind.warmup,
+        sourceId: dayKey,
+        label: label,
+        createdAt: now ?? DateTime.now(),
+      ),
+    ]);
+    return amount;
+  }
+
   Future<int> awardDemoGems({
     required String packId,
     required int amount,

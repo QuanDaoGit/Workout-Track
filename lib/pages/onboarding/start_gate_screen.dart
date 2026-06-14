@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../data/companion_address.dart';
 import '../../models/avatar_spec.dart';
 import '../../models/character.dart';
 import '../../models/character_class.dart';
@@ -15,6 +16,8 @@ import '../../widgets/pixel_button.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/strobe_flash.dart';
 import '../../widgets/avatar/ironbit_avatar.dart';
+import '../../widgets/companion/bit_speech_bubble.dart';
+import '../../widgets/companion/bit_sprite.dart';
 import '../../widgets/typewriter_text.dart';
 import '../root_page.dart';
 
@@ -154,6 +157,11 @@ class _StartGateScreenState extends State<StartGateScreen> {
     final character = widget.character;
     final mq = MediaQuery.of(context);
     final reduceMotion = mq.disableAnimations || mq.accessibleNavigation;
+    final addressed = bitAddress(
+      BitRegister.name,
+      name: character.characterName,
+    );
+    final bitPrompt = 'What should we do first, $addressed?';
 
     return PopScope(
       canPop: false,
@@ -169,41 +177,46 @@ class _StartGateScreenState extends State<StartGateScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildCharacterCard(character, reduceMotion),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 32),
+                    // BIT embodies here — powers on below the character card and
+                    // delivers its first name-drop. Gated on the existing reveal
+                    // flags (_promptTyping / _subtextVisible) so it shows on the
+                    // timed, tap-skip, and reduce-motion paths alike; StrobeFlash
+                    // is the one-shot "online" beat (no new timers).
                     SizedBox(
-                      height: 22,
+                      height: 80,
                       child: !_promptTyping
                           ? const SizedBox.shrink()
-                          : (reduceMotion
-                                ? const Text(
-                                    'READY TO TRAIN?',
-                                    style: TextStyle(
-                                      fontFamily: 'PressStart2P',
-                                      fontSize: 16,
-                                      color: kNeon,
+                          : StrobeFlash(
+                              trigger: _promptTyping,
+                              color: kNeon,
+                              opacity: 0.2,
+                              toggles: 1,
+                              toggleMs: 80,
+                              borderRadius: BorderRadius.circular(kCardRadius),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const BitSprite(
+                                    mood: BitMood.neutral,
+                                    size: 56,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: AnimatedOpacity(
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      opacity: _subtextVisible ? 1.0 : 0.0,
+                                      child: BitSpeechBubble(
+                                        text: bitPrompt,
+                                        emphasis: addressed,
+                                      ),
                                     ),
-                                  )
-                                : const TypewriterText(
-                                    'READY TO TRAIN?',
-                                    charMs: 30,
-                                    style: TextStyle(
-                                      fontFamily: 'PressStart2P',
-                                      fontSize: 16,
-                                      color: kNeon,
-                                    ),
-                                  )),
-                    ),
-                    const SizedBox(height: 8),
-                    AnimatedOpacity(
-                      duration: const Duration(milliseconds: 200),
-                      opacity: _subtextVisible ? 1.0 : 0.0,
-                      child: Text(
-                        'first quest is waiting either way.',
-                        style: AppFonts.shareTechMono(
-                          color: kMutedText,
-                          fontSize: 13,
-                        ),
-                      ),
+                                  ),
+                                ],
+                              ),
+                            ),
                     ),
                     const Spacer(),
                     Semantics(

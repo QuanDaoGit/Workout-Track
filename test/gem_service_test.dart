@@ -37,6 +37,36 @@ void main() {
     expect(await service.ledger(), hasLength(1));
   });
 
+  test('warm-up awards are idempotent by day key (one per calendar day)', () async {
+    final service = GemService();
+
+    final first = await service.awardWarmupGems(
+      dayKey: '2026-06-13',
+      amount: 10,
+      label: 'Warm-up bonus',
+      now: DateTime(2026, 6, 13, 8),
+    );
+    final secondSameDay = await service.awardWarmupGems(
+      dayKey: '2026-06-13',
+      amount: 10,
+      label: 'Warm-up bonus',
+      now: DateTime(2026, 6, 13, 20),
+    );
+    final nextDay = await service.awardWarmupGems(
+      dayKey: '2026-06-14',
+      amount: 10,
+      label: 'Warm-up bonus',
+      now: DateTime(2026, 6, 14, 8),
+    );
+
+    expect(first, 10);
+    expect(secondSameDay, 0);
+    expect(nextDay, 10);
+    expect(await service.balance(), 20);
+    final ledger = await service.ledger();
+    expect(ledger.first.sourceKind, GemLedgerSourceKind.warmup);
+  });
+
   test(
     'spending reduces balance and records a negative ledger entry',
     () async {

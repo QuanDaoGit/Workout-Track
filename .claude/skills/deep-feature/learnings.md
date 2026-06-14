@@ -1,74 +1,66 @@
 # Deep-feature learnings — recurring failure modes from Codex reviews
 
-Maintenance rules: **generalize, never transcribe** — an entry is a reusable category, not a
-feature-specific finding (those stay in the feature's plan doc). Update an existing category
-instead of adding a near-duplicate. Cap ~40 content lines below this header; when full, prune
-the category that has fired least recently.
+Maintenance: **generalize, never transcribe** (feature-specific findings stay in the plan doc).
+Update an existing category over adding a near-duplicate. Cap ~40 content lines below this header;
+when full, prune the least-recently-fired category.
 
 ### Fire-and-forget write races
-**Rule:** Any unawaited write that can land after a later read-modify-write on the same
-SharedPreferences key resurrects or clobbers state. Track in-flight writes and drain/await them
-on every exit path before the final write.
-*Seen: idle checkpoint racing `saveSession` (2026-06, idle auto-save diff review).*
+**Rule:** An unawaited write that can land after a later read-modify-write on the same prefs key
+resurrects/clobbers state — track in-flight writes and drain them on every exit path before the final
+write. *Seen: idle checkpoint racing `saveSession` (2026-06).*
 
 ### Dual-path divergence
-**Rule:** When two+ code paths handle the same event OR seed the same state field (foreground vs
-cold-reopen; manual vs auto; resume vs repeat vs history-default), pin edge cases to one written
-rule and give shared state an explicit, once-only precedence plus a "user touched it → never
-auto-reseed" guard. Test every path.
-*Seen: zero-set idle prompted on foreground but silent on reopen; exercise-selection default
-loadout could clobber a resumed/repeat selection without precedence (2026-06).*
+**Rule:** When 2+ paths handle one event or seed one field (foreground vs cold-reopen, manual vs auto,
+resume vs repeat vs history), pin a once-only precedence + a "user touched it → never auto-reseed" guard,
+and test every path. *Seen: zero-set idle reveal; selection clobbering a resumed loadout (2026-06).*
 
 ### Legacy-data cliffs
-**Rule:** A new nullable field used in a threshold or comparison must define the null (legacy)
-behavior explicitly — default to "never triggers", and add a legacy-fixture test.
-*Seen: null `lastActivityAt` would have instantly timed out every pre-existing session (2026-06).*
+**Rule:** A new nullable field used in a threshold/comparison must define the null (legacy) case
+explicitly — default to "never triggers" — with a legacy-fixture test. *Seen: null `lastActivityAt` would
+time out every old session; warm-up `warmup` key → false (2026-06).*
 
 ### Settlement/presentation coupling
-**Rule:** When a reward resolves on a *later* surface (pending-reveal patterns), settle the data
-(award, persist, mark unviewed) independently of showing the ceremony — and make the next earn
-event auto-settle first. A blocked/unseen ceremony must never block or burn the next earn.
-*Seen: Adventure pending expedition would have silently cost a dispatch day (2026-06).*
+**Rule:** When a reward resolves on a later surface, settle the data (award, persist, mark unviewed)
+independently of the ceremony and auto-settle on the next earn — a blocked/unseen ceremony must never
+block or burn the next earn. *Seen: Adventure pending expedition (2026-06).*
 
 ### Asset-dependent core surfaces
-**Rule:** A core surface that newly depends on bundled images needs per-image errorBuilder
-fallbacks AND a manifest test that `rootBundle.load`s every registry path — pubspec misses and
-renames fail in CI, not on device. Flutter asset-dir declarations are **non-recursive**: a new
-`assets/x/sub/` won't bundle just because `assets/x/` is listed — declare each subfolder.
-*Seen: Adventure diorama/emblems on Home; v3 body/ + body/frames/ subfolders (2026-06).*
+**Rule:** A surface newly depending on bundled images needs per-image errorBuilder fallbacks + a manifest
+test that loads every registry path; Flutter asset dirs are non-recursive — declare each subfolder.
+*Seen: Adventure diorama/emblems; v3 body/ subfolders (2026-06).*
 
 ### Farmable reward surfaces
-**Rule:** Any new reward path needs an explicit anti-farm bound consistent with existing bars
-(the 1-set Finish bar, rolling reward anchors, decaying high-water floors). Ask "what is the
-cheapest action that triggers this reward repeatedly?"
-*Seen: stat-engine intensity rework; body-metrics weekly reward anchor (2026).*
+**Rule:** Every new reward needs an anti-farm bound; ask the cheapest action that repeats it.
+Idempotency-by-entity-id is NOT a rate cap — for once-per-period rewards key the ledger id on the
+*period* so the dedup is the cap. Reward an **observable artifact** (a logged set), not a bare
+self-report toggle. A variant many aggregators read goes in its **own field**, never a flag
+filtered at every consumer (a missed reader silently inflates). *Seen: stat intensity; body-metrics
+anchor; warm-up `warmup:<day>` then re-anchored to `ExerciseLog.warmupSets` (2026).*
 
 ### Decoupled id sources
-**Rule:** When an id's uniqueness silently rode on a correlate you're removing (session id,
-per-day timestamp, boot id), it collides once decoupled — and a ledger keyed on it swallows the
-duplicate. Re-base on an independent source (`microsecondsSinceEpoch` + `Random().nextInt(0x7fffffff)`,
-never `1<<32`); test the worst case (same fixed clock). *Seen: Adventure v2 manual dispatch (2026-06).*
+**Rule:** When an id's uniqueness rode on a correlate you're removing (session id, per-day timestamp, boot
+id), it collides once decoupled and a ledger keyed on it swallows the dup — re-base on
+`microsecondsSinceEpoch + Random().nextInt(0x7fffffff)`; test the same-fixed-clock case. *Seen: Adventure v2 dispatch (2026-06).*
 
-### Advisory/derived numbers — bound to anchor, quantize to a settable value
-**Rule:** A computed value shown to the user (warm-up, target, suggested load) must (a) be validated
-against its own anchor and **suppressed when the relationship inverts** (a "warm-up" ≥ the work set is
-not a warm-up), and (b) be **quantized to a real actuatable value in the user's display unit** — never a
-raw % or kg round-trip that lands off-grid. Compute in the display unit; don't assume one equipment/
-context's constant (bar weight, plate size) applies to all. *Seen: warm-up suggestion — suppress unless
-< work, EZ bar ≠ Olympic bar, 55% rounded to a real stack pin (2026-06).*
+### Advisory/derived numbers
+**Rule:** A number shown to the user must (a) be validated against its anchor and suppressed when the
+relationship inverts (a warm-up ≥ the work set isn't one), and (b) be quantized to a real settable value
+in the display unit — never a raw % or kg round-trip; don't assume one context's constant (bar weight,
+plate size) fits all. *Seen: warm-up suggestion (2026-06).*
 
 ### Entity-keyed side-state lifecycle
-**Rule:** Ephemeral state in a sibling store keyed by an entity id (per-session swaps, per-id flags)
-leaks or mis-applies unless cleared **wherever the entity row is removed/finalized in the storage
-layer** — every terminal path, never at UI buttons. Bonus: make a heavily-mutated field a read-only
-projection (no setter) so stray writers fail `analyze`. *Seen: ongoing program-swap store cleared in
-save/delete/abandon; `_selectedExerciseIds` as a getter over `_slots` (selection v2, 2026-06).*
+**Rule:** Ephemeral state in a sibling store keyed by an entity id leaks/mis-applies unless cleared
+wherever the entity row is removed/finalized in the storage layer — every terminal path, never at UI
+buttons. Bonus: make a heavily-mutated field a read-only projection so stray writers fail `analyze`.
+*Seen: program-swap store; `_selectedExerciseIds` getter (selection v2, 2026-06).*
 
 ### Navigation restructure: positional + always-present assumptions
 **Rule:** Remapping nav slots, converting tabs→pushed routes, or removing a persistent shell surface
-silently breaks hidden contracts: positional index callers misroute (migrate to a **semantic
-destination** API before remapping), reload-on-tab-switch stops (re-run the affected reloads **on pop**),
-and modal gating that assumed the shell route is current gets starved (re-arm pending reveals on pop).
-Back any removed always-visible affordance with a safety net. *Seen: 4-places+center-Train shell —
-index→AppDestination, reload + idle/expired reveal re-fired on pop in `_pushFaded`, dock→pulse + idle
-backstop (2026-06).*
+breaks hidden contracts: positional index callers misroute (migrate to a semantic destination API first),
+reload-on-tab-switch stops (re-run reloads on pop), and modal gating assuming the shell route is current
+gets starved (re-arm pending reveals on pop). Back any removed always-visible affordance with a safety
+net. A **new pre-start/draft state** beside an existing entity must be gated by the authoritative
+machine (a live session wins and clears the draft), funnel all launchers through **one entry API**
+(pushed vs embedded must not diverge), and expose validity as the single synchronous commit gate.
+*Seen: 4-places+center-Train shell (index→AppDestination, reloads/reveals re-fired on pop); in-shell
+selection draft gated by the session machine via one openWorkoutDraft entry (2026-06).*

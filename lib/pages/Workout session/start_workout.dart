@@ -12,6 +12,7 @@ import '../../services/exercise_catalog_service.dart';
 import '../../services/favorite_service.dart';
 import '../../services/program_service.dart';
 import '../../services/workout_defaults_service.dart';
+import '../../services/workout_draft_controller.dart';
 import '../../services/workout_storage_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
@@ -23,8 +24,10 @@ import '../../widgets/exercise_card.dart';
 import '../../widgets/exercise_replace_sheet.dart';
 import '../../widgets/level_badge.dart';
 import '../../widgets/motion/arcade_text_field.dart';
+import '../../widgets/motion/phosphor_tap.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/pixel_loader.dart';
+import '../../widgets/warmup_sheet.dart';
 import 'active_workout.dart';
 
 /// Builds a program-mode [StartWorkoutPage] for [day]: the day's target groups
@@ -38,6 +41,23 @@ StartWorkoutPage programDayStarter(ProgramDay day) {
       ? day.suggestedExerciseIds
       : curatedExerciseIdsForMuscleGroups(targetGroups);
   return StartWorkoutPage(
+    initialMuscleGroups: targetGroups,
+    programCuratedExerciseIds: curated,
+    programPrescriptions: day.prescription,
+    programDayLabel: day.label,
+    programFocusSummary: programDayFocusSummary(day),
+    isProgramWorkout: true,
+  );
+}
+
+/// The [WorkoutDraftSeed] equivalent of [programDayStarter] — used by the in-shell
+/// selection entry so program-day starts flow through the one draft API.
+WorkoutDraftSeed workoutDraftSeedForProgramDay(ProgramDay day) {
+  final targetGroups = programDayTargetMuscleGroups(day);
+  final curated = day.suggestedExerciseIds.isNotEmpty
+      ? day.suggestedExerciseIds
+      : curatedExerciseIdsForMuscleGroups(targetGroups);
+  return WorkoutDraftSeed(
     initialMuscleGroups: targetGroups,
     programCuratedExerciseIds: curated,
     programPrescriptions: day.prescription,
@@ -106,7 +126,21 @@ class StartWorkoutPage extends StatefulWidget {
     this.advanceProgramRestDayOnCompletion = false,
     this.initialSelectedExerciseIds,
     this.catalogOverride,
+    this.embedded = false,
+    this.draftController,
+    this.onCommitted,
   });
+
+  /// When true the page renders as an in-shell surface (no Scaffold/AppBar and
+  /// no own selection bar — the shell's persistent nav + center Train drive the
+  /// commit). It reports loadout validity to [draftController] and registers its
+  /// confirm+launch as the draft committer.
+  final bool embedded;
+  final WorkoutDraftController? draftController;
+
+  /// Fired right after a live session is launched, so the shell can drop the
+  /// draft and leave selection mode.
+  final VoidCallback? onCommitted;
 
   final String? initialMuscleGroup;
   final List<String>? initialMuscleGroups;
@@ -144,7 +178,12 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   Future<List<Exercise>>? _exerciseCatalogFuture;
   List<Exercise>? _catalog;
   List<String> _selectedMuscleGroups = const [];
-  Set<String> _selectedExerciseIds = {};
+
+  /// The loadout as provenance-tagged slots (v2 chip-owned model).
+  /// [_selectedExerciseIds] is a read-only projection so no writer can bypass
+  /// the slot mutation API.
+  final List<_LoadoutSlot> _slots = [];
+
   Set<String> _favoriteExerciseIds = {};
   String _searchQuery = '';
   String? _levelFilter;
@@ -153,18 +192,23 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   int _durationMinutes = WorkoutDefaultsService.defaultDurationMinutes;
   int _restSeconds = 90;
 
-  /// Manual-path UI state. The muscle target step collapses behind a "Focus"
-  /// affordance once a default loadout exists; the full curated picker hides
-  /// behind "ADD EXERCISE" (See All). `_userTouchedSelection` guards the
-  /// history default from re-clobbering a manual edit (Codex plan-review F2).
-  bool _targetExpanded = false;
+  /// The full curated picker hides behind "ADD EXERCISE" (See All).
   bool _seeAllExpanded = false;
-  bool _userTouchedSelection = false;
   _SeedSource _seedSource = _SeedSource.none;
+  bool _entrySeeded = false;
 
-  /// Minimum live exercises a history seed must yield to become the front-door
-  /// default (Codex plan-review F3 quality gate). Below this → chip-first.
-  static const int _minSeedSize = 3;
+  /// Program-day in-session state: a live (re-keyed) prescription map, and the
+  /// cumulative ephemeral swaps (effectiveOriginalId → replacementId) handed to
+  /// the live session so a force-kill resume can re-pair sets×reps.
+  late final Map<String, SetRepScheme> _prescriptions = Map.of(
+    widget.programPrescriptions,
+  );
+  final Map<String, String> _sessionSwaps = {};
+
+  /// Read-only projection of the loadout. Mutating the loadout goes through the
+  /// slot API ([_selectChip]/[_deselectChip]/[_addUser]/[_removeSlot]/
+  /// [_replaceSlot]/[_seedImport]) — there is deliberately no setter.
+  Set<String> get _selectedExerciseIds => {for (final slot in _slots) slot.id};
 
   bool get _programMode => widget.isProgramWorkout;
 
@@ -181,80 +225,169 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       widget.initialMuscleGroups ??
           [if (widget.initialMuscleGroup != null) widget.initialMuscleGroup!],
     );
-    // A preset target (program day or repeat-workout) keeps the chips visible;
-    // a plain manual quick-start tries the front-door default first.
-    _targetExpanded = _selectedMuscleGroups.isNotEmpty;
     _loadDefaults();
     _loadFavoriteExerciseIds();
+    if (widget.embedded) {
+      widget.draftController?.registerCommitter(_startSelectedWorkout);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _initSeed());
   }
 
-  /// Resolves the catalog once, then applies pre-selection by precedence:
-  /// repeat/resume ids win first (handled here, target or not), then program /
-  /// preset-target seeding, else a plain manual start gets the front-door
-  /// "usual" default.
+  /// Resolves the catalog once, then seeds the loadout by precedence:
+  /// repeat import (seed-owned, no chips) → program prescribed lifts (seed-owned,
+  /// no chips) → manual entry (pre-select the last completed session's groups and
+  /// add each group's 2 defaults). Runs once.
   Future<void> _initSeed() async {
     final catalog = await _safeExerciseCatalogFuture;
     if (!mounted) return;
     setState(() => _catalog = catalog);
+    if (_entrySeeded) return;
+    _entrySeeded = true;
 
-    // Repeat-workout / resume ids win over any history default, independent of
-    // whether a muscle target was preset — handled in ONE place so a targetless
-    // caller still gets its loadout instead of an empty screen (diff-review #1).
-    if (!_programMode &&
-        widget.initialSelectedExerciseIds != null &&
-        !_initialSelectionConsumed) {
-      _initialSelectionConsumed = true;
-      final catalogIds = {for (final exercise in catalog) exercise.id};
+    final catalogIds = {for (final exercise in catalog) exercise.id};
+
+    // Repeat-workout import: seed-owned slots, chips NOT pre-selected, so a chip
+    // toggle can never delete the imported workout (Codex opinion F2).
+    if (!_programMode && widget.initialSelectedExerciseIds != null) {
       final valid = widget.initialSelectedExerciseIds!
           .where(catalogIds.contains)
           .toList();
       if (valid.isNotEmpty) {
-        setState(() {
-          _selectedExerciseIds = valid.toSet();
-          if (_selectedMuscleGroups.isEmpty) {
-            _selectedMuscleGroups = _groupsForIds(valid, catalog);
-            _targetExpanded = false;
-          }
-          _seedSource = _SeedSource.repeat;
-        });
+        _seedImport(valid);
+        setState(() => _seedSource = _SeedSource.repeat);
         return;
       }
     }
 
-    if (_programMode || _selectedMuscleGroups.isNotEmpty) {
-      await _refreshHistoryPreselection();
-    } else {
-      await _applyFrontDoorDefault(catalog);
+    // Program day: the prescribed lifts are the (seed-owned) loadout; no chips.
+    if (_programMode) {
+      final ids = (widget.programCuratedExerciseIds ?? const <String>[])
+          .where(catalogIds.contains)
+          .toList();
+      _seedImport(ids);
+      return;
+    }
+
+    // Manual: pre-select the last completed session's groups (else any preset),
+    // then add each group's 2 defaults — one-tap START for a returning user.
+    if (_selectedMuscleGroups.isEmpty) {
+      final last = await WorkoutStorageService().lastCompletedSession();
+      if (!mounted) return;
+      if (last != null) {
+        setState(() {
+          _selectedMuscleGroups = normalizeTargetMuscleGroups(
+            last.targetMuscleGroups,
+          );
+        });
+      }
+    }
+    for (final group in List<String>.from(_selectedMuscleGroups)) {
+      await _selectChip(group, catalog);
+      if (!mounted) return;
     }
   }
 
-  /// Plain manual quick-start: seed the screen with the user's frequency-ranked
-  /// "usual" lifts across all training. Accept only if ≥[_minSeedSize] live
-  /// exercises survive AND their muscle groups resolve (so START and the curated
-  /// See-All stay coherent); otherwise fall back to the chip-first flow.
-  Future<void> _applyFrontDoorDefault(List<Exercise> catalog) async {
-    if (_userTouchedSelection || _selectedExerciseIds.isNotEmpty) return;
-    final seed = await WorkoutStorageService().topExerciseIds(catalog, limit: 5);
-    if (!mounted || _userTouchedSelection || _selectedExerciseIds.isNotEmpty) {
-      return;
+  // ── Slot mutation API (the only writers of _slots) ────────────────────────
+
+  _LoadoutSlot? _slotFor(String id) {
+    for (final slot in _slots) {
+      if (slot.id == id) return slot;
     }
-    final groups = _groupsForIds(seed, catalog);
-    if (seed.length >= _minSeedSize && groups.isNotEmpty) {
-      setState(() {
-        _selectedExerciseIds = seed.toSet();
-        _selectedMuscleGroups = groups;
-        _seedSource = _SeedSource.usual;
-        _targetExpanded = false;
-        _seeAllExpanded = false;
-      });
-    } else {
-      setState(() {
-        _targetExpanded = true;
-        _seeAllExpanded = true;
-        _seedSource = _SeedSource.none;
-      });
-    }
+    return null;
+  }
+
+  /// The 2 defaults for a group: the user's top-2 history for it, else the
+  /// curated head.
+  Future<List<String>> _defaultIdsForGroup(
+    String group,
+    List<Exercise> catalog,
+  ) async {
+    final top = await WorkoutStorageService().topExerciseIdsForTargets(
+      [group],
+      catalog,
+      limit: 2,
+    );
+    if (top.isNotEmpty) return top;
+    return curatedExerciseIdsForMuscleGroups([group]).take(2).toList();
+  }
+
+  /// Add a group's 2 defaults as chip-owned (ref-counted). Bails if the group
+  /// was deselected while the history read was in flight.
+  Future<void> _selectChip(String group, List<Exercise> catalog) async {
+    final ids = await _defaultIdsForGroup(group, catalog);
+    if (!mounted || !_selectedMuscleGroups.contains(group)) return;
+    setState(() {
+      for (final id in ids) {
+        final existing = _slotFor(id);
+        if (existing != null) {
+          existing.chipOwners.add(group);
+        } else {
+          _slots.add(_LoadoutSlot(id: id, chipOwners: {group}));
+        }
+      }
+    });
+  }
+
+  /// Drop a group's ownership; a slot is removed only when no chip/user/seed
+  /// owner remains — a default shared with another selected group survives (F3).
+  void _deselectChip(String group) {
+    setState(() {
+      for (final slot in _slots) {
+        slot.chipOwners.remove(group);
+      }
+      _slots.removeWhere(
+        (slot) => slot.chipOwners.isEmpty && !slot.userOwned && !slot.seedOwned,
+      );
+    });
+  }
+
+  void _addUser(String id) {
+    setState(() {
+      final existing = _slotFor(id);
+      if (existing != null) {
+        existing.userOwned = true;
+      } else {
+        _slots.add(_LoadoutSlot(id: id, userOwned: true));
+      }
+    });
+  }
+
+  void _removeSlot(String id) {
+    setState(() => _slots.removeWhere((slot) => slot.id == id));
+  }
+
+  /// Swap a slot in place. If [newId] already occupies a slot, fold the old
+  /// slot's owners into it and drop the old one — slot ids stay unique so the
+  /// derived set never hides a duplicate (Codex plan-review F1).
+  void _replaceSlot(String oldId, String newId) {
+    setState(() {
+      if (oldId == newId) return;
+      final oldIndex = _slots.indexWhere((slot) => slot.id == oldId);
+      if (oldIndex < 0) return;
+      final old = _slots[oldIndex];
+      final existing = _slotFor(newId);
+      if (existing != null && !identical(existing, old)) {
+        existing.chipOwners.addAll(old.chipOwners);
+        existing.userOwned = existing.userOwned || old.userOwned;
+        existing.seedOwned = existing.seedOwned || old.seedOwned;
+        _slots.removeAt(oldIndex);
+      } else {
+        old.id = newId;
+      }
+    });
+  }
+
+  void _seedImport(List<String> ids) {
+    setState(() {
+      for (final id in ids) {
+        final existing = _slotFor(id);
+        if (existing != null) {
+          existing.seedOwned = true;
+        } else {
+          _slots.add(_LoadoutSlot(id: id, seedOwned: true));
+        }
+      }
+    });
   }
 
   /// Canonical muscle group for an exercise (primary-muscle bucket, else the
@@ -271,20 +404,9 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     return null;
   }
 
-  /// Deduped, normalized canonical groups implied by a set of exercise ids —
-  /// used to derive the target focus from a history-seeded loadout.
-  List<String> _groupsForIds(Iterable<String> ids, List<Exercise> catalog) {
-    final byId = {for (final exercise in catalog) exercise.id: exercise};
-    final groups = <String>[];
-    for (final id in ids) {
-      final group = _groupForExercise(byId[id]);
-      if (group != null) groups.add(group);
-    }
-    return normalizeTargetMuscleGroups(groups);
-  }
-
   @override
   void dispose() {
+    if (widget.embedded) widget.draftController?.registerCommitter(null);
     _searchController.dispose();
     super.dispose();
   }
@@ -307,95 +429,35 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   }
 
   void _toggleMuscleGroup(String muscleGroup) {
+    final wasSelected = _selectedMuscleGroups.contains(muscleGroup);
     setState(() {
       final selected = _selectedMuscleGroups.toSet();
-      if (selected.contains(muscleGroup)) {
+      if (wasSelected) {
         selected.remove(muscleGroup);
       } else {
         selected.add(muscleGroup);
       }
       _selectedMuscleGroups = normalizeTargetMuscleGroups(selected);
-      _selectedExerciseIds = {};
-      // A deliberate focus change re-seeds the loadout for the new target.
-      _userTouchedSelection = false;
     });
-    _refreshHistoryPreselection();
-  }
-
-  bool _initialSelectionConsumed = false;
-
-  Future<void> _refreshHistoryPreselection() async {
-    final targets = List<String>.from(_selectedMuscleGroups);
-    if (targets.isEmpty) {
-      if (mounted) setState(() => _selectedExerciseIds = {});
-      return;
-    }
-
-    final catalog = await _safeExerciseCatalogFuture;
-    if (mounted && _catalog == null) setState(() => _catalog = catalog);
-
-    // (Repeat/resume ids are applied once in _initSeed, ahead of this.)
-
-    // Program mode pre-selects today's full prescribed loadout (not a slice).
-    if (_programMode && widget.programCuratedExerciseIds != null) {
-      final ids = widget.programCuratedExerciseIds!;
-      if (!mounted || !_sameTargets(targets, _selectedMuscleGroups)) return;
-      setState(() => _selectedExerciseIds = ids.toSet());
-      return;
-    }
-
-    // Manual target: the frequency "usual" for this focus, else the curated
-    // starter head so a never-trained target still yields a non-empty default.
-    final topIds = await WorkoutStorageService().topExerciseIdsForTargets(
-      targets,
-      catalog,
-      limit: 5,
-    );
-    // Bail if the target changed OR the user edited the selection while this
-    // ranking was in flight — the history default must never clobber a manual
-    // edit (diff-review #2).
-    if (!mounted ||
-        !_sameTargets(targets, _selectedMuscleGroups) ||
-        _userTouchedSelection) {
-      return;
-    }
-    if (topIds.isNotEmpty) {
-      setState(() {
-        _selectedExerciseIds = topIds.toSet();
-        _seedSource = _SeedSource.target;
-      });
+    if (wasSelected) {
+      _deselectChip(muscleGroup);
     } else {
-      final starter = curatedExerciseIdsForMuscleGroups(targets).take(5).toList();
-      setState(() {
-        _selectedExerciseIds = starter.toSet();
-        _seedSource = starter.isEmpty ? _SeedSource.none : _SeedSource.curated;
-      });
+      final catalog = _catalog;
+      if (catalog != null) _selectChip(muscleGroup, catalog);
     }
   }
 
-  bool _sameTargets(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
-
+  /// See-All checkbox toggle: add as user-owned (survives chip deselect) or
+  /// remove the slot entirely.
   void _toggleSelectedExercise(String id) {
-    setState(() {
-      final next = {..._selectedExerciseIds};
-      if (next.contains(id)) {
-        next.remove(id);
-      } else {
-        next.add(id);
-      }
-      _selectedExerciseIds = next;
-      _userTouchedSelection = true;
-    });
+    if (_selectedExerciseIds.contains(id)) {
+      _removeSlot(id);
+    } else {
+      _addUser(id);
+    }
   }
 
-  /// Swap one loadout slot for an alternative (or open See All). Preserves the
-  /// slot's position by mapping the id in place across the ordered selection.
+  /// Swap one loadout slot for a same-muscle alternative (or open See All).
   Future<void> _replaceExercise(Exercise replaced) async {
     final catalog = _catalog ?? await _safeExerciseCatalogFuture;
     if (!mounted) return;
@@ -419,23 +481,26 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       return;
     }
     final replacement = result.replacement!;
-    setState(() {
-      _selectedExerciseIds = {
-        for (final id in _selectedExerciseIds)
-          if (id == replaced.id) replacement.id else id,
-      };
-      _userTouchedSelection = true;
-    });
+    _replaceSlot(replaced.id, replacement.id);
+    if (_programMode) _recordProgramSwap(replaced.id, replacement.id);
   }
 
-  void _removeExercise(String id) {
-    setState(() {
-      _selectedExerciseIds = {
-        for (final existing in _selectedExerciseIds)
-          if (existing != id) existing,
-      };
-      _userTouchedSelection = true;
-    });
+  void _removeExercise(String id) => _removeSlot(id);
+
+  /// Program-day ephemeral swap: re-key the live prescription to the new lift
+  /// and record the cumulative effectiveOriginalId→replacement map so a
+  /// force-kill resume can re-pair sets×reps (Codex F1/F4).
+  void _recordProgramSwap(String oldId, String newId) {
+    final scheme = _prescriptions.remove(oldId);
+    if (scheme != null) _prescriptions[newId] = scheme;
+    String? origin;
+    for (final entry in _sessionSwaps.entries) {
+      if (entry.value == oldId) {
+        origin = entry.key;
+        break;
+      }
+    }
+    _sessionSwaps[origin ?? oldId] = newId;
   }
 
   Future<bool> _toggleFavoriteExercise(Exercise exercise) async {
@@ -457,14 +522,19 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   }
 
   Future<void> _startSelectedWorkout() async {
-    if (_selectedMuscleGroups.isEmpty || _selectedExerciseIds.isEmpty) return;
+    if (_selectedExerciseIds.isEmpty) return;
 
     final catalog = await _safeExerciseCatalogFuture;
-    final selected = _candidateExercises(
-      catalog,
-      applyFilters: false,
-    ).where((exercise) => _selectedExerciseIds.contains(exercise.id)).toList();
-    if (!mounted || selected.isEmpty) return;
+    if (!mounted) return;
+    final effectiveGroups = _candidateGroups(catalog);
+    if (effectiveGroups.isEmpty) return;
+    // Loadout order = slot order.
+    final byId = {for (final exercise in catalog) exercise.id: exercise};
+    final selected = [
+      for (final slot in _slots)
+        if (byId[slot.id] != null) byId[slot.id]!,
+    ];
+    if (selected.isEmpty) return;
 
     final ongoing = await WorkoutStorageService().getOngoingSession();
     if (!mounted) return;
@@ -486,14 +556,16 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     if (!mounted || !confirmed) return;
 
     _pushActiveWorkout(
-      muscleGroup: _selectedMuscleGroups.first,
-      targetMuscleGroups: _selectedMuscleGroups,
+      muscleGroup: effectiveGroups.first,
+      targetMuscleGroups: effectiveGroups,
       durationMinutes: _durationMinutes,
       exercises: selected,
       restSeconds: _restSeconds,
       isProgramWorkout: widget.isProgramWorkout,
       advanceProgramRestDayOnCompletion:
           widget.advanceProgramRestDayOnCompletion,
+      prescriptions: _programMode ? _prescriptions : null,
+      programSwaps: _programMode ? _sessionSwaps : null,
     );
   }
 
@@ -561,6 +633,12 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     await ProgramService().clearOngoingProgramSession(session.id);
   }
 
+  // Opens the general (pre-session) mobility guide. Optional, unrewarded
+  // reference — the rewarded warm-up is the warm-up *sets* logged in-session.
+  Future<void> _openWarmupSheet() async {
+    await WarmupSheet.show(context, targets: _selectedMuscleGroups);
+  }
+
   void _pushActiveWorkout({
     required String muscleGroup,
     required List<String> targetMuscleGroups,
@@ -571,6 +649,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     bool isProgramWorkout = false,
     bool advanceProgramRestDayOnCompletion = false,
     Map<String, SetRepScheme>? prescriptions,
+    Map<String, String>? programSwaps,
   }) {
     Navigator.push(
       context,
@@ -585,29 +664,46 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
           isProgramWorkout: isProgramWorkout,
           advanceProgramRestDayOnCompletion: advanceProgramRestDayOnCompletion,
           prescriptions: prescriptions ?? widget.programPrescriptions,
+          programSwaps: programSwaps,
         ),
         motion: ArcadeRouteMotion.flow,
       ),
     );
+    // Embedded: the live session is launched — tell the shell to drop the draft
+    // and leave selection mode. No-op for the standalone pushed page.
+    widget.onCommitted?.call();
+  }
+
+  /// Candidate-universe groups = selected chips ∪ the groups of the current
+  /// slots, so See-All/ADD stays relevant even when the loadout has no chips lit
+  /// (a repeat import — Codex plan-review F5).
+  List<String> _candidateGroups(List<Exercise> exercises) {
+    final groups = _selectedMuscleGroups.toSet();
+    final byId = {for (final exercise in exercises) exercise.id: exercise};
+    for (final slot in _slots) {
+      final group = _groupForExercise(byId[slot.id]);
+      if (group != null) groups.add(group);
+    }
+    return normalizeTargetMuscleGroups(groups.toList());
   }
 
   List<Exercise> _candidateExercises(
     List<Exercise> exercises, {
     bool applyFilters = true,
   }) {
-    if (_selectedMuscleGroups.isEmpty) return const [];
+    final groups = _candidateGroups(exercises);
+    if (groups.isEmpty && _slots.isEmpty) return const [];
     final exerciseById = {
       for (final exercise in exercises) exercise.id: exercise,
     };
     // Program mode shows today's prescribed lifts PLUS the rest of the curated
-    // pool for the day's locked muscles, so the user can genuinely add/swap
-    // (not just re-check the prescribed set). Today's lifts stay pre-selected.
+    // pool for the day's locked muscles; manual shows curated for the universe.
     final ids = _programMode && widget.programCuratedExerciseIds != null
         ? [
             ...widget.programCuratedExerciseIds!,
-            ...curatedExerciseIdsForMuscleGroups(_selectedMuscleGroups),
+            ...curatedExerciseIdsForMuscleGroups(groups),
           ]
-        : curatedExerciseIdsForMuscleGroups(_selectedMuscleGroups);
+        : curatedExerciseIdsForMuscleGroups(groups);
     final result = <Exercise>[];
     final added = <String>{};
 
@@ -618,7 +714,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     for (final exercise in exercises) {
       if (!exercise.isCustom) continue;
       final group = exercise.muscleGroup;
-      if (group != null && hasTargetMuscle(_selectedMuscleGroups, group)) {
+      if (group != null && hasTargetMuscle(groups, group)) {
         addExercise(exercise);
       }
     }
@@ -661,6 +757,36 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       _selectedMuscleGroups,
       fallback: 'target',
     );
+    final sections = _programMode
+        ? _buildProgramSections(targetLabel)
+        : _buildManualSections(targetLabel);
+    // Optional pre-session mobility guide — a calm, unrewarded reference (the
+    // rewarded warm-up is the warm-up sets logged in-session). Shown once
+    // there's a loadout to start.
+    if (_selectedExerciseIds.isNotEmpty) {
+      sections
+        ..add(const SizedBox(height: kSpace5))
+        ..add(_WarmupStartCard(onTap: _openWarmupSheet));
+    }
+
+    // Embedded under the shell: no Scaffold/AppBar/selection bar — the shell's
+    // persistent nav + center Train commit. Report loadout validity so Train can
+    // arm (re-read synchronously at commit by the controller).
+    if (widget.embedded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.draftController?.setValid(_selectedExerciseIds.isNotEmpty);
+        }
+      });
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(kSpace4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: sections,
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Start Workout')),
       body: Column(
@@ -670,16 +796,13 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
               padding: const EdgeInsets.all(kSpace4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: _programMode
-                    ? _buildProgramSections(targetLabel)
-                    : _buildManualSections(targetLabel),
+                children: sections,
               ),
             ),
           ),
           _SelectionBar(
             count: _selectedExerciseIds.length,
-            onContinue:
-                _selectedMuscleGroups.isEmpty || _selectedExerciseIds.isEmpty
+            onContinue: _selectedExerciseIds.isEmpty
                 ? null
                 : _startSelectedWorkout,
           ),
@@ -689,6 +812,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   }
 
   List<Widget> _buildProgramSections(String targetLabel) {
+    final hasLoadout = _selectedExerciseIds.isNotEmpty;
     return [
       const _StepHeader(label: '1. CHOOSE TARGET'),
       const SizedBox(height: kSpace2),
@@ -696,16 +820,22 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
         label: widget.programDayLabel ?? targetLabel,
         summary: widget.programFocusSummary ?? 'Program workout selected.',
       ),
-      if (_selectedMuscleGroups.isNotEmpty) ...[
-        const SizedBox(height: kSpace5),
-        const _StepHeader(label: '2. PICK EXERCISES'),
+      const SizedBox(height: kSpace5),
+      const _StepHeader(label: '2. YOUR LOADOUT'),
+      const SizedBox(height: kSpace2),
+      if (hasLoadout) ...[
+        ..._buildLoadoutCards(),
         const SizedBox(height: kSpace2),
+        _AddExerciseButton(
+          expanded: _seeAllExpanded,
+          onTap: () => setState(() => _seeAllExpanded = !_seeAllExpanded),
+        ),
+      ] else
         Text(
-          _selectedExerciseIds.isEmpty
-              ? 'Choose at least one exercise.'
-              : '${_selectedExerciseIds.length} selected',
+          'Choose at least one exercise.',
           style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
         ),
+      if (_seeAllExpanded || !hasLoadout) ...[
         const SizedBox(height: kSpace3),
         _buildSearchAndFilters(),
         const SizedBox(height: kSpace3),
@@ -719,66 +849,61 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     return [
       const _StepHeader(label: '1. CHOOSE TARGET'),
       const SizedBox(height: kSpace2),
-      if (_targetExpanded) ...[
-        Text(
-          _selectedMuscleGroups.isEmpty
-              ? 'Tap one target to begin. Add more only if needed.'
-              : targetLabel,
-          style: AppFonts.shareTechMono(
-            color: _selectedMuscleGroups.isEmpty ? kMutedText : kText,
-            fontSize: 14,
-            fontWeight: _selectedMuscleGroups.isEmpty
-                ? FontWeight.w400
-                : FontWeight.w700,
-          ),
+      Text(
+        _selectedMuscleGroups.isEmpty
+            ? 'Tap a target — two exercises are added for each.'
+            : targetLabel,
+        style: AppFonts.shareTechMono(
+          color: _selectedMuscleGroups.isEmpty ? kMutedText : kText,
+          fontSize: 14,
+          fontWeight: _selectedMuscleGroups.isEmpty
+              ? FontWeight.w400
+              : FontWeight.w700,
         ),
-        const SizedBox(height: kSpace4),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (final muscleGroup in canonicalMuscleGroups)
-              ArcadeChip(
-                label: muscleGroup,
-                selected: _selectedMuscleGroups.contains(muscleGroup),
-                onTap: () => _toggleMuscleGroup(muscleGroup),
-              ),
-          ],
+      ),
+      const SizedBox(height: kSpace4),
+      Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (final muscleGroup in canonicalMuscleGroups)
+            ArcadeChip(
+              label: muscleGroup,
+              selected: _selectedMuscleGroups.contains(muscleGroup),
+              onTap: () => _toggleMuscleGroup(muscleGroup),
+            ),
+        ],
+      ),
+      const SizedBox(height: kSpace5),
+      _StepHeader(label: hasLoadout ? '2. YOUR LOADOUT' : '2. PICK EXERCISES'),
+      const SizedBox(height: kSpace2),
+      if (hasLoadout) ...[
+        if (_seedSource.label != null) ...[
+          Text(
+            _seedSource.label!,
+            style: AppFonts.shareTechMono(color: kNeon, fontSize: 12),
+          ),
+          const SizedBox(height: kSpace2),
+        ],
+        ..._buildLoadoutCards(),
+        const SizedBox(height: kSpace2),
+        _AddExerciseButton(
+          expanded: _seeAllExpanded,
+          onTap: () => setState(() => _seeAllExpanded = !_seeAllExpanded),
         ),
       ] else
-        _FocusSummary(
-          label: targetLabel,
-          onChange: () => setState(() => _targetExpanded = true),
+        Text(
+          _selectedMuscleGroups.isEmpty
+              ? 'Pick a target above to build your loadout.'
+              : 'Choose at least one exercise.',
+          style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
         ),
-      if (_selectedMuscleGroups.isNotEmpty) ...[
-        const SizedBox(height: kSpace5),
-        _StepHeader(label: hasLoadout ? '2. YOUR LOADOUT' : '2. PICK EXERCISES'),
-        const SizedBox(height: kSpace2),
-        if (hasLoadout) ...[
-          if (_seedSource.label != null) ...[
-            Text(
-              _seedSource.label!,
-              style: AppFonts.shareTechMono(color: kNeon, fontSize: 12),
-            ),
-            const SizedBox(height: kSpace2),
-          ],
-          ..._buildLoadoutCards(),
-          const SizedBox(height: kSpace2),
-          _AddExerciseButton(
-            expanded: _seeAllExpanded,
-            onTap: () => setState(() => _seeAllExpanded = !_seeAllExpanded),
-          ),
-        ] else
-          Text(
-            'Choose at least one exercise.',
-            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
-          ),
-        if (_seeAllExpanded || !hasLoadout) ...[
-          const SizedBox(height: kSpace3),
-          _buildSearchAndFilters(),
-          const SizedBox(height: kSpace3),
-          _buildExerciseList(),
-        ],
+      if (_seeAllExpanded ||
+          (!hasLoadout && _selectedMuscleGroups.isNotEmpty)) ...[
+        const SizedBox(height: kSpace3),
+        _buildSearchAndFilters(),
+        const SizedBox(height: kSpace3),
+        _buildExerciseList(),
       ],
     ];
   }
@@ -795,8 +920,8 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
     }
     final byId = {for (final exercise in catalog) exercise.id: exercise};
     final cards = <Widget>[];
-    for (final id in _selectedExerciseIds) {
-      final exercise = byId[id];
+    for (final slot in _slots) {
+      final exercise = byId[slot.id];
       if (exercise == null) continue;
       cards.add(
         ExerciseCard(
@@ -1060,9 +1185,98 @@ class _StepHeader extends StatelessWidget {
   }
 }
 
-/// Where the manual default loadout came from — drives an honest source label
-/// (Codex plan-review F3) so a history-seeded default is never presented as if
-/// the user hand-picked it.
+/// Pre-session warm-up opt-in card. Tapping opens the tailored warm-up sheet;
+/// once done it flips to a calm confirmed state. Its absence/decline is silent
+/// (no nag) — the reward is a small cherry, the prompt is an invitation.
+/// Optional pre-session mobility guide entry — calm and unrewarded (the rewarded
+/// warm-up is the warm-up *sets* logged in-session). Opens [WarmupSheet].
+class _WarmupStartCard extends StatelessWidget {
+  const _WarmupStartCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Warm-up guide — optional pre-session mobility routine',
+      child: PhosphorTap(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(kSpace3),
+          decoration: BoxDecoration(
+            color: kCard,
+            border: Border.all(color: kBorder),
+            borderRadius: BorderRadius.circular(kCardRadius),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.local_fire_department_sharp,
+                size: 22,
+                color: kMutedText,
+              ),
+              const SizedBox(width: kSpace3),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'WARM-UP GUIDE',
+                      style: TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 9,
+                        color: kText,
+                      ),
+                    ),
+                    SizedBox(height: 5),
+                    _WarmupGuideSubtitle(),
+                  ],
+                ),
+              ),
+              const SizedBox(width: kSpace2),
+              const Icon(
+                Icons.chevron_right_sharp,
+                size: 18,
+                color: kMutedText,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WarmupGuideSubtitle extends StatelessWidget {
+  const _WarmupGuideSubtitle();
+
+  @override
+  Widget build(BuildContext context) => Text(
+    'Optional — a quick tailored mobility routine.',
+    style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
+  );
+}
+
+/// A provenance-tagged loadout entry (v2). `chipOwners` ref-counts the muscle
+/// chips that contributed it; `userOwned` = added via See All; `seedOwned` =
+/// imported (repeat / program prescribed). The slot survives a chip deselect
+/// while any owner remains. `id` is mutable for in-place Replace.
+class _LoadoutSlot {
+  _LoadoutSlot({
+    required this.id,
+    Set<String>? chipOwners,
+    this.userOwned = false,
+    this.seedOwned = false,
+  }) : chipOwners = chipOwners ?? <String>{};
+
+  String id;
+  final Set<String> chipOwners;
+  bool userOwned;
+  bool seedOwned;
+}
+
+/// Where the manual loadout's source label came from (repeat import only in v2).
 enum _SeedSource { none, usual, target, curated, repeat }
 
 extension _SeedSourceLabel on _SeedSource {
@@ -1073,49 +1287,6 @@ extension _SeedSourceLabel on _SeedSource {
     _SeedSource.repeat => 'REPEAT OF LAST WORKOUT',
     _SeedSource.none => null,
   };
-}
-
-/// Collapsed muscle-target row shown once a default loadout exists — keeps the
-/// focus/stat cue visible (Codex F5) while hiding the chips behind CHANGE.
-class _FocusSummary extends StatelessWidget {
-  const _FocusSummary({required this.label, required this.onChange});
-
-  final String label;
-  final VoidCallback onChange;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
-      decoration: BoxDecoration(
-        color: kCard,
-        border: Border.all(color: kBorder),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'FOCUS: ${label.toUpperCase()}',
-              style: AppFonts.shareTechMono(
-                color: kText,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: onChange,
-            child: Text(
-              'CHANGE',
-              style: AppFonts.shareTechMono(color: kNeon, fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// Loadout card trailing controls: swap (Replace sheet) and remove.

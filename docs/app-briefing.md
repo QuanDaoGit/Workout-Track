@@ -330,11 +330,11 @@ The app is a **4-destination bottom-nav shell with an elevated center Train acti
 |---|---|
 | **Home** | Character avatar/frame, level + title, build/status stats with ranks, last-session deltas, today's mission, class. Quests, Adventure, and workout **history/calendar** are reached from here (pushed pages). |
 | **Inventory** | Loot inventory + the gem Shop; the new-loot badge lives on this icon. |
-| **Train** *(center action — not a page)* | Confirm → start a session; **resumes** if one is already live. The button **pulses** while a session is live (it replaced the old always-visible active-workout dock). |
+| **Train** *(center action — not a page)* | Opens exercise selection **in-shell** (nav stays visible; the pick persists as a draft across tabs); the button **arms** once ≥1 lift is chosen and commits via one "START THIS WORKOUT?" confirm. **Resumes** a live session instead, and **pulses** while one runs (it replaced the old always-visible active-workout dock). |
 | **Guild** | The local guild simulation — NPC members, weekly social signal. |
 | **Labs** | Avatar/name/class, full stat card, settings (opt-in body metrics, progressive-overload toggle), progress charts, and the Programs/Exercise **library**. |
 
-**The workout-logging flow** (its own stack, launched from the center Train action or the Home mission):
+**The workout-logging flow** (the center Train action opens selection in-shell; the Home mission and "repeat" still push it full-screen):
 
 ```
 Start Workout (pick muscle group → duration → pick exercises)

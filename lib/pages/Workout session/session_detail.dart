@@ -225,6 +225,9 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
       exerciseId: log.exerciseId,
       exerciseName: log.exerciseName,
       sets: newSets,
+      // Preserve warm-up sets through a working-set edit (they're display-only
+      // and feed no stat path, but must not be silently dropped).
+      warmupSets: log.warmupSets,
     );
     final updated = _session.copyWith(exercises: newLogs);
     // awardedXP is deliberately untouched: XP was earned at save time —
@@ -440,6 +443,34 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
               ),
             ),
             const SizedBox(height: 8),
+            // Warm-up sets — read-only, badged, and never counted toward volume.
+            for (final w in log.warmupSets)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 48,
+                      child: Text(
+                        'Warm',
+                        style: AppFonts.shareTechMono(
+                          color: kAmber,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${weightValue(w.weight, Units.weight)} ${Units.weight.label}',
+                      style: const TextStyle(fontSize: 13, color: kMutedText),
+                    ),
+                    const SizedBox(width: 16),
+                    Text(
+                      '${w.reps} reps',
+                      style: const TextStyle(fontSize: 13, color: kMutedText),
+                    ),
+                  ],
+                ),
+              ),
             for (int i = 0; i < log.sets.length; i++)
               PhosphorTap(
                 onTap: () => _editSet(logIndex, i),

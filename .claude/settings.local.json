@@ -8,7 +8,14 @@
       "Bash(Select-Object FullName)",
       "Bash(Measure-Object)",
       "Bash(Select-Object Count)",
-      "Bash(flutter test:*)"
+      "Bash(flutter test:*)",
+      "Bash(claude plugin *)",
+      "Bash(where wmux *)",
+      "Bash(wmux --help)",
+      "PowerShell(node $env:WMUX_CLI --help 2>&1 | Out-String)",
+      "PowerShell(node $env:WMUX_CLI capabilities 2>&1 | Out-String; \"=====AGENT=====\"; node $env:WMUX_CLI agent 2>&1 | Out-String; \"=====AGENT SPAWN=====\"; node $env:WMUX_CLI agent spawn 2>&1 | Out-String)",
+      "PowerShell($out = node $env:WMUX_CLI agent spawn --cmd \"cmd /c echo probe\" --label orch-probe 2>&1 | Out-String; \"=====SPAWN RETURN=====\"; $out; \"=====AGENT LIST=====\"; node $env:WMUX_CLI agent list 2>&1 | Out-String)",
+      "PowerShell(\"=====STATUS=====\"; node $env:WMUX_CLI agent status agent-80d03cde-d5de-4ea3-8cf3-9badb62e69cf 2>&1 | Out-String; \"=====READ-SCREEN w/ --surface \\(expect ignored\\)=====\"; node $env:WMUX_CLI read-screen --surface surf-479370ba-10d6-4e7a-aff7-dbe281c5d673 --lines 5 2>&1 | Out-String; \"=====KILL PROBE=====\"; node $env:WMUX_CLI agent kill agent-80d03cde-d5de-4ea3-8cf3-9badb62e69cf 2>&1 | Out-String)"
     ]
   },
   "autoAcceptEdits": true,

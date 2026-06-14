@@ -1,4 +1,4 @@
-enum GemLedgerSourceKind { quest, cosmeticPurchase, demoTopUp, adventure }
+enum GemLedgerSourceKind { quest, cosmeticPurchase, demoTopUp, adventure, warmup }
 
 class GemLedgerEntry {
   const GemLedgerEntry({

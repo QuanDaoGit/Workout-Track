@@ -7,10 +7,12 @@ import '../../models/overload_models.dart';
 import '../../models/program_models.dart';
 import '../../models/unit_models.dart';
 import '../../models/workout_models.dart';
+import '../../services/plate_calculator.dart';
 import '../../services/progression_settings_service.dart';
 import '../../services/progressive_overload_service.dart';
 import '../../services/rest_timer_service.dart';
 import '../../services/unit_settings_service.dart';
+import '../../services/warmup_calculator.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/exercise_demo_cabinet.dart';
 import '../../widgets/motion/arcade_text_field.dart';
@@ -20,7 +22,7 @@ import '../../widgets/rest_timer_bar.dart';
 import '../../widgets/strobe_flash.dart';
 
 class _SetRow {
-  _SetRow()
+  _SetRow({this.isWarmup = false})
     : weight = TextEditingController(),
       reps = TextEditingController(),
       weightFocus = FocusNode() {
@@ -30,6 +32,10 @@ class _SetRow {
   final TextEditingController weight;
   final TextEditingController reps;
   final FocusNode weightFocus;
+
+  /// True for a warm-up (ramp-up) row. Warm-up rows live in their own list and
+  /// section — apart from the working-set table and its progression/PR logic.
+  final bool isWarmup;
 
   /// Snaps a free-typed weight to the nearest 0.5 (in the active display unit)
   /// once the field loses focus, so logged loads stay gym-plausible.
@@ -78,6 +84,10 @@ class ExerciseSessionPage extends StatefulWidget {
 
 class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   final List<_SetRow> _rows = [];
+  // Warm-up (ramp-up) rows — kept apart from the working `_rows` so the working
+  // table's set numbering, progression, and PR logic never see them. Captured
+  // at finish into the session's separate warm-up set list (no stat/XP impact).
+  final List<_SetRow> _warmupRows = [];
   final List<GlobalKey> _rowKeys = [];
   final Map<int, int> _rowFlashTriggers = {};
   List<SetEntry>? _previousSets;
@@ -86,6 +96,12 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   bool _progressionEnabled = false;
   OverloadSuggestion? _set1Suggestion;
   final Set<int> _prefilledRows = {};
+
+  /// Working weight (canonical kg) the advisory warm-up derives from, resolved
+  /// once at load: the overload suggestion, else last session's top working set.
+  /// Display-only; the suggestion itself is recomputed in `build` for the active
+  /// unit, so a mid-session unit toggle moves it with everything else.
+  double? _warmupAnchorKg;
 
   ProgressiveOverloadService? _overloadService;
   final Map<int, OverloadDelta?> _deltas = {};
@@ -98,12 +114,23 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   void initState() {
     super.initState();
     if (widget.initialSets.isNotEmpty) {
+      // Re-entry: split the round-tripped sets back into warm-up vs working
+      // rows so warm-up sets never land in the working table.
       for (final s in widget.initialSets) {
-        _rows.add(
-          _SetRow()
-            ..weight.text = weightValue(s.weight, Units.weight)
-            ..reps.text = s.reps.toString(),
-        );
+        final row = _SetRow(isWarmup: s.isWarmup)
+          ..weight.text = weightValue(s.weight, Units.weight)
+          ..reps.text = s.reps.toString();
+        if (s.isWarmup) {
+          _warmupRows.add(row);
+        } else {
+          _rows.add(row);
+          _rowKeys.add(GlobalKey());
+        }
+      }
+      // A re-entered exercise that had only warm-up sets still needs one working
+      // row to log into.
+      if (_rows.isEmpty) {
+        _rows.add(_SetRow());
         _rowKeys.add(GlobalKey());
       }
     } else {
@@ -130,11 +157,31 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       targetRepMax: prescription?.repMax,
     );
     if (!mounted) return;
+    final previous = service.getLastSessionSets(widget.exercise.id);
     setState(() {
       _overloadService = service;
-      _previousSets = service.getLastSessionSets(widget.exercise.id);
+      _previousSets = previous;
       _set1Suggestion = suggestion;
+      _warmupAnchorKg = _resolveWarmupAnchor(suggestion, previous);
     });
+  }
+
+  /// Prefer the overload suggestion's load; fall back to the heaviest set of the
+  /// last completed session. A non-positive (bodyweight) weight is not an anchor.
+  static double? _resolveWarmupAnchor(
+    OverloadSuggestion? suggestion,
+    List<SetEntry>? previous,
+  ) {
+    final suggested = suggestion?.weight;
+    if (suggested != null && suggested > 0) return suggested;
+    if (previous != null && previous.isNotEmpty) {
+      final top = previous.fold<double>(
+        0,
+        (m, s) => s.weight > m ? s.weight : m,
+      );
+      if (top > 0) return top;
+    }
+    return null;
   }
 
   Future<void> _loadProgressionSetting() async {
@@ -166,6 +213,9 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     for (final row in _rows) {
       row.dispose();
     }
+    for (final row in _warmupRows) {
+      row.dispose();
+    }
     super.dispose();
   }
 
@@ -182,6 +232,18 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('plate_calc_seen', true);
+  }
+
+  /// Opens the plate calculator pre-filled with the advisory warm-up load, so a
+  /// plate-loaded warm-up doesn't make the user do the plate math by hand. The
+  /// warm-up card stays read-only — this is a reference, not an edit.
+  Future<void> _openWarmupPlateCalc(WarmupSuggestion warmup) async {
+    await _markPlateCalcSeen();
+    if (!mounted) return;
+    await PlateCalculatorSheet.show(
+      context,
+      initialTargetKg: displayToKg(warmup.displayWeight, Units.weight),
+    );
   }
 
   void _scrollToRow(int index) {
@@ -282,6 +344,81 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     });
   }
 
+  void _addWarmupRow({String weightText = '', String repsText = ''}) {
+    setState(() {
+      _warmupRows.add(
+        _SetRow(isWarmup: true)
+          ..weight.text = weightText
+          ..reps.text = repsText,
+      );
+    });
+  }
+
+  void _removeWarmupRow(_SetRow row) {
+    setState(() => _warmupRows.remove(row));
+    row.dispose();
+  }
+
+  /// One-tap log of the advisory warm-up: drops a pre-filled warm-up row using
+  /// the suggested load (empty bar logs as 0). The user can edit or remove it.
+  void _logWarmupFromSuggestion(WarmupSuggestion warmup) {
+    _addWarmupRow(
+      weightText: warmup.emptyBar ? '0' : fmtNum(warmup.displayWeight),
+      repsText: warmup.reps.toString(),
+    );
+  }
+
+  /// The warm-up sub-section: demoted rows above the working-set table. These
+  /// feed the once-per-day warm-up bonus only — never volume, stats, or XP.
+  Widget _buildWarmupRows() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: kSpace1),
+          child: Text(
+            'WARM-UP',
+            style: AppFonts.shareTechMono(
+              fontSize: 11,
+              color: kMutedText,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ),
+        for (final row in _warmupRows) ...[
+          _WarmupSetRow(
+            weight: row.weight,
+            reps: row.reps,
+            weightFocus: row.weightFocus,
+            onRemove: () => _removeWarmupRow(row),
+          ),
+          const SizedBox(height: kSpace2),
+        ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: _addWarmupRow,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: const Size(0, 36),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              foregroundColor: kAmber,
+            ),
+            icon: const Icon(Icons.add_sharp, size: 16, color: kAmber),
+            label: Text(
+              'WARM-UP SET',
+              style: AppFonts.shareTechMono(
+                fontSize: 11,
+                color: kAmber,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildDeltaWidget(OverloadDelta d) {
     if (d.weightDiff == 0 && d.repsDiff == 0) return const SizedBox.shrink();
     final spans = <InlineSpan>[];
@@ -355,8 +492,19 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
         return;
       }
     }
+    // Warm-up rows are forgiving: a blank one the user added but never filled is
+    // dropped silently rather than blocking the finish.
+    final warmupEntries = <SetEntry>[];
+    for (final row in _warmupRows) {
+      final w = parseWeightToKg(row.weight.text, Units.weight);
+      final r = int.tryParse(row.reps.text);
+      if (w != null && w >= 0 && r != null && r > 0) {
+        warmupEntries.add(SetEntry(weight: w, reps: r, isWarmup: true));
+      }
+    }
     RestTimerService.instance.start(widget.restSeconds);
     Navigator.of(context).pop([
+      ...warmupEntries,
       for (final row in _rows)
         SetEntry(
           // Stored canonical in kg regardless of the entry unit.
@@ -426,6 +574,31 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                     ],
 
                     const SizedBox(height: kSpace5),
+
+                    if (WarmupCalculator.suggest(
+                          equipment: widget.exercise.equipment,
+                          anchorKg: _warmupAnchorKg,
+                          unit: Units.weight,
+                        )
+                        case final warmup?) ...[
+                      _WarmupCard(
+                        suggestion: warmup,
+                        onLog: () => _logWarmupFromSuggestion(warmup),
+                        onPlateCalc:
+                            !warmup.emptyBar &&
+                                PlateCalculator.usesPlates(
+                                  widget.exercise.equipment,
+                                )
+                            ? () => _openWarmupPlateCalc(warmup)
+                            : null,
+                      ),
+                      const SizedBox(height: kSpace3),
+                    ],
+
+                    if (_warmupRows.isNotEmpty) ...[
+                      _buildWarmupRows(),
+                      const SizedBox(height: kSpace3),
+                    ],
 
                     Row(
                       children: [
@@ -550,66 +723,74 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                         controller: row.weight,
                         focusNode: row.weightFocus,
                         hintText: weightHint,
-                        suffixIcon: Padding(
-                          padding: const EdgeInsets.only(right: 2),
-                          child: TooltipTheme(
-                            data: TooltipTheme.of(context).copyWith(
-                              decoration: BoxDecoration(
-                                color: kCard,
-                                border: Border.all(color: kCyan),
-                                borderRadius: BorderRadius.circular(4),
+                        suffixIcon:
+                            !PlateCalculator.usesPlates(
+                              widget.exercise.equipment,
+                            )
+                            ? null
+                            : Padding(
+                                padding: const EdgeInsets.only(right: 2),
+                                child: TooltipTheme(
+                                  data: TooltipTheme.of(context).copyWith(
+                                    decoration: BoxDecoration(
+                                      color: kCard,
+                                      border: Border.all(color: kCyan),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    textStyle: AppFonts.shareTechMono(
+                                      color: kText,
+                                      fontSize: 12,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    waitDuration: const Duration(
+                                      milliseconds: 400,
+                                    ),
+                                    showDuration: const Duration(seconds: 2),
+                                  ),
+                                  child: IconButton(
+                                    tooltip: 'Plate calculator',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 28,
+                                      minHeight: 28,
+                                    ),
+                                    icon: Image.asset(
+                                      'assets/icons/control/ui/icon_load_calc_pad.png',
+                                      width: 18,
+                                      height: 18,
+                                      fit: BoxFit.contain,
+                                    ),
+                                    onPressed: () async {
+                                      await _markPlateCalcSeen();
+                                      if (!mounted) return;
+                                      final entered = parseWeightToKg(
+                                        row.weight.text,
+                                        Units.weight,
+                                      );
+                                      final fallback = prevSet?.weight;
+                                      final resultKg =
+                                          await PlateCalculatorSheet.show(
+                                            context,
+                                            initialTargetKg:
+                                                entered ?? fallback,
+                                          );
+                                      if (resultKg != null && mounted) {
+                                        setState(() {
+                                          row.weight.text = weightValue(
+                                            resultKg,
+                                            Units.weight,
+                                          );
+                                          _interactedRows.add(index);
+                                          _prefilledRows.remove(index);
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
                               ),
-                              textStyle: AppFonts.shareTechMono(
-                                color: kText,
-                                fontSize: 12,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              waitDuration: const Duration(milliseconds: 400),
-                              showDuration: const Duration(seconds: 2),
-                            ),
-                            child: IconButton(
-                              tooltip: 'Plate calculator',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 28,
-                                minHeight: 28,
-                              ),
-                              icon: Image.asset(
-                                'assets/icons/control/ui/icon_load_calc_pad.png',
-                                width: 18,
-                                height: 18,
-                                fit: BoxFit.contain,
-                              ),
-                              onPressed: () async {
-                                await _markPlateCalcSeen();
-                                if (!mounted) return;
-                                final entered = parseWeightToKg(
-                                  row.weight.text,
-                                  Units.weight,
-                                );
-                                final fallback = prevSet?.weight;
-                                final resultKg =
-                                    await PlateCalculatorSheet.show(
-                                      context,
-                                      initialTargetKg: entered ?? fallback,
-                                    );
-                                if (resultKg != null && mounted) {
-                                  setState(() {
-                                    row.weight.text = weightValue(
-                                      resultKg,
-                                      Units.weight,
-                                    );
-                                    _interactedRows.add(index);
-                                    _prefilledRows.remove(index);
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                        ),
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
@@ -686,7 +867,9 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                       ),
                     ),
                   ),
-                if (index == 0 && !_plateCalcSeen)
+                if (index == 0 &&
+                    !_plateCalcSeen &&
+                    PlateCalculator.usesPlates(widget.exercise.equipment))
                   Padding(
                     padding: const EdgeInsets.only(left: 32, top: 2),
                     child: Row(
@@ -729,6 +912,196 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Advisory warm-up suggestion, styled as a demoted (amber) card above the set
+/// table. [onLog] one-taps the suggested load into a real warm-up row; the card
+/// itself is never a logged set and feeds no volume/stat/XP path.
+class _WarmupCard extends StatelessWidget {
+  const _WarmupCard({required this.suggestion, this.onLog, this.onPlateCalc});
+
+  final WarmupSuggestion suggestion;
+
+  /// One-tap "LOG IT": records the suggested load as a warm-up set.
+  final VoidCallback? onLog;
+
+  /// When non-null, the card shows a plate-calculator shortcut (plate-loaded
+  /// warm-ups only). Null leaves the card purely informational.
+  final VoidCallback? onPlateCalc;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = suggestion;
+    final body = s.emptyBar
+        ? 'Empty bar  ×  ${s.reps}'
+        : '${fmtNum(s.displayWeight)} ${s.unit.label}  ×  ${s.reps}';
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: kSpace3,
+        vertical: kSpace2,
+      ),
+      decoration: BoxDecoration(
+        color: kCard,
+        border: Border.all(color: kBorder),
+        borderRadius: BorderRadius.circular(kCardRadius),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 26,
+            height: 22,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: Border.all(color: kAmber.withValues(alpha: 0.7)),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Text(
+              'W',
+              style: AppFonts.shareTechMono(fontSize: 11, color: kAmber),
+            ),
+          ),
+          const SizedBox(width: kSpace3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Warm up',
+                  style: TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 7,
+                    color: kMutedText,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  body,
+                  style: AppFonts.shareTechMono(
+                    fontSize: 14,
+                    color: kMutedText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onPlateCalc != null)
+            IconButton(
+              tooltip: 'Plate calculator',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              icon: Image.asset(
+                'assets/icons/control/ui/icon_load_calc_pad.png',
+                width: 18,
+                height: 18,
+                fit: BoxFit.contain,
+              ),
+              onPressed: onPlateCalc,
+            ),
+          if (onLog != null) ...[
+            const SizedBox(width: kSpace2),
+            SizedBox(
+              height: 32,
+              child: FilledButton(
+                onPressed: onLog,
+                style: FilledButton.styleFrom(
+                  backgroundColor: kCard,
+                  foregroundColor: kAmber,
+                  side: const BorderSide(color: kAmber),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  textStyle: AppFonts.shareTechMono(
+                    fontSize: 12,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                child: const Text('LOG IT'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// An editable warm-up (ramp-up) row in the warm-up sub-section: a demoted "W"
+/// badge + weight/reps fields + remove. Kept apart from the working-set table
+/// so it never touches progression, PR, or volume/stat/XP.
+class _WarmupSetRow extends StatelessWidget {
+  const _WarmupSetRow({
+    required this.weight,
+    required this.reps,
+    required this.weightFocus,
+    required this.onRemove,
+  });
+
+  final TextEditingController weight;
+  final TextEditingController reps;
+  final FocusNode weightFocus;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 22,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: kAmber.withValues(alpha: 0.7)),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(
+            'W',
+            style: AppFonts.shareTechMono(fontSize: 11, color: kAmber),
+          ),
+        ),
+        const SizedBox(width: kSpace2),
+        Expanded(
+          child: ArcadeTextField(
+            controller: weight,
+            focusNode: weightFocus,
+            hintText: '0',
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            enableEcho: false,
+            height: 48,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 10,
+            ),
+          ),
+        ),
+        const SizedBox(width: kSpace2),
+        Expanded(
+          child: ArcadeTextField(
+            controller: reps,
+            hintText: '0',
+            keyboardType: TextInputType.number,
+            enableEcho: false,
+            height: 48,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 10,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 48,
+          height: 48,
+          child: IconButton(
+            tooltip: 'Remove warm-up set',
+            padding: EdgeInsets.zero,
+            icon: const Icon(
+              Icons.close_sharp,
+              color: kMutedText,
+              size: 20,
+            ),
+            onPressed: onRemove,
+          ),
+        ),
+      ],
     );
   }
 }
