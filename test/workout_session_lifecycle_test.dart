@@ -166,13 +166,7 @@ void main() {
 
       expect(
         summary.weeklyQuests
-            .firstWhere((quest) => quest.id == 'weekly_workout_1')
-            .completed,
-        isFalse,
-      );
-      expect(
-        summary.weeklyQuests
-            .firstWhere((quest) => quest.id == 'weekly_sets_10')
+            .firstWhere((quest) => quest.id == 'opening_move')
             .completed,
         isFalse,
       );

@@ -7,8 +7,8 @@ import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/pages/quests_page.dart';
 import 'package:workout_track/services/gem_service.dart';
 import 'package:workout_track/theme/tokens.dart';
-import 'package:workout_track/widgets/count_up_text.dart';
 import 'package:workout_track/widgets/pixel_button.dart';
+import 'package:workout_track/widgets/quest_claim_flight.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -48,28 +48,21 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('+5 GEMS'), findsWidgets);
+    expect(find.text('CLAIM'), findsWidgets);
+    // The card never quotes the gem amount (no price tag).
+    expect(find.text('+5 GEMS'), findsNothing);
     expect(find.text('+5 XP'), findsNothing);
 
-    final gemCounter = tester.widget<CountUpText>(
-      find.descendant(
-        of: find.byKey(const ValueKey('quests_gem_balance_counter')),
-        matching: find.byType(CountUpText),
-      ),
-    );
-    final claimButton = tester.widget<PixelButton>(
-      find.widgetWithText(PixelButton, '+5 GEMS').first,
-    );
+    // The slim magenta gem wallet is present — the flight destination + readout.
+    expect(find.byType(GemWallet), findsOneWidget);
 
-    expect(
-      find.byKey(const ValueKey('quests_gem_balance_icon')),
-      findsOneWidget,
+    final claimButton = tester.widget<PixelButton>(
+      find.widgetWithText(PixelButton, 'CLAIM').first,
     );
-    expect(gemCounter.style?.color, kText);
     expect(claimButton.color, isNull);
     expect(claimButton.onPressed, isNotNull);
 
-    await tester.tap(find.text('+5 GEMS').first);
+    await tester.tap(find.text('CLAIM').first);
     await tester.pumpAndSettle();
 
     // The quest flips to CLAIMED — the juice replaces the old SnackBar.
@@ -87,11 +80,16 @@ void main() {
     final claimedBorder = claimedDecoration.border! as Border;
     expect(claimedBorder.top.color, kMutedText);
 
-    // The gems actually landed in the ledger.
+    // The gems landed in the ledger, and the wallet counted up to them (reduced
+    // motion snaps the count to the new total).
     expect(await GemService().balance(), 5);
+    expect(
+      find.descendant(of: find.byType(GemWallet), matching: find.text('5')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('locked quest reward badges use amber as value color', (
+  testWidgets('in-progress quests show a dim box with no gem amount', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -104,17 +102,25 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final rewardBadge = tester.widget<Container>(
+    final inProgress = find.byKey(const ValueKey('quest_status_in_progress'));
+    expect(inProgress, findsWidgets);
+    expect(
+      find.descendant(of: inProgress.first, matching: find.text('IN PROGRESS')),
+      findsOneWidget,
+    );
+    // No gem amount and no gem image inside the in-progress marker.
+    expect(find.text('+5'), findsNothing);
+    expect(
+      find.descendant(of: inProgress.first, matching: find.byType(Image)),
+      findsNothing,
+    );
+
+    final badge = tester.widget<Container>(
       find
-          .descendant(
-            of: find.byKey(const ValueKey('quest_reward_badge_5')).first,
-            matching: find.byType(Container),
-          )
+          .descendant(of: inProgress.first, matching: find.byType(Container))
           .first,
     );
-    final decoration = rewardBadge.decoration! as BoxDecoration;
-    final border = decoration.border! as Border;
-
-    expect(border.top.color, kAmber);
+    final border = (badge.decoration! as BoxDecoration).border! as Border;
+    expect(border.top.color, kMutedText);
   });
 }

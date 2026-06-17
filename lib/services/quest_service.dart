@@ -218,6 +218,15 @@ class QuestService {
     if (selectedTitle == _oldTimeTitle) {
       selectedTitle = _timeTitle;
     }
+    // Side-quest reward titles renamed 2026-06 (loot ids kept stable; migrate the
+    // user's selected-title NAME so an equipped pick still resolves).
+    const renamedTitles = {
+      'Iron Novice': 'A New Dawn',
+      'Guild Walker': 'Juggler',
+      'Volume Knight': 'Elephant Lifter',
+    };
+    final renamed = renamedTitles[selectedTitle];
+    if (renamed != null) selectedTitle = renamed;
 
     return state.copyWith(
       dailyPeriodKey: dailyKey,
@@ -233,254 +242,320 @@ class QuestService {
     await prefs.setString(_stateKey, jsonEncode(state.toJson()));
   }
 
-  List<QuestItem> _buildDailyQuests(QuestState state, _QuestStats stats) {
-    const templates = [
-      _DailyTemplate('show_up', 'Show Up', 'Complete any workout today.', 5),
-      _DailyTemplate(
-        'class_focus',
-        'Class Focus',
-        "Train one of your class's primary muscle groups.",
-        5,
-      ),
-      _DailyTemplate(
-        'volume_floor',
-        'Volume Floor',
-        'Log 1,000 kg total volume today.',
-        5,
-      ),
-    ];
+  // ── quest pools + deterministic rotation ─────────────────────────────────
+  // Each template carries its own auto-eval + progress closures, so the pool
+  // extends without per-id switches. Daily/weekly surface a deterministic subset
+  // per period (anchored by one guaranteed reliable win); side = the full ladder.
 
-    return [
-      for (final template in templates)
-        _dailyQuestItem(template, state, stats, state.dailyPeriodKey),
-    ];
+  static String _descVol(num kg) =>
+      formatWeight(kg.toDouble(), Units.weight, decimals: 0);
+  static String _progVol(double have, num cap) =>
+      '${weightValue(min(have, cap.toDouble()), Units.weight, decimals: 0)}'
+      ' / ${formatWeight(cap.toDouble(), Units.weight, decimals: 0)}';
+  static bool _hasGroup(_QuestStats s, String g) => s.todayMuscles.contains(g);
+
+  static final List<_QuestTemplate> _dailyPool = [
+    _QuestTemplate(
+      id: 'show_up', title: 'Show Up', gems: 5,
+      done: (s) => s.todayCompletedSessions >= 1,
+      describe: (s) => 'Complete any workout today.',
+      progress: (s) => '${min(s.todayCompletedSessions, 1)} / 1',
+    ),
+    _QuestTemplate(
+      id: 'class_focus', title: 'Class Focus', gems: 5,
+      done: (s) => s.todayClassFocusTrained,
+      describe: (s) => "Train one of your class's primary muscle groups.",
+      progress: (s) => s.todayClassFocusTrained ? 'DONE' : '0 / 1',
+    ),
+    _QuestTemplate(
+      id: 'volume_floor', title: 'Volume Floor', gems: 5,
+      done: (s) => s.todayVolume >= 1000,
+      describe: (s) => 'Log ${_descVol(1000)} total volume today.',
+      progress: (s) => _progVol(s.todayVolume, 1000),
+    ),
+    _QuestTemplate(
+      id: 'two_fronts', title: 'Two Fronts', gems: 5,
+      done: (s) => s.todayMuscles.length >= 2,
+      describe: (s) => 'Train 2 muscle groups today.',
+      progress: (s) => '${min(s.todayMuscles.length, 2)} / 2 groups',
+    ),
+    _QuestTemplate(
+      id: 'rack_work', title: 'Rack Work', gems: 5,
+      done: (s) => s.todaySets >= 12,
+      describe: (s) => 'Log 12 sets today.',
+      progress: (s) => '${min(s.todaySets, 12)} / 12 sets',
+    ),
+    _QuestTemplate(
+      id: 'time_in', title: 'Time In', gems: 5,
+      done: (s) => s.todayDurationSeconds >= 25 * 60,
+      describe: (s) => 'Train 25 minutes today.',
+      progress: (s) => '${min(s.todayDurationSeconds ~/ 60, 25)} / 25 min',
+    ),
+    _QuestTemplate(
+      id: 'warm_first', title: 'Warm First', gems: 5,
+      done: (s) => s.todayWarmedUp,
+      describe: (s) => 'Log a warm-up set today.',
+      progress: (s) => s.todayWarmedUp ? 'DONE' : '0 / 1',
+    ),
+    _QuestTemplate(
+      id: 'leg_day', title: 'Leg Day', gems: 5,
+      done: (s) => _hasGroup(s, 'Legs'),
+      describe: (s) => 'Train Legs today.',
+      progress: (s) => _hasGroup(s, 'Legs') ? 'DONE' : '0 / 1',
+    ),
+    _QuestTemplate(
+      id: 'push_day', title: 'Push Day', gems: 5,
+      done: (s) => _hasGroup(s, 'Chest') || _hasGroup(s, 'Shoulders'),
+      describe: (s) => 'Train Chest or Shoulders today.',
+      progress: (s) =>
+          (_hasGroup(s, 'Chest') || _hasGroup(s, 'Shoulders')) ? 'DONE' : '0 / 1',
+    ),
+    _QuestTemplate(
+      id: 'pull_day', title: 'Pull Day', gems: 5,
+      done: (s) => _hasGroup(s, 'Back'),
+      describe: (s) => 'Train Back today.',
+      progress: (s) => _hasGroup(s, 'Back') ? 'DONE' : '0 / 1',
+    ),
+    _QuestTemplate(
+      id: 'the_core', title: 'The Core', gems: 5,
+      done: (s) => _hasGroup(s, 'Core'),
+      describe: (s) => 'Train Core today.',
+      progress: (s) => _hasGroup(s, 'Core') ? 'DONE' : '0 / 1',
+    ),
+  ];
+
+  // A stable (portable) FNV-1a hash of the period key seeds the pick, so the same
+  // period always surfaces the same quests and a new period rotates — no
+  // persistence. (Dart's String.hashCode is not stable across runs.)
+  static int _seed(String s) {
+    var h = 0x811c9dc5;
+    for (final c in s.codeUnits) {
+      h = ((h ^ c) * 0x01000193) & 0x7fffffff;
+    }
+    return h;
   }
 
-  QuestItem _dailyQuestItem(
-    _DailyTemplate template,
+  // Anchors first (guaranteed reliable wins / a featured quest), then a
+  // deterministic subset of the rest (optionally excluding e.g. Limit Break when
+  // it has no baseline yet).
+  List<_QuestTemplate> _rotate(
+    List<_QuestTemplate> pool,
+    List<String> anchorIds,
+    int count,
+    String seedKey, {
+    bool Function(_QuestTemplate)? exclude,
+  }) {
+    final anchors = [
+      for (final id in anchorIds) pool.firstWhere((t) => t.id == id),
+    ];
+    final rest = pool
+        .where((t) =>
+            !anchorIds.contains(t.id) && (exclude == null || !exclude(t)))
+        .toList()
+      ..shuffle(Random(_seed(seedKey)));
+    return [...anchors, ...rest.take(count - anchors.length)];
+  }
+
+  QuestItem _questItem(
+    _QuestTemplate t,
+    QuestCategory category,
+    String claimKey,
     QuestState state,
     _QuestStats stats,
-    String periodKey,
   ) {
-    final claimKey = 'daily:$periodKey:${template.id}';
     final claim = state.claims[claimKey];
-    final completed = _isDailyAutoComplete(template.id, stats);
-
     return QuestItem(
-      id: template.id,
+      id: t.id,
       claimKey: claimKey,
-      category: QuestCategory.daily,
-      title: template.title,
-      description: _questDescription(template.id, template.description),
+      category: category,
+      title: t.title,
+      description: t.describe(stats),
       rewardXP: claim?.xp ?? 0,
-      rewardGems: claim?.gems ?? template.rewardGems,
-      completed: completed,
+      rewardGems: claim?.gems ?? t.gems,
+      completed: t.done(stats),
       claimed: claim != null,
       isManual: false,
-      progressLabel: _dailyProgress(template.id, stats),
+      progressLabel: t.progress(stats),
+      rewardTitle: t.rewardTitle,
     );
   }
+
+  List<QuestItem> _buildDailyQuests(QuestState state, _QuestStats stats) {
+    final key = 'daily:${state.dailyPeriodKey}';
+    return [
+      for (final t in _rotate(_dailyPool, const ['show_up'], 3, key))
+        _questItem(t, QuestCategory.daily,
+            'daily:${state.dailyPeriodKey}:${t.id}', state, stats),
+    ];
+  }
+
+  static final List<_QuestTemplate> _weeklyPool = [
+    _QuestTemplate(
+      id: 'opening_move', title: 'Opening Move', gems: 5,
+      done: (s) => s.weekCompletedSessions >= 1,
+      describe: (s) => 'Complete 1 workout this week.',
+      progress: (s) => '${min(s.weekCompletedSessions, 1)} / 1',
+    ),
+    _QuestTemplate(
+      id: 'double_up', title: 'Double Up', gems: 5,
+      done: (s) => s.weekCompletedSessions >= 2,
+      describe: (s) => 'Complete 2 workouts this week.',
+      progress: (s) => '${min(s.weekCompletedSessions, 2)} / 2',
+    ),
+    _QuestTemplate(
+      id: 'triple_threat', title: 'Triple Threat', gems: 10,
+      done: (s) => s.weekCompletedSessions >= 3,
+      describe: (s) => 'Complete 3 workouts this week.',
+      progress: (s) => '${min(s.weekCompletedSessions, 3)} / 3',
+    ),
+    _QuestTemplate(
+      id: 'steady_cadence', title: 'Steady Cadence', gems: 10,
+      done: (s) => s.weekDays >= 3,
+      describe: (s) => 'Train on 3 different days this week.',
+      progress: (s) => '${min(s.weekDays, 3)} / 3 days',
+    ),
+    _QuestTemplate(
+      id: 'set_chaser', title: 'Set Chaser', gems: 10,
+      done: (s) => s.weekSetCount >= 30,
+      describe: (s) => 'Log 30 sets this week.',
+      progress: (s) => '${min(s.weekSetCount, 30)} / 30 sets',
+    ),
+    _QuestTemplate(
+      id: 'balance', title: 'Balance', gems: 10,
+      done: (s) => s.weekMuscleGroups >= 3,
+      describe: (s) => 'Train 3 muscle groups this week.',
+      progress: (s) => '${min(s.weekMuscleGroups, 3)} / 3 groups',
+    ),
+    _QuestTemplate(
+      id: 'full_sweep', title: 'Full Sweep', gems: 15,
+      done: (s) => s.weekMuscleGroups >= 5,
+      describe: (s) => 'Train 5 muscle groups this week.',
+      progress: (s) => '${min(s.weekMuscleGroups, 5)} / 5 groups',
+    ),
+    _QuestTemplate(
+      id: 'hour_trial', title: 'Hour Trial', gems: 15,
+      done: (s) => s.weekDurationSeconds >= 90 * 60,
+      describe: (s) => 'Train 90 minutes this week.',
+      progress: (s) => '${min(s.weekDurationSeconds ~/ 60, 90)} / 90 min',
+    ),
+    _QuestTemplate(
+      id: 'limit_break', title: 'Limit Break', gems: 20,
+      done: (s) => s.limitBreakAvailable && s.weekVolume >= s.limitBreakTarget,
+      describe: (s) => 'Move ${_descVol(s.limitBreakTarget)} this week.',
+      progress: (s) => _progVol(s.weekVolume, s.limitBreakTarget),
+    ),
+    _QuestTemplate(
+      id: 'warm_discipline', title: 'Warm Discipline', gems: 10,
+      done: (s) => s.weekWarmupSessions >= 3,
+      describe: (s) => 'Warm up in 3 sessions this week.',
+      progress: (s) => '${min(s.weekWarmupSessions, 3)} / 3',
+    ),
+    _QuestTemplate(
+      id: 'class_dedication', title: 'Class Dedication', gems: 15,
+      done: (s) => s.weekClassFocusCount >= 3,
+      describe: (s) => 'Hit your class focus 3 times this week.',
+      progress: (s) => '${min(s.weekClassFocusCount, 3)} / 3',
+    ),
+  ];
 
   List<QuestItem> _buildWeeklyQuests(QuestState state, _QuestStats stats) {
-    const templates = [
-      _WeeklyTemplate(
-        'weekly_workout_1',
-        'First Quest',
-        'Complete 1 workout',
-        5,
-      ),
-      _WeeklyTemplate(
-        'weekly_workout_2',
-        'Second Quest',
-        'Complete 2 workouts',
-        5,
-      ),
-      _WeeklyTemplate('weekly_sets_10', 'Set Smith', 'Log 10 total sets', 10),
-      _WeeklyTemplate(
-        'weekly_muscles_2',
-        'Balanced Path',
-        'Train 2 muscle groups',
-        10,
-      ),
-      _WeeklyTemplate(
-        'weekly_minutes_60',
-        'Hour Trial',
-        'Train 60 total minutes',
-        20,
-      ),
-    ];
-
-    return [
-      for (final template in templates)
-        _weeklyQuestItem(template, state, stats),
-    ];
-  }
-
-  QuestItem _weeklyQuestItem(
-    _WeeklyTemplate template,
-    QuestState state,
-    _QuestStats stats,
-  ) {
-    final claimKey = 'weekly:${state.weeklyPeriodKey}:${template.id}';
-    final claim = state.claims[claimKey];
-    final completed = switch (template.id) {
-      'weekly_workout_1' => stats.weekCompletedSessions >= 1,
-      'weekly_workout_2' => stats.weekCompletedSessions >= 2,
-      'weekly_sets_10' => stats.weekSetCount >= 10,
-      'weekly_muscles_2' => stats.weekMuscleGroups >= 2,
-      'weekly_minutes_60' => stats.weekDurationSeconds >= 3600,
-      _ => false,
-    };
-
-    return QuestItem(
-      id: template.id,
-      claimKey: claimKey,
-      category: QuestCategory.weekly,
-      title: template.title,
-      description: template.description,
-      rewardXP: claim?.xp ?? 0,
-      rewardGems: claim?.gems ?? template.rewardGems,
-      completed: completed,
-      claimed: claim != null,
-      isManual: false,
-      progressLabel: _weeklyProgress(template.id, stats),
+    final key = 'weekly:${state.weeklyPeriodKey}';
+    // Limit Break is a FEATURED (anchored) quest when the user has a baseline
+    // week to personalize its target; otherwise it is excluded entirely.
+    final anchors = stats.limitBreakAvailable
+        ? const ['opening_move', 'limit_break']
+        : const ['opening_move'];
+    final picks = _rotate(
+      _weeklyPool,
+      anchors,
+      5,
+      key,
+      exclude: (t) => t.id == 'limit_break' && !stats.limitBreakAvailable,
     );
+    return [
+      for (final t in picks)
+        _questItem(t, QuestCategory.weekly,
+            'weekly:${state.weeklyPeriodKey}:${t.id}', state, stats),
+    ];
   }
+
+  static final List<_QuestTemplate> _sidePool = [
+    _QuestTemplate(
+      id: 'side_first_workout', title: 'A New Dawn', gems: 100,
+      rewardTitle: 'A New Dawn',
+      done: (s) => s.lifetimeCompletedSessions >= 1,
+      describe: (s) => 'Complete your first workout.',
+      progress: (s) => '${min(s.lifetimeCompletedSessions, 1)} / 1',
+    ),
+    _QuestTemplate(
+      id: 'side_sets_25', title: 'Set Smith', gems: 100, rewardTitle: 'Set Smith',
+      done: (s) => s.lifetimeSetCount >= 25,
+      describe: (s) => 'Log 25 total sets.',
+      progress: (s) => '${min(s.lifetimeSetCount, 25)} / 25 sets',
+    ),
+    _QuestTemplate(
+      id: 'side_minutes_300', title: 'Time Keeper', gems: 100,
+      rewardTitle: 'Time Keeper',
+      done: (s) => s.lifetimeDurationSeconds >= 300 * 60,
+      describe: (s) => 'Train 300 total minutes.',
+      progress: (s) => '${min(s.lifetimeDurationSeconds ~/ 60, 300)} / 300 min',
+    ),
+    _QuestTemplate(
+      id: 'side_all_muscles', title: 'All-Rounded', gems: 100,
+      rewardTitle: 'Juggler',
+      done: (s) => s.lifetimeMuscleGroups >= 4,
+      describe: (s) => 'Train Chest, Back, Arms, and Legs.',
+      progress: (s) => '${min(s.lifetimeMuscleGroups, 4)} / 4 groups',
+    ),
+    _QuestTemplate(
+      id: 'side_volume_10000', title: 'Elephant Lifter', gems: 100,
+      rewardTitle: 'Elephant Lifter',
+      done: (s) => s.lifetimeVolume >= 10000,
+      describe: (s) => 'Reach ${_descVol(10000)} total volume.',
+      progress: (s) => _progVol(s.lifetimeVolume, 10000),
+    ),
+    _QuestTemplate(
+      id: 'side_workouts_100', title: 'Centurion', gems: 100,
+      rewardTitle: 'Centurion',
+      done: (s) => s.lifetimeCompletedSessions >= 100,
+      describe: (s) => 'Complete 100 total workouts.',
+      progress: (s) => '${min(s.lifetimeCompletedSessions, 100)} / 100',
+    ),
+    _QuestTemplate(
+      id: 'side_minutes_3000', title: 'Not There Yet?', gems: 100,
+      rewardTitle: 'Long Live',
+      done: (s) => s.lifetimeDurationSeconds >= 3000 * 60,
+      describe: (s) => 'Train 3,000 total minutes.',
+      progress: (s) => '${min(s.lifetimeDurationSeconds ~/ 60, 3000)} / 3000 min',
+    ),
+    _QuestTemplate(
+      id: 'side_volume_50000', title: 'Whale Lifter', gems: 100,
+      rewardTitle: 'Whale Lifter',
+      done: (s) => s.lifetimeVolume >= 50000,
+      describe: (s) => 'Reach ${_descVol(50000)} total volume.',
+      progress: (s) => _progVol(s.lifetimeVolume, 50000),
+    ),
+    _QuestTemplate(
+      id: 'side_all_seven', title: 'All Seven', gems: 100,
+      rewardTitle: 'Guildmaster',
+      done: (s) => s.lifetimeMuscleGroups >= 7,
+      describe: (s) => 'Train all 7 muscle groups.',
+      progress: (s) => '${min(s.lifetimeMuscleGroups, 7)} / 7 groups',
+    ),
+    _QuestTemplate(
+      id: 'side_sets_1000', title: 'Apex 1000', gems: 100,
+      rewardTitle: 'Apex 1000',
+      done: (s) => s.lifetimeSetCount >= 1000,
+      describe: (s) => 'Log 1,000 total sets.',
+      progress: (s) => '${min(s.lifetimeSetCount, 1000)} / 1000 sets',
+    ),
+  ];
 
   List<QuestItem> _buildSideQuests(QuestState state, _QuestStats stats) {
-    const templates = [
-      _SideTemplate(
-        'side_first_workout',
-        'First Forge',
-        'Complete your first workout',
-        'Iron Novice',
-        100,
-      ),
-      _SideTemplate(
-        'side_sets_25',
-        'Set Smith',
-        'Log 25 total sets',
-        'Set Smith',
-        100,
-      ),
-      _SideTemplate(
-        'side_minutes_300',
-        'Time Trial',
-        'Train 300 total minutes',
-        'Time Keeper',
-        100,
-      ),
-      _SideTemplate(
-        'side_all_muscles',
-        'Four Guilds',
-        'Train Chest, Back, Arms, and Legs',
-        'Guild Walker',
-        100,
-      ),
-      _SideTemplate(
-        'side_volume_10000',
-        'Iron Ledger',
-        'Reach 10,000 kg total volume',
-        'Volume Knight',
-        100,
-      ),
-    ];
-
     return [
-      for (final template in templates) _sideQuestItem(template, state, stats),
+      for (final t in _sidePool)
+        _questItem(t, QuestCategory.side, 'side:${t.id}', state, stats),
     ];
-  }
-
-  QuestItem _sideQuestItem(
-    _SideTemplate template,
-    QuestState state,
-    _QuestStats stats,
-  ) {
-    final claimKey = 'side:${template.id}';
-    final claim = state.claims[claimKey];
-    final completed = switch (template.id) {
-      'side_first_workout' => stats.lifetimeCompletedSessions >= 1,
-      'side_sets_25' => stats.lifetimeSetCount >= 25,
-      'side_minutes_300' => stats.lifetimeDurationSeconds >= 18000,
-      'side_all_muscles' => stats.lifetimeMuscleGroups >= 4,
-      'side_volume_10000' => stats.lifetimeVolume >= 10000,
-      _ => false,
-    };
-
-    return QuestItem(
-      id: template.id,
-      claimKey: claimKey,
-      category: QuestCategory.side,
-      title: template.title,
-      description: _questDescription(template.id, template.description),
-      rewardXP: claim?.xp ?? 0,
-      rewardGems: claim?.gems ?? template.rewardGems,
-      completed: completed,
-      claimed: claim != null,
-      isManual: false,
-      progressLabel: _sideProgress(template.id, stats),
-      rewardTitle: template.rewardTitle,
-    );
-  }
-
-  bool _isDailyAutoComplete(String id, _QuestStats stats) {
-    return switch (id) {
-      'show_up' => stats.todayCompletedSessions >= 1,
-      'class_focus' => stats.todayClassFocusTrained,
-      'volume_floor' => stats.todayVolume >= 1000,
-      _ => false,
-    };
-  }
-
-  /// Volume-quest descriptions render their kg threshold in the active unit so
-  /// the copy matches the progress counter (e.g. "Log 2,205 lbs..." / "0 / 2205
-  /// lbs"). Non-volume quests keep their static [fallback] text.
-  String _questDescription(String id, String fallback) {
-    switch (id) {
-      case 'volume_floor':
-        return 'Log ${formatWeight(1000, Units.weight, decimals: 0)} total volume today.';
-      case 'side_volume_10000':
-        return 'Reach ${formatWeight(10000, Units.weight, decimals: 0)} total volume';
-      default:
-        return fallback;
-    }
-  }
-
-  String _dailyProgress(String id, _QuestStats stats) {
-    return switch (id) {
-      'show_up' => '${min(stats.todayCompletedSessions, 1)} / 1',
-      'class_focus' => stats.todayClassFocusTrained ? 'DONE' : '0 / 1',
-      'volume_floor' =>
-        '${weightValue(min(stats.todayVolume, 1000.0), Units.weight, decimals: 0)}'
-            ' / ${formatWeight(1000, Units.weight, decimals: 0)}',
-      _ => '',
-    };
-  }
-
-  String _weeklyProgress(String id, _QuestStats stats) {
-    return switch (id) {
-      'weekly_workout_1' => '${min(stats.weekCompletedSessions, 1)} / 1',
-      'weekly_workout_2' => '${min(stats.weekCompletedSessions, 2)} / 2',
-      'weekly_sets_10' => '${min(stats.weekSetCount, 10)} / 10 sets',
-      'weekly_muscles_2' => '${min(stats.weekMuscleGroups, 2)} / 2 groups',
-      'weekly_minutes_60' =>
-        '${min(stats.weekDurationSeconds ~/ 60, 60)} / 60 min',
-      _ => '',
-    };
-  }
-
-  String _sideProgress(String id, _QuestStats stats) {
-    return switch (id) {
-      'side_first_workout' => '${min(stats.lifetimeCompletedSessions, 1)} / 1',
-      'side_sets_25' => '${min(stats.lifetimeSetCount, 25)} / 25 sets',
-      'side_minutes_300' =>
-        '${min(stats.lifetimeDurationSeconds ~/ 60, 300)} / 300 min',
-      'side_all_muscles' => '${min(stats.lifetimeMuscleGroups, 4)} / 4 groups',
-      'side_volume_10000' =>
-        '${weightValue(min(stats.lifetimeVolume, 10000.0), Units.weight, decimals: 0)}'
-            ' / ${formatWeight(10000, Units.weight, decimals: 0)}',
-      _ => '',
-    };
   }
 
   int _claimedXPForDay(QuestState state, DateTime day) {
@@ -510,31 +585,73 @@ class _QuestStats {
     required this.todayCompletedSessions,
     required this.todayMuscles,
     required this.todayVolume,
+    required this.todaySets,
+    required this.todayDurationSeconds,
+    required this.todayWarmedUp,
     required this.todayClassFocusTrained,
     required this.weekCompletedSessions,
     required this.weekSetCount,
     required this.weekMuscleGroups,
     required this.weekDurationSeconds,
+    required this.weekVolume,
+    required this.weekDays,
+    required this.weekWarmupSessions,
+    required this.weekClassFocusCount,
     required this.lifetimeCompletedSessions,
     required this.lifetimeSetCount,
     required this.lifetimeMuscleGroups,
     required this.lifetimeDurationSeconds,
     required this.lifetimeVolume,
+    required this.limitBreakTarget,
+    required this.limitBreakAvailable,
   });
 
   final int todayCompletedSessions;
   final Set<String> todayMuscles;
   final double todayVolume;
+  final int todaySets;
+  final int todayDurationSeconds;
+  final bool todayWarmedUp;
   final bool todayClassFocusTrained;
   final int weekCompletedSessions;
   final int weekSetCount;
   final int weekMuscleGroups;
   final int weekDurationSeconds;
+  final double weekVolume;
+  final int weekDays;
+  final int weekWarmupSessions;
+  final int weekClassFocusCount;
   final int lifetimeCompletedSessions;
   final int lifetimeSetCount;
   final int lifetimeMuscleGroups;
   final int lifetimeDurationSeconds;
   final double lifetimeVolume;
+
+  /// Personalized "Limit Break" weekly-volume target (canonical kg): the avg of
+  /// the last <=4 completed prior weeks (weeks-with-training only) x 1.15 (x1.10
+  /// when <3 weeks of history), clamped to [x1.05, x1.30] so it stays a doable
+  /// stretch and never a danger-zone spike. Rounded to the nearest 100 in the
+  /// user's DISPLAY unit (so a lbs target reads as a clean hundred too), then
+  /// stored as the kg threshold that formats back to it. 0 + [limitBreakAvailable]
+  /// false when there is no prior training week (the quest is then excluded).
+  final double limitBreakTarget;
+  final bool limitBreakAvailable;
+
+  static double _vol(Iterable<WorkoutSession> s) => s.fold(
+        0.0,
+        (sum, session) =>
+            sum +
+            session.exercises
+                .fold(0.0, (logSum, log) => logSum + log.totalVolume),
+      );
+  static int _sets(Iterable<WorkoutSession> s) => s.fold(
+        0,
+        (sum, session) =>
+            sum +
+            session.exercises.fold(0, (setSum, log) => setSum + log.sets.length),
+      );
+  static int _secs(Iterable<WorkoutSession> s) =>
+      s.fold(0, (sum, session) => sum + session.actualDurationSeconds);
 
   factory _QuestStats.fromSessions(
     List<WorkoutSession> sessions,
@@ -554,73 +671,71 @@ class _QuestStats {
               !session.date.isBefore(monday) && session.date.isBefore(sunday),
         )
         .toList();
-
-    final weekSetCount = weekSessions.fold(
-      0,
-      (sum, session) =>
-          sum +
-          session.exercises.fold(0, (setSum, log) => setSum + log.sets.length),
-    );
-    final lifetimeSetCount = completed.fold(
-      0,
-      (sum, session) =>
-          sum +
-          session.exercises.fold(0, (setSum, log) => setSum + log.sets.length),
-    );
-    final lifetimeVolume = completed.fold(
-      0.0,
-      (sum, session) =>
-          sum +
-          session.exercises.fold(
-            0.0,
-            (logSum, log) => logSum + log.totalVolume,
-          ),
-    );
-    final todayVolume = todaySessions.fold(
-      0.0,
-      (sum, session) =>
-          sum +
-          session.exercises.fold(
-            0.0,
-            (logSum, log) => logSum + log.totalVolume,
-          ),
-    );
     final classTargets = musclesForClass(currentClass);
-    final todayClassFocusTrained = todaySessions.any(
-      (session) => session.targetMuscleGroups.any(
-        (target) => classTargets.contains(target),
-      ),
-    );
-    final lifetimeDurationSeconds = completed.fold(
-      0,
-      (sum, session) => sum + session.actualDurationSeconds,
-    );
+    bool hitsClassFocus(WorkoutSession s) =>
+        s.targetMuscleGroups.any((t) => classTargets.contains(t));
+
+    // Limit Break baseline: avg volume over the last up-to-4 completed prior
+    // weeks (the ACWR "chronic" window); only weeks that had training count.
+    final priorWeekVolumes = <double>[];
+    for (var w = 1; w <= 4; w++) {
+      final wkMonday = monday.subtract(Duration(days: 7 * w));
+      final wkSunday = wkMonday.add(const Duration(days: 7));
+      final vol = _vol(completed.where(
+        (s) => !s.date.isBefore(wkMonday) && s.date.isBefore(wkSunday),
+      ));
+      if (vol > 0) priorWeekVolumes.add(vol);
+    }
+    var limitBreakTarget = 0.0;
+    final limitBreakAvailable = priorWeekVolumes.isNotEmpty;
+    if (limitBreakAvailable) {
+      final avg =
+          priorWeekVolumes.reduce((a, b) => a + b) / priorWeekVolumes.length;
+      final factor = priorWeekVolumes.length >= 3 ? 1.15 : 1.10;
+      final clampedKg = (avg * factor).clamp(avg * 1.05, avg * 1.30);
+      // Round to the nearest 100 in the user's DISPLAY unit so the shown target
+      // reads as a clean hundred (lbs or kg), then store the kg threshold that
+      // formats back to it.
+      final hundreds =
+          (kgToDisplay(clampedKg, Units.weight) / 100).round() * 100;
+      final display = hundreds < 100 ? 100 : hundreds;
+      limitBreakTarget = displayToKg(display.toDouble(), Units.weight);
+    }
 
     return _QuestStats(
       todayCompletedSessions: todaySessions.length,
       todayMuscles: todaySessions
           .expand((session) => session.targetMuscleGroups)
           .toSet(),
-      todayVolume: todayVolume,
-      todayClassFocusTrained: todayClassFocusTrained,
+      todayVolume: _vol(todaySessions),
+      todaySets: _sets(todaySessions),
+      todayDurationSeconds: _secs(todaySessions),
+      todayWarmedUp: todaySessions.any((s) => s.warmedUp),
+      todayClassFocusTrained: todaySessions.any(hitsClassFocus),
       weekCompletedSessions: weekSessions.length,
-      weekSetCount: weekSetCount,
+      weekSetCount: _sets(weekSessions),
       weekMuscleGroups: weekSessions
           .expand((session) => session.targetMuscleGroups)
           .toSet()
           .length,
-      weekDurationSeconds: weekSessions.fold(
-        0,
-        (sum, session) => sum + session.actualDurationSeconds,
-      ),
+      weekDurationSeconds: _secs(weekSessions),
+      weekVolume: _vol(weekSessions),
+      weekDays: weekSessions
+          .map((s) => DateTime(s.date.year, s.date.month, s.date.day))
+          .toSet()
+          .length,
+      weekWarmupSessions: weekSessions.where((s) => s.warmedUp).length,
+      weekClassFocusCount: weekSessions.where(hitsClassFocus).length,
       lifetimeCompletedSessions: completed.length,
-      lifetimeSetCount: lifetimeSetCount,
+      lifetimeSetCount: _sets(completed),
       lifetimeMuscleGroups: completed
           .expand((session) => session.targetMuscleGroups)
           .toSet()
           .length,
-      lifetimeDurationSeconds: lifetimeDurationSeconds,
-      lifetimeVolume: lifetimeVolume,
+      lifetimeDurationSeconds: _secs(completed),
+      lifetimeVolume: _vol(completed),
+      limitBreakTarget: limitBreakTarget,
+      limitBreakAvailable: limitBreakAvailable,
     );
   }
 
@@ -628,36 +743,26 @@ class _QuestStats {
       a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
-class _DailyTemplate {
-  const _DailyTemplate(this.id, this.title, this.description, this.rewardGems);
-
-  final String id;
-  final String title;
-  final String description;
-  final int rewardGems;
-}
-
-class _WeeklyTemplate {
-  const _WeeklyTemplate(this.id, this.title, this.description, this.rewardGems);
-
-  final String id;
-  final String title;
-  final String description;
-  final int rewardGems;
-}
-
-class _SideTemplate {
-  const _SideTemplate(
-    this.id,
-    this.title,
-    this.description,
+/// A pooled quest. Each carries its own auto-eval ([done]), [describe], and
+/// [progress] closures (evaluated against the computed `_QuestStats`), so the
+/// rotation pools extend without per-id switches. [rewardTitle] is the loot
+/// title-badge name a side quest grants (null for daily/weekly).
+class _QuestTemplate {
+  _QuestTemplate({
+    required this.id,
+    required this.title,
+    required this.gems,
+    required this.done,
+    required this.describe,
+    required this.progress,
     this.rewardTitle,
-    this.rewardGems,
-  );
+  });
 
   final String id;
   final String title;
-  final String description;
-  final String rewardTitle;
-  final int rewardGems;
+  final int gems;
+  final String? rewardTitle;
+  final bool Function(_QuestStats stats) done;
+  final String Function(_QuestStats stats) describe;
+  final String Function(_QuestStats stats) progress;
 }

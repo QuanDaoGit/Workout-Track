@@ -8,34 +8,40 @@ import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/services/gem_service.dart';
 import 'package:workout_track/services/loot_service.dart';
 import 'package:workout_track/services/quest_service.dart';
+import 'package:workout_track/models/unit_models.dart';
 import 'package:workout_track/services/rest_service.dart';
+import 'package:workout_track/services/unit_settings_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    Units.weight = WeightUnit.kg;
   });
 
-  test('daily quests are fixed, automatic, and training-derived', () async {
+  test('daily quests rotate (3, anchored by Show Up), automatic, gem-only',
+      () async {
     final service = QuestService();
     final now = DateTime(2026, 5, 13, 10);
 
     final initial = await service.getSummary(const [], now: now);
-    expect(initial.dailyQuests.map((quest) => quest.id), [
-      'show_up',
-      'class_focus',
-      'volume_floor',
-    ]);
-    expect(initial.dailyQuests.where((quest) => quest.isManual), isEmpty);
+    // Three per day, deterministically picked, with Show Up always anchored first.
+    expect(initial.dailyQuests.length, 3);
+    expect(initial.dailyQuests.first.id, 'show_up');
+    expect(initial.dailyQuests.every((quest) => !quest.isManual), isTrue);
+    expect(initial.dailyQuests.every((quest) => quest.rewardGems == 5), isTrue);
     expect(initial.dailyQuests.where((quest) => quest.completed), isEmpty);
 
+    // A workout today completes the Show Up anchor (auto-evaluated, gems only).
     final completed = await service.getSummary([
       _session(date: now, setCount: 4),
     ], now: now);
-    expect(completed.dailyQuests.every((quest) => quest.completed), isTrue);
-    expect(completed.dailyQuests.map((quest) => quest.rewardXP), [0, 0, 0]);
-    expect(completed.dailyQuests.map((quest) => quest.rewardGems), [5, 5, 5]);
+    final showUp =
+        completed.dailyQuests.firstWhere((quest) => quest.id == 'show_up');
+    expect(showUp.completed, isTrue);
+    expect(showUp.rewardXP, 0);
+    expect(showUp.rewardGems, 5);
   });
 
   test('weekly workout quests reset on the next Monday period', () async {
@@ -47,7 +53,7 @@ void main() {
     final current = await service.getSummary(sessions, now: weekOne);
     expect(
       current.weeklyQuests
-          .firstWhere((quest) => quest.id == 'weekly_workout_1')
+          .firstWhere((quest) => quest.id == 'opening_move')
           .completed,
       isTrue,
     );
@@ -55,7 +61,7 @@ void main() {
     final next = await service.getSummary(sessions, now: weekTwo);
     expect(
       next.weeklyQuests
-          .firstWhere((quest) => quest.id == 'weekly_workout_1')
+          .firstWhere((quest) => quest.id == 'opening_move')
           .completed,
       isFalse,
     );
@@ -131,14 +137,14 @@ void main() {
     ];
 
     final summary = await service.getSummary(sessions, now: now);
-    final classFocus = summary.dailyQuests.firstWhere(
-      (quest) => quest.id == 'class_focus',
+    final showUp = summary.dailyQuests.firstWhere(
+      (quest) => quest.id == 'show_up',
     );
 
-    expect(classFocus.rewardXP, 0);
-    expect(classFocus.rewardGems, 5);
+    expect(showUp.rewardXP, 0);
+    expect(showUp.rewardGems, 5);
     final claim = await service.claimReward(
-      classFocus.claimKey,
+      showUp.claimKey,
       sessions,
       now: now,
     );
@@ -158,13 +164,7 @@ void main() {
 
       expect(
         summary.weeklyQuests
-            .firstWhere((quest) => quest.id == 'weekly_workout_1')
-            .completed,
-        isTrue,
-      );
-      expect(
-        summary.weeklyQuests
-            .firstWhere((quest) => quest.id == 'weekly_sets_10')
+            .firstWhere((quest) => quest.id == 'opening_move')
             .completed,
         isTrue,
       );
@@ -189,7 +189,7 @@ void main() {
         (quest) => quest.id == 'side_minutes_300',
       );
 
-      expect(quest.title, 'Time Trial');
+      expect(quest.title, 'Time Keeper');
       expect(quest.rewardTitle, 'Time Keeper');
       expect(quest.completed, isTrue);
       expect(quest.progressLabel, '300 / 300 min');
@@ -309,7 +309,7 @@ void main() {
 
     final summary = await QuestService().getSummary(const [], now: now);
     final firstWorkout = summary.weeklyQuests.firstWhere(
-      (quest) => quest.id == 'weekly_workout_1',
+      (quest) => quest.id == 'opening_move',
     );
     final side = summary.sideQuests.firstWhere(
       (quest) => quest.id == 'side_first_workout',
@@ -319,6 +319,79 @@ void main() {
     expect(side.completed, isFalse);
     expect(side.rewardXP, 0);
     expect(side.rewardGems, 100);
+  });
+
+  test('rotation is deterministic per day and rotates across days', () async {
+    final service = QuestService();
+    final picks = [
+      for (var i = 0; i < 6; i++)
+        (await service.getSummary(const [], now: DateTime(2026, 5, 13 + i, 10)))
+            .dailyQuests
+            .map((quest) => quest.id)
+            .join(','),
+    ];
+    // Same period (same day, different hour) → identical picks.
+    final again = (await service.getSummary(const [],
+            now: DateTime(2026, 5, 13, 22)))
+        .dailyQuests
+        .map((quest) => quest.id)
+        .join(',');
+    expect(again, picks.first);
+    // Show Up always anchored first; three per day; the board rotates across days.
+    expect(picks.every((p) => p.startsWith('show_up')), isTrue);
+    expect(picks.every((p) => p.split(',').length == 3), isTrue);
+    expect(picks.toSet().length, greaterThan(1));
+  });
+
+  test('Limit Break is featured + personalized once a baseline exists, else absent',
+      () async {
+    final service = QuestService();
+    final now = DateTime(2026, 5, 13, 10); // week of Mon 2026-05-11
+
+    // No prior weeks → Limit Break is never offered.
+    final cold = await service.getSummary(const [], now: now);
+    expect(cold.weeklyQuests.any((q) => q.id == 'limit_break'), isFalse);
+
+    // Three prior weeks of training (1,000 / 2,000 / 3,000 kg) → avg 2,000 kg.
+    final sessions = [
+      _session(date: DateTime(2026, 5, 5, 10), setCount: 4), // 4*250 = 1000
+      _session(date: DateTime(2026, 4, 28, 10), setCount: 8), // 2000
+      _session(date: DateTime(2026, 4, 21, 10), setCount: 12), // 3000
+    ];
+    final warm = await service.getSummary(sessions, now: now);
+    final lb = warm.weeklyQuests.firstWhere((q) => q.id == 'limit_break');
+
+    // avg 2000 * 1.15 = 2300 → a round hundred.
+    expect(lb.description.replaceAll(',', ''), contains('2300'));
+    expect(lb.completed, isFalse); // this week's volume is 0
+  });
+
+  test('Limit Break uses a gentler 1.10x stretch with under 3 weeks of history',
+      () async {
+    final service = QuestService();
+    final now = DateTime(2026, 5, 13, 10);
+    // A single noisy baseline week of 2,000 kg → gentler factor 1.10.
+    final sessions = [_session(date: DateTime(2026, 5, 5, 10), setCount: 8)];
+    final warm = await service.getSummary(sessions, now: now);
+    final lb = warm.weeklyQuests.firstWhere((q) => q.id == 'limit_break');
+    // 2000 * 1.10 = 2200 (a round hundred, inside the [x1.05, x1.30] safety clamp).
+    expect(lb.description.replaceAll(',', ''), contains('2200'));
+  });
+
+  test('Limit Break rounds the target to a clean hundred in the display unit (lbs)',
+      () async {
+    Units.weight = WeightUnit.lbs;
+    final service = QuestService();
+    final now = DateTime(2026, 5, 13, 10);
+    // avg 2000 kg * 1.15 = ~2300 kg ~= 5071 lbs → rounded IN LBS to 5,100.
+    final sessions = [
+      _session(date: DateTime(2026, 5, 5, 10), setCount: 4), // 1000 kg
+      _session(date: DateTime(2026, 4, 28, 10), setCount: 8), // 2000 kg
+      _session(date: DateTime(2026, 4, 21, 10), setCount: 12), // 3000 kg
+    ];
+    final warm = await service.getSummary(sessions, now: now);
+    final lb = warm.weeklyQuests.firstWhere((q) => q.id == 'limit_break');
+    expect(lb.description, contains('5100 lbs'));
   });
 }
 

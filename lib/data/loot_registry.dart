@@ -282,9 +282,11 @@ const List<LootItem> lootRegistry = [
   // Side-quest reward titles. Ruleless: granted imperatively by
   // QuestService.claimReward (and equipped the first time), never by
   // LootService.evaluateUnlocks. See sideQuestTitleLootId below.
+  // Side-quest title display names were renamed 2026-06; the loot IDs are kept
+  // stable so already-earned/equipped titles survive (they show the new name).
   LootItem(
     id: 'title_iron_novice',
-    name: 'Iron Novice',
+    name: 'A New Dawn',
     description: 'Completed your first workout.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.common,
@@ -308,7 +310,7 @@ const List<LootItem> lootRegistry = [
   ),
   LootItem(
     id: 'title_guild_walker',
-    name: 'Guild Walker',
+    name: 'Juggler',
     description: 'Trained Chest, Back, Arms, and Legs.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.uncommon,
@@ -316,10 +318,50 @@ const List<LootItem> lootRegistry = [
   ),
   LootItem(
     id: 'title_volume_knight',
-    name: 'Volume Knight',
+    name: 'Elephant Lifter',
     description: 'Reached 10,000 kg total volume.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.rare,
+    assetPath: '',
+  ),
+  LootItem(
+    id: 'title_centurion',
+    name: 'Centurion',
+    description: 'Completed 100 total workouts.',
+    category: LootCategory.titleBadge,
+    rarity: LootRarity.rare,
+    assetPath: '',
+  ),
+  LootItem(
+    id: 'title_long_live',
+    name: 'Long Live',
+    description: 'Trained 3,000 total minutes.',
+    category: LootCategory.titleBadge,
+    rarity: LootRarity.epic,
+    assetPath: '',
+  ),
+  LootItem(
+    id: 'title_whale_lifter',
+    name: 'Whale Lifter',
+    description: 'Reached 50,000 kg total volume.',
+    category: LootCategory.titleBadge,
+    rarity: LootRarity.epic,
+    assetPath: '',
+  ),
+  LootItem(
+    id: 'title_guildmaster',
+    name: 'Guildmaster',
+    description: 'Trained all 7 muscle groups.',
+    category: LootCategory.titleBadge,
+    rarity: LootRarity.rare,
+    assetPath: '',
+  ),
+  LootItem(
+    id: 'title_apex_1000',
+    name: 'Apex 1000',
+    description: 'Logged 1,000 total sets.',
+    category: LootCategory.titleBadge,
+    rarity: LootRarity.epic,
     assetPath: '',
   ),
 ];
@@ -348,16 +390,31 @@ const Map<String, String> sideQuestTitleLootId = {
   'side_minutes_300': 'title_time_keeper',
   'side_all_muscles': 'title_guild_walker',
   'side_volume_10000': 'title_volume_knight',
+  'side_workouts_100': 'title_centurion',
+  'side_minutes_3000': 'title_long_live',
+  'side_volume_50000': 'title_whale_lifter',
+  'side_all_seven': 'title_guildmaster',
+  'side_sets_1000': 'title_apex_1000',
 };
 
 /// Reverse lookup keyed by the historical reward-title display string, used by
 /// the one-time title-unification migration to backfill existing claims.
 const Map<String, String> questTitleNameToLootId = {
-  'Iron Novice': 'title_iron_novice',
+  // Current display names.
+  'A New Dawn': 'title_iron_novice',
   'Set Smith': 'title_set_smith',
   'Time Keeper': 'title_time_keeper',
+  'Juggler': 'title_guild_walker',
+  'Elephant Lifter': 'title_volume_knight',
+  'Centurion': 'title_centurion',
+  'Long Live': 'title_long_live',
+  'Whale Lifter': 'title_whale_lifter',
+  'Guildmaster': 'title_guildmaster',
+  'Apex 1000': 'title_apex_1000',
+  // Legacy aliases: keep historical reward-title strings resolving after renames.
+  'Iron Novice': 'title_iron_novice',
   'Guild Walker': 'title_guild_walker',
   'Volume Knight': 'title_volume_knight',
-  // Legacy alias: the time quest's title was renamed Oath Keeper → Time Keeper.
+  // The time quest's title was renamed Oath Keeper → Time Keeper.
   'Oath Keeper': 'title_time_keeper',
 };

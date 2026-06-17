@@ -1,24 +1,22 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../data/bit_quest_copy.dart';
 import '../models/quest_models.dart';
-import '../widgets/pixel_button.dart';
-import '../widgets/pixel_loader.dart';
 import '../models/workout_models.dart';
 import '../services/gem_service.dart';
 import '../services/quest_service.dart';
-import '../services/rest_service.dart';
 import '../services/sfx_service.dart';
 import '../services/workout_storage_service.dart';
-import '../services/xp_boost_service.dart';
-import '../services/xp_service.dart';
-import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
-import '../widgets/count_up_text.dart';
-import '../widgets/gem_claim_burst.dart';
+import '../widgets/arcade_bar.dart';
+import '../widgets/companion/bit_mood_core.dart';
+import '../widgets/companion/bit_speech_bubble.dart';
+import '../widgets/pixel_button.dart';
+import '../widgets/pixel_loader.dart';
+import '../widgets/quest_claim_flight.dart';
 
 class QuestsPage extends StatefulWidget {
   const QuestsPage({super.key, this.onQuestChanged});
@@ -31,13 +29,20 @@ class QuestsPage extends StatefulWidget {
 
 class QuestsPageState extends State<QuestsPage> {
   final QuestService _questService = QuestService();
+  final GlobalKey<GemWalletState> _walletKey = GlobalKey<GemWalletState>();
+  final GlobalKey<GemFlightLayerState> _flightKey =
+      GlobalKey<GemFlightLayerState>();
   bool _loading = true;
+  bool _walletSeeded = false;
   List<WorkoutSession> _sessions = [];
   QuestSummary? _summary;
-  int _recoveryXP = 0;
-  int _potionBonusXP = 0;
   int _gemBalance = 0;
   final Set<String> _claimingKeys = {};
+
+  // BIT cheers as gems land (refreshed per arrival), then settles. Lives on the
+  // page State so the optimistic-claim reload() never restarts it.
+  bool _bitCheer = false;
+  Timer? _bitCheerTimer;
 
   @override
   void initState() {
@@ -45,29 +50,62 @@ class QuestsPageState extends State<QuestsPage> {
     reload();
   }
 
+  @override
+  void dispose() {
+    _bitCheerTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> reload() async {
     final sessions = await WorkoutStorageService().getSessions();
     final summary = await _questService.getSummary(sessions);
-    final recoveryXP = await RestService().effectiveRecoveryXP(sessions);
-    final potionBonusXP = await XpBoostService().getTotalBonusXP();
     final gemBalance = await GemService().balance();
     if (!mounted) return;
     setState(() {
       _sessions = sessions;
       _summary = summary;
-      _recoveryXP = recoveryXP;
-      _potionBonusXP = potionBonusXP;
       _gemBalance = gemBalance;
       _loading = false;
     });
+    // Seed the wallet once; thereafter claims drive its count-up (re-seeding
+    // would snap it mid-flight). The pill builds after this setState, so defer a
+    // frame before reaching into its state.
+    if (!_walletSeeded) {
+      _walletSeeded = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _walletKey.currentState?.setInitial(_gemBalance);
+      });
+    }
   }
 
-  Future<void> _claim(QuestItem quest) async {
+  /// Claim [quest]: the reward gems fly from the tapped CLAIM button
+  /// ([originRect]) up into the pinned wallet, which counts up as they land.
+  /// Reduced motion snaps the counter instead (audio + haptic still fire).
+  Future<void> _claim(QuestItem quest, Rect originRect) async {
     if (!_claimingKeys.add(quest.claimKey)) return;
-    // Optimistic count-up: bump the header balance immediately so the gem
-    // counter animates old→new while the (fast, local) persist runs. `reload()`
-    // then settles to the authoritative ledger balance (same value).
-    setState(() => _gemBalance += quest.rewardGems);
+    final reward = quest.rewardGems;
+    final big = reward >= kBigRewardThreshold;
+    final wallet = _walletKey.currentState;
+    final walletBox =
+        _walletKey.currentContext?.findRenderObject() as RenderBox?;
+
+    if (MediaQuery.of(context).disableAnimations || walletBox == null) {
+      // No travel: the counter snaps, BIT shows a static cheer, audio still fires.
+      wallet?.land(reward, snap: true, big: big);
+      SfxService.instance.playQuestClaim();
+      HapticFeedback.mediumImpact();
+      _triggerBitCheer(big);
+    } else {
+      final walletRect = walletBox.localToGlobal(Offset.zero) & walletBox.size;
+      wallet?.showDelta(reward); // the single per-claim "+N" reveal
+      _flightKey.currentState?.fly(
+        originGlobal: originRect,
+        walletGlobal: walletRect,
+        reward: reward,
+        big: big,
+      );
+    }
+
     try {
       await _questService.claimReward(quest.claimKey, _sessions);
       await reload();
@@ -77,6 +115,30 @@ class QuestsPageState extends State<QuestsPage> {
     }
   }
 
+  // Each gem arrival: raise the wallet, refresh BIT's cheer, and on the last gem
+  // fire the chime + haptic (one satisfying "landed" beat, not a machine-gun).
+  void _onGemLand(int amt, bool isLast, bool big) {
+    _walletKey.currentState?.land(amt, big: big);
+    _triggerBitCheer(big);
+    if (isLast) {
+      SfxService.instance.playQuestClaim();
+      HapticFeedback.mediumImpact();
+    }
+  }
+
+  void _triggerBitCheer(bool big) {
+    if (!mounted) return;
+    _bitCheerTimer?.cancel();
+    setState(() => _bitCheer = true);
+    // Under reduced motion BitMoodCore snaps to a static cheer frame; a brief
+    // hold then snaps back. With motion, the cheer holds longer for big payouts.
+    final hold =
+        MediaQuery.of(context).disableAnimations ? 900 : (big ? 1800 : 1400);
+    _bitCheerTimer = Timer(Duration(milliseconds: hold), () {
+      if (mounted) setState(() => _bitCheer = false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading || _summary == null) {
@@ -84,283 +146,111 @@ class QuestsPageState extends State<QuestsPage> {
     }
 
     final summary = _summary!;
-    final totalXP =
-        XpService.calculateTotalXP(_sessions) +
-        summary.claimedRewardXP +
-        _recoveryXP +
-        _potionBonusXP;
-    final xpProgress = XpService.progressForTotalXP(totalXP);
-    final level = xpProgress.level;
-    final rank = XpService.getRank(level);
+    final bitLine = BitQuestCopy.briefing(
+      claimable: summary.claimableCount,
+      todayClaimed: summary.todayClaimedGems,
+      weeklyDone: summary.weeklyCompleted,
+      weeklyTotal: summary.weeklyTotal,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Quests')),
-      body: RefreshIndicator(
-        onRefresh: reload,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _GemRewardsBar(
-              gemBalance: _gemBalance,
-              todayGems: summary.todayClaimedGems,
-              earnedGems: summary.claimedRewardGems,
-              claimableCount: summary.claimableCount,
-              level: level,
-              rank: rank,
-            ),
-            const SizedBox(height: 24),
-            _QuestSection(
-              title: 'DAILY QUESTS',
-              subtitle: 'Resets at 00:00',
-              quests: summary.dailyQuests,
-              onClaim: _claim,
-            ),
-            const SizedBox(height: 24),
-            _QuestSection(
-              title: 'WEEKLY QUESTS',
-              subtitle: 'Resets Monday',
-              quests: summary.weeklyQuests,
-              header: _SegmentedProgressBar(
-                total: summary.weeklyTotal,
-                completed: summary.weeklyCompleted,
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              _PinnedHeader(
+                line: bitLine,
+                cheer: _bitCheer,
+                walletKey: _walletKey,
               ),
-              onClaim: _claim,
-            ),
-            const SizedBox(height: 24),
-            _QuestSection(
-              title: 'SIDE QUESTS',
-              subtitle: 'Permanent milestones',
-              quests: summary.sideQuests,
-              onClaim: _claim,
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: reload,
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _QuestSection(
+                        title: 'DAILY QUESTS',
+                        subtitle: 'Resets at 00:00',
+                        quests: summary.dailyQuests,
+                        onClaim: _claim,
+                      ),
+                      const SizedBox(height: 24),
+                      _QuestSection(
+                        title: 'WEEKLY QUESTS',
+                        subtitle: 'Resets Monday',
+                        quests: summary.weeklyQuests,
+                        header: ArcadeBar.segments(
+                          litCells: summary.weeklyCompleted,
+                          totalCells: summary.weeklyTotal,
+                        ),
+                        onClaim: _claim,
+                      ),
+                      const SizedBox(height: 24),
+                      _QuestSection(
+                        title: 'SIDE QUESTS',
+                        subtitle: 'Permanent milestones',
+                        quests: summary.sideQuests,
+                        onClaim: _claim,
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // Flight overlay — spans the screen so gems fly from any row (even the
+          // bottom of the scroll) up to the pinned wallet. Paints nothing idle.
+          Positioned.fill(
+            child: GemFlightLayer(key: _flightKey, onLand: _onGemLand),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Quest header — the gem economy at a glance. The gem balance is the hero
-/// (it count-ups + overshoots on claim); rank/level is a small identity tag
-/// (the player's XP/level bar lives on Home). A sub-stats strip keeps the card
-/// from feeling empty: today's haul, rewards ready, and lifetime quest gems.
-class _GemRewardsBar extends StatelessWidget {
-  const _GemRewardsBar({
-    required this.gemBalance,
-    required this.todayGems,
-    required this.earnedGems,
-    required this.claimableCount,
-    required this.level,
-    required this.rank,
+/// The pinned quest header (does NOT scroll): BIT + his state line on the left,
+/// the slim magenta gem wallet (the flight destination) on the right. Ported
+/// from the Quest Claim handoff's `Header`; replaces the old scrolling briefing
+/// + the richer `_GemRewardsBar` (the "slim wallet pill" call drops the rank tag
+/// + the TODAY/READY/EARNED sub-stats). BIT is the real painted `BitMoodCore`.
+class _PinnedHeader extends StatelessWidget {
+  const _PinnedHeader({
+    required this.line,
+    required this.cheer,
+    required this.walletKey,
   });
 
-  final int gemBalance;
-  final int todayGems;
-  final int earnedGems;
-  final int claimableCount;
-  final int level;
-  final String rank;
+  final String line;
+  final bool cheer;
+  final GlobalKey<GemWalletState> walletKey;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      key: const ValueKey('quests_gem_header'),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Identity tag.
-            Row(
-              children: [
-                const ImageIcon(
-                  AssetImage('assets/icons/control/icon_scroll.png'),
-                  size: 20,
-                  color: kNeon,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    rank.toUpperCase(),
-                    style: const TextStyle(
-                      fontFamily: 'PressStart2P',
-                      fontSize: 10,
-                      color: kNeon,
-                    ),
-                  ),
-                ),
-                Text(
-                  'LV. $level',
-                  style: AppFonts.shareTechMono(
-                    color: kMutedText,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // Hero — the gem balance.
-            Row(
-              children: [
-                Image.asset(
-                  'assets/icons/economy/icon_gem.png',
-                  key: ValueKey('quests_gem_balance_icon'),
-                  width: 30,
-                  height: 30,
-                  filterQuality: FilterQuality.none,
-                ),
-                const SizedBox(width: 12),
-                _GemBalanceCounter(
-                  key: const ValueKey('quests_gem_balance_counter'),
-                  value: gemBalance,
-                ),
-                const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    'GEMS',
-                    style: AppFonts.shareTechMono(
-                      color: kMutedText,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // Sub-stats strip.
-            Row(
-              children: [
-                Expanded(
-                  child: _GemStat(label: 'TODAY', value: '+$todayGems'),
-                ),
-                Expanded(
-                  child: _GemStat(
-                    label: 'READY',
-                    value: '$claimableCount',
-                    highlight: claimableCount > 0,
-                  ),
-                ),
-                Expanded(
-                  child: _GemStat(label: 'EARNED', value: '$earnedGems'),
-                ),
-              ],
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: const BoxDecoration(
+        color: kBg,
+        border: Border(bottom: BorderSide(color: kBorder)),
       ),
-    );
-  }
-}
-
-/// A single labelled stat in the header strip.
-class _GemStat extends StatelessWidget {
-  const _GemStat({
-    required this.label,
-    required this.value,
-    this.highlight = false,
-  });
-
-  final String label;
-  final String value;
-  final bool highlight;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'PressStart2P',
-            fontSize: 8,
-            color: kMutedText,
+      child: Row(
+        children: [
+          BitMoodCore(
+            key: const ValueKey('quests_bit_core'),
+            pose: cheer ? BitPose.cheer : BitPose.neutral,
+            size: 44,
+            reveal: 1,
+            idleAmp: 0.55,
           ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: AppFonts.shareTechMono(
-            color: highlight ? kAmber : kText,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// The big gem-balance number: counts up old→new and scale-overshoots with an
-/// amber glow whenever the balance rises (the "bar overshoot" analog for a
-/// counter). Reduced motion snaps to the final value with no pulse.
-class _GemBalanceCounter extends StatefulWidget {
-  const _GemBalanceCounter({super.key, required this.value});
-
-  final int value;
-
-  @override
-  State<_GemBalanceCounter> createState() => _GemBalanceCounterState();
-}
-
-class _GemBalanceCounterState extends State<_GemBalanceCounter>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 340),
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant _GemBalanceCounter oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.value > oldWidget.value &&
-        !MediaQuery.of(context).disableAnimations) {
-      _pulse.forward(from: 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const textStyle = TextStyle(
-      fontFamily: 'PressStart2P',
-      fontSize: 22,
-      color: kText,
-    );
-    return AnimatedBuilder(
-      animation: _pulse,
-      builder: (context, child) {
-        final pulse = math.sin(math.pi * _pulse.value);
-        return Transform.scale(
-          scale: 1 + 0.18 * pulse,
-          alignment: Alignment.centerLeft,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              boxShadow: [
-                BoxShadow(
-                  color: kNeon.withValues(alpha: 0.35 * pulse),
-                  blurRadius: 14 * pulse,
-                ),
-              ],
-            ),
-            child: child,
-          ),
-        );
-      },
-      child: CountUpText(value: widget.value, style: textStyle),
+          const SizedBox(width: 4),
+          Expanded(child: BitSpeechBubble(text: line)),
+          const SizedBox(width: 10),
+          GemWallet(key: walletKey),
+        ],
+      ),
     );
   }
 }
@@ -378,7 +268,7 @@ class _QuestSection extends StatelessWidget {
   final String subtitle;
   final List<QuestItem> quests;
   final Widget? header;
-  final ValueChanged<QuestItem> onClaim;
+  final void Function(QuestItem quest, Rect originRect) onClaim;
 
   @override
   Widget build(BuildContext context) {
@@ -398,7 +288,7 @@ class _QuestSection extends StatelessWidget {
               style: const TextStyle(
                 fontFamily: 'PressStart2P',
                 fontSize: 9,
-                color: Color(0xFFE8E8FF),
+                color: kText,
               ),
             ),
           ],
@@ -411,75 +301,44 @@ class _QuestSection extends StatelessWidget {
           Padding(
             key: ValueKey(quest.claimKey),
             padding: const EdgeInsets.only(bottom: 8),
-            child: _QuestCard(quest: quest, onClaim: () => onClaim(quest)),
+            child: _QuestCard(
+              quest: quest,
+              onClaim: (rect) => onClaim(quest, rect),
+            ),
           ),
       ],
     );
   }
 }
 
-/// A quest row with a juicy claim: tap → button squash → flip to CLAIMED →
-/// gem-shard burst + "+N" float (and chime + haptic from [_handleClaim]) →
-/// settle to a dimmed claimed state. Optimistic: it flips locally on tap and
-/// reports up via [onClaim]; the page persists + reloads in the background. The
-/// stable `ValueKey(claimKey)` on the list element keeps this State across that
-/// reload, so the animation never restarts. Reduced motion flips instantly.
+/// A quest row. Tap CLAIM → button squash (anticipation) → the reward gems fly
+/// from the button up into the pinned wallet (the page's flight engine) → the
+/// row settles to a dimmed CLAIMED state. The card no longer hosts a reward
+/// burst or quotes the gem amount — the reward travels to the wallet (the Quest
+/// Claim handoff). The stable `ValueKey(claimKey)` keeps this State across the
+/// optimistic reload, so the row never re-animates. Reduced motion flips instantly.
 class _QuestCard extends StatefulWidget {
   const _QuestCard({required this.quest, required this.onClaim});
 
   final QuestItem quest;
-  final VoidCallback onClaim;
+  final void Function(Rect originRect) onClaim;
 
   @override
   State<_QuestCard> createState() => _QuestCardState();
 }
 
-class _QuestCardState extends State<_QuestCard>
-    with SingleTickerProviderStateMixin {
+class _QuestCardState extends State<_QuestCard> {
   bool _claimed = false;
   bool _dim = false;
   bool _squash = false;
-  int _burstTrigger = 0;
-  int _floatTrigger = 0;
   final List<Timer> _timers = [];
-
-  // The claim "pop": a subtle squash → overshoot → settle bounce on the whole
-  // card, with an amber border that lights up then fades (g = sin(pi·t)).
-  late final AnimationController _pop;
-  late final Animation<double> _bounce;
+  final GlobalKey _claimKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _claimed = widget.quest.claimed;
     _dim = widget.quest.claimed;
-    _pop = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 420),
-    );
-    _bounce = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 1.0,
-          end: 0.96,
-        ).chain(CurveTween(curve: Curves.easeOut)),
-        weight: 25,
-      ),
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 0.96,
-          end: 1.05,
-        ).chain(CurveTween(curve: Curves.easeOutBack)),
-        weight: 40,
-      ),
-      TweenSequenceItem(
-        tween: Tween(
-          begin: 1.05,
-          end: 1.0,
-        ).chain(CurveTween(curve: Curves.easeOut)),
-        weight: 35,
-      ),
-    ]).animate(_pop);
   }
 
   @override
@@ -487,7 +346,6 @@ class _QuestCardState extends State<_QuestCard>
     for (final timer in _timers) {
       timer.cancel();
     }
-    _pop.dispose();
     super.dispose();
   }
 
@@ -495,10 +353,12 @@ class _QuestCardState extends State<_QuestCard>
 
   void _handleClaim() {
     if (_isClaimed || !widget.quest.claimable) return;
-    // Reaction beat — sound + haptic fire regardless of motion settings.
-    SfxService.instance.playQuestClaim();
-    HapticFeedback.mediumImpact();
-    widget.onClaim();
+    // The CLAIM button's rect is the flight origin — read it before the flip.
+    final box = _claimKey.currentContext?.findRenderObject() as RenderBox?;
+    final origin = box != null
+        ? (box.localToGlobal(Offset.zero) & box.size)
+        : Rect.zero;
+    widget.onClaim(origin); // page fires the flight / chime / haptic / cheer
 
     if (MediaQuery.of(context).disableAnimations) {
       setState(() {
@@ -507,27 +367,19 @@ class _QuestCardState extends State<_QuestCard>
       });
       return;
     }
-
-    // Anticipation → action → reaction → settle.
+    // Beat 1 — anticipation: button squash, then flip + settle to dimmed CLAIMED.
     setState(() => _squash = true);
-    _timers.add(
-      Timer(const Duration(milliseconds: 90), () {
-        if (!mounted) return;
-        setState(() {
-          _squash = false;
-          _claimed = true; // flip to CLAIMED
-          _burstTrigger++; // shard burst
-          _floatTrigger++; // rising "+N"
-        });
-        _pop.forward(from: 0); // card bounce + border glow
-      }),
-    );
-    _timers.add(
-      Timer(const Duration(milliseconds: 560), () {
-        if (!mounted) return;
-        setState(() => _dim = true); // settle to claimed
-      }),
-    );
+    _timers.add(Timer(const Duration(milliseconds: 90), () {
+      if (!mounted) return;
+      setState(() {
+        _squash = false;
+        _claimed = true;
+      });
+    }));
+    _timers.add(Timer(const Duration(milliseconds: 360), () {
+      if (!mounted) return;
+      setState(() => _dim = true);
+    }));
   }
 
   @override
@@ -536,116 +388,64 @@ class _QuestCardState extends State<_QuestCard>
     return AnimatedOpacity(
       opacity: _dim ? 0.6 : 1.0,
       duration: const Duration(milliseconds: 300),
-      child: AnimatedBuilder(
-        animation: _pop,
-        builder: (context, child) {
-          final glow = math.sin(math.pi * _pop.value);
-          return Transform.scale(
-            scale: _bounce.value,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(kCardRadius),
-                border: glow > 0
-                    ? Border.all(
-                        color: kAmber.withValues(alpha: glow),
-                        width: 1.5,
-                      )
-                    : null,
-                boxShadow: glow > 0
-                    ? neonGlow(
-                        color: kAmber,
-                        opacity: 0.5 * glow,
-                        blur: 18 * glow,
-                      )
-                    : null,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ImageIcon(
+                AssetImage(_iconPath()),
+                color: (quest.completed || _isClaimed) ? kNeon : kMutedText,
+                size: 20,
               ),
-              child: child,
-            ),
-          );
-        },
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ImageIcon(
-                  AssetImage(_iconPath()),
-                  color: (quest.completed || _isClaimed) ? kNeon : kMutedText,
-                  size: 20,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        quest.title,
-                        style: const TextStyle(
-                          color: kText,
-                          fontWeight: FontWeight.bold,
-                        ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      quest.title,
+                      style: const TextStyle(
+                        color: kText,
+                        fontWeight: FontWeight.bold,
                       ),
-                      const SizedBox(height: 4),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      quest.description,
+                      style: const TextStyle(color: kMutedText, fontSize: 12),
+                    ),
+                    if (quest.rewardTitle != null) ...[
+                      const SizedBox(height: 6),
                       Text(
-                        quest.description,
-                        style: const TextStyle(color: kMutedText, fontSize: 12),
+                        'Title: ${quest.rewardTitle}',
+                        style: const TextStyle(color: kAmber, fontSize: 11),
                       ),
-                      if (quest.rewardTitle != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          'Title: ${quest.rewardTitle}',
-                          style: const TextStyle(color: kAmber, fontSize: 11),
-                        ),
-                      ],
-                      if (quest.progressLabel != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          quest.progressLabel!,
-                          style: const TextStyle(
-                            color: kMutedText,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
+                    if (quest.progressLabel != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        quest.progressLabel!,
+                        style: const TextStyle(color: kMutedText, fontSize: 10),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(width: 8),
-                _action(),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              _actionControl(),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _action() {
-    return Stack(
-      clipBehavior: Clip.none,
-      alignment: Alignment.center,
-      children: [
-        _actionControl(),
-        // Shards + rising "+N", emanating from the reward control.
-        Positioned.fill(child: GemClaimBurst(trigger: _burstTrigger)),
-        Positioned(
-          top: -4,
-          left: 0,
-          right: 0,
-          child: _GemFloat(
-            trigger: _floatTrigger,
-            gems: widget.quest.rewardGems,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _actionControl() {
     if (_isClaimed) {
-      return _StatusBadge(
-        key: const ValueKey('quest_status_claimed'),
+      return const _StatusBadge(
+        key: ValueKey('quest_status_claimed'),
         label: 'CLAIMED',
         color: kMutedText,
       );
@@ -656,24 +456,26 @@ class _QuestCardState extends State<_QuestCard>
         duration: const Duration(milliseconds: 90),
         curve: Curves.easeOut,
         child: PixelButton(
-          label: '+${widget.quest.rewardGems} GEMS',
+          key: _claimKey,
+          label: 'CLAIM',
           fullWidth: false,
           onPressed: _handleClaim,
         ),
       );
     }
-    return _StatusBadge(
-      key: ValueKey('quest_reward_badge_${widget.quest.rewardGems}'),
-      label: '+${widget.quest.rewardGems}',
-      color: kAmber,
-      iconPath: 'assets/icons/economy/icon_gem_reward.png',
+    // In progress — a quiet, dim marker. Quest cards never quote the gem payout;
+    // the reward is something you earn, not a price tag.
+    return const _StatusBadge(
+      key: ValueKey('quest_status_in_progress'),
+      label: 'IN PROGRESS',
+      color: kMutedText,
     );
   }
 
   String _iconPath() {
     return switch (widget.quest.category) {
-      // Daily quests use the check-slot bullet; it fills in once the quest
-      // hits its target (the row also tints it neon at that point).
+      // Daily quests use the check-slot bullet; it fills in once the quest hits
+      // its target (the row also tints it neon at that point).
       QuestCategory.daily => (widget.quest.completed || _isClaimed)
           ? 'assets/icons/control/ui/icon_quest_bullet_done.png'
           : 'assets/icons/control/ui/icon_quest_bullet.png',
@@ -683,86 +485,15 @@ class _QuestCardState extends State<_QuestCard>
   }
 }
 
-/// A single rising "+N" that floats up from the claimed button and fades, once
-/// per [trigger] bump. Inert under reduced motion.
-class _GemFloat extends StatefulWidget {
-  const _GemFloat({required this.trigger, required this.gems});
-
-  final int trigger;
-  final int gems;
-
-  @override
-  State<_GemFloat> createState() => _GemFloatState();
-}
-
-class _GemFloatState extends State<_GemFloat>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 650),
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant _GemFloat oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.trigger != oldWidget.trigger && widget.trigger > 0) {
-      if (!MediaQuery.of(context).disableAnimations) {
-        _controller.forward(from: 0);
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        final v = _controller.value;
-        if (v <= 0 || v >= 1) return const SizedBox.shrink();
-        final t = Curves.easeOut.transform(v);
-        return Opacity(
-          opacity: (1 - t).clamp(0.0, 1.0),
-          child: Transform.translate(
-            offset: Offset(0, -t * 26),
-            child: Text(
-              '+${widget.gems}',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontFamily: 'PressStart2P',
-                fontSize: 10,
-                color: kAmber,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({
     super.key,
     required this.label,
     required this.color,
-    this.iconPath,
   });
 
   final String label;
   final Color color;
-  final String? iconPath;
 
   @override
   Widget build(BuildContext context) {
@@ -772,55 +503,14 @@ class _StatusBadge extends StatelessWidget {
         border: Border.all(color: color),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (iconPath != null) ...[
-            Image.asset(
-              iconPath!,
-              width: 12,
-              height: 12,
-              filterQuality: FilterQuality.none,
-            ),
-            const SizedBox(width: 4),
-          ],
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              color: color,
-              fontSize: 8,
-            ),
-          ),
-        ],
+      child: Text(
+        label,
+        style: TextStyle(
+          fontFamily: 'PressStart2P',
+          color: color,
+          fontSize: 8,
+        ),
       ),
-    );
-  }
-}
-
-class _SegmentedProgressBar extends StatelessWidget {
-  const _SegmentedProgressBar({required this.total, required this.completed});
-
-  final int total;
-  final int completed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        for (int i = 0; i < total; i++) ...[
-          Expanded(
-            child: Container(
-              height: 10,
-              decoration: BoxDecoration(
-                color: i < completed ? const Color(0xFF00FF9C) : kBorder,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-          ),
-          if (i < total - 1) const SizedBox(width: 4),
-        ],
-      ],
     );
   }
 }

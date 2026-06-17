@@ -74,21 +74,6 @@ void main() {
 
   test('quest group mechanics credit every selected target', () async {
     final now = DateTime(2026, 5, 13, 10);
-    final summary = await QuestService().getSummary([
-      _session(
-        date: now,
-        muscleGroup: 'Chest',
-        targetMuscleGroups: const ['Chest', 'Back'],
-      ),
-    ], now: now);
-
-    expect(
-      summary.weeklyQuests
-          .firstWhere((quest) => quest.id == 'weekly_muscles_2')
-          .completed,
-      isTrue,
-    );
-
     final sideSummary = await QuestService().getSummary([
       _session(
         date: now,
