@@ -100,8 +100,9 @@ void main() {
       harness(ProgramPathHud(program: program, progress: progress)),
     );
 
-    // Reward exists but is hidden until 100% — teaser shows, name/tier do not.
-    expect(find.text('REWARD AT 100%'), findsOneWidget);
+    // Reward exists but is hidden until 100% — concise locked teaser shows,
+    // name/tier do not (the lock + panel context convey "locked until 100%").
+    expect(find.text('REWARD'), findsOneWidget);
     expect(find.textContaining('SPLIT DISCIPLINE'), findsNothing);
     expect(find.text('LEGENDARY'), findsNothing);
   });

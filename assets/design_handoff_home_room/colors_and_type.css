@@ -1,0 +1,221 @@
+/* ============================================================================
+   IRONBIT — Colors & Type
+   Pixel-arcade workout RPG. Dark mode only. Neon-on-near-black.
+   Source of truth: lib/theme/tokens.dart (Flutter). If this drifts, code wins.
+   ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   FONTS  (local files under fonts/)
+   - PressStart2P : headings, ranks, labels, counters that need "arcade cabinet"
+   - ShareTechMono: timers, numeric counters, meta lines, body-ish mono copy
+   - Gotham       : longer-form body text (paragraphs, descriptions)
+   -------------------------------------------------------------------------- */
+@font-face {
+  font-family: "PressStart2P";
+  src: url("fonts/pressstart2p/PressStart2P-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ShareTechMono";
+  src: url("fonts/sharetechmono/ShareTechMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gotham";
+  src: url("fonts/gotham/Gotham-Book.otf") format("opentype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gotham";
+  src: url("fonts/gotham/Gotham-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gotham";
+  src: url("fonts/gotham/Gotham-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gotham";
+  src: url("fonts/gotham/Gotham-Black.otf") format("opentype");
+  font-weight: 900;
+  font-display: swap;
+}
+
+:root {
+  /* ==========================================================================
+     PALETTE  (exact hex from tokens.dart)
+     ======================================================================== */
+
+  /* Backgrounds / surfaces — near-black blue-violet, layered for elevation */
+  --bg:            #11111F;  /* app background                              */
+  --bg-grad-top:   #15152C;  /* subtle vertical bg gradient — top           */
+  --bg-grad-bottom:#0E0E1B;  /* subtle vertical bg gradient — bottom        */
+  --card:          #1C1C34;  /* default card / surface                      */
+  --surface-2:     #232342;  /* raised surface (mission card bg)            */
+  --surface-3:     #2A2A4E;  /* highest surface                            */
+
+  /* Borders */
+  --border:        #36365E;  /* default 1px border                          */
+  --border-variant:#45437A;  /* brighter border / secondary button fill     */
+  --border-dark:   #2A2A3E;  /* disabled fills, faint dividers              */
+
+  /* Brand accent — neon green is THE tap-target / identity color */
+  --neon:          #00FF9C;
+  --neon-dark:     #009955;  /* pressed / glow falloff                      */
+
+  /* Text */
+  --text:          #E8E8FF;  /* primary text                                */
+  --muted-text:    #9494B8;  /* secondary / "the app's guess" / suggestions */
+  --dim:           #555577;  /* disabled labels, faint axis labels          */
+
+  /* Signal accents */
+  --amber:         #FFD700;  /* reward / "you leveled up" / rewards-ready    */
+  --amber-dark:    #FFA500;
+  --cyan:          #00BFFF;  /* recovery / secondary accent                 */
+  --danger:        #FF2D55;  /* destructive / warnings (NEVER body-shaming) */
+
+  /* Class identity colors */
+  --class-assassin:#4DE5FF;  /* cyan   — Shoulders + Core                   */
+  --class-bruiser: #FFD700;  /* gold   — Chest + Back + Arms                */
+  --class-tank:    #FF2D55;  /* red    — Legs                              */
+  --class-vanguard:#B14DFF;  /* violet — all-round, unlocks at L10          */
+
+  /* Loot rarity — standard RPG convention: grey / green / blue / purple */
+  --rarity-common:   #9A9AAA;
+  --rarity-uncommon: #00FF9C;
+  --rarity-rare:     #00BFFF;
+  --rarity-epic:     #B14DFF;
+
+  /* ==========================================================================
+     TYPE FAMILIES
+     ======================================================================== */
+  --font-display: "PressStart2P", "Courier New", monospace; /* headings/labels */
+  --font-mono:    "ShareTechMono", "Courier New", monospace; /* counters/meta   */
+  --font-body:    "Gotham", system-ui, sans-serif;           /* paragraphs      */
+
+  /* ==========================================================================
+     SPACING SCALE  (kSpace1..5 = 4/8/12/16/24)
+     ======================================================================== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  /* Layout rules */
+  --home-pad:        16px;  /* kHomeHorizontalPadding                       */
+  --card-pad:        16px;  /* kCardPadding                                 */
+  --section-gap:     16px;  /* kSectionGap                                  */
+  --button-height:   48px;  /* kButtonHeight                                */
+  --primary-border:  1.2px; /* kPrimaryCardBorderWidth                      */
+
+  /* ==========================================================================
+     SHAPE — sharp 4px corners everywhere. No soft radii.
+     ======================================================================== */
+  --radius: 4px;            /* kCardRadius — the ONLY radius in the system   */
+
+  /* ==========================================================================
+     MOTION  (durations + easing from tokens.dart)
+     ======================================================================== */
+  --motion-fast: 120ms;  /* @kind other */ /* kMotionFast — taps */
+  --motion-base: 180ms;  /* @kind other */ /* kMotionBase — most transitions */
+  --motion-pop:  220ms;  /* @kind other */ /* kMotionPop  — celebratory pops */
+  --motion-curve: cubic-bezier(0.215, 0.61, 0.355, 1);  /* @kind other */ /* easeOutCubic */
+
+  /* ==========================================================================
+     NEON GLOW  (neonGlow() — emissive bloom on dark surfaces)
+     spreadRadius -2, blur 16, ~22% alpha of the accent.
+     ======================================================================== */
+  --glow-neon:  0 0 16px -2px rgba(0, 255, 156, 0.22);
+  --glow-amber: 0 0 16px -2px rgba(255, 215, 0, 0.22);
+  --glow-cyan:  0 0 16px -2px rgba(0, 191, 255, 0.22);
+}
+
+/* ============================================================================
+   SEMANTIC TYPE RAMP
+   Headings = PressStart2P (tight, pixel). Counters/meta = ShareTechMono.
+   Body = Gotham. All-caps is the default register for arcade labels.
+   ========================================================================== */
+
+/* Display / hero — onboarding slams, rank reveals */
+.t-display {
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1.35;
+  letter-spacing: 0.5px;
+  color: var(--text);
+}
+
+/* H1 — screen titles, big mission titles */
+.t-h1 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+/* H2 — section headers (DAILY QUESTS, etc.) */
+.t-h2 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+/* Label — small PressStart2P tags, nav labels, chips */
+.t-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.3px;
+  color: var(--muted-text);
+}
+
+/* Micro label — tiny stat/axis labels (radar STR/AGI/END) */
+.t-micro {
+  font-family: var(--font-display);
+  font-size: 7px;
+  line-height: 1.4;
+  color: var(--muted-text);
+}
+
+/* Counter — big monospaced numerics: timers, weights, XP */
+.t-counter {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* Meta — mono support lines under titles, detail rows */
+.t-meta {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.25;
+  color: var(--muted-text);
+}
+
+/* Body — longer descriptive copy */
+.t-body {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+/* Body strong */
+.t-body-strong {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}

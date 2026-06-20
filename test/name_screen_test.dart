@@ -19,12 +19,11 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets(
-    'reduced motion renders prompt, subtext, empty field, counter, disabled button',
+    'reduced motion renders prompt, empty field, counter, disabled button',
     (tester) async {
       await _pumpNameScreen(tester);
 
       expect(find.text('NAME YOUR CHARACTER'), findsOneWidget);
-      expect(find.text("this is who you'll become."), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
       expect(find.text('0/16'), findsOneWidget);
       expect(find.text('ENTER A NAME'), findsOneWidget);

@@ -73,7 +73,11 @@ class Expedition {
   /// True once the report ceremony has been shown.
   final bool viewed;
 
-  Expedition copyWith({String? settledAtIso, bool? viewed}) => Expedition(
+  Expedition copyWith({
+    String? returnsAtIso,
+    String? settledAtIso,
+    bool? viewed,
+  }) => Expedition(
     id: id,
     routeId: routeId,
     day: day,
@@ -83,7 +87,7 @@ class Expedition {
     findId: findId,
     flavorIdx: flavorIdx,
     dispatchedAtIso: dispatchedAtIso,
-    returnsAtIso: returnsAtIso,
+    returnsAtIso: returnsAtIso ?? this.returnsAtIso,
     durationMinutes: durationMinutes,
     multiplier: multiplier,
     vitAtDispatch: vitAtDispatch,
@@ -361,4 +365,23 @@ AdventureUiState adventureUiStateOf(
     charges: state.charges,
     weeklyCapped: cappedThisWeek,
   );
+}
+
+/// True when a haul is waiting to be collected — the **single persisted
+/// authority** for the home-room coffer (Codex: never a volatile held report).
+/// Two equivalent sources, both durable: an already-settled report still
+/// unviewed in [AdventureState.history], or a [pending] whose return time has
+/// passed (which `settleAndPeekReport` will move to unviewed history on the next
+/// touch). Derived fresh from persisted state every load, so it survives
+/// kill/reopen and the service auto-settling a pending between opens. The
+/// `returns-at` test mirrors [adventureUiStateOf] exactly so the coffer and the
+/// phase can never disagree.
+bool hasUncollectedHaul(AdventureState state, DateTime now) {
+  if (state.history.any((e) => !e.viewed)) return true;
+  final pending = state.pending;
+  if (pending == null) return false;
+  final returnsAt = pending.returnsAtIso == null
+      ? null
+      : DateTime.tryParse(pending.returnsAtIso!);
+  return returnsAt == null || !now.isBefore(returnsAt);
 }

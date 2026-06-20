@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/tokens.dart';
 import 'motion/phosphor_tap.dart';
 
 /// Drop-in replacement for InkWell that does a hard color swap on tap
@@ -12,7 +13,7 @@ class ArcadeTap extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.borderRadius,
-    this.flashColor = const Color(0xFF00FF9C),
+    this.flashColor = kNeon,
     this.flashOpacity = 0.15,
     this.flashMs = 80,
     this.behavior = HitTestBehavior.opaque,

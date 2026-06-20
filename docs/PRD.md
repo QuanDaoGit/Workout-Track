@@ -78,30 +78,55 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 
 ### Supporting systems
 - [x] XP & levels (`XpService`), threshold leveling, LCK multiplier.
-- [x] Quests (`QuestService`) — auto-evaluated from workout history; no manual-confirm quests.
+- [x] Quests (`QuestService`) — auto-evaluated from workout history; no manual-confirm quests. A
+      **rotating pool** surfaces a fresh deterministic set each period (3 daily / 5 weekly, each anchored
+      by a reliable win; side = a permanent milestone ladder). **Limit Break** is a personalized weekly
+      volume target from the user's own recent training — a doable stretch, rounded to the nearest 100.
+      **BIT voices the board** (pinned header) — a small faced `BitMoodCore` + a state-derived,
+      body-neutral line (shared `BitSpeechBubble`); an empty board reads as *quiet*, never a guilt-poke.
+      Claiming a quest **flies the reward gems** from the CLAIM button to the pinned magenta gem wallet,
+      which counts up as they land while BIT cheers (`quest_claim_flight.dart`; reduced motion snaps).
 - [x] Loot & inventory (`LootService`) — deterministic milestone unlocks (avatar frames/themes)
       that create collection pull without paid shortcuts.
 - [x] Guild (`GuildService`) — local single-player simulation with NPC members, deterministic per ISO week.
-- [x] The Shadow (`ShadowService`) — nemesis built from the user's own steady training: acute
-      (last 10 days) vs chronic (prior 28 days) per-axis pace contest on STR/AGI/END. Home
-      callout + Guild-tab arena (ghost of the user's own avatar, dual radar). First genuine
-      defeat grants the Shadowbane title + Spectral Frame (identity only — never XP/gems);
-      a decaying high-water floor blocks rewards for beating a rested-away baseline. See
-      `docs/stats-mechanics.md` → "The Shadow".
 - [x] Adventure (`AdventureService`) — workout-fueled expeditions. Each completed workout grants one
       expedition **charge** (max 1/day, banked up to 3) — the instant payoff, surfaced on the workout
       summary. The user spends a charge to send the character out on a chosen stat-keyed route (IRON
       VAULT/STR, SKY TRACER/AGI, INFINI MAZE/END) via a console-style stage-select ceremony (tap to
       arm → the other two lock → DISPATCH). Recovery (**VIT**) scales the haul: duration 4–8h and a
       1.0–1.4× gem multiplier, both frozen at dispatch. Payout = rank base (8/12/18/26/40) × VIT
-      multiplier × ±30% roll. The report greets the user once the haul returns (wall-clock
-      `returnsAt`, monotonic max-seen rollback guard; collected on the page or auto-revealed on the
-      next Home open). One expedition out at a time; ≤5 dispatch/ISO-week (weekly gem budget = 5 ×
+      multiplier × ±30% roll. Gems **settle durably on the next Home open** (idempotent ledger),
+      but the **report is the single reveal, gated behind COLLECT** — a tapped curtain, never an
+      auto-push (so the numbers reveal once, on the report's diorama/flavor/find/count-up). One
+      expedition out at a time; ≤5 dispatch/ISO-week (weekly gem budget = 5 ×
       base × [1.0–1.4×]). Idempotent ledger awards, occasional no-power flavor finds. **The 4–8h
       gated wait is a deliberate, eyes-open exception to the no-idle-loop doctrine:** gems are
       cosmetic-only, the wait is never punished (no expiry/withering, calm collection), and a
-      clock-forward skip only bypasses the wait, never the charge cost (a real logged workout). See
-      `docs/superpowers/plans/2026-06-12-adventure-design.md` (+ the v2 addendum).
+      clock-forward skip only bypasses the wait, never the charge cost (a real logged workout). The
+      **home-room pad doubles as the in-room dispatch dock**: the pad's own readout strip is repainted
+      as an **integrated 3-segment charge meter** (`widgets/room/pad_charge_meter.dart` — a faithful
+      port of the `pad-charge-meter` handoff) that lights **0–3 cyan** for the banked charges, with a
+      static armed glow only when a dispatch is possible — no separate label, nothing protrudes, no nag
+      at zero. The meter shows in **every pad state** (home / out / haul), only hidden by the transition
+      FX, so the dock never reverts to a bare strip; and when a workout **banks a charge** the newly-lit
+      segment gives a brief **arrival flash** (the rare earned moment gets a beat; reduced-motion → none).
+      Earning is independent of an expedition being out (workout-while-out still banks a charge). The
+      **dispatch console** ("WHERE DOES BIT SCOUT?") shows the charge as the **energy-cell icon + `N/3`**
+      (`widgets/room/energy_cell.dart`, a faithful port; cyan = BIT's energy, depleted = dead grey, never
+      red). The **report ceremony** reveals staged, **tap-to-skip**, with the gem + found item **popping
+      in** (scale + a brief glow / rarity-colour flash) — juice, never a slot-machine roll. Tap → SEND BIT console → BIT launches
+      up the beam and scouts → while out, the dock shows his **turquoise hologram in a containment
+      rig** ("out there", not gone) + "back ~Nh" → on return, BIT **rides the beam home and the dock
+      fabricates a magenta haul coffer** → tapping the coffer **dissolves it (the curtain) and routes
+      into the report** (the single reveal). The coffer is the **persisted authority**
+      (`hasUncollectedHaul`): it survives kill/reopen, blocks re-dispatch until collected
+      (single-track pad), and a returning haul plays the homecoming once (backlog = static coffer).
+      BIT *himself* is the expedition protagonist — he also **hover-glides the scrolling route
+      diorama** (Adventure tiles + report) in right-facing profile; **no avatar walker on any
+      expedition surface**. See
+      `docs/superpowers/plans/2026-06-12-adventure-design.md` (+ the v2 addendum),
+      `docs/superpowers/plans/2026-06-17-expedition-pad-dock.md`, and
+      `docs/superpowers/plans/2026-06-17-expedition-homecoming-coffer.md`.
 - [x] Body metrics (`BodyMetricsService`) — opt-in, body-neutral weight tracking: log any time, an
       EWMA **trend line** smooths the noise, and a single weekly XP-boost reward (rolling 7-day
       window) rewards the act of checking in.
@@ -114,8 +139,23 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
       through onboarding and **embodies** at the start gate, greeting the user by name for the first
       time ("What should we do first, {name}?"). Subordinate to the user-hero (never on the identity
       card); see `lib/widgets/companion/`. Address register: name (intimate) / "warrior" (ceremony) /
-      "recruit" (pre-embodiment), with "warrior" as the fallback for an unusable name. The interview
-      voice + in-app presence are planned follow-ups.
+      "recruit" (pre-embodiment), with "warrior" as the fallback for an unusable name. In-app
+      presence has begun — BIT voices the **quest board** and **lives in the home room**: one speech
+      box (`BitSpeechBubble` — an in-world balloon ABOVE BIT with a downward tail) that rotates short,
+      body-neutral life-advice when home (a fresh line on each Home re-entry), greets **"It's me
+      again"** once when the away hologram first appears, carries the
+      live expedition status while scouting, and prompts **"Check out the loots"** (gem-magenta,
+      tap-to-collect) when a haul waits (`data/bit_room_copy.dart`; never a guilt-poke). The room
+      also mounts a **wall quest board** (`widgets/room/quest_board.dart`) upper-left, a little above
+      BIT (counterweighting the world window): a glance peek (QUESTS · 5-seg weekly bar · gem pip)
+      that tints **amber + breathes only when a reward is claimable** (else calm steady-cyan, the
+      pad-LED hue), tapping routes to the full Quests page; when a reward waits BIT also speaks a calm
+      claimable nudge line (tappable → Quests). A small
+      **spam-tap easter egg**: poke BIT five times fast (≤350ms apart) at home and he tires of it —
+      smoothly slumps to a REST pose and sighs **"I guess bro..."** for ~3s, then perks back to neutral
+      advice (armed only at home/idle, so it never buries a haul or away line; reduced motion → an
+      instant slump, still legible). The interview
+      voice is a planned follow-up.
 
 ---
 

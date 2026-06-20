@@ -3,13 +3,16 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/loot_registry.dart';
+import '../data/programs_library.dart';
 import '../models/avatar_spec.dart';
 import '../models/loot_item.dart';
+import '../models/program_models.dart';
 import 'body_metrics_service.dart';
 import 'calibration_service.dart';
 import 'character_service.dart';
 import 'loot_service.dart';
 import 'profile_service.dart';
+import 'program_service.dart';
 import 'stat_engine.dart';
 
 /// One-shot cleanup of dead `shared_preferences` keys left over from the
@@ -28,6 +31,9 @@ class MigrationService {
       'migration_v_weightlog_reward_anchor_done';
   static const _themeLootCleanupDoneKey =
       'migration_v_theme_loot_cleanup_done';
+  static const _shadowRemovalDoneKey = 'migration_v_shadow_removal_done';
+  static const _weekdayAnchoredScheduleDoneKey =
+      'migration_v_weekday_anchored_schedule_done';
 
   static const _deadKeys = <String>[
     // Battle / dungeon / scrap
@@ -97,6 +103,46 @@ class MigrationService {
     }
 
     await prefs.setBool(_themeLootCleanupDoneKey, true);
+  }
+
+  /// One-shot: removes the retired "Shadow" boss feature's persisted residue —
+  /// its `shadow_state_v1` key, and the two grant-only loot ids it awarded
+  /// (`title_shadowbane`, `frame_spectral`) from the equipped slots + owned
+  /// inventory. The loot load paths already skip unknown ids (so this is tidy-
+  /// up that keeps `getOwnedCount` honest), and clearing an equipped Shadow
+  /// frame/title reverts the avatar/title to its default cleanly. Mirrors
+  /// [runThemeLootCleanupOnce]; idempotent (gated + exact-id match).
+  static Future<void> runShadowRemovalCleanupOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_shadowRemovalDoneKey) == true) return;
+
+    const shadowLootIds = {'title_shadowbane', 'frame_spectral'};
+
+    await prefs.remove('shadow_state_v1');
+
+    final equippedRaw = prefs.getString('equipped_loot');
+    if (equippedRaw != null && equippedRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(equippedRaw) as Map<String, dynamic>;
+        final before = decoded.length;
+        decoded.removeWhere((_, value) => shadowLootIds.contains(value));
+        if (decoded.length != before) {
+          await prefs.setString('equipped_loot', jsonEncode(decoded));
+        }
+      } catch (_) {
+        // Malformed JSON — leave it; the loader already tolerates it.
+      }
+    }
+
+    final owned = prefs.getStringList('loot_inventory');
+    if (owned != null) {
+      final cleaned = owned.where((id) => !shadowLootIds.contains(id)).toList();
+      if (cleaned.length != owned.length) {
+        await prefs.setStringList('loot_inventory', cleaned);
+      }
+    }
+
+    await prefs.setBool(_shadowRemovalDoneKey, true);
   }
 
   static Future<void> runEndStatBackfillOnce() async {
@@ -240,6 +286,44 @@ class MigrationService {
     }
 
     await prefs.setBool(_titleUnificationDoneKey, true);
+  }
+
+  /// Seeds the workout-only progression cursor for the weekday-anchored
+  /// schedule. Pre-this-build, `ProgramProgress.currentDayIndex` walked the full
+  /// 7-slot workout+rest cycle; now progression tracks `workoutIndex` over the
+  /// workout-only sublist and rest is calendar-derived. Maps a mid-program user's
+  /// legacy cursor to the next actionable workout (via
+  /// [workoutIndexForLegacyDayIndex]) so the first post-update session is neither
+  /// skipped nor duplicated. No-op when there is no active program (a fresh start
+  /// writes `workoutIndex` directly). One-shot + idempotent; does not touch
+  /// shields/streaks (the transition day applies no miss logic).
+  static Future<void> runWeekdayAnchoredScheduleOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_weekdayAnchoredScheduleDoneKey) == true) return;
+
+    final raw = prefs.getString(ProgramService.progressKey);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final progress = ProgramProgress.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>,
+        );
+        final program = programById(progress.programId);
+        if (program != null && program.workouts.isNotEmpty) {
+          final mapped = workoutIndexForLegacyDayIndex(
+            program,
+            progress.currentDayIndex,
+          );
+          await prefs.setString(
+            ProgramService.progressKey,
+            jsonEncode(progress.copyWith(workoutIndex: mapped).toJson()),
+          );
+        }
+      } catch (_) {
+        // Malformed progress — leave it; ProgramService clamps/ignores on load.
+      }
+    }
+
+    await prefs.setBool(_weekdayAnchoredScheduleDoneKey, true);
   }
 
   /// Seeds the weekly-reward anchor for the decoupled weight-log cadence. Before

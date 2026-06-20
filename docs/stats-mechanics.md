@@ -271,55 +271,6 @@ newValue = max(floor(peak * 0.5), floor(currentValue * 0.9))
 
 The stat cannot decay below 50% of its historical peak.
 
-## The Shadow (acute:chronic contest)
-
-The Shadow is the user's nemesis built from their own steady training — a
-live mirror, recomputed from history on every evaluation (`ShadowService`,
-key `shadow_state_v1`). It personifies the decay system as a visible opponent:
-keep pace with your past month and you hold it off; slip and it pulls ahead.
-
-**Currency:** per-session *linear* axis credits from
-`StatEngine.sessionAxisLoads` — the same intensity currency and muscle weights
-as the board, but never log-curved, with no calibration seed, no decay, and no
-class focus bonus (pure training signal, identical across classes). STR/AGI
-are in intensity-credit units; END in endurance points.
-
-**Windows (uncoupled ACWR):** per axis,
-
-```text
-acuteRate   = credit per day over the last 10 days        (YOU)
-chronicRate = credit per day over the 28 days before that (THE SHADOW)
-r           = acuteRate / chronicRate
-```
-
-Calendar-day rate windows — not session counts — so sparse and dense trainers
-compare honestly and a 10-day acute window spans any common split cycle.
-
-**Per-axis states:** `r >= 0.95` ahead (threshold sits under 1.0 to absorb
-window quantization noise), `0.8 <= r < 0.95` close (the ACWR literature's
-healthy floor), `r < 0.8` behind (with a plain-language reason). An axis whose
-chronic rate is under its sufficiency floor is *forming* — never scored as a
-loss.
-
-**Lifecycle:** < 6 completed sessions → locked teaser ("Something is
-forming."); < 3 sessions in the chronic window → forming; 6–11 sessions →
-provisional (labeled experimental, no permanent reward); ≥ 12 sessions →
-mature.
-
-**Defeat and the faded floor:** the Shadow is defeated when every sufficient
-axis is ahead. A per-axis chronic high-water (decaying ~2%/week) guards
-against under-training: if the current baseline has decayed well below its
-high-water, the Shadow is *faded* — out-pacing it reads as rebuilding and
-awards nothing. The first genuine (mature, non-faded) defeat grants the
-`Shadowbane` title and the Spectral Frame once, idempotently — identity only,
-never XP or gems. The Shadow never mutates board stats, decay, or XP.
-
-**Surfaces:** compact Home callout (status line, tap-through) and the Guild
-tab arena (ghost avatar = the user's own pixel face desaturated/tinted, dual
-radar with the Shadow as the dashed reference ring, per-axis reads, reward
-state). Week-over-week mean-ratio comparison drives a "gap closing"
-encouragement while behind.
-
 ## Adventure (rank consumption)
 
 Adventure (`AdventureService`, key `adventure_state_v1`) is the economy consumer of absolute
@@ -451,5 +402,4 @@ Important stat-related local keys:
 | `calibration_seed_volumes_v1` | workout-derived calibration seed volume |
 | `workout_sessions` | saved workout history |
 | `rest_state_v1` | recovery schedule, shields, rest claims |
-| `shadow_state_v1` | Shadow high-water floor, weekly ratio, defeat marker |
 | `adventure_state_v1` | Adventure orders, pending expedition, day/week caps, report history |

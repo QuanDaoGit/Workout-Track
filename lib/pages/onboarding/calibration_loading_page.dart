@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../data/bit_interview_copy.dart';
 import '../../models/body_goal_models.dart';
 import '../../models/calibration_quiz_models.dart';
 import '../../models/character_class.dart';
@@ -10,6 +11,8 @@ import '../../models/unit_models.dart';
 import '../../services/unit_settings_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/companion/bit_mood_core.dart';
+import '../../widgets/companion/bit_speech_bubble.dart';
 
 /// Authentic, tap-gated "technical calibration" loader shown after the quiz and
 /// before the class reveal.
@@ -163,6 +166,18 @@ class _CalibrationLoadingPageState extends State<CalibrationLoadingPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // BIT frames the calibration — it's "picking a path that fits you".
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              BitMoodCore(pose: BitPose.neutral, reveal: 1, size: 48),
+              SizedBox(width: 12),
+              Expanded(
+                child: BitSpeechBubble(text: BitInterviewCopy.pickingPath),
+              ),
+            ],
+          ),
+          const SizedBox(height: kSpace5),
           const Text(
             'CALIBRATING PROFILE',
             key: ValueKey('calibration_header'),

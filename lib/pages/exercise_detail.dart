@@ -170,7 +170,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                   scaleX: -1,
                   child: const ImageIcon(
                     AssetImage('assets/icons/control/icon_next.png'),
-                    color: Color(0xFF00FF9C),
+                    color: kNeon,
                     size: 20,
                   ),
                 ),
@@ -197,7 +197,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                         child: Center(
                           child: ImageIcon(
                             AssetImage('assets/icons/control/icon_hammer.png'),
-                            color: Color(0xFF00FF9C),
+                            color: kNeon,
                             size: 64,
                           ),
                         ),
@@ -358,11 +358,9 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                               width: 24,
                               height: 24,
                               decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF00FF9C,
-                                ).withValues(alpha: 0.15),
+                                color: kNeon.withValues(alpha: 0.15),
                                 border: Border.all(
-                                  color: const Color(0xFF00FF9C),
+                                  color: kNeon,
                                 ),
                                 borderRadius: BorderRadius.circular(4),
                               ),
@@ -372,7 +370,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                                 style: const TextStyle(
                                   fontFamily: 'PressStart2P',
                                   fontSize: 8,
-                                  color: Color(0xFF00FF9C),
+                                  color: kNeon,
                                 ),
                               ),
                             ),
@@ -494,7 +492,7 @@ class _BouncingFavoriteIconState extends State<_BouncingFavoriteIcon>
                 ? 'assets/icons/control/icon_heart.png'
                 : 'assets/icons/control/icon_receptacle.png',
           ),
-          color: widget.isFavorite ? const Color(0xFFFF2D55) : kMutedText,
+          color: widget.isFavorite ? kDanger : kMutedText,
           size: 24,
         ),
       ),

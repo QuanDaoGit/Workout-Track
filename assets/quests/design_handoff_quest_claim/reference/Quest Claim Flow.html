@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ironbit — Quest Claim → Wallet Flow</title>
+<style>
+  @font-face { font-family:"PressStart2P"; src:url("fonts/pressstart2p/PressStart2P-Regular.ttf") format("truetype"); font-display:swap; }
+  @font-face { font-family:"ShareTechMono"; src:url("fonts/sharetechmono/ShareTechMono-Regular.ttf") format("truetype"); font-display:swap; }
+  @font-face { font-family:"Gotham"; src:url("fonts/gotham/Gotham-Book.otf") format("opentype"); font-weight:400; font-display:swap; }
+  @font-face { font-family:"Gotham"; src:url("fonts/gotham/Gotham-Medium.otf") format("opentype"); font-weight:500; font-display:swap; }
+
+  html, body { margin:0; height:100%; background:#07070E; }
+  body {
+    display:flex; align-items:center; justify-content:center; gap:34px;
+    min-height:100vh; padding:28px; box-sizing:border-box;
+    font-family:'ShareTechMono', monospace; flex-wrap:wrap;
+  }
+  .phone {
+    width:390px; height:844px; flex:none;
+    background:#000; border-radius:44px; padding:10px;
+    box-shadow:0 0 0 2px #2A2A3E, 0 30px 80px -20px rgba(0,0,0,0.9);
+    position:relative;
+  }
+  .screen {
+    width:100%; height:100%; border-radius:36px; overflow:hidden;
+    background:#11111F; position:relative; display:flex; flex-direction:column;
+  }
+  .statusbar {
+    height:28px; flex:none; display:flex; align-items:center; justify-content:space-between;
+    padding:0 22px; background:#11111F; z-index:5;
+    font-family:'ShareTechMono', monospace; font-size:12px; color:#E8E8FF;
+  }
+  .statusbar .dots { display:flex; gap:4px; align-items:center; }
+  .statusbar .dot { width:5px; height:5px; border-radius:1px; background:#00FF9C; }
+  .notch { position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    width:120px; height:26px; background:#000; border-radius:0 0 14px 14px; z-index:10; }
+  #app { flex:1; min-height:0; display:flex; flex-direction:column; }
+
+  img { image-rendering:pixelated; image-rendering:crisp-edges; }
+
+  @keyframes bitBob { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-3px); } }
+  .bit-bob { animation:bitBob 3.4s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce){ .bit-bob{ animation:none; } }
+
+  /* ---- side control panel (not part of the device) ---- */
+  .panel { width:240px; flex:none; color:#9494B8; font-family:'ShareTechMono', monospace; }
+  .panel h1 { font-family:'PressStart2P', monospace; font-size:12px; color:#E8E8FF; margin:0 0 4px; line-height:1.5; }
+  .panel .sub { font-size:12px; color:#555577; margin-bottom:18px; line-height:1.5; }
+  .panel h2 { font-family:'PressStart2P', monospace; font-size:8px; color:#9494B8; letter-spacing:.5px;
+    margin:18px 0 9px; text-transform:uppercase; }
+  .panel button { width:100%; text-align:left; font-family:'ShareTechMono', monospace; font-size:13px;
+    color:#E8E8FF; background:#1C1C34; border:1px solid #36365E; border-radius:4px; padding:11px 13px;
+    cursor:pointer; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; }
+  .panel button:hover { border-color:#45437A; }
+  .panel button .state { font-size:11px; color:#9494B8; }
+  .panel button.on { border-color:#00FF9C; }
+  .panel button.on .state { color:#00FF9C; }
+  .panel .beats { font-size:11.5px; line-height:1.7; color:#9494B8; }
+  .panel .beats b { color:#E8E8FF; font-weight:400; }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <h1>Quest Claim<br>→ Wallet</h1>
+    <div class="sub">The reward travels from the row it was earned on, up into the pinned gem wallet. BIT witnesses it.</div>
+
+    <h2>Try it</h2>
+    <button id="btn-claimall">Claim all ready <span class="state">rapid →</span></button>
+    <button id="btn-reset">Reset board <span class="state">↺</span></button>
+
+    <h2>States</h2>
+    <button id="btn-reduce" class="">Reduced motion <span class="state">off</span></button>
+    <button id="btn-sound" class="on">Sound + haptic <span class="state">on</span></button>
+    <button id="btn-quiet">Quiet board <span class="state">empty →</span></button>
+
+    <h2>The four beats</h2>
+    <div class="beats">
+      <b>1 · Anticipate</b> — button squash, card dims.<br>
+      <b>2 · Flight</b> — gems arc up, staggered, spinning.<br>
+      <b>3 · Land</b> — counter ticks up, pulses, chimes.<br>
+      <b>4 · Settle</b> — BIT cheers, then back to calm.
+    </div>
+  </div>
+
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+      </div>
+      <div id="app"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+/* ── tokens (mirror colors_and_type.css) ────────────────────────────────── */
+const T = {
+  bg:'#11111F', card:'#1C1C34', surface2:'#232342', border:'#36365E', borderDark:'#2A2A3E',
+  neon:'#00FF9C', neonDark:'#009955', text:'#E8E8FF', muted:'#9494B8', dim:'#555577',
+  amber:'#FFD700', gem:'#ff4dcd', gemDark:'#961c8c', cyan:'#00BFFF',
+  disp:"'PressStart2P', monospace", mono:"'ShareTechMono', monospace", body:"'Gotham', sans-serif",
+  glowGem:'0 0 16px -2px rgba(255,77,205,0.30)', glowNeon:'0 0 16px -2px rgba(0,255,156,0.22)',
+};
+const GEM_SRC = 'assets/gem.png';
+
+/* ── audio + haptics — fire regardless of motion settings ───────────────── */
+let SOUND = true, _ac = null, _lastChime = 0;
+function gemChime(big){
+  if (!SOUND) return;
+  const now = performance.now();
+  if (now - _lastChime < 60) return;        // throttle on rapid arrivals
+  _lastChime = now;
+  try {
+    _ac = _ac || new (window.AudioContext || window.webkitAudioContext)();
+    const t = _ac.currentTime;
+    // bass-y "abundance" body
+    const o1 = _ac.createOscillator(), g1 = _ac.createGain();
+    o1.type='triangle'; o1.frequency.setValueAtTime(big?180:220, t);
+    o1.frequency.exponentialRampToValueAtTime(big?320:380, t+0.10);
+    g1.gain.setValueAtTime(0.0001,t); g1.gain.exponentialRampToValueAtTime(0.16,t+0.012);
+    g1.gain.exponentialRampToValueAtTime(0.0001,t+0.26);
+    o1.connect(g1); g1.connect(_ac.destination); o1.start(t); o1.stop(t+0.28);
+    // bright facet sparkle
+    const o2 = _ac.createOscillator(), g2 = _ac.createGain();
+    o2.type='square'; o2.frequency.setValueAtTime(880,t+0.02);
+    o2.frequency.exponentialRampToValueAtTime(1660,t+0.12);
+    g2.gain.setValueAtTime(0.0001,t+0.02); g2.gain.exponentialRampToValueAtTime(0.05,t+0.03);
+    g2.gain.exponentialRampToValueAtTime(0.0001,t+0.16);
+    o2.connect(g2); g2.connect(_ac.destination); o2.start(t+0.02); o2.stop(t+0.18);
+  } catch(e){}
+}
+function haptic(big){ if (SOUND && navigator.vibrate) try { navigator.vibrate(big?[10,20,12]:8); } catch(e){} }
+
+/* cubic-bezier easing solver (for the flight arc timing) */
+function bezierEase(p1x,p1y,p2x,p2y){
+  const cx=3*p1x, bx=3*(p2x-p1x)-cx, ax=1-cx-bx;
+  const cy=3*p1y, by=3*(p2y-p1y)-cy, ay=1-cy-by;
+  const fx=t=>((ax*t+bx)*t+cx)*t, dfx=t=>(3*ax*t+2*bx)*t+cx;
+  return x=>{ let t=x; for(let i=0;i<5;i++){ const e=fx(t)-x, d=dfx(t)||1e-6; t-=e/d; } return ((ay*t+by)*t+cy)*t; };
+}
+const FLIGHT_EASE = bezierEase(0.45,0,0.4,1);   // slow-in to the hang, accelerate into the wallet
+const motionOff = () => REDUCE || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let REDUCE = false;
+
+/* ── flight engine — imperative, runs off-React so particles never thrash ─ */
+function makeEngine(screenRef, overlayRef, walletRef, walletValRef, pulseWallet, bitCheer){
+  const wallet = { display:0, target:0, raf:null };
+  function write(n){ if (walletValRef.current) walletValRef.current.textContent = n.toLocaleString(); }
+  function setInitial(v){ wallet.display = v; wallet.target = v; write(v); }
+  function loop(){
+    const d = wallet.target - wallet.display;
+    if (Math.abs(d) < 0.5){ wallet.display = wallet.target; write(wallet.target); wallet.raf=null; return; }
+    wallet.display += d*0.16 + (d>0?0.6:-0.6);
+    write(Math.round(wallet.display));
+    wallet.raf = requestAnimationFrame(loop);
+  }
+  function bumpTarget(amt, snap){
+    wallet.target += amt;
+    if (snap){ wallet.display = wallet.target; write(wallet.target); }
+    else if (!wallet.raf) wallet.raf = requestAnimationFrame(loop);
+  }
+  function land(amt, big){ bumpTarget(amt, false); pulseWallet(big); gemChime(big); haptic(big); bitCheer(big); }
+
+  function fly(originEl, reward){
+    const scr = screenRef.current.getBoundingClientRect();
+    const o = (originEl || walletRef.current).getBoundingClientRect();
+    const w = walletRef.current.getBoundingClientRect();
+    const start = { x:o.left+o.width/2-scr.left, y:o.top+o.height/2-scr.top };
+    const end   = { x:w.left+w.width/2-scr.left, y:w.top+w.height/2-scr.top };
+
+    // Reduced motion: no travel, counter just updates, BIT shows a static cheer frame.
+    if (motionOff()){ bumpTarget(reward, true); pulseWallet(reward>=50, true); gemChime(reward>=50); haptic(reward>=50); bitCheer(reward>=50, true); return; }
+
+    const big = reward >= 50;
+    const N = reward <= 8 ? reward : 8;          // honesty: cap the cluster, counter conveys the amount
+    const per = Math.floor(reward/N), rem = reward - per*N;
+    const stagger = big ? 46 : 58;
+    const overlay = overlayRef.current;
+    // straight-line midpoint, raised so the arc reads
+    const midRaise = 26 + Math.random()*8;
+
+    for (let i=0;i<N;i++){
+      const amt = per + (i >= N-rem ? 1 : 0);    // remainder rides the last gems → counter completes on the last arrival
+      const isLast = i === N-1;
+      setTimeout(() => spawn(start, end, amt, big, isLast, midRaise, i, N), i*stagger);
+    }
+
+    function spawn(s, e, amt, big, isLast, raise, idx, total){
+      const g = document.createElement('img');
+      g.src = GEM_SRC;
+      const size = big ? 22 : 18;
+      g.style.cssText = `position:absolute;left:0;top:0;width:${size}px;height:${size}px;
+        will-change:transform;pointer-events:none;filter:drop-shadow(0 0 5px rgba(255,77,205,.6));z-index:6;`;
+      overlay.appendChild(g);
+      const jx = (idx - total/2) * 7;            // lateral spread at the source so they stream, not stack
+      const cx = (s.x+e.x)/2 + jx*0.4, cy = Math.min(s.y,e.y) - raise;
+      const dur = (big?760:670) + Math.random()*90;
+      const spin = (idx%2?1:-1) * (260 + Math.random()*160);
+      const t0 = performance.now();
+      (function step(now){
+        const lin = Math.min((now-t0)/dur, 1);
+        const t = FLIGHT_EASE(lin);
+        const it = 1-t;
+        const x = it*it*(s.x+jx) + 2*it*t*cx + t*t*e.x;
+        const y = it*it*s.y + 2*it*t*cy + t*t*e.y;
+        const sc = 1 - 0.42*t;                   // scale down a touch as it approaches
+        g.style.transform = `translate(${x-size/2}px, ${y-size/2}px) scale(${sc}) rotate(${spin*t}deg)`;
+        if (lin < 1) requestAnimationFrame(step);
+        else { g.remove(); land(amt, big); }
+      })(t0);
+    }
+  }
+  return { fly, setInitial };
+}
+
+/* ── BIT — real painted drone-core, neutral ⇄ cheer ─────────────────────── */
+function Bit({ mode, line }){
+  const wrap = useRef(null);
+  const cheering = mode === 'cheer';
+  useEffect(() => {
+    if (cheering && wrap.current && !motionOff()){
+      wrap.current.animate(
+        [{transform:'scale(1)'},{transform:'scale(1.09)',offset:0.4},{transform:'scale(0.99)',offset:0.7},{transform:'scale(1)'}],
+        { duration:560, easing:'cubic-bezier(.2,1.2,.4,1)' }
+      );
+    }
+  }, [cheering]);
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
+      <div ref={wrap} className={cheering?'':'bit-bob'}
+        style={{ position:'relative', width:46, height:46, flex:'none' }}
+        role="img" aria-label={cheering ? 'BIT, cheering' : 'BIT, your companion'}>
+        <img src="assets/bit_neutral.png" alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%',
+          opacity:cheering?0:1, transition:'opacity 250ms ease' }} />
+        <img src="assets/bit_cheer.png" alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%',
+          opacity:cheering?1:0, transition:'opacity 250ms ease' }} />
+      </div>
+      <div style={{ fontFamily:T.mono, fontSize:11.5, color:cheering?T.amber:T.muted, lineHeight:1.35,
+        minWidth:0, transition:'color 250ms ease' }}>{line}</div>
+    </div>
+  );
+}
+
+/* ── pinned header: BIT + gem wallet (the flight destination) ───────────── */
+function Header({ bit, line, walletRef, walletValRef }){
+  return (
+    <div style={{ flex:'none', padding:'12px 16px 12px', display:'flex', alignItems:'center',
+      justifyContent:'space-between', gap:12, borderBottom:`1px solid ${T.borderDark}`, background:T.bg, zIndex:4 }}>
+      <Bit mode={bit} line={line} />
+      <div ref={walletRef} style={{ flex:'none', display:'flex', alignItems:'center', gap:7,
+        background:T.card, border:`1px solid ${T.border}`, borderRadius:4, padding:'8px 11px' }}>
+        <img src={GEM_SRC} alt="gems" style={{ width:16, height:16 }} />
+        <span ref={walletValRef} aria-live="polite" aria-label="gem balance"
+          style={{ fontFamily:T.mono, fontSize:17, color:T.gem, fontVariantNumeric:'tabular-nums', minWidth:34, textAlign:'right' }}>0</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── gem reward chip (flight origin) ────────────────────────────────────── */
+function GemChip({ amount, chipRef, dim }){
+  return (
+    <span ref={chipRef} style={{ display:'inline-flex', alignItems:'center', gap:5,
+      background:'rgba(255,77,205,0.10)', border:`1px solid ${dim?T.border:'rgba(255,77,205,0.45)'}`,
+      borderRadius:4, padding:'6px 9px', opacity:dim?0.55:1 }}>
+      <img src={GEM_SRC} alt="" style={{ width:13, height:13 }} />
+      <span style={{ fontFamily:T.mono, fontSize:13, color:dim?T.muted:T.gem }}>{amount}</span>
+    </span>
+  );
+}
+
+function SegBar({ done, total }){
+  return (
+    <div style={{ marginTop:7 }}>
+      <div style={{ display:'flex', gap:4 }}>
+        {Array.from({length:total}).map((_,i)=>(
+          <span key={i} style={{ flex:1, height:7, borderRadius:2,
+            background:i<done?T.amber:T.borderDark, border:`1px solid ${i<done?T.amber:T.border}`,
+            boxShadow:i<done?'0 0 6px rgba(255,215,0,.35)':'none' }} />
+        ))}
+      </div>
+      <div style={{ fontFamily:T.mono, fontSize:11, color:T.muted, marginTop:5 }}>{done} / {total}</div>
+    </div>
+  );
+}
+
+/* ── quest row ──────────────────────────────────────────────────────────── */
+function QuestCard({ q, claimed, onClaim, registerRef }){
+  const btnRef = useRef(null), chipRef = useRef(null), cardRef = useRef(null);
+  const [squash, setSquash] = useState(false);
+  const claimable = q.claimable && !claimed;
+  useEffect(() => { registerRef(q.id, { chip:chipRef, fire:doClaim }); });
+
+  function doClaim(){
+    if (!q.claimable || claimed) return;
+    // beat 1 — anticipation: button squash, then the card eases to its dimmed CLAIMED state
+    setSquash(true); setTimeout(()=>setSquash(false), 130);
+    if (cardRef.current && !motionOff())
+      cardRef.current.animate([{transform:'scale(1)'},{transform:'scale(0.985)'},{transform:'scale(1)'}],{duration:200,easing:'ease'});
+    setTimeout(() => onClaim(q, chipRef.current), 100);
+  }
+
+  const iconColor = (q.completed || claimed) ? T.neon : T.dim;
+  return (
+    <div ref={cardRef} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:4, padding:13,
+      opacity:claimed?0.62:1, transition:'opacity .32s ease' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+        <span style={{ width:9, height:9, flex:'none', transform:'rotate(45deg)', borderRadius:1,
+          background:iconColor, boxShadow:(q.completed||claimed)?'0 0 7px rgba(0,255,156,.5)':'none' }} />
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontFamily:T.mono, fontSize:14, color:T.text }}>{q.title}</div>
+          <div style={{ fontFamily:T.mono, fontSize:12, color:T.muted, marginTop:3 }}>{q.desc}</div>
+          {q.segs && <SegBar done={q.segs[0]} total={q.segs[1]} />}
+          {q.progress && !q.segs && <div style={{ fontFamily:T.mono, fontSize:11, color:T.muted, marginTop:5 }}>{q.progress}</div>}
+          {q.rewardTitle && <div style={{ fontFamily:T.mono, fontSize:11, color:T.amber, marginTop:5 }}>Title · {q.rewardTitle}</div>}
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:8, flex:'none' }}>
+          <GemChip amount={q.gems} chipRef={chipRef} dim={!q.completed && !claimed} />
+          {claimed ? (
+            <span style={{ display:'inline-flex', alignItems:'center', gap:5, minHeight:44, padding:'0 4px',
+              fontFamily:T.disp, fontSize:8, color:T.muted, letterSpacing:'.3px' }}>
+              <span style={{ color:T.neon }}>✓</span> CLAIMED
+            </span>
+          ) : claimable ? (
+            <button ref={btnRef} onClick={doClaim} style={{
+              fontFamily:T.disp, fontSize:9, color:T.bg, background:T.neon, border:'none', borderRadius:4,
+              minHeight:44, padding:'0 16px', cursor:'pointer', letterSpacing:'.4px',
+              boxShadow:`${T.glowNeon}, 0 3px 0 0 ${T.neonDark}`,
+              transform:squash?'translateY(2px) scale(0.94)':'none', transition:'transform .1s cubic-bezier(.2,1.3,.4,1)' }}>
+              CLAIM
+            </button>
+          ) : (
+            <span style={{ display:'inline-flex', alignItems:'center', minHeight:44, padding:'0 12px',
+              fontFamily:T.disp, fontSize:8, color:T.dim, background:T.borderDark, border:`1px solid ${T.border}`,
+              borderRadius:4, letterSpacing:'.3px' }}>LOCKED</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, subtitle, quests, claimedIds, onClaim, registerRef }){
+  const done = quests.filter(q => q.completed || claimedIds.has(q.id)).length;
+  return (
+    <div>
+      <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', marginBottom:12 }}>
+        <div>
+          <div style={{ fontFamily:T.disp, fontSize:12, color:T.text }}>{title}</div>
+          <div style={{ fontFamily:T.mono, fontSize:11, color:T.muted, marginTop:7 }}>{subtitle}</div>
+        </div>
+        <span style={{ fontFamily:T.disp, fontSize:9, color:T.muted }}>{done} / {quests.length}</span>
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        {quests.map(q => (
+          <QuestCard key={q.id} q={q} claimed={claimedIds.has(q.id)} onClaim={onClaim} registerRef={registerRef} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── data — quests award GEMS (product model: Quests → Gems) ────────────── */
+const DATA = () => ({
+  daily: [
+    { id:'d1', title:'Show up', desc:'Log any workout today', gems:5, completed:true, claimable:true },
+    { id:'d2', title:'Train your class', desc:'Hit a Bruiser focus muscle', gems:5, completed:true, claimable:true },
+    { id:'d3', title:'Daily volume', desc:'Move 2,000 kg today', gems:8, completed:false, progress:'1,240 / 2,000 kg' },
+  ],
+  weekly: [
+    { id:'w1', title:'Five missions', desc:'Clear 5 workouts this week', gems:25, completed:true, claimable:true, segs:[5,5] },
+    { id:'w2', title:'Iron week', desc:'Move 20,000 kg this week', gems:30, completed:false, progress:'12,400 / 20,000 kg' },
+  ],
+  side: [
+    { id:'s1', title:'Iron initiate', desc:'Reach 1,000 lifetime reps', gems:50, completed:true, claimable:true, rewardTitle:'The Initiate' },
+    { id:'s2', title:'Centurion', desc:'Clear 100 total workouts', gems:100, completed:true, claimable:true, rewardTitle:'Centurion' },
+  ],
+});
+const ALL = d => [...d.daily, ...d.weekly, ...d.side];
+const START_GEMS = 120;
+
+function idleLine(remaining){
+  return remaining > 0 ? 'Rewards waiting — claim when ready.' : 'Nothing to claim yet. Let us change that.';
+}
+
+function App(){
+  const [data, setData] = useState(DATA);
+  const [claimedIds, setClaimedIds] = useState(() => new Set());
+  const [bit, setBit] = useState('idle');
+  const [line, setLine] = useState(() => idleLine(ALL(DATA()).filter(q=>q.claimable).length));
+
+  const screenRef = useRef(null), overlayRef = useRef(null), walletRef = useRef(null), walletValRef = useRef(null);
+  const engineRef = useRef(null), refMap = useRef({}), settleRef = useRef(null), bigRef = useRef(false);
+
+  const remaining = ALL(data).filter(q => q.claimable && !claimedIds.has(q.id)).length;
+
+  const pulseWallet = useCallback((big, snap) => {
+    const el = walletRef.current; if (!el) return;
+    if (motionOff() && !snap) return;
+    el.animate(
+      [{transform:'scale(1)',boxShadow:`0 0 0 0 ${T.gem}00`},
+       {transform:`scale(${big?1.30:1.20})`,boxShadow:T.glowGem,offset:0.45},
+       {transform:'scale(1)',boxShadow:`0 0 0 0 ${T.gem}00`}],
+      { duration: big?360:300, easing:'cubic-bezier(.2,1.2,.4,1)' }
+    );
+  }, []);
+
+  const bitCheer = useCallback((big, reducedStatic) => {
+    bigRef.current = bigRef.current || big;
+    setBit('cheer'); setLine('Good haul today.');
+    clearTimeout(settleRef.current);
+    const hold = (bigRef.current ? 1000 : 700) + (reducedStatic ? 0 : 0);
+    settleRef.current = setTimeout(() => {
+      setBit('idle'); bigRef.current = false;
+      setLine(idleLine(ALL(data).filter(q => q.claimable && !claimedIds.has(q.id)).length));
+    }, hold + 400);
+  }, [data, claimedIds]);
+
+  useEffect(() => {
+    engineRef.current = makeEngine(screenRef, overlayRef, walletRef, walletValRef, pulseWallet, bitCheer);
+    engineRef.current.setInitial(START_GEMS);
+  }, []);
+
+  const registerRef = useCallback((id, api) => { refMap.current[id] = api; }, []);
+
+  const handleClaim = useCallback((q, originEl) => {
+    if (claimedIds.has(q.id)) return;
+    setClaimedIds(prev => { const n = new Set(prev); n.add(q.id); return n; });
+    engineRef.current.fly(originEl, q.gems);   // beats 2–4 run in the engine
+  }, [claimedIds]);
+
+  const claimAll = () => {
+    const ready = ALL(data).filter(q => q.claimable && !claimedIds.has(q.id));
+    ready.forEach((q, i) => setTimeout(() => {
+      const api = refMap.current[q.id];
+      if (api && api.fire) api.fire();
+    }, i * 150));                              // rapid claims pool gracefully into one wallet
+  };
+
+  const reset = () => {
+    clearTimeout(settleRef.current); bigRef.current = false;
+    const d = DATA();
+    setData(d); setClaimedIds(new Set());
+    setBit('idle'); setLine(idleLine(ALL(d).filter(q=>q.claimable).length));
+    engineRef.current.setInitial(START_GEMS);
+  };
+
+  const quietBoard = () => {
+    clearTimeout(settleRef.current); bigRef.current = false;
+    const d = DATA();
+    ALL(d).forEach(q => q.claimable = false);  // nothing to claim
+    setData(d);
+    setClaimedIds(new Set(ALL(d).filter(q=>q.completed).map(q=>q.id)));
+    setBit('idle'); setLine('Nothing to claim yet. Let us change that.');
+  };
+
+  // expose to side-panel buttons
+  useEffect(() => {
+    window.__quest = { claimAll, reset, quietBoard,
+      setReduce:(v)=>{ REDUCE=v; }, setSound:(v)=>{ SOUND=v; } };
+  });
+
+  return (
+    <div ref={screenRef} style={{ flex:1, minHeight:0, position:'relative', display:'flex', flexDirection:'column',
+      background:`linear-gradient(${ '#15152C' }, ${ '#0E0E1B' })` }}>
+      <Header bit={bit} line={line} walletRef={walletRef} walletValRef={walletValRef} />
+      <div style={{ flex:1, minHeight:0, overflowY:'auto', padding:'16px 16px 28px',
+        display:'flex', flexDirection:'column', gap:22 }}>
+        <Section title="DAILY QUESTS" subtitle="Resets at 00:00" quests={data.daily}
+          claimedIds={claimedIds} onClaim={handleClaim} registerRef={registerRef} />
+        <Section title="WEEKLY QUESTS" subtitle="Resets Monday" quests={data.weekly}
+          claimedIds={claimedIds} onClaim={handleClaim} registerRef={registerRef} />
+        <Section title="SIDE QUESTS" subtitle="Permanent milestones" quests={data.side}
+          claimedIds={claimedIds} onClaim={handleClaim} registerRef={registerRef} />
+      </div>
+      {/* flight overlay — spans the whole screen so gems fly from any row to the pinned wallet */}
+      <div ref={overlayRef} style={{ position:'absolute', inset:0, pointerEvents:'none', overflow:'visible', zIndex:6 }} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(<App />);
+
+/* ── wire side-panel controls ───────────────────────────────────────────── */
+function wire(id, fn){ const b=document.getElementById(id); if(b) b.onclick=()=>fn(b); }
+wire('btn-claimall', ()=> window.__quest && window.__quest.claimAll());
+wire('btn-reset',    ()=> window.__quest && window.__quest.reset());
+wire('btn-quiet',    ()=> window.__quest && window.__quest.quietBoard());
+wire('btn-reduce',   (b)=>{ const on=!b.classList.contains('on'); b.classList.toggle('on',on);
+  b.querySelector('.state').textContent=on?'on':'off'; window.__quest && window.__quest.setReduce(on); });
+wire('btn-sound',    (b)=>{ const on=!b.classList.contains('on'); b.classList.toggle('on',on);
+  b.querySelector('.state').textContent=on?'on':'off'; window.__quest && window.__quest.setSound(on); });
+  </script>
+</body>
+</html>

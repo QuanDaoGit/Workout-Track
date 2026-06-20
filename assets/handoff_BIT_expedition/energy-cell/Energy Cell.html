@@ -1,0 +1,449 @@
+<!-- @dsCard group="Components" viewport="1180x1180" name="Expedition Energy Cell" subtitle="Code-painted pixel-art charge unit — BIT's expedition fuel. Cyan glass + lightning core in pad-metal frame; FULL→LOW→DEPLETED→RECHARGING states + HUD usage." -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ironbit — Expedition Energy Cell</title>
+<link rel="stylesheet" href="colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    background-image:linear-gradient(var(--bg-grad-top),var(--bg-grad-bottom));min-height:100%;}
+  body{padding:40px 32px 72px;font-family:var(--font-mono);}
+  .wrap{max-width:1180px;margin:0 auto;}
+
+  .brandline{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .brandline .dot{width:10px;height:10px;background:var(--cyan);box-shadow:var(--glow-cyan);}
+  .brandline span{font-family:var(--font-display);font-size:11px;letter-spacing:1px;color:var(--cyan);}
+  h1{font-family:var(--font-display);font-size:18px;color:var(--text);margin:0 0 12px;letter-spacing:.5px;}
+  .sub{font-family:var(--font-mono);font-size:13px;color:var(--muted-text);line-height:1.55;max-width:840px;}
+  .sub b{color:var(--text);font-weight:400;}
+  .sub .cy{color:var(--cyan);}
+  .swatch{display:inline-block;width:9px;height:9px;vertical-align:-1px;margin:0 1px 0 7px;
+    image-rendering:pixelated;border:1px solid #0006;}
+
+  .specbar{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0 0;}
+  .spec{font-family:var(--font-mono);font-size:11px;color:var(--muted-text);
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:7px 11px;}
+  .spec b{color:var(--text);font-weight:400;}
+  .spec.warn{border-color:rgba(0,191,255,.4);color:var(--cyan);}
+
+  .sec{margin-top:34px;}
+  .sec-title{font-family:var(--font-display);font-size:11px;letter-spacing:.5px;color:var(--text);margin-bottom:4px;}
+  .sec-cap{font-family:var(--font-mono);font-size:12px;color:var(--dim);line-height:1.5;margin:10px 0 18px;max-width:840px;}
+  .sec-cap b{color:var(--muted-text);font-weight:400;}
+
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px;}
+
+  /* hero */
+  .hero{display:flex;gap:30px;align-items:flex-end;flex-wrap:wrap;}
+  .hero-stage{position:relative;width:300px;height:380px;border-radius:var(--radius);
+    background:radial-gradient(60% 55% at 50% 46%,rgba(0,191,255,.07) 0%,rgba(0,0,0,0) 70%),#07070f;
+    border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none;}
+  .hero-stage .crt{position:absolute;inset:0;pointer-events:none;opacity:.3;
+    background:repeating-linear-gradient(180deg,rgba(0,0,0,.20) 0 2px,transparent 2px 4px);}
+  .cellbox{position:relative;display:flex;align-items:center;justify-content:center;}
+  .bloom{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;border-radius:50%;
+    background:radial-gradient(ellipse at center,rgba(0,191,255,.45),rgba(0,191,255,.08) 55%,transparent 75%);}
+  canvas{image-rendering:pixelated;display:block;position:relative;z-index:2;}
+
+  .px-col{display:flex;flex-direction:column;gap:12px;}
+  .px-row{display:flex;align-items:flex-end;gap:10px;}
+  .tag{font-family:var(--font-mono);font-size:9px;color:var(--dim);}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted-text);margin-top:20px;}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .legend i{width:11px;height:11px;border-radius:2px;border:1px solid rgba(0,0,0,.4);}
+
+  /* states */
+  .states{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  @media(max-width:900px){.states{grid-template-columns:repeat(2,1fr);}}
+  .state{background:#07070f;border:1px solid var(--border-dark);border-radius:var(--radius);
+    padding:20px 14px 14px;display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .state .st-stage{height:172px;display:flex;align-items:center;justify-content:center;}
+  .state .nm{font-family:var(--font-display);font-size:9px;letter-spacing:.3px;color:var(--text);}
+  .state .nm i{display:inline-block;width:8px;height:8px;border-radius:2px;vertical-align:-1px;margin-right:6px;}
+  .state .mt{font-family:var(--font-mono);font-size:10.5px;color:var(--dim);text-align:center;line-height:1.45;}
+
+  /* HUD usage */
+  .ctx-row{display:flex;gap:18px;flex-wrap:wrap;}
+  .ctx-card{flex:1;min-width:320px;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:14px;}
+  .ctx-card.ready{border:1.2px solid rgba(0,191,255,.5);box-shadow:var(--glow-cyan);}
+  .ctx-h{display:flex;align-items:center;gap:10px;}
+  .ctx-h .lbl{font-family:var(--font-display);font-size:10px;letter-spacing:.3px;color:var(--cyan);margin-right:auto;}
+  .ctx-h .cnt{font-family:var(--font-mono);font-size:13px;color:var(--text);}
+  .pips{display:flex;align-items:center;gap:10px;}
+  .pip{display:flex;align-items:center;justify-content:center;}
+  .ctx-meta{font-family:var(--font-mono);font-size:11.5px;color:var(--muted-text);line-height:1.5;}
+  .ctx-meta b{color:var(--text);font-weight:400;}
+  .send{display:flex;align-items:center;gap:10px;margin-top:2px;}
+  .btn{font-family:var(--font-display);font-size:9px;letter-spacing:.4px;padding:13px 16px;border-radius:var(--radius);
+    border:none;display:inline-flex;align-items:center;gap:9px;cursor:default;}
+  .btn.primary{background:var(--cyan);color:var(--bg);box-shadow:var(--glow-cyan);}
+  .btn.dis{background:var(--border-dark);color:var(--dim);}
+  .chip{font-family:var(--font-mono);font-size:11px;color:var(--muted-text);
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:6px 9px;display:inline-flex;align-items:center;gap:8px;}
+  .chip b{color:var(--cyan);font-family:var(--font-display);font-size:9px;}
+
+  /* spec */
+  .spec-grid{display:grid;grid-template-columns:180px 1fr;gap:0;}
+  .spec-grid>div{padding:10px 12px;border-bottom:1px solid var(--border-dark);}
+  .spec-grid .k{font-family:var(--font-display);font-size:8px;letter-spacing:.3px;color:var(--muted-text);}
+  .spec-grid .v{font-family:var(--font-mono);font-size:12.5px;color:var(--text);line-height:1.45;}
+  .spec-grid .v .sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:-1px;margin-right:6px;border:1px solid rgba(0,0,0,.4);}
+  .rules{display:flex;flex-direction:column;gap:10px;margin-top:6px;}
+  .rule{display:flex;gap:12px;align-items:baseline;font-family:var(--font-mono);font-size:12.5px;color:var(--muted-text);line-height:1.5;}
+  .rule b{color:var(--cyan);font-family:var(--font-display);font-size:9px;flex:none;width:16px;}
+  .rule .t b{color:var(--text);font-family:inherit;font-size:inherit;width:auto;display:inline;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brandline"><div class="dot"></div><span>IRONBIT &middot; EXPEDITION</span></div>
+  <h1>ENERGY CELL — BIT'S EXPEDITION CHARGE</h1>
+  <p class="sub">The fuel unit that gates <b>SEND BIT</b>. Each scouting run spends one cell; the HUD shows how many charges BIT has banked. Drawn as a sealed power cell in the dock's own <b>pad-metal</b> frame with a <span class="cy">cyan glass core</span> and a captured <span class="cy">lightning glyph</span> &mdash; BIT owns the cyan, so his fuel reads as <b>his energy</b>, never confused with the magenta haul currency.
+    <br><br>Every cell is <b>code-painted</b> &mdash; plotted pixel-by-pixel on an <b>18&times;26</b> native canvas and blitted at an integer scale with nearest-neighbour, exactly like the pad / beam / haul cache. No CSS shapes, no upscaled PNG.
+    Metal<span class="swatch" style="background:#2e3150"></span><span class="swatch" style="background:#525879"></span><span class="swatch" style="background:#6b72a0"></span>· glass<span class="swatch" style="background:#0e6f88"></span><span class="swatch" style="background:#19a8c8"></span><span class="swatch" style="background:#45d8f0"></span><span class="swatch" style="background:#8af0ff"></span>· bolt<span class="swatch" style="background:#eafdff"></span></p>
+
+  <div class="specbar">
+    <span class="spec">native <b>18&times;26 px</b></span>
+    <span class="spec">HUD <b>2&times; → 36&times;52</b></span>
+    <span class="spec">scale <b>integer only</b> · FilterQuality.none</span>
+    <span class="spec warn">⚡ cyan = BIT's energy · magenta = haul (never mix)</span>
+  </div>
+
+  <!-- HERO -->
+  <div class="sec">
+    <div class="sec-title">THE CELL</div>
+    <div class="panel hero">
+      <div class="hero-stage">
+        <div class="crt"></div>
+        <div class="cellbox">
+          <div class="bloom" id="heroBloom" style="width:230px;height:230px"></div>
+          <canvas id="heroCell"></canvas>
+        </div>
+      </div>
+      <div class="px-col">
+        <div class="px-row"><canvas id="z3"></canvas><span class="tag">native &times;3</span></div>
+        <div class="px-row"><canvas id="z2"></canvas><span class="tag">native &times;2</span></div>
+        <div class="px-row"><canvas id="z1"></canvas><span class="tag">18&times;26</span></div>
+        <div class="legend" id="legend"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATES -->
+  <div class="sec">
+    <div class="sec-title">CHARGE STATES</div>
+    <p class="sec-cap">Same frame, same bolt &mdash; only the <b>glass tint and core brightness</b> carry the level, so the silhouette is constant. <b>DEPLETED</b> drops the cyan entirely (dead grey glass, ghost bolt, no bloom) &mdash; absence reads as "needs recharge," never as failure. <b>RECHARGING</b> sweeps a bright fill-front up the glass.</p>
+    <div class="panel">
+      <div class="states" id="states"></div>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div class="sec">
+    <div class="sec-title">IN THE HUD — CHARGE METER</div>
+    <p class="sec-cap">Cells are the charge unit. Show banked charges as a <b>row of pips</b> (filled = charged, dead-grey = spent) with a mono count, seated beside the pad's send control.</p>
+    <div class="ctx-row">
+      <div class="ctx-card ready">
+        <div class="ctx-h"><span class="lbl">EXPEDITION CHARGES</span><span class="cnt" id="cntA">3 / 3</span></div>
+        <div class="pips" id="pipsA"></div>
+        <div class="ctx-meta"><b>BIT is fueled.</b> Send him to scout &mdash; one cell per run, banks back over time.</div>
+        <div class="send"><button class="btn primary">&#9650; SEND BIT</button><span class="chip">cost <b>1 CELL</b></span></div>
+      </div>
+      <div class="ctx-card">
+        <div class="ctx-h"><span class="lbl">EXPEDITION CHARGES</span><span class="cnt" id="cntB">0 / 3</span></div>
+        <div class="pips" id="pipsB"></div>
+        <div class="ctx-meta"><b>Out of charge.</b> A cell is recharging &mdash; ready in <b>2h 14m</b>.</div>
+        <div class="send"><button class="btn dis">&#9650; SEND BIT</button><span class="chip">recharging&hellip;</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SPEC -->
+  <div class="sec">
+    <div class="sec-title">BUILD SPEC</div>
+    <div class="panel">
+      <div class="spec-grid">
+        <div class="k">GRID</div><div class="v">18 &times; 26 logical cells &middot; code-painted, scaled in whole multiples</div>
+        <div class="k">FRAME</div><div class="v"><span class="sw" style="background:#2e3150"></span>pad-metal caps + side rails, top-left lit, bottom-right shaded</div>
+        <div class="k">GLASS CORE</div><div class="v"><span class="sw" style="background:#19a8c8"></span>radial cyan ramp + scanlines + starfield specks &mdash; carries the level</div>
+        <div class="k">BOLT</div><div class="v"><span class="sw" style="background:#eafdff"></span>near-white lightning glyph, cyan edge &mdash; the ONE signature hook</div>
+        <div class="k">VENTS</div><div class="v"><span class="sw" style="background:#7fe8ff"></span>bright cyan slot on each cap + glow tips on the rails</div>
+        <div class="k">IDENTITY</div><div class="v"><span class="sw" style="background:#00BFFF"></span>cyan &mdash; BIT's energy family, complementary to magenta haul</div>
+        <div class="k">BLOOM</div><div class="v">soft cyan glow pulses with the idle breath; killed on DEPLETED</div>
+      </div>
+      <div class="rules" id="rules"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================================
+   EXPEDITION ENERGY CELL — code-painted pixel art.
+   Plotted into an 18×26 offscreen canvas one pixel at a time, blitted at an
+   integer scale with imageSmoothing OFF. Mirrors a Flutter CustomPainter.
+   ========================================================================== */
+const NW = 18, NH = 26;
+
+const C = {
+  OUT:'#0a0b14',
+  d2 :'#14162a',   // deepest metal shadow / recess
+  d1 :'#222540',   // dark metal
+  m  :'#2e3150',   // base metal
+  l1 :'#3d4262',   // bevel mid
+  l2 :'#525879',   // bevel light
+  l3 :'#6b72a0',   // top highlight
+  // cyan vent / rail glow
+  vDk:'#0e6f88', vMd:'#2bb8dc', vHi:'#7fe8ff', vBr:'#d6fbff',
+  // bolt
+  bolt:'#eafdff', boltEdge:'#9beeff',
+};
+
+/* full-charge glass ramp: edge → core */
+const GLASS_FULL = ['#0a3a4a','#0e6f88','#19a8c8','#45d8f0','#8af0ff'];
+const GLASS_CORE = '#cdf6ff';
+/* dead glass (depleted) — grey-blue, no cyan */
+const GLASS_DEAD = ['#10131f','#191c2e','#22253b','#2b2e47','#343858'];
+const DEAD_CORE  = '#3a3f5c';
+
+function painter(ctx){
+  return {
+    px(x,y,c){ if(c){ctx.fillStyle=c; ctx.fillRect(x,y,1,1);} },
+    clr(x,y){ ctx.clearRect(x,y,1,1); },
+    rect(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x,y,w,h); },
+    hline(x,y,w,c){ ctx.fillStyle=c; ctx.fillRect(x,y,w,1); },
+    vline(x,y,h,c){ ctx.fillStyle=c; ctx.fillRect(x,y,1,h); },
+  };
+}
+
+/* beveled metal block: outline + fill, top/left lit, bottom/right shadowed */
+function bevelBox(p,x,y,w,h,fill,lit,shade,top){
+  p.rect(x,y,w,h,C.OUT);
+  p.rect(x+1,y+1,w-2,h-2,fill);
+  p.hline(x+1,y+1,w-2,top||lit);
+  p.vline(x+1,y+1,h-2,lit);
+  p.hline(x+1,y+h-2,w-2,shade);
+  p.vline(x+w-2,y+1,h-2,shade);
+}
+
+/* window geometry */
+const WX=5, WY=6, WW=8, WH=14;          // glass rect: x5..12, y6..19
+const WCX = WX + (WW-1)/2;              // 8.5
+const WCY = WY + (WH-1)/2;              // 12.5
+
+/* lightning bolt glyph — absolute coords, centred in the glass */
+const BOLT = [
+  [9,7],[10,7],
+  [8,8],[9,8],
+  [7,9],[8,9],[9,9],
+  [6,10],[7,10],[8,10],
+  [6,11],[7,11],[8,11],[9,11],[10,11],
+  [7,12],[8,12],[9,12],[10,12],
+  [8,13],[9,13],[10,13],
+  [9,14],[10,14],
+  [8,15],[9,15],
+  [8,16],
+];
+/* a couple of inner-glow accents on the bolt body */
+const BOLT_HOT = [[8,11],[9,11],[8,12]];
+
+/* paint the glass interior given a brightness 0..1 and dead flag.
+   fillTop = topmost glass row that is lit (for the recharge sweep) */
+function paintGlass(p, lvl, dead, fillTop){
+  const ramp = dead ? GLASS_DEAD : GLASS_FULL;
+  const core = dead ? DEAD_CORE : GLASS_CORE;
+  fillTop = (fillTop===undefined) ? WY : fillTop;
+  for(let y=WY; y<WY+WH; y++){
+    for(let x=WX; x<WX+WW; x++){
+      const charged = y >= fillTop;              // below the fill-front = charged
+      const r = charged ? ramp : GLASS_DEAD;
+      const co = charged ? core : DEAD_CORE;
+      const dx=x-WCX, dy=y-WCY, d=Math.hypot(dx,dy);
+      let idx = d<1.4?-1 : d<2.6?4 : d<3.8?3 : d<5.0?2 : d<6.4?1 : 0;
+      let c = idx<0 ? co : r[idx];
+      // scanline darken on even rows
+      if(((y-WY)&1)===0 && idx>0) c = shade(c,0.82);
+      // global dim by level
+      if(!charged) c = c; else if(lvl<1) c = shade(c, 0.5+0.5*lvl);
+      p.px(x,y,c);
+    }
+  }
+  // starfield specks (only on charged glass)
+  const specks=[[6,8],[11,9],[7,17],[10,16],[6,14],[11,13]];
+  for(const [x,y] of specks){ if(y>=fillTop){ p.px(x,y, dead?'#2f3350':'#bdf2ff'); } }
+  // fill-front bright line (recharge)
+  if(fillTop>WY && fillTop<WY+WH){
+    for(let x=WX;x<WX+WW;x++) p.px(x,fillTop,'#d8fbff');
+  }
+}
+
+/* darken a hex toward black by factor (0..1, 1 = unchanged) */
+function shade(hex,f){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  const k=v=>Math.max(0,Math.round(v*f)).toString(16).padStart(2,'0');
+  return '#'+k(r)+k(g)+k(b);
+}
+
+/* paint the full cell. opts: { lvl 0..1, dead, fillTop, boltLit } */
+function paintCell(p, opts){
+  const o = opts||{};
+  const dead = !!o.dead;
+  const lvl = o.lvl===undefined?1:o.lvl;
+
+  /* --- side rails (drawn first, caps overlap them) --- */
+  // left rail x2..4, right rail x13..15, span y4..21
+  bevelBox(p,2,4,3,18,C.d1,C.l1,C.d2,C.l1);
+  bevelBox(p,13,4,3,18,C.d1,C.l1,C.d2,C.l1);
+  // rail glow tips (inner edge near glass corners) — cyan unless dead
+  const tip = dead?C.d2:C.vMd, tipHi = dead?C.d1:C.vHi;
+  p.px(4,6,tip); p.px(4,7,tipHi); p.px(4,18,tipHi); p.px(4,19,tip);
+  p.px(13,6,tip); p.px(13,7,tipHi); p.px(13,18,tipHi); p.px(13,19,tip);
+
+  /* --- glass core --- */
+  // recessed dark socket behind the glass
+  p.rect(WX-1,WY-1,WW+2,WH+2,C.OUT);
+  paintGlass(p, lvl, dead, o.fillTop);
+
+  /* --- top cap --- */
+  bevelBox(p,1,1,16,5,C.m,C.l2,C.d1,C.l3);   // x1..16 y1..5
+  p.hline(2,5,14,C.d2);                        // underside seam
+  // top vent slot (recessed bright cyan) centred on cap
+  p.rect(6,2,6,2,C.OUT);
+  const vt = dead?C.d1:C.vHi, vtb = dead?C.l1:C.vBr;
+  p.hline(7,3,4,vt); p.px(8,3,vtb); p.px(9,3,vtb);
+  // corner knobs on the cap
+  p.px(1,3,C.l1); p.px(16,3,C.l1);
+
+  /* --- bottom cap --- */
+  bevelBox(p,1,20,16,5,C.m,C.l2,C.d1,C.l3);  // y20..24
+  p.hline(2,20,14,C.l3);                       // top edge catch-light
+  p.rect(6,22,6,2,C.OUT);                       // bottom vent slot
+  p.hline(7,22,4,vt); p.px(8,22,vtb); p.px(9,22,vtb);
+  p.px(1,22,C.l1); p.px(16,22,C.l1);
+
+  /* --- the bolt --- */
+  const bc   = dead ? '#454a68' : C.bolt;
+  const bce  = dead ? '#363a55' : C.boltEdge;
+  const bhot = dead ? '#4e5474' : '#ffffff';
+  for(const [x,y] of BOLT) p.px(x,y,bc);
+  // cyan edge underglow on a few outer bolt pixels
+  if(!dead){
+    p.px(6,12,bce); p.px(10,10,bce); p.px(10,11,bce); p.px(7,13,bce);
+  }
+  for(const [x,y] of BOLT_HOT) p.px(x,y,bhot);
+}
+
+/* bake a cell to an offscreen 18×26 canvas */
+function bake(opts){
+  const off=document.createElement('canvas'); off.width=NW; off.height=NH;
+  const ctx=off.getContext('2d'); ctx.imageSmoothingEnabled=false;
+  paintCell(painter(ctx), opts);
+  return off;
+}
+/* blit offscreen onto a fresh display canvas at integer scale */
+function blit(off,scale,cv){
+  cv = cv || document.createElement('canvas');
+  cv.width=NW*scale; cv.height=NH*scale;
+  const ctx=cv.getContext('2d'); ctx.imageSmoothingEnabled=false;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.drawImage(off,0,0,NW,NH,0,0,NW*scale,NH*scale);
+  return cv;
+}
+
+const RM = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- HERO ---------- */
+const heroFull = bake({lvl:1});
+blit(heroFull, 11, document.getElementById('heroCell'));
+blit(heroFull, 3,  document.getElementById('z3'));
+blit(heroFull, 2,  document.getElementById('z2'));
+blit(heroFull, 1,  document.getElementById('z1'));
+
+/* ---------- STATES ---------- */
+const STATES = [
+  { nm:'FULL',       tint:'#8af0ff', opts:{lvl:1},          glow:1,   mt:'bright glass · white bolt\nready to deploy' },
+  { nm:'LOW',        tint:'#2bb8dc', opts:{lvl:0.55},        glow:0.5, mt:'dimmed core · last charge\nspend with care' },
+  { nm:'DEPLETED',   tint:'#343858', opts:{dead:true},       glow:0,   mt:'dead grey glass · ghost bolt\nno bloom — needs recharge' },
+  { nm:'RECHARGING', tint:'#57e3f7', opts:{lvl:1,recharge:true}, glow:0.7, mt:'fill-front sweeps up\nbanking a new cell' },
+];
+const statesEl=document.getElementById('states');
+const animCells=[];   // {cv, off-less: re-bake fn}
+STATES.forEach(s=>{
+  const cell=document.createElement('div'); cell.className='state'; cell.dataset.screenLabel='Cell · '+s.nm;
+  const stage=document.createElement('div'); stage.className='st-stage';
+  const box=document.createElement('div'); box.className='cellbox';
+  const bloom=document.createElement('div'); bloom.className='bloom'; bloom.style.width='120px'; bloom.style.height='120px';
+  bloom.style.opacity = s.glow*0.9;
+  const cv=document.createElement('canvas');
+  box.appendChild(bloom); box.appendChild(cv); stage.appendChild(box);
+  cell.appendChild(stage);
+  const nm=document.createElement('div'); nm.className='nm'; nm.innerHTML='<i style="background:'+s.tint+'"></i>'+s.nm; cell.appendChild(nm);
+  const mt=document.createElement('div'); mt.className='mt'; mt.textContent=s.mt; cell.appendChild(mt);
+  statesEl.appendChild(cell);
+
+  if(s.opts.recharge){
+    animCells.push({cv, bloom, kind:'recharge', base:s.glow});
+    blit(bake({lvl:1, fillTop:WY+WH-3}),5,cv);       // static fallback (reduce-motion)
+  } else {
+    blit(bake(s.opts),5,cv);
+    if(s.glow>0) animCells.push({cv, bloom, kind:'pulse', base:s.glow});
+  }
+});
+
+/* ---------- HUD PIPS ---------- */
+function buildPips(host, charged, total){
+  host.innerHTML='';
+  for(let i=0;i<total;i++){
+    const wrap=document.createElement('div'); wrap.className='pip';
+    const cv=document.createElement('canvas');
+    blit(bake(i<charged?{lvl:1}:{dead:true}),2,cv);
+    wrap.appendChild(cv); host.appendChild(wrap);
+  }
+}
+buildPips(document.getElementById('pipsA'),3,3);
+buildPips(document.getElementById('pipsB'),0,3);
+
+/* ---------- LEGEND + RULES ---------- */
+const LEG=[['outline','#0a0b14'],['dark metal','#222540'],['base','#2e3150'],['bevel light','#525879'],['top hi','#6b72a0'],['glass','#19a8c8'],['glass hi','#8af0ff'],['vent cyan','#7fe8ff'],['bolt','#eafdff']];
+document.getElementById('legend').innerHTML = LEG.map(([n,c])=>'<span><i style="background:'+c+'"></i>'+n+'</span>').join('');
+const RULES=[
+  ['01','BIT owns the cyan. The cell is <b>his</b> energy — glass, vents and bolt all the cyan family. Magenta stays the haul currency; the two never share a screen role.'],
+  ['02','One signature hook. The captured <b>lightning glyph</b> reads the meaning at a glance; the frame stays quiet metal so the bolt carries.'],
+  ['03','Level lives in the glass, not the frame. Tint + core brightness change; the silhouette is constant so a row of pips scans cleanly.'],
+  ['04','Depleted ≠ failure. Dead grey glass and a ghost bolt read as <b>"recharge me"</b> — never red, never shaming (body-neutral mandate).'],
+  ['05','Integer scale only. 18×26 native, blitted ×N with FilterQuality.none — a fractional upscale shatters the grid.'],
+  ['06','Reduce-motion safe. The recharge sweep and idle bloom have static fallbacks (near-full glass, fixed glow).'],
+];
+document.getElementById('rules').innerHTML = RULES.map(([n,t])=>'<div class="rule"><b>'+n+'</b><span class="t">'+t+'</span></div>').join('');
+
+/* ---------- IDLE ANIMATION (bloom pulse + recharge sweep) ---------- */
+let t0=performance.now();
+let sweep=0;
+function frame(now){
+  const t=now-t0;
+  // hero bloom breath
+  const hb=document.getElementById('heroBloom');
+  if(hb && !RM){ hb.style.opacity = 0.5 + 0.18*Math.sin(t/780); }
+  for(const a of animCells){
+    if(a.kind==='pulse' && !RM){
+      a.bloom.style.opacity = a.base*(0.78 + 0.22*Math.sin(t/700));
+    } else if(a.kind==='recharge'){
+      if(RM) continue;
+      // fill-front rises from bottom to top, then loops
+      sweep = (t/2400)%1;
+      const front = WY+WH - Math.floor(sweep*(WH+1));   // top of charged region moves up
+      blit(bake({lvl:1, fillTop:Math.max(WY,front)}),5,a.cv);
+      a.bloom.style.opacity = a.base*(0.6 + 0.4*sweep);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

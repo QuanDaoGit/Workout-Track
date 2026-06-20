@@ -44,6 +44,13 @@ class AdventureService {
 
   static const stateKey = 'adventure_state_v1';
 
+  /// The expedition id whose home-room "I'm back" greeting was already shown
+  /// (so it fires once when the hologram first appears, not on every reopen).
+  /// Keyed on the stable expedition id; a missing/legacy value ⇒ not greeted
+  /// (greets once — harmless). Own key, so its idempotent set never races the
+  /// state queue.
+  static const greetedKey = 'bit_room_greeted_v1';
+
   /// Gems per expedition by rank letter (before the ±variance roll).
   static const payTiers = {'D': 8, 'C': 12, 'B': 18, 'A': 26, 'S': 40};
 
@@ -72,6 +79,19 @@ class AdventureService {
       (minDurationMinutes +
               _vitFraction(vit) * (maxDurationMinutes - minDurationMinutes))
           .round();
+
+  /// Which expedition's home-room greeting has been shown (null ⇒ none).
+  Future<String?> loadGreetedExpeditionId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(greetedKey);
+  }
+
+  /// Mark [id]'s greeting consumed — so "I'm back" shows once, then the away
+  /// status takes over on the next return.
+  Future<void> setGreetedExpeditionId(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(greetedKey, id);
+  }
 
   /// Payout multiplier for a VIT value — 1.0…1.4.
   static double multiplierForVit(int vit) =>
@@ -366,6 +386,36 @@ class AdventureService {
       state.copyWith(
         standingOrderRouteId: adventureRouteById(routeId).id,
         ordersConfirmed: true,
+      ),
+    );
+  });
+
+  // ---------------------------------------------------------------------
+  // Debug helpers (wired only behind kDebugMode UI — never in release flows)
+  // ---------------------------------------------------------------------
+
+  /// Debug-only: grant one charge immediately (bypasses the one/day gate) so a
+  /// dispatch + launch can be triggered without first logging a workout.
+  Future<void> debugGrantCharge() => _serial(() async {
+    final prefs = await SharedPreferences.getInstance();
+    final state = _decode(prefs.getString(stateKey));
+    final charges = (state.charges + 1).clamp(0, AdventureState.chargeCap);
+    await _save(prefs, state.copyWith(charges: charges));
+  });
+
+  /// Debug-only: make the pending expedition return *now* (backdates its
+  /// `returnsAt`) so the report can be collected immediately — preview the whole
+  /// loop in seconds instead of waiting out the 4–8h timer.
+  Future<void> debugReturnPendingNow() => _serial(() async {
+    final prefs = await SharedPreferences.getInstance();
+    final state = _decode(prefs.getString(stateKey));
+    final pending = state.pending;
+    if (pending == null) return;
+    final now = _effectiveNow(state);
+    await _save(
+      prefs,
+      state.copyWith(
+        pending: pending.copyWith(returnsAtIso: now.toIso8601String()),
       ),
     );
   });

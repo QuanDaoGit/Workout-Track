@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/tokens.dart';
 import 'loot_unlock_rule.dart';
 import 'unit_models.dart';
 
@@ -26,15 +27,15 @@ extension LootRarityInfo on LootRarity {
   Color get color {
     switch (this) {
       case LootRarity.common:
-        return Colors.white;
+        return kRarityCommon;
       case LootRarity.uncommon:
-        return const Color(0xFF00FF9C);
+        return kRarityUncommon;
       case LootRarity.rare:
-        return const Color(0xFF00BFFF);
+        return kRarityRare;
       case LootRarity.epic:
-        return const Color(0xFFA66BFF);
+        return kRarityEpic;
       case LootRarity.legendary:
-        return const Color(0xFFFFD700);
+        return kRarityLegendary;
     }
   }
 }
@@ -80,6 +81,11 @@ class LootItem {
   final bool isDefault;
   final LootUnlockRule? unlockRule;
 
+  /// Number of frames for an animated avatar-frame asset (1 = static). Animated
+  /// frames live at `<dir>/<id>_<i>.png`; [assetPath] points at frame 0 — the
+  /// poster shown in grids and as the reduced-motion still.
+  final int frameCount;
+
   const LootItem({
     required this.id,
     required this.name,
@@ -91,9 +97,16 @@ class LootItem {
     this.gemPrice,
     this.isDefault = false,
     this.unlockRule,
+    this.frameCount = 1,
   });
 
   Color get color => colorValue == null ? rarity.color : Color(colorValue!);
+
+  /// Asset path of animation frame [i] (0-based); static frames ignore [i] and
+  /// always return [assetPath].
+  String frameAt(int i) => frameCount <= 1
+      ? assetPath
+      : assetPath.replaceFirst(RegExp(r'_0\.png$'), '_$i.png');
 
   /// Description rendered in the active weight [unit]. For volume-gated loot the
   /// threshold clause is built from [unlockRule] (stored kg) so it converts;

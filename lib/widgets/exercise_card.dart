@@ -86,7 +86,7 @@ class ExerciseCard extends StatelessWidget {
                               AssetImage(
                                 'assets/icons/control/icon_hammer.png',
                               ),
-                              color: Color(0xFF00FF9C),
+                              color: kNeon,
                               size: 24,
                             ),
                           ),
@@ -135,7 +135,7 @@ class ExerciseCard extends StatelessWidget {
                             ),
                             decoration: BoxDecoration(
                               border: Border.all(
-                                color: const Color(0xFF00BFFF),
+                                color: kCyan,
                               ),
                               borderRadius: BorderRadius.circular(4),
                             ),
@@ -144,7 +144,7 @@ class ExerciseCard extends StatelessWidget {
                               style: TextStyle(
                                 fontFamily: 'PressStart2P',
                                 fontSize: 7,
-                                color: Color(0xFF00BFFF),
+                                color: kCyan,
                               ),
                             ),
                           ),
@@ -335,7 +335,7 @@ class _BouncingHeartIconState extends State<_BouncingHeartIcon>
                 ? 'assets/icons/control/icon_heart.png'
                 : 'assets/icons/control/icon_receptacle.png',
           ),
-          color: widget.isFavorite ? const Color(0xFFFF2D55) : kMutedText,
+          color: widget.isFavorite ? kDanger : kMutedText,
           size: 20,
         ),
       ),

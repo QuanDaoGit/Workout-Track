@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/bit_interview_copy.dart';
 import '../../models/body_goal_models.dart';
 import '../../models/calibration_quiz_models.dart';
 import '../../models/resolve_models.dart';
@@ -12,10 +13,12 @@ import '../../services/unit_settings_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_chip.dart';
+import '../../widgets/companion/bit_mood_core.dart';
+import '../../widgets/companion/bit_speech_bubble.dart';
 import '../../widgets/motion/arcade_text_field.dart';
 import '../../widgets/onboarding/option_question.dart';
 import '../../widgets/pixel_button.dart';
-import '../../widgets/segmented_progress_bar.dart';
+import '../../widgets/arcade_bar.dart';
 import '../../widgets/typewriter_text.dart';
 
 /// The onboarding question quiz. Renders a caller-supplied list of
@@ -80,36 +83,112 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
   // typewriter + wipe-in when navigating back to an already-seen question.
   final Set<int> _seenSteps = {};
 
+  // Reaction beat — on an emotional question, BIT types a "promise" after the
+  // answer is committed; the user taps to continue (no auto-advance). EVENT-DRIVEN:
+  // set only on the commit action, never on build, so it never replays on
+  // back-navigation or a prefilled re-entry (a rebuilt step just shows ASKING with
+  // the selection restored). Backing out of a reaction returns to ASKING.
+  bool _reacting = false;
+  String? _reactionText;
+  // Latched when the FINAL reaction's continue fires onComplete (which replaces
+  // this page with a loader). Guards a double-tap WITHOUT flipping _reacting back
+  // to ASKING — see _advanceFromReaction.
+  bool _completing = false;
+  Timer? _selectHoldTimer; // the 280ms single-select "land" hold (cancellable)
+
+  // Segment B opens with a brief BIT intro line ("just a few more questions")
+  // before the first question morphs in. Fires once; reduced motion skips it.
+  bool _showIntro = false;
+  bool _introScheduled = false;
+  Timer? _introTimer;
+
   late final QuizAnswers _answers =
       widget.initialAnswers?.copy() ?? QuizAnswers();
 
   int get _progressCells => widget.progressBaseCells + _step + 1;
   bool get _isLast => _step == widget.questions.length - 1;
 
-  Future<void> _select(Object answer) async {
+  @override
+  void initState() {
+    super.initState();
+    // The post-reveal segment opens on the experience question.
+    _showIntro = widget.questions.isNotEmpty &&
+        widget.questions.first == QuizQuestion.experience;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_showIntro && !_introScheduled) {
+      _introScheduled = true;
+      if (MediaQuery.of(context).disableAnimations) {
+        _showIntro = false; // no intro beat under reduced motion
+      } else {
+        // Time the intro to the typewriter: it types out, holds ~900 ms, then the
+        // question types in — at the same consistent speed.
+        _introTimer = Timer(
+          Duration(
+            milliseconds:
+                BitInterviewCopy.segmentBIntro.length * kBitTypeCharMs + 900,
+          ),
+          () {
+            if (mounted) setState(() => _showIntro = false);
+          },
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _introTimer?.cancel();
+    _selectHoldTimer?.cancel();
+    super.dispose();
+  }
+
+  void _select(Object answer) {
     if (_advancing) return;
     _advancing = true;
     // Apply the answer immediately so back-navigation restores it.
     if (answer is BodyGoal) _answers.goal = answer;
     if (answer is TrainingFreq) _answers.freq = answer;
     if (answer is Experience) _answers.exp = answer;
-    // 280 ms hold so the selection animation (120 ms) completes and the
-    // choice visibly "lands" before the screen swaps.
-    final reducedMotion = MediaQuery.of(context).disableAnimations;
-    if (!reducedMotion) {
-      await Future<void>.delayed(const Duration(milliseconds: 280));
+    if (answer is Obstacle) _answers.obstacle = answer;
+    // 280 ms hold so the selection animation (120 ms) completes and the choice
+    // visibly "lands" before the screen swaps. Owned + step-guarded: a Back press
+    // during the hold cancels it (see _goBack), so a stale commit can never react
+    // or advance for a question that is no longer current.
+    final step = _step;
+    void commit() {
+      if (!mounted || _step != step) return;
+      final current = widget.questions[step];
+      // Emotional questions: BIT reacts (and owns the advance); the rest advance.
+      if (_isReactionQuestion(current)) {
+        _enterReaction(current);
+      } else {
+        _advance();
+      }
     }
-    if (!mounted) return;
-    _advance();
+
+    if (MediaQuery.of(context).disableAnimations) {
+      commit();
+    } else {
+      _selectHoldTimer = Timer(const Duration(milliseconds: 280), commit);
+    }
   }
 
   // Multi-select identity questions confirm via an explicit CONTINUE: store the
-  // chosen set, then advance under the same re-entrancy guard as the others.
+  // chosen set, then react (emotional) or advance under the same re-entrancy guard.
   void _confirmIdentity(VoidCallback applyAnswer) {
     if (_advancing) return;
     _advancing = true;
     applyAnswer();
-    _advance();
+    final current = widget.questions[_step];
+    if (_isReactionQuestion(current)) {
+      _enterReaction(current);
+    } else {
+      _advance();
+    }
   }
 
   void _finishWeightSex({
@@ -134,7 +213,80 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
     }
   }
 
+  // ── BIT reaction beat ─────────────────────────────────────────────────────
+  // The emotional questions BIT reacts to (goal + body-metrics are ask-only).
+  bool _isReactionQuestion(QuizQuestion q) => switch (q) {
+    QuizQuestion.trainingWhy ||
+    QuizQuestion.winningVision ||
+    QuizQuestion.experience ||
+    QuizQuestion.frequency ||
+    QuizQuestion.obstacle => true,
+    QuizQuestion.goal || QuizQuestion.weightSex => false,
+  };
+
+  String _reactionTextFor(QuizQuestion q) => switch (q) {
+    QuizQuestion.trainingWhy => BitInterviewCopy.vowReaction(
+      BitInterviewCopy.vowPrimary(_answers.trainingWhy),
+    ),
+    QuizQuestion.winningVision => BitInterviewCopy.visionReaction(
+      BitInterviewCopy.visionPrimary(_answers.winningVision),
+    ),
+    QuizQuestion.experience => BitInterviewCopy.experienceReaction(
+      _answers.exp!,
+    ),
+    QuizQuestion.frequency => BitInterviewCopy.frequencyReaction(_answers.freq!),
+    QuizQuestion.obstacle => BitInterviewCopy.obstacleReaction(
+      _answers.obstacle!,
+      freq: _answers.freq,
+    ),
+    QuizQuestion.goal || QuizQuestion.weightSex => '',
+  };
+
+  void _enterReaction(QuizQuestion q) {
+    // The segment-B intro is moot once the user has answered.
+    _introTimer?.cancel();
+    _showIntro = false;
+    setState(() {
+      _reacting = true;
+      _reactionText = _reactionTextFor(q);
+    });
+  }
+
+  void _advanceFromReaction() {
+    if (!_reacting || _completing) return; // re-entrancy (double tap)
+    if (_isLast) {
+      // This page is about to be REPLACED by the next route (a loader that
+      // animates in semi-transparent). Keep the reaction on screen — do NOT flip
+      // back to ASKING — so the loader rises over BIT's promise, not a one-frame
+      // flash of the answered question's options bleeding through the incoming
+      // route. (Mid-quiz, the revert is fine: the next question's ASKING replaces
+      // it in the same frame.)
+      _completing = true;
+      widget.onComplete(_answers);
+      return;
+    }
+    setState(() {
+      _reacting = false;
+      _reactionText = null;
+    });
+    _advance();
+  }
+
   void _goBack() {
+    // A Back press during the 280ms select-hold cancels the pending commit, so a
+    // stale callback can never react/advance for a question that's no longer up.
+    _selectHoldTimer?.cancel();
+    _selectHoldTimer = null;
+    // Back during a reaction returns to ASKING of the SAME question (cancel the
+    // timer, keep the selection editable) — not to the previous question.
+    if (_reacting) {
+      setState(() {
+        _reacting = false;
+        _reactionText = null;
+        _advancing = false;
+      });
+      return;
+    }
     if (_step == 0) {
       widget.onExit?.call();
       return;
@@ -179,6 +331,7 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
         animate: firstView,
         onBack: onBack,
         onSelect: _select,
+        bitAsk: BitInterviewCopy.ask(QuizQuestion.goal),
       ),
       QuizQuestion.frequency => _FreqQuestion(
         key: const ValueKey('quiz-frequency'),
@@ -187,6 +340,10 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
         animate: firstView,
         onBack: onBack,
         onSelect: _select,
+        bitAsk: BitInterviewCopy.ask(QuizQuestion.frequency),
+        reacting: _reacting,
+        reactionText: _reactionText,
+        onReactionContinue: _advanceFromReaction,
       ),
       QuizQuestion.experience => _ExperienceQuestion(
         key: const ValueKey('quiz-experience'),
@@ -195,6 +352,13 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
         animate: firstView,
         onBack: onBack,
         onSelect: _select,
+        // Segment-B intro line precedes the question, then morphs to the ask.
+        bitAsk: _showIntro
+            ? BitInterviewCopy.segmentBIntro
+            : BitInterviewCopy.ask(QuizQuestion.experience),
+        reacting: _reacting,
+        reactionText: _reactionText,
+        onReactionContinue: _advanceFromReaction,
       ),
       QuizQuestion.weightSex => _CalibrationQuestion(
         key: const ValueKey('quiz-weightSex'),
@@ -205,6 +369,7 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
         animate: firstView,
         onBack: onBack,
         onContinue: _finishWeightSex,
+        bitAsk: BitInterviewCopy.ask(QuizQuestion.weightSex),
       ),
       QuizQuestion.trainingWhy => _MultiSelectQuestion<TrainingWhy>(
         key: const ValueKey('quiz-trainingWhy'),
@@ -217,6 +382,10 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
         animate: firstView,
         onBack: onBack,
         onConfirm: (set) => _confirmIdentity(() => _answers.trainingWhy = set),
+        bitAsk: BitInterviewCopy.ask(QuizQuestion.trainingWhy),
+        reacting: _reacting,
+        reactionText: _reactionText,
+        onReactionContinue: _advanceFromReaction,
       ),
       QuizQuestion.winningVision => _MultiSelectQuestion<WinningVision>(
         key: const ValueKey('quiz-winningVision'),
@@ -231,16 +400,22 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
         onBack: onBack,
         onConfirm: (set) =>
             _confirmIdentity(() => _answers.winningVision = set),
+        bitAsk: BitInterviewCopy.ask(QuizQuestion.winningVision),
+        reacting: _reacting,
+        reactionText: _reactionText,
+        onReactionContinue: _advanceFromReaction,
       ),
-      QuizQuestion.obstacle => _MultiSelectQuestion<Obstacle>(
+      QuizQuestion.obstacle => _ObstacleQuestion(
         key: const ValueKey('quiz-obstacle'),
         progressCells: _progressCells,
-        prompt: 'WHAT USUALLY GETS\nIN THE WAY?',
-        options: [for (final o in Obstacle.values) _MultiOption(o, o.label)],
         selected: _answers.obstacle,
         animate: firstView,
         onBack: onBack,
-        onConfirm: (set) => _confirmIdentity(() => _answers.obstacle = set),
+        onSelect: _select,
+        bitAsk: BitInterviewCopy.ask(QuizQuestion.obstacle),
+        reacting: _reacting,
+        reactionText: _reactionText,
+        onReactionContinue: _advanceFromReaction,
       ),
     };
   }
@@ -250,7 +425,7 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
 // Shared layout
 // ---------------------------------------------------------------------------
 
-class _QuestionScaffold extends StatelessWidget {
+class _QuestionScaffold extends StatefulWidget {
   const _QuestionScaffold({
     required this.progressCells,
     required this.prompt,
@@ -258,6 +433,10 @@ class _QuestionScaffold extends StatelessWidget {
     required this.onBack,
     this.animatePrompt = true,
     this.subtitle,
+    this.bitAsk,
+    this.reacting = false,
+    this.reactionText,
+    this.onReactionContinue,
   });
 
   final int progressCells;
@@ -266,115 +445,227 @@ class _QuestionScaffold extends StatelessWidget {
   final VoidCallback? onBack;
   final bool animatePrompt;
 
-  /// Optional muted line beneath the prompt. Used only by the multi-select
-  /// identity questions to surface "Pick all that apply"; single-select
-  /// questions leave it null (no descriptive subtitle).
+  /// Optional muted line beneath the prompt — the multi-select "Pick all that
+  /// apply"; single-select questions leave it null.
   final String? subtitle;
+
+  /// When non-null, BIT *asks* the question: the prompt zone becomes BIT's sprite
+  /// + a typing speech bubble (the companion is the interviewer).
+  final String? bitAsk;
+
+  /// Reaction beat — BIT *types* [reactionText] (the promise) and the answer zone
+  /// becomes a "tap to continue" hint. Tapping anywhere continues
+  /// ([onReactionContinue]) once typed, or skips the type if still typing. No
+  /// auto-advance.
+  final bool reacting;
+  final String? reactionText;
+  final VoidCallback? onReactionContinue;
+
+  @override
+  State<_QuestionScaffold> createState() => _QuestionScaffoldState();
+}
+
+class _QuestionScaffoldState extends State<_QuestionScaffold> {
+  static const _neonPromptStyle = TextStyle(
+    fontFamily: 'PressStart2P',
+    fontSize: 16,
+    color: kNeon,
+    height: 1.4,
+  );
+
+  // Reaction tap-to-continue: a tap before BIT finishes typing *skips* the type;
+  // a tap after *continues*.
+  bool _reactionTyped = false;
+  bool _skip = false;
+
+  @override
+  void didUpdateWidget(_QuestionScaffold old) {
+    super.didUpdateWidget(old);
+    if (widget.reacting != old.reacting) {
+      _reactionTyped = false;
+      _skip = false;
+    }
+  }
+
+  void _onTyped() {
+    if (mounted) setState(() => _reactionTyped = true);
+  }
+
+  void _onReactionTap() {
+    if (_reactionTyped) {
+      widget.onReactionContinue?.call();
+    } else {
+      setState(() => _skip = true); // first tap finishes the line
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final reducedMotion = MediaQuery.of(context).disableAnimations;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Zone 1 — top bar (56 px including SafeArea padding above).
-        SizedBox(
-          height: 56,
-          child: Row(
-            children: [
-              SizedBox(
-                width: 56,
-                height: 56,
-                child: onBack == null
-                    ? null
-                    : Semantics(
-                        button: true,
-                        label: 'Back',
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.chevron_left_sharp,
-                            color: kText,
-                            size: 28,
+    return GestureDetector(
+      // Tap anywhere to continue — but only while reacting (asking taps belong to
+      // the options). The back button is a child, so it wins its own taps.
+      behavior: widget.reacting
+          ? HitTestBehavior.opaque
+          : HitTestBehavior.deferToChild,
+      onTap: widget.reacting ? _onReactionTap : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Zone 1 — top bar (56 px including SafeArea padding above).
+          SizedBox(
+            height: 56,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: widget.onBack == null
+                      ? null
+                      : Semantics(
+                          button: true,
+                          label: 'Back',
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.chevron_left_sharp,
+                              color: kText,
+                              size: 28,
+                            ),
+                            onPressed: widget.onBack,
                           ),
-                          onPressed: onBack,
                         ),
-                      ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: SegmentedProgressBar(
-                    totalCells: CalibrationQuizPage.totalProgressCells,
-                    litCells: progressCells,
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: ArcadeBar.segments(
+                      totalCells: CalibrationQuizPage.totalProgressCells,
+                      litCells: widget.progressCells,
+                    ),
                   ),
                 ),
-              ),
-              SizedBox(
-                width: 56,
-                child: Text(
-                  '$progressCells/${CalibrationQuizPage.totalProgressCells}',
-                  textAlign: TextAlign.center,
-                  style: AppFonts.shareTechMono(
-                    color: kMutedText,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 48),
-        // Zone 2 — prompt.
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Semantics(
-                header: true,
-                child: (reducedMotion || !animatePrompt)
-                    ? Text(
-                        prompt,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontFamily: 'PressStart2P',
-                          fontSize: 16,
-                          color: kNeon,
-                          height: 1.4,
-                        ),
-                      )
-                    : TypewriterText(
-                        prompt,
-                        textAlign: TextAlign.center,
-                        charMs: 30,
-                        style: const TextStyle(
-                          fontFamily: 'PressStart2P',
-                          fontSize: 16,
-                          color: kNeon,
-                          height: 1.4,
-                        ),
-                      ),
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  subtitle!,
-                  textAlign: TextAlign.center,
-                  style: AppFonts.shareTechMono(
-                    color: kMutedText,
-                    fontSize: 12,
+                SizedBox(
+                  width: 56,
+                  child: Text(
+                    '${widget.progressCells}/${CalibrationQuizPage.totalProgressCells}',
+                    textAlign: TextAlign.center,
+                    style: AppFonts.shareTechMono(
+                      color: kMutedText,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 48),
+          // Zone 2 — BIT asking/reacting, or the neon prompt.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: widget.bitAsk != null
+                ? _bitPrompt()
+                : _neonPrompt(reducedMotion),
+          ),
+          const SizedBox(height: 32),
+          // Zone 3 — the answer, or the reaction's "tap to continue" hint.
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+              child: widget.reacting ? _reactionBody() : widget.body,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _neonPrompt(bool reducedMotion) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          header: true,
+          child: (reducedMotion || !widget.animatePrompt)
+              ? Text(widget.prompt,
+                  textAlign: TextAlign.center, style: _neonPromptStyle)
+              : TypewriterText(
+                  widget.prompt,
+                  textAlign: TextAlign.center,
+                  charMs: 30,
+                  style: _neonPromptStyle,
+                ),
+        ),
+        if (widget.subtitle != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            widget.subtitle!,
+            textAlign: TextAlign.center,
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // BIT asks (or, when reacting, delivers its promise) — the bubble *types* the
+  // line (robotic), re-typing whenever the line changes (question→question and
+  // question→response). The sprite stays put; cheer on a reaction.
+  Widget _bitPrompt() {
+    final line =
+        widget.reacting ? (widget.reactionText ?? widget.bitAsk!) : widget.bitAsk!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          header: true,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              BitMoodCore(
+                pose: widget.reacting ? BitPose.cheer : BitPose.neutral,
+                reveal: 1,
+                size: 52,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: BitSpeechBubble(
+                    text: line,
+                    typewriter: true,
+                    skip: _skip,
+                    onTypingComplete: _onTyped,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
-        const SizedBox(height: 32),
-        // Zone 3 — answer.
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-            child: body,
+        if (widget.subtitle != null && !widget.reacting) ...[
+          const SizedBox(height: 12),
+          Text(
+            widget.subtitle!,
+            textAlign: TextAlign.center,
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // No CONTINUE button — a subtle "tap to continue" hint appears once BIT has
+  // finished typing the promise; the whole screen is the tap target.
+  Widget _reactionBody() {
+    return Column(
+      children: [
+        const Spacer(),
+        AnimatedOpacity(
+          duration: const Duration(milliseconds: 220),
+          opacity: _reactionTyped ? 1.0 : 0.0,
+          child: Text(
+            'tap to continue ›',
+            textAlign: TextAlign.center,
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
           ),
         ),
       ],
@@ -394,6 +685,7 @@ class _GoalQuestion extends StatelessWidget {
     required this.animate,
     required this.onBack,
     required this.onSelect,
+    this.bitAsk,
   });
 
   final int progressCells;
@@ -401,12 +693,14 @@ class _GoalQuestion extends StatelessWidget {
   final bool animate;
   final VoidCallback? onBack;
   final ValueChanged<BodyGoal> onSelect;
+  final String? bitAsk;
 
   @override
   Widget build(BuildContext context) {
     return _QuestionScaffold(
       progressCells: progressCells,
       prompt: "WHAT'S THE GOAL?",
+      bitAsk: bitAsk,
       animatePrompt: animate,
       onBack: onBack,
       body: OptionList(
@@ -453,6 +747,10 @@ class _FreqQuestion extends StatelessWidget {
     required this.animate,
     required this.onBack,
     required this.onSelect,
+    this.bitAsk,
+    this.reacting = false,
+    this.reactionText,
+    this.onReactionContinue,
   });
 
   final int progressCells;
@@ -460,12 +758,20 @@ class _FreqQuestion extends StatelessWidget {
   final bool animate;
   final VoidCallback? onBack;
   final ValueChanged<TrainingFreq> onSelect;
+  final String? bitAsk;
+  final bool reacting;
+  final String? reactionText;
+  final VoidCallback? onReactionContinue;
 
   @override
   Widget build(BuildContext context) {
     return _QuestionScaffold(
       progressCells: progressCells,
       prompt: 'HOW OFTEN?',
+      bitAsk: bitAsk,
+      reacting: reacting,
+      reactionText: reactionText,
+      onReactionContinue: onReactionContinue,
       animatePrompt: animate,
       onBack: onBack,
       body: OptionList(
@@ -509,6 +815,10 @@ class _ExperienceQuestion extends StatelessWidget {
     required this.animate,
     required this.onBack,
     required this.onSelect,
+    this.bitAsk,
+    this.reacting = false,
+    this.reactionText,
+    this.onReactionContinue,
   });
 
   final int progressCells;
@@ -516,12 +826,20 @@ class _ExperienceQuestion extends StatelessWidget {
   final bool animate;
   final VoidCallback? onBack;
   final ValueChanged<Experience> onSelect;
+  final String? bitAsk;
+  final bool reacting;
+  final String? reactionText;
+  final VoidCallback? onReactionContinue;
 
   @override
   Widget build(BuildContext context) {
     return _QuestionScaffold(
       progressCells: progressCells,
       prompt: 'YOUR LEVEL?',
+      bitAsk: bitAsk,
+      reacting: reacting,
+      reactionText: reactionText,
+      onReactionContinue: onReactionContinue,
       animatePrompt: animate,
       onBack: onBack,
       body: OptionList(
@@ -560,6 +878,62 @@ class _ExperienceQuestion extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// OBSTACLE (single-select) — the one barrier BIT responds to
+// ---------------------------------------------------------------------------
+
+class _ObstacleQuestion extends StatelessWidget {
+  const _ObstacleQuestion({
+    super.key,
+    required this.progressCells,
+    required this.selected,
+    required this.animate,
+    required this.onBack,
+    required this.onSelect,
+    this.bitAsk,
+    this.reacting = false,
+    this.reactionText,
+    this.onReactionContinue,
+  });
+
+  final int progressCells;
+  final Obstacle? selected;
+  final bool animate;
+  final VoidCallback? onBack;
+  final ValueChanged<Obstacle> onSelect;
+  final String? bitAsk;
+  final bool reacting;
+  final String? reactionText;
+  final VoidCallback? onReactionContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    return _QuestionScaffold(
+      progressCells: progressCells,
+      prompt: 'WHAT USUALLY GETS\nIN THE WAY?',
+      bitAsk: bitAsk,
+      reacting: reacting,
+      reactionText: reactionText,
+      onReactionContinue: onReactionContinue,
+      animatePrompt: animate,
+      onBack: onBack,
+      body: OptionList(
+        hasAnySelection: selected != null,
+        animate: animate,
+        mainAxisAlignment: MainAxisAlignment.start,
+        options: [
+          for (final o in Obstacle.values)
+            OptionDef(
+              title: o.label,
+              isSelected: selected == o,
+              onTap: () => onSelect(o),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Identity beats — vow / vision / obstacle (Resolve questions, interleaved)
 // ---------------------------------------------------------------------------
 
@@ -584,6 +958,10 @@ class _MultiSelectQuestion<T> extends StatefulWidget {
     required this.animate,
     required this.onBack,
     required this.onConfirm,
+    this.bitAsk,
+    this.reacting = false,
+    this.reactionText,
+    this.onReactionContinue,
   });
 
   final int progressCells;
@@ -593,6 +971,10 @@ class _MultiSelectQuestion<T> extends StatefulWidget {
   final bool animate;
   final VoidCallback? onBack;
   final ValueChanged<Set<T>> onConfirm;
+  final String? bitAsk;
+  final bool reacting;
+  final String? reactionText;
+  final VoidCallback? onReactionContinue;
 
   @override
   State<_MultiSelectQuestion<T>> createState() =>
@@ -613,6 +995,10 @@ class _MultiSelectQuestionState<T> extends State<_MultiSelectQuestion<T>> {
       progressCells: widget.progressCells,
       prompt: widget.prompt,
       subtitle: 'Pick all that apply',
+      bitAsk: widget.bitAsk,
+      reacting: widget.reacting,
+      reactionText: widget.reactionText,
+      onReactionContinue: widget.onReactionContinue,
       animatePrompt: widget.animate,
       onBack: widget.onBack,
       body: Column(
@@ -662,6 +1048,7 @@ class _CalibrationQuestion extends StatefulWidget {
     required this.animate,
     required this.onBack,
     required this.onContinue,
+    this.bitAsk,
   });
 
   final int progressCells;
@@ -676,6 +1063,8 @@ class _CalibrationQuestion extends StatefulWidget {
     required UserProfileSex sex,
   })
   onContinue;
+
+  final String? bitAsk;
 
   @override
   State<_CalibrationQuestion> createState() => _CalibrationQuestionState();
@@ -779,6 +1168,7 @@ class _CalibrationQuestionState extends State<_CalibrationQuestion> {
     return _QuestionScaffold(
       progressCells: widget.progressCells,
       prompt: 'DIAL IT IN',
+      bitAsk: widget.bitAsk,
       animatePrompt: widget.animate,
       onBack: widget.onBack,
       body: ListView(

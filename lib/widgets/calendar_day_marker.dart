@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../models/rest_models.dart';
+import '../theme/tokens.dart';
 
 enum CalendarMarkerKind { workout, abandoned, protected, missed, rest }
 
-const Color calendarMarkerMuted = Color(0xFF6B6B8A);
-const Color calendarMarkerNeon = Color(0xFF00FF9C);
-const Color calendarMarkerRed = Color(0xFFFF2D55);
-const Color calendarMarkerGold = Color(0xFFFFD700);
-const Color calendarMarkerCyan = Color(0xFF00BFFF);
+const Color calendarMarkerMuted = kSlate;
+const Color calendarMarkerNeon = kNeon;
+const Color calendarMarkerRed = kDanger;
+const Color calendarMarkerGold = kAmber;
+const Color calendarMarkerCyan = kCyan;
 
 CalendarMarkerKind? calendarMarkerKindFor({
   required RestDayInfo restInfo,
@@ -249,7 +250,7 @@ class CalendarDayStatusCard extends StatelessWidget {
                     style: const TextStyle(
                       fontFamily: 'PressStart2P',
                       fontSize: 9,
-                      color: Color(0xFFE8E8FF),
+                      color: kText,
                     ),
                   ),
                   const SizedBox(height: 6),

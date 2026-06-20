@@ -5,7 +5,7 @@ import '../theme/app_fonts.dart';
 
 import '../services/rest_timer_service.dart';
 import '../theme/tokens.dart';
-import 'segmented_progress_bar.dart';
+import 'arcade_bar.dart';
 
 class RestTimerBar extends StatefulWidget {
   const RestTimerBar({super.key});
@@ -92,18 +92,12 @@ class _CollapsedRestBar extends StatelessWidget {
       child: SizedBox(
         height: 20,
         width: double.infinity,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: FractionallySizedBox(
-            widthFactor: fraction,
-            alignment: Alignment.centerLeft,
-            child: Container(
-              height: 4,
-              decoration: const BoxDecoration(
-                color: kNeon,
-                borderRadius: BorderRadius.all(Radius.circular(4)),
-              ),
-            ),
+        child: Center(
+          child: ArcadeBar(
+            value: fraction,
+            accent: kNeon,
+            height: 6,
+            flashOnIncrease: false,
           ),
         ),
       ),
@@ -155,7 +149,7 @@ class _ExpandedRestBar extends StatelessWidget {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: SegmentedProgressBar(
+                      child: ArcadeBar.segments(
                         totalCells: totalCells,
                         litCells: litCells,
                         height: 8,

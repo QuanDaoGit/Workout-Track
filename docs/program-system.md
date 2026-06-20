@@ -152,38 +152,59 @@ Programs Library ─► Program Detail ─► START PROGRAM (confirm if switchin
    program session.
 
 5. **Completion advances the schedule.** Saving a program workout calls **advanceDay()**: it moves
-   `currentDayIndex` to the next slot (wrapping to `currentWeek + 1` at the end of the cycle) and
-   increments `completedSessions` for workout days. A **once-per-day guard** prevents double
-   advancement if you log twice in a day.
+   `workoutIndex` to the next workout (wrapping to `currentWeek + 1` when the cycle completes) and
+   increments `completedSessions`. A **once-per-day guard** prevents double advancement if you log
+   twice in a day.
 
-6. **Rest days are automatic.** A scheduled rest day is **credited as planned rest** (which protects
-   your streak and feeds the VIT recovery meter) and **auto-rolls forward** to the next slot when
-   the calendar date changes — you don't have to do anything. (The user *can* still "train anyway"
-   on a rest day; that path advances the schedule too.)
+6. **Rest is calendar-derived.** Any non-training weekday is a planned-rest day natively (it
+   protects your streak and feeds the VIT recovery meter) — the program no longer stamps or rolls
+   rest slots. (The user *can* still "train anyway" on a rest day; that workout counts and advances
+   `workoutIndex` like any other.)
 
-7. **Skipping.** A day can also be skipped manually, which advances the position **without**
-   counting a completed session.
+See §5 for the full weekday-anchored model.
 
 ---
 
-## 5. The scheduling model (the important nuance)
+## 5. The scheduling model — weekday-anchored, forgiving
 
-The schedule is **sequence-based, not calendar-locked.** "Current day" is an index that advances
-when you **complete or credit** a day — it is *not* tied to real weekdays. Consequences:
+As of the 2026-06-20 rework the schedule is **weekday-anchored**: the **TRAINING GOALS** weekday
+picker (Settings, and an optional onboarding step) is the single anchor that decides **which
+weekdays are training days**, and the program's sessions are *projected* onto those days. The same
+choice now drives **both** which workout you do **and** the shield/recovery/streak accounting — the
+two used to be separate systems that ignored each other.
 
-- A user who trains every other day still walks **Day 1 → Day 2 → Day 3 …** in order; they just move
-  through it more slowly. The program never "skips ahead" because it's Wednesday.
-- `currentWeek` increments each time the cycle wraps. `recommendedWeeks` (8) is **guidance only** —
-  there is no hard finish line; the cycle simply repeats.
-- The position is **clamped** to the schedule length on load, so corrupt/legacy state can't point
-  off the end.
+How the projection works (the `ScheduleResolver`, a pure function shared by `ProgramService` and
+`RestService`):
+
+- Progression is a **workout-only cursor**, `ProgramProgress.workoutIndex`, into
+  `Program.workouts` (the `weekSchedule` with rest slots dropped). **Rest is calendar-derived** — a
+  non-training weekday *is* a planned-rest day; rest is no longer a slot in the progression.
+- On a **training weekday**, today's session is `workouts[workoutIndex]`. On a **non-training
+  weekday**, today is rest. Completing a workout advances `workoutIndex` by exactly **one**
+  (`mod` the workout count); `currentWeek` ticks up each time that cursor wraps to 0 (one "week" =
+  one full pass of the program's workouts).
+- **Forgiveness is structural.** The cursor only moves on a *completed* workout, so a missed
+  anchored day is never lost — the same session simply rolls to the next training weekday, order
+  intact. Training **off-anchor** (a non-training weekday) still counts and still advances; it is
+  never punished (no miss, no obligation added).
+- **History is frozen.** Past-day classification reads the immutable per-week `scheduleByWeekKey`
+  snapshot, never a live re-projection — so editing your weekdays can never retroactively burn a
+  shield or reset a streak. Settings edits apply **next Monday** (`pending`); the onboarding pick
+  applies **immediately** (a brand-new user has no history to protect).
+- `recommendedWeeks` (8) is **guidance only** — there is no hard finish line; the cycle repeats.
+
+> **Legacy `currentDayIndex`.** The old 7-slot cursor is frozen at its migration value (no longer
+> advanced) and kept serialized one release for rollback. The one-shot `weekdayAnchoredScheduleV1`
+> migration maps it to the next actionable `workoutIndex`. Don't read `currentDayIndex` for "today".
 
 ---
 
 ## 6. Progress & persistence
 
 Active state is a small **ProgramProgress** record stored locally:
-`programId`, `currentWeek`, `currentDayIndex`, `startedAt`, `completedSessions`.
+`programId`, `currentWeek`, `workoutIndex` (the live progression cursor), `startedAt`,
+`completedSessions`, plus a frozen legacy `currentDayIndex` (migration/rollback only). The chosen
+training weekdays live in `RestState.trainingWeekdays` (the `rest_state_v1` key), not here.
 
 - **Starting** a program resets all program-side bookkeeping (advance guards, snapshots, ongoing
   flags) to a clean slate.
@@ -242,8 +263,10 @@ workout, or "recovery scheduled" on a rest day).
   (top 3 surface in the picker).
 - **Active program prefills Start Workout** (muscle groups + suggested exercises) and flags the
   session; everything else logs normally.
-- **Schedule advances by completing/crediting days, not by weekday.** Workout days advance on save
-  (+1 completed); rest days auto-credit and roll forward.
+- **Schedule is weekday-anchored + forgiving.** TRAINING GOALS weekdays decide which days are
+  training; the program's workouts project onto them. `workoutIndex` advances +1 on each completed
+  workout; rest is calendar-derived (any non-training weekday). A missed anchored day rolls forward,
+  never lost; off-anchor training still counts. (See §5.)
 - **One program at a time;** switching/quitting resets *program progress only* — **workout history
   is always kept.**
 - The program layer is pure scaffolding: **it never changes how a workout is scored.**

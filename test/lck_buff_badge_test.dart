@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:workout_track/widgets/radar_stat_icon.dart';
 import 'package:workout_track/widgets/lck_buff_badge.dart';
+import 'package:workout_track/widgets/radar_stat_icon.dart';
 
 void main() {
   testWidgets('hidden when there is no buff (multiplier 1.0)', (tester) async {

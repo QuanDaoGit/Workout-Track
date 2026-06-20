@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
+import 'json_safe.dart';
 import 'xp_service.dart';
 
 class RestProtectionResult {
@@ -33,19 +34,55 @@ class RestService {
     final raw = prefs.getString(stateKey);
     final currentDay = _dateOnly(now ?? _nowProvider());
     final currentWeekKey = weekKey(currentDay);
-    var state = raw == null
+    final decoded = safeDecodeMap(raw, debugLabel: stateKey);
+    var state = decoded == null
         ? RestState.defaults(currentWeekKey: currentWeekKey)
-        : RestState.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+        : _restStateOrDefaults(decoded, currentWeekKey);
 
     state = _normalizeState(state, currentDay);
     await _saveState(state);
     return state;
   }
 
-  Future<void> saveTrainingWeekdays(Set<int> weekdays, {DateTime? now}) async {
+  /// A decoded-but-possibly-schema-drifted map → a [RestState], falling back to
+  /// defaults if `fromJson` throws on an unexpected shape.
+  RestState _restStateOrDefaults(
+    Map<String, dynamic> json,
+    String currentWeekKey,
+  ) {
+    try {
+      return RestState.fromJson(json);
+    } on Object {
+      return RestState.defaults(currentWeekKey: currentWeekKey);
+    }
+  }
+
+  /// Stages a new training-weekday anchor. By default it applies **next Monday**
+  /// (so a mid-week change can't retroactively corrupt this week's shield/streak
+  /// accounting). Pass [immediate] for onboarding, where the user is brand new
+  /// and has no history to protect — the anchor takes effect from today's week.
+  Future<void> saveTrainingWeekdays(
+    Set<int> weekdays, {
+    DateTime? now,
+    bool immediate = false,
+  }) async {
     final currentDay = _dateOnly(now ?? _nowProvider());
     final sanitized = _sanitizeWeekdays(weekdays);
     final state = await loadState(now: currentDay);
+
+    if (immediate) {
+      final schedule = Map<String, Set<int>>.from(state.scheduleByWeekKey);
+      schedule[weekKey(currentDay)] = sanitized;
+      await _saveState(
+        state.copyWith(
+          trainingWeekdays: sanitized,
+          scheduleByWeekKey: schedule,
+          clearPending: true,
+        ),
+      );
+      return;
+    }
+
     final nextStart = _nextMonday(currentDay);
     final nextStartKey = dateKey(nextStart);
 

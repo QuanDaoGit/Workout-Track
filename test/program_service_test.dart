@@ -16,68 +16,40 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('starts program at week 1 day 1', () async {
+  test('starts program at week 1, workout 0', () async {
     final service = ProgramService(nowProvider: () => DateTime(2026, 5, 11));
 
     final progress = await service.startProgram('full_body_3x');
 
     expect(progress.programId, 'full_body_3x');
     expect(progress.currentWeek, 1);
-    expect(progress.currentDayIndex, 0);
+    expect(progress.workoutIndex, 0);
     expect(progress.completedSessions, 0);
   });
 
-  test('workout day advances and increments completed sessions', () async {
+  test('a completed workout advances the workout-only index by one', () async {
     final service = ProgramService(nowProvider: () => DateTime(2026, 5, 11));
     await service.startProgram('full_body_3x');
 
     final progress = await service.advanceDay(now: DateTime(2026, 5, 11));
 
-    expect(progress?.currentDayIndex, 1);
+    expect(progress?.workoutIndex, 1);
     expect(progress?.completedSessions, 1);
   });
 
-  test('rest day advances without incrementing completed sessions', () async {
+  test('a full cycle of workouts wraps the week (rest slots dropped)', () async {
     final service = ProgramService(nowProvider: () => DateTime(2026, 5, 11));
-    await service.startProgram('full_body_3x');
-    await service.advanceDay(now: DateTime(2026, 5, 11));
+    await service.startProgram('ppl'); // 6 workouts
 
-    final progress = await service.advanceDay(now: DateTime(2026, 5, 12));
-
-    expect(progress?.currentDayIndex, 2);
-    expect(progress?.completedSessions, 1);
-  });
-
-  test('credited rest day stays visible today and rolls tomorrow', () async {
-    final service = ProgramService(nowProvider: () => DateTime(2026, 5, 11));
-    await service.startProgram('full_body_3x');
-    await service.advanceDay(now: DateTime(2026, 5, 11));
-
-    final snapshot = await service.creditRestDayForToday(
-      now: DateTime(2026, 5, 12),
-    );
-    final sameDay = await service.getActiveProgress(now: DateTime(2026, 5, 12));
-    final nextDay = await service.getActiveProgress(now: DateTime(2026, 5, 13));
-
-    expect(snapshot?.dayIndex, 1);
-    expect(sameDay?.currentDayIndex, 1);
-    expect(nextDay?.currentDayIndex, 2);
-    expect(nextDay?.completedSessions, 1);
-  });
-
-  test('end of week wraps to next week', () async {
-    final service = ProgramService(nowProvider: () => DateTime(2026, 5, 11));
-    await service.startProgram('ppl');
-
-    for (var i = 0; i < 7; i++) {
+    for (var i = 0; i < 6; i++) {
       await service.advanceDay(now: DateTime(2026, 5, 11 + i));
     }
     final progress = await service.getActiveProgress(
-      now: DateTime(2026, 5, 18),
+      now: DateTime(2026, 5, 17),
     );
 
     expect(progress?.currentWeek, 2);
-    expect(progress?.currentDayIndex, 0);
+    expect(progress?.workoutIndex, 0); // wrapped 0..5 -> 0
     expect(progress?.completedSessions, 6);
   });
 
@@ -91,8 +63,28 @@ void main() {
       now: DateTime(2026, 5, 11),
     );
 
-    expect(progress?.currentDayIndex, 1);
+    expect(progress?.workoutIndex, 1);
     expect(progress?.completedSessions, 1);
+  });
+
+  test('getTodayDay surfaces the next workout on a training weekday', () async {
+    // 2026-05-11 is a Monday; default training weekdays {1,3,5} include it.
+    final service = ProgramService(nowProvider: () => DateTime(2026, 5, 11));
+    await service.startProgram('full_body_3x');
+
+    final day = await service.getTodayDay(now: DateTime(2026, 5, 11));
+    expect(day?.isWorkout, isTrue);
+    expect(day?.label, 'FULL BODY A');
+  });
+
+  test('getTodayDay returns calendar REST on a non-training weekday', () async {
+    // 2026-05-12 is a Tuesday; {1,3,5} excludes it -> calendar rest.
+    final service = ProgramService(nowProvider: () => DateTime(2026, 5, 12));
+    await service.startProgram('full_body_3x');
+
+    final day = await service.getTodayDay(now: DateTime(2026, 5, 12));
+    expect(day?.isWorkout, isFalse);
+    expect(day?.label, 'REST');
   });
 
   test('quit clears active progress', () async {
@@ -169,21 +161,17 @@ void main() {
     expect(programById('ppl')!.targetSessions, 48);
   });
 
-  test('arc progress counts only workout-day completions', () async {
+  test('arc progress increments once per completed workout', () async {
     final service = ProgramService(nowProvider: () => DateTime(2026, 5, 11));
     await service.startProgram('full_body_3x');
 
-    await service.advanceDay(now: DateTime(2026, 5, 11)); // workout day
-    final afterWorkout = await service.getActiveProgress(
-      now: DateTime(2026, 5, 11),
-    );
-    await service.advanceDay(now: DateTime(2026, 5, 12)); // rest day
-    final afterRest = await service.getActiveProgress(
-      now: DateTime(2026, 5, 12),
-    );
+    await service.advanceDay(now: DateTime(2026, 5, 11));
+    final afterOne = await service.getActiveProgress(now: DateTime(2026, 5, 11));
+    await service.advanceDay(now: DateTime(2026, 5, 13));
+    final afterTwo = await service.getActiveProgress(now: DateTime(2026, 5, 13));
 
-    expect(afterWorkout?.arcSessions, 1);
-    expect(afterRest?.arcSessions, 1);
+    expect(afterOne?.arcSessions, 1);
+    expect(afterTwo?.arcSessions, 2);
   });
 
   test('completion fires once at target, grants title, sets arc', () async {
@@ -307,20 +295,22 @@ void main() {
       expect(prescriptions['Goblet_Squat']?.repMin, 8);
     });
 
-    test('empty for a rest-day workout session', () async {
+    test('off-anchor (forgiveness) training still gets its prescriptions',
+        () async {
+      // Under the weekday-anchored schedule the in-session workout is the active
+      // workout-index slot regardless of weekday, so an off-anchor session keeps
+      // its TARGET banners (the prescriptions are not empty).
       final service = ProgramService(nowProvider: () => DateTime(2026, 5, 12));
       await service.startProgram('full_body_3x');
-      // Advance past FULL BODY A onto the day-2 rest slot.
-      await service.advanceDay(now: DateTime(2026, 5, 11));
+      await service.advanceDay(now: DateTime(2026, 5, 11)); // now on FULL BODY B
       await service.markOngoingProgramSession(
         'session-a',
         restDayWorkout: true,
       );
 
-      expect(
-        await service.prescriptionsForOngoingSession('session-a'),
-        isEmpty,
-      );
+      final prescriptions =
+          await service.prescriptionsForOngoingSession('session-a');
+      expect(prescriptions.length, 5); // FULL BODY B's five lifts
     });
   });
 }

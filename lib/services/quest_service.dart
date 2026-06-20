@@ -11,6 +11,7 @@ import '../models/quest_models.dart';
 import '../models/unit_models.dart';
 import '../models/workout_models.dart';
 import 'class_service.dart';
+import 'json_safe.dart';
 import 'loot_service.dart';
 import 'unit_settings_service.dart';
 import 'gem_service.dart';
@@ -172,13 +173,28 @@ class QuestService {
     final raw = prefs.getString(_stateKey);
     final dailyKey = dailyPeriodKey(now);
     final weeklyKey = weeklyPeriodKey(now);
-    final loaded = raw == null
+    final decoded = safeDecodeMap(raw, debugLabel: _stateKey);
+    final loaded = decoded == null
         ? QuestState.empty(dailyPeriodKey: dailyKey, weeklyPeriodKey: weeklyKey)
-        : QuestState.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+        : _questStateOrEmpty(decoded, dailyKey, weeklyKey);
 
     final normalized = _normalizePeriods(loaded, dailyKey, weeklyKey);
     if (normalized != loaded) await _saveState(normalized);
     return normalized;
+  }
+
+  /// A decoded-but-possibly-schema-drifted map → a [QuestState], falling back to
+  /// an empty period state if `fromJson` throws on an unexpected shape.
+  QuestState _questStateOrEmpty(
+    Map<String, dynamic> json,
+    String dailyKey,
+    String weeklyKey,
+  ) {
+    try {
+      return QuestState.fromJson(json);
+    } on Object {
+      return QuestState.empty(dailyPeriodKey: dailyKey, weeklyPeriodKey: weeklyKey);
+    }
   }
 
   QuestState _normalizePeriods(

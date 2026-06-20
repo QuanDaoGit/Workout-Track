@@ -7,8 +7,9 @@ class CharacterDraft {
     required this.classConfirmedAt,
     this.characterName,
     this.selectedProgramId,
+    this.trainingWeekdays,
     this.winningVision = const <WinningVision>{},
-    this.obstacle = const <Obstacle>{},
+    this.obstacle,
     this.trainingWhy = const <TrainingWhy>{},
   });
 
@@ -17,9 +18,14 @@ class CharacterDraft {
   final String? characterName;
   final String? selectedProgramId;
 
+  /// Optional weekday anchor (1=Mon..7=Sun) chosen alongside the program in
+  /// onboarding. Applied immediately at character creation (no next-Monday
+  /// pending — there is no history to protect for a brand-new user).
+  final Set<int>? trainingWeekdays;
+
   // "Forge Your Resolve" answers — multi-select identity beats from the quiz.
   final Set<WinningVision> winningVision;
-  final Set<Obstacle> obstacle;
+  final Obstacle? obstacle;
   final Set<TrainingWhy> trainingWhy;
 
   CharacterDraft copyWith({
@@ -27,8 +33,9 @@ class CharacterDraft {
     DateTime? classConfirmedAt,
     String? characterName,
     String? selectedProgramId,
+    Set<int>? trainingWeekdays,
     Set<WinningVision>? winningVision,
-    Set<Obstacle>? obstacle,
+    Obstacle? obstacle,
     Set<TrainingWhy>? trainingWhy,
   }) {
     return CharacterDraft(
@@ -36,6 +43,7 @@ class CharacterDraft {
       classConfirmedAt: classConfirmedAt ?? this.classConfirmedAt,
       characterName: characterName ?? this.characterName,
       selectedProgramId: selectedProgramId ?? this.selectedProgramId,
+      trainingWeekdays: trainingWeekdays ?? this.trainingWeekdays,
       winningVision: winningVision ?? this.winningVision,
       obstacle: obstacle ?? this.obstacle,
       trainingWhy: trainingWhy ?? this.trainingWhy,

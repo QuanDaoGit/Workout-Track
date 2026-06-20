@@ -22,7 +22,7 @@ import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_chip.dart';
-import '../widgets/arcade_progress_bar.dart';
+import '../widgets/arcade_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/calendar_day_marker.dart';
 import '../widgets/exercise_card.dart';
@@ -693,7 +693,7 @@ class _LogsTabState extends State<_LogsTab> {
                     ],
                   ),
                   const SizedBox(height: kSpace3),
-                  ArcadeProgressBar(value: _xpProgress.fraction),
+                  ArcadeBar(value: _xpProgress.fraction),
                   const SizedBox(height: 6),
                   Text(
                     _xpProgress.label,
@@ -1840,10 +1840,10 @@ class _MuscleBalanceRow extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: ArcadeProgressBar(
+          child: ArcadeBar(
             value: progress,
             height: 8,
-            fillColor: color,
+            accent: color,
           ),
         ),
         const SizedBox(width: 8),

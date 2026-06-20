@@ -17,6 +17,17 @@ void main() {
     returnsAtIso: returnsAtIso,
   );
 
+  Expedition history({required bool viewed}) => Expedition(
+    id: 'h1',
+    routeId: 'iron_vault',
+    day: '2026-06-12',
+    rank: 'D',
+    payout: 8,
+    flavorIdx: 0,
+    settledAtIso: '2026-06-12T17:00:00.000',
+    viewed: viewed,
+  );
+
   final now = DateTime(2026, 6, 12, 18);
 
   test('no pending → idle', () {
@@ -96,5 +107,62 @@ void main() {
     );
     expect(staleWeek.weeklyCapped, isFalse);
     expect(staleWeek.canDispatch, isTrue);
+  });
+
+  group('hasUncollectedHaul — the persisted coffer authority', () {
+    test('empty / all-viewed history → false', () {
+      expect(hasUncollectedHaul(AdventureState(charges: 2), now), isFalse);
+      expect(
+        hasUncollectedHaul(
+          AdventureState(history: [history(viewed: true)]),
+          now,
+        ),
+        isFalse,
+      );
+    });
+
+    test('an unviewed settled report (pending cleared) → true', () {
+      // The settled-on-open shape: pending null, an unviewed haul in history.
+      expect(
+        hasUncollectedHaul(
+          AdventureState(history: [history(viewed: false)]),
+          now,
+        ),
+        isTrue,
+      );
+    });
+
+    test('a returned-but-unsettled pending → true; still-out pending → false', () {
+      final returned = AdventureState(
+        pending: pending(
+          returnsAtIso: now.subtract(const Duration(minutes: 1)).toIso8601String(),
+        ),
+      );
+      expect(hasUncollectedHaul(returned, now), isTrue);
+
+      final out = AdventureState(
+        pending: pending(
+          returnsAtIso: now.add(const Duration(hours: 5)).toIso8601String(),
+        ),
+      );
+      expect(hasUncollectedHaul(out, now), isFalse);
+    });
+
+    test('legacy pending (null returnsAt) → true', () {
+      expect(
+        hasUncollectedHaul(AdventureState(pending: pending()), now),
+        isTrue,
+      );
+    });
+
+    test('survives kill/reopen: unviewed history alone is sufficient', () {
+      // No pending (settled last open), gems already durable — the coffer must
+      // reappear purely from persisted unviewed history.
+      final reopened = AdventureState(
+        charges: 1,
+        history: [history(viewed: true), history(viewed: false)],
+      );
+      expect(hasUncollectedHaul(reopened, now), isTrue);
+    });
   });
 }

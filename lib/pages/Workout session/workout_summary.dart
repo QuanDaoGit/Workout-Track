@@ -1445,7 +1445,7 @@ class _WarmupBonusCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Image.asset(
-                'assets/icons/economy/icon_gem_reward.png',
+                'assets/icons/economy/icon_gem.png',
                 width: 16,
                 height: 16,
                 fit: BoxFit.contain,

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -10,8 +9,10 @@ import '../data/class_definitions.dart';
 import '../data/muscle_groups.dart';
 import '../models/character_class.dart';
 import '../models/rest_models.dart';
+import '../theme/tokens.dart';
 import '../models/workout_models.dart';
 import 'exercise_catalog_service.dart';
+import 'json_safe.dart';
 import 'rest_service.dart';
 
 class StatEngine {
@@ -168,11 +169,11 @@ class StatEngine {
 
   /// Returns rank color for a given stat value.
   Color getRankColor(int statValue) {
-    if (statValue >= rankThresholdS) return const Color(0xFF00FF9C);
-    if (statValue >= rankThresholdA) return const Color(0xFFFFD700);
-    if (statValue >= rankThresholdB) return const Color(0xFF00BFFF);
-    if (statValue >= rankThresholdC) return Colors.white;
-    return const Color(0xFF6B6B8A);
+    if (statValue >= rankThresholdS) return kRankS;
+    if (statValue >= rankThresholdA) return kRankA;
+    if (statValue >= rankThresholdB) return kRankB;
+    if (statValue >= rankThresholdC) return kRankC;
+    return kRankD;
   }
 
   /// Returns the current LCK value (weekly consistency streak).
@@ -322,65 +323,15 @@ class StatEngine {
   ) async {
     final raw = prefs.getString(_sessionsKey);
     if (raw == null) return [];
-    final decoded = jsonDecode(raw) as List<dynamic>;
-    return [
-        for (final item in decoded)
-          WorkoutSession.fromJson(item as Map<String, dynamic>),
-      ].where((session) => !session.isPartial && !session.isAbandoned).toList()
+    return safeMapList(raw, WorkoutSession.fromJson, debugLabel: _sessionsKey)
+        .where((session) => !session.isPartial && !session.isAbandoned)
+        .toList()
       ..sort((a, b) => a.date.compareTo(b.date));
   }
 
   /// Public catalog loader (exerciseId -> primary muscle). Reused by
   /// calibration so its exercise->stat mapping matches the engine exactly.
   Future<Map<String, String>> loadCatalog() => _loadCatalog();
-
-  /// Per-session *linear* axis credits — the Shadow's currency.
-  ///
-  /// Returns one [SessionAxisLoad] per input session (sorted by date) with the
-  /// session's raw STR/AGI/END credit under the same intensity currency and
-  /// muscle weights as the board ([intensityCreditForLog] ×
-  /// [_visibleWeightsForPrimaryMuscle]). Deliberately NOT the log-curved
-  /// 0–1000 board values: ratios over log-curved stats compress real training
-  /// differences. No calibration seed, no decay, no class focus bonus — a pure
-  /// training signal, identical across classes. Read-only: never touches the
-  /// cached board stats.
-  Future<List<SessionAxisLoad>> sessionAxisLoads(
-    List<WorkoutSession> sessions,
-  ) async {
-    final catalog = await _loadCatalog();
-    final sorted = [...sessions]..sort((a, b) => a.date.compareTo(b.date));
-    double? lastKnownBodyweight;
-    final result = <SessionAxisLoad>[];
-    for (final session in sorted) {
-      final bodyweight =
-          session.bodyweightKgAtSave ??
-          lastKnownBodyweight ??
-          fallbackBodyweightKg;
-      if (session.bodyweightKgAtSave != null) {
-        lastKnownBodyweight = session.bodyweightKgAtSave;
-      }
-      var str = 0.0, agi = 0.0, end = 0.0;
-      for (final log in session.exercises) {
-        final volume = intensityCreditForLog(log, bodyweightKg: bodyweight);
-        final endurancePoints = _endurancePointsForLog(log);
-        final primary = _primaryForLog(log, session, catalog);
-        final weights = _visibleWeightsForPrimaryMuscle(primary);
-        str += volume * weights.strVolume;
-        agi += volume * weights.agiVolume;
-        end += endurancePoints * weights.endurancePoints;
-      }
-      result.add(
-        SessionAxisLoad(
-          sessionId: session.id,
-          date: session.date,
-          str: str,
-          agi: agi,
-          end: end,
-        ),
-      );
-    }
-    return result;
-  }
 
   Future<Map<String, String>> _loadCatalog() async {
     if (_catalogOverride != null) return _catalogOverride;
@@ -754,11 +705,11 @@ class StatEngine {
   }
 
   Map<String, double> _decodeSeed(String? raw) {
-    if (raw == null || raw.isEmpty) return const {};
-    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    final decoded = safeDecodeMap(raw, debugLabel: 'stat_seed');
+    if (decoded == null) return const {};
     return {
       for (final entry in decoded.entries)
-        if (_kgVolumeStats.contains(entry.key))
+        if (_kgVolumeStats.contains(entry.key) && entry.value is num)
           entry.key: (entry.value as num).toDouble(),
     };
   }
@@ -778,19 +729,20 @@ class StatEngine {
   }
 
   Map<String, int> _decodeStats(String? raw) {
-    if (raw == null) return _emptyStats();
-    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    final decoded = safeDecodeMap(raw, debugLabel: 'combat_stats');
+    if (decoded == null) return _emptyStats();
     return {
       for (final stat in stats) stat: (decoded[stat] as num?)?.toInt() ?? 0,
     };
   }
 
   Map<String, int> _decodePartialStats(String? raw) {
-    if (raw == null) return {};
-    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    final decoded = safeDecodeMap(raw, debugLabel: 'partial_stats');
+    if (decoded == null) return {};
     return {
       for (final entry in decoded.entries)
-        if (stats.contains(entry.key)) entry.key: (entry.value as num).toInt(),
+        if (stats.contains(entry.key) && entry.value is num)
+          entry.key: (entry.value as num).toInt(),
     };
   }
 
@@ -801,33 +753,6 @@ class StatEngine {
 
   DateTime _dateOnly(DateTime date) =>
       DateTime(date.year, date.month, date.day);
-}
-
-/// One completed session's linear axis credits (see
-/// [StatEngine.sessionAxisLoads]). STR/AGI are in intensity-credit units;
-/// END is in endurance points. A dedicated type so these can never be
-/// confused with the log-curved 0–1000 board stat values.
-class SessionAxisLoad {
-  const SessionAxisLoad({
-    required this.sessionId,
-    required this.date,
-    required this.str,
-    required this.agi,
-    required this.end,
-  });
-
-  final String sessionId;
-  final DateTime date;
-  final double str;
-  final double agi;
-  final double end;
-
-  double axis(String axis) => switch (axis) {
-    'STR' => str,
-    'AGI' => agi,
-    'END' => end,
-    _ => 0,
-  };
 }
 
 class _StatWeights {

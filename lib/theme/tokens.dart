@@ -16,6 +16,12 @@ const kText = Color(0xFFE8E8FF);
 const kMutedText = Color(0xFF9494B8);
 const kDim = Color(0xFF555577);
 
+/// Pure white / black — the only sanctioned use of these absolutes (the
+/// Material palette white/black are banned). For button text on bright fills,
+/// letterbox/video backdrops, scrims, and effect flashes.
+const kWhite = Color(0xFFFFFFFF);
+const kBlack = Color(0xFF000000);
+
 // Accent colors — officially part of the palette as of this UI polish pass.
 /// Level-up / reward signal. Used wherever the app celebrates progression:
 /// bench scene "+1 LV", Screen 3 "LEVELS YOU UP" slam, RANK UP! callouts,
@@ -25,6 +31,36 @@ const kAmber = Color(0xFFFFD700);
 const kAmberDark = Color(0xFFFFA500);
 const kCyan = Color(0xFF00BFFF);
 const kDanger = Color(0xFFFF2D55);
+
+/// Gem / haul magenta — the currency colour (sampled from the gem-art ramp
+/// core). Use for UI text/accents that reference gems or a haul (e.g. BIT's
+/// "loots" prompt). Contrast on [kCard] ≈ 5.7:1 (passes 4.5:1). The dithered
+/// procedural haul ramp (`_magentaTiers`) stays separate art, not this token.
+const kGemMagenta = Color(0xFFFF4DCD);
+
+// ── Semantic / functional roles ──────────────────────────────────────────────
+// These encode MEANING (quality ladders), not brand. They hold their own fixed
+// values so a brand recolor of the accents above never silently scrambles the
+// rank or rarity ladders. UI consumes these; only the brand accents re-theme.
+
+/// Muted neutral slate — lowest rank tier + a muted calendar marker.
+const kSlate = Color(0xFF6B6B8A);
+
+/// Rank tiers (`StatEngine.getRankColor`) — a stable S→D quality gradient.
+const kRankS = Color(0xFF00FF9C);
+const kRankA = Color(0xFFFFD700);
+const kRankB = Color(0xFF00BFFF);
+const kRankC = Color(0xFFFFFFFF);
+const kRankD = kSlate;
+
+/// Loot rarity (`LootRarity.color`) — follows the cross-game convention
+/// (common white · uncommon green · rare blue · epic purple · legendary gold)
+/// so players read quality the way they do in every other RPG. Brand-independent.
+const kRarityCommon = Color(0xFFFFFFFF);
+const kRarityUncommon = Color(0xFF00FF9C);
+const kRarityRare = Color(0xFF00BFFF);
+const kRarityEpic = Color(0xFFA66BFF);
+const kRarityLegendary = Color(0xFFFFD700);
 
 /// Canonical color per muscle-group bucket (see data/muscle_groups.dart).
 /// Single source of truth for calendars, charts, and balance bars.

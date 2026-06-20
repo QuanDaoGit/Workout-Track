@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/xp_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
+import 'arcade_bar.dart';
 import 'glitch_text.dart';
 import 'strobe_flash.dart';
 
@@ -171,22 +172,15 @@ class _XpLevelMeterState extends State<XpLevelMeter>
     toggles: 2,
     toggleMs: 70,
     borderRadius: BorderRadius.circular(4),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(4),
-      child: SizedBox(
-        height: 12,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            const ColoredBox(color: kBorder),
-            FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: _fill.clamp(0.0, 1.0),
-              child: const ColoredBox(color: kNeon),
-            ),
-          ],
-        ),
-      ),
+    // The meter's own controller drives `_fill` (segment climb + level-up
+    // reset); ArcadeBar with flashOnIncrease:false renders that fill each frame
+    // (beveled, no second ease). Amber = the XP/reward read, matching the home
+    // XP strip.
+    child: ArcadeBar(
+      value: _fill,
+      accent: kAmber,
+      height: 12,
+      flashOnIncrease: false,
     ),
   );
 

@@ -12,7 +12,7 @@ class Character {
     required this.characterName,
     required this.createdAt,
     this.winningVision = const <WinningVision>{},
-    this.obstacle = const <Obstacle>{},
+    this.obstacle,
     this.trainingWhy = const <TrainingWhy>{},
   });
 
@@ -25,7 +25,7 @@ class Character {
   // "Forge Your Resolve" answers — multi-select; empty for characters created
   // before the resolve beat existed.
   final Set<WinningVision> winningVision;
-  final Set<Obstacle> obstacle;
+  final Obstacle? obstacle;
   final Set<TrainingWhy> trainingWhy;
 
   Map<String, dynamic> toJson() => {
@@ -44,7 +44,7 @@ class Character {
     'createdAt': createdAt.toIso8601String(),
     if (winningVision.isNotEmpty)
       'winningVision': winningVision.map((e) => e.name).toList(),
-    if (obstacle.isNotEmpty) 'obstacle': obstacle.map((e) => e.name).toList(),
+    if (obstacle != null) 'obstacle': obstacle!.name,
     if (trainingWhy.isNotEmpty)
       'trainingWhy': trainingWhy.map((e) => e.name).toList(),
   };
@@ -82,7 +82,7 @@ class Character {
         json['winningVision'],
         WinningVision.fromName,
       ),
-      obstacle: _decodeResolveSet(json['obstacle'], Obstacle.fromName),
+      obstacle: _decodeResolveSingle(json['obstacle'], Obstacle.fromName),
       trainingWhy: _decodeResolveSet(json['trainingWhy'], TrainingWhy.fromName),
     );
   }
@@ -103,4 +103,11 @@ Set<T> _decodeResolveSet<T>(dynamic raw, T? Function(String?) fromName) {
     if (value != null) out.add(value);
   }
   return out;
+}
+
+/// Decodes a stored single resolve answer (single-select). Tolerates the new
+/// single-`String` format, a legacy `List` (takes the first), or null.
+T? _decodeResolveSingle<T>(dynamic raw, T? Function(String?) fromName) {
+  final set = _decodeResolveSet(raw, fromName);
+  return set.isEmpty ? null : set.first;
 }

@@ -15,7 +15,7 @@ enum WinningVision {
 
   String get label => switch (this) {
     WinningVision.strongCapable => 'LOOKS AND FEELS AMAZING',
-    WinningVision.stillHere => 'STILL HERE IN A YEAR',
+    WinningVision.stillHere => 'SHOWS UP CONSISTENTLY',
     WinningVision.clearHeaded => 'DEEPLY CARVED',
     WinningVision.visiblyStronger => 'VISIBLY STRONGER',
   };

@@ -1,0 +1,1274 @@
+<!-- @dsCard group="Components" viewport="430x900" name="Haul Cache — Returned State" subtitle="Home Room, expedition returned: code-painted Coffer on the pad + COLLECT→vanish transition, tweakable" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ironbit — Home Room · Returned</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%; background: #07070E;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'ShareTechMono', monospace;
+  }
+
+  /* ── Phone bezel ─────────────────────────────────────────────── */
+  .phone {
+    width: 390px; height: 844px; flex: none;
+    background: #0A0A0A; border-radius: 44px; padding: 10px;
+    box-shadow: 0 0 0 2px #2A2A3E, 0 30px 80px -20px rgba(0,0,0,.9);
+    position: relative;
+  }
+  .screen {
+    width: 100%; height: 100%; border-radius: 36px; overflow: hidden;
+    background: #11111F; position: relative;
+    display: flex; flex-direction: column;
+  }
+  .notch {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 118px; height: 24px; background: #000;
+    border-radius: 0 0 13px 13px; z-index: 10;
+  }
+
+  /* ── System bar ──────────────────────────────────────────────── */
+  .sysbar {
+    height: 44px; flex: none;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 0 24px 8px;
+    font-family: 'ShareTechMono', monospace; font-size: 12px; color: rgba(232,232,255,.5);
+  }
+  .sysbar-dots { display: flex; gap: 4px; }
+  .sysbar-dot { width: 5px; height: 5px; border-radius: 1px; background: #00FF9C; }
+
+  /* ── Content area — scroll host ──────────────────────────────── */
+  .content {
+    flex: 1; min-height: 0;
+    background: #11111F;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* The scroller: room is the top of one long scroll, cards stack below */
+  .scroller {
+    position: absolute; inset: 0;
+    overflow-y: auto; overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scroller::-webkit-scrollbar { width: 0; height: 0; }
+
+  /* The room — top viewport. Sits just shy of full height so the first card
+     peeks above the fold (Finch's scroll cue). */
+  .room {
+    position: relative;
+    height: calc(100% - 58px);
+    min-height: 520px;
+    background: #11111F;
+  }
+
+  /* The card feed — floating cards on kBg below the room */
+  .feed {
+    position: relative; z-index: 1;
+    background: #11111F;
+    padding: 14px 16px 28px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+
+  /* Back wall — a clearly LIGHTER plane, top-lit by the ceiling fixture.
+     bg=#11111F  <  wall=#1C1C36 (a clear shade up)  >  floor=darker. */
+  .wall {
+    position: absolute; left: 0; right: 0; top: 0;
+    bottom: 30%;
+    background-color: #1C1C36;
+    /* layers (top→bottom): panel seams · horizontal seam · ceiling-lit gradient */
+    background-image:
+      repeating-linear-gradient(90deg,
+        transparent 0px,
+        transparent 91px,
+        rgba(0,0,0,.30) 91px,
+        rgba(255,255,255,.04) 92px,
+        transparent 93px
+      ),
+      linear-gradient(180deg,
+        transparent 0%, transparent 43%,
+        rgba(0,0,0,.22) 43%, rgba(255,255,255,.03) 43.6%,
+        transparent 44.2%
+      ),
+      linear-gradient(180deg,
+        rgba(150,165,235,.16) 0%,
+        rgba(120,135,210,.05) 26%,
+        transparent 52%,
+        rgba(0,0,0,.10) 84%,
+        rgba(0,0,0,.22) 100%
+      );
+  }
+
+  /* Ceiling fixture — ambient light spilling DOWN from under the topbar */
+  .ceiling-fixture {
+    position: absolute; left: 0; right: 0; top: 42px;
+    height: 4px; z-index: 2; pointer-events: none;
+    background: linear-gradient(90deg,
+      transparent 6%, rgba(150,170,255,.45) 32%, rgba(170,185,255,.55) 50%,
+      rgba(150,170,255,.45) 68%, transparent 94%);
+    box-shadow: 0 0 16px 1px rgba(120,150,255,.22);
+  }
+  .ceiling-fixture::after {
+    content: '';
+    position: absolute; left: 4%; right: 4%; top: 3px; height: 120px;
+    background: radial-gradient(ellipse 64% 100% at 50% 0%,
+      rgba(135,155,235,.16) 0%, rgba(135,155,235,.05) 45%, transparent 78%);
+    pointer-events: none;
+  }
+
+  /* Window — real decor art on the wall. Snapped to panel 3 (182–273px seam).
+     Frame asset is 575×454 (ratio 1.27); box matches so there's no distortion. */
+  .window {
+    position: absolute; z-index: 4;
+    left: 182px; width: 91px;
+    top: 56px; height: 76px;
+  }
+  .window-glow {
+    position: absolute; inset: -16px; z-index: 0; border-radius: 8px;
+    background: radial-gradient(ellipse at center, var(--win-glow, rgba(120,150,220,.32)) 0%, transparent 68%);
+    filter: blur(3px); opacity: .55; pointer-events: none;
+  }
+  .window-img {
+    position: relative; z-index: 1;
+    display: block; width: 100%; height: 100%;
+    image-rendering: pixelated;
+  }
+
+  /* Identity anchor — rank / level / title, left side of the room */
+  .identity {
+    position: absolute; z-index: 8;
+    left: 16px; top: 56px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .identity-name {
+    font-family: 'PressStart2P', monospace; font-size: 14px;
+    color: #E8E8FF; line-height: 1; letter-spacing: .5px;
+    text-shadow: 0 0 12px rgba(232,232,255,.25);
+  }
+  .identity-rank {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .identity-lv {
+    font-family: 'ShareTechMono', monospace; font-size: 13px;
+    color: #9494B8; line-height: 1;
+  }
+  .identity-sep {
+    width: 1px; height: 11px; background: rgba(255,215,0,.4);
+  }
+  .identity-title {
+    font-family: 'PressStart2P', monospace; font-size: 9px;
+    color: #FFD700; line-height: 1; letter-spacing: .5px;
+    text-shadow: 0 0 10px rgba(255,215,0,.35);
+  }
+
+  /* ── BIT — the room's inhabitant. Canonical engine, mounted by bit.js. ────
+     Anchor rule: hover-center is a FIXED point; bit.js paints its canvas +
+     ground-glow INTO #bit, so swapping moods / accessories never shifts him. */
+  .bit-anchor {
+    position: absolute; z-index: 7;
+    left: 185px; top: 340px;   /* hover-center (≈ horiz centre, lower-middle) */
+    width: 0; height: 0;
+  }
+  .bit-host {
+    position: absolute; left: 0; top: 0;
+    width: 92px; height: 92px;
+    transform: translate(-50%, calc(-50% + var(--bit-dy, 0px)));
+    opacity: var(--bit-op, 1);
+    filter: drop-shadow(0 0 5px rgba(0,191,255,.28));
+  }
+  /* ── BIT's hover pad — emitter on the floor; BIT floats ~80px above it ────
+     Pad base rests at the floor band (~y452); emitter top at ~y420. */
+  /* floor pool — BitPadLight pixel-art canvas, scaled up chunky, BEHIND pad.
+     Held at ~0.8 opacity so BIT's concentrated lens still wins the eye. */
+  .pad-glow {
+    position: absolute; z-index: 3;
+    left: 185px; top: 354px; width: 228px; height: 192px;
+    transform: translateX(-50%); opacity: .8;
+    image-rendering: pixelated; pointer-events: none;
+  }
+  /* dark contact shadow grounding the pad on the floor */
+  .pad-contact {
+    position: absolute; z-index: 4;
+    left: 185px; top: 470px; width: 130px; height: 11px;
+    transform: translate(-50%, -50%); pointer-events: none;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(3,3,8,.6) 0%, rgba(3,3,8,.3) 55%, transparent 80%);
+    filter: blur(1.5px);
+  }
+  /* the metal console sprite (108×40 native, shown ~1.4×) */
+  .pad {
+    position: absolute; z-index: 5;
+    left: 185px; top: 414px; width: 150px; height: 56px;
+    transform: translateX(-50%);
+  }
+  .pad-sprite {
+    display: block; width: 100%; height: 100%; image-rendering: pixelated;
+  }
+  /* rising energy beam — BitPadBeam canvas, additive, fades before BIT */
+  .pad-beam {
+    position: absolute; z-index: 6;
+    left: 185px; top: 366px; width: 64px; height: 64px;
+    transform: translateX(-50%);
+    image-rendering: pixelated; pointer-events: none; mix-blend-mode: screen;
+  }
+
+  /* ── HAUL CACHE — the "returned haul" sitting on the pad's emitter mouth ───
+     Coffer is CODE-PAINTED (pixel-by-pixel, 28×20 native) and blitted at an
+     INTEGER scale (×2 = 56×40) with nearest-neighbour. Glow held subordinate to
+     BIT's lens (GUARDRAIL #2) — it only brightens on COLLECT focus/hover. */
+  .haul {
+    position: absolute; z-index: 6;
+    left: 185px; top: 384px;
+    transform: translateX(-50%);
+    /* settle bob — gentle, far quieter than BIT's float */
+    animation: haul-settle 4.8s ease-in-out infinite;
+  }
+  @keyframes haul-settle {
+    0%,100% { transform: translateX(-50%) translateY(0); }
+    50%     { transform: translateX(-50%) translateY(-1.5px); }
+  }
+  /* subordinate amber pool under the coffer — LOW by default */
+  .haul-glow {
+    position: absolute; left: 50%; bottom: -6px;
+    width: 86px; height: 30px; transform: translateX(-50%);
+    border-radius: 50%; filter: blur(6px); pointer-events: none;
+    background: radial-gradient(ellipse at center,
+      rgba(255,77,205,.5) 0%, rgba(224,40,160,.18) 52%, transparent 78%);
+    opacity: var(--haul-glow-idle, .22);
+    transition: opacity 220ms ease, transform 220ms ease;
+  }
+  .haul-canvas { display: block; image-rendering: pixelated; position: relative; z-index: 2;
+    transition: filter 220ms ease, transform 220ms ease, opacity 200ms linear; }
+  /* particle layer for the COLLECT burst */
+  .haul-fx { position: absolute; left: 50%; bottom: 8px; width: 120px; height: 150px;
+    transform: translateX(-50%); pointer-events: none; z-index: 3; image-rendering: pixelated; }
+
+  /* invisible hit target over the coffer (the COLLECT affordance) */
+  .haul-hit {
+    position: absolute; left: 50%; top: -10px; transform: translateX(-50%);
+    width: 76px; height: 60px; z-index: 4; cursor: pointer;
+    background: none; border: none; padding: 0;
+  }
+  /* floating COLLECT pill tethered above the coffer */
+  .haul-pill {
+    position: absolute; left: 185px; top: 354px; transform: translateX(-50%);
+    z-index: 8; display: flex; align-items: center; gap: 6px;
+    padding: 6px 11px 5px; white-space: nowrap; pointer-events: none;
+    background: rgba(13,4,11,.82); border: 1px solid rgba(255,77,205,.5);
+    border-radius: 4px;
+    font-family: 'PressStart2P', monospace; font-size: 8px; letter-spacing: .5px;
+    color: #ff96e6;
+    box-shadow: 0 0 0 rgba(255,77,205,0);
+    transition: box-shadow 220ms ease, border-color 220ms ease, transform 220ms ease;
+    animation: pill-tip 3.4s ease-in-out infinite;
+  }
+  @keyframes pill-tip {
+    0%,100% { transform: translateX(-50%) translateY(0); }
+    50%     { transform: translateX(-50%) translateY(-2px); }
+  }
+  .haul-pill::after {                 /* little stem pointing at the coffer */
+    content: ''; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%) rotate(45deg);
+    width: 7px; height: 7px; background: rgba(13,4,11,.82);
+    border-right: 1px solid rgba(255,77,205,.5); border-bottom: 1px solid rgba(255,77,205,.5);
+  }
+  .haul-pill .dot { width: 7px; height: 7px; transform: rotate(45deg); background: #ff4dcd;
+    box-shadow: 0 0 5px rgba(255,77,205,.7); }
+
+  /* FOCUS / HOVER state — coffer brightens, but stays under BIT's salience */
+  .haul.focus .haul-glow { opacity: var(--haul-glow-focus, .6); transform: translateX(-50%) scaleX(1.08); }
+  .haul.focus .haul-canvas { filter: drop-shadow(0 0 7px rgba(255,77,205,.5)); transform: translateY(-1px); }
+  .haul.focus ~ .haul-pill,
+  .haul-pill.focus {
+    border-color: #ff4dcd; transform: translateX(-50%) translateY(-3px);
+    box-shadow: 0 0 16px -3px rgba(255,77,205,.6);
+  }
+
+  /* haul cleared — everything tied to the haul hides; nothing lingers empty */
+  .room.collected .haul,
+  .room.collected .haul-pill { display: none; }
+
+  /* COLLECT report toast — terse arcade reward line, fades after the claim */
+  .haul-report {
+    position: absolute; left: 185px; top: 284px; transform: translateX(-50%) translateY(6px);
+    z-index: 9; text-align: center; pointer-events: none; opacity: 0;
+    transition: opacity 240ms ease, transform 240ms ease;
+  }
+  .haul-report.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .haul-report .hr-head {
+    font-family: 'PressStart2P', monospace; font-size: 9px; letter-spacing: .5px;
+    color: #ff4dcd; text-shadow: 0 0 12px rgba(255,77,205,.5); }
+  .haul-report .hr-rewards {
+    margin-top: 9px; display: flex; gap: 14px; justify-content: center;
+    font-family: 'ShareTechMono', monospace; font-size: 13px; }
+  .haul-report .hr-gem { color: #ff4dcd; }
+  .haul-report .hr-xp  { color: #FFD700; }
+
+  /* homecoming FX layer — mote + amber coalesce sparks, pixel-drawn at 1:1 */
+  .hc-fx {
+    position: absolute; left: 0; top: 0; z-index: 6;
+    image-rendering: pixelated; pointer-events: none;
+  }
+  /* visually-hidden live region for the reduced-motion announcement */
+  .hc-live {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+
+  /* Mounting points — small dots at seam intersections */
+  .mount {
+    position: absolute; width: 4px; height: 4px; z-index: 3;
+    border-radius: 50%;
+    background: #0E0E22;
+    border: 1px solid rgba(255,255,255,.07);
+    transform: translate(-50%, -50%);
+  }
+
+  /* Top bar — resource strip, PINNED over the scroll */
+  .topbar {
+    position: absolute; top: 0; left: 0; right: 0;
+    z-index: 20; padding: 11px 16px 10px;
+    display: flex; align-items: center;
+    background: rgba(11,11,22,.85);
+    border-bottom: 1px solid rgba(255,255,255,.05);
+  }
+  .topbar-name {
+    font-family: 'PressStart2P', monospace; font-size: 11px;
+    color: #00FF9C; line-height: 1;
+  }
+  .topbar-resources {
+    margin-left: auto; display: flex; gap: 14px; align-items: center;
+  }
+  /* bare icon + value pair, no container */
+  .res {
+    display: flex; align-items: center; gap: 5px;
+  }
+  .res-icon {
+    width: 12px; height: 12px; flex: none;
+    image-rendering: pixelated;
+  }
+  /* luck: rotated square diamond (inline) */
+  .res-icon-diamond {
+    width: 9px; height: 9px; flex: none;
+    transform: rotate(45deg);
+    background: #FFD700;
+    box-shadow: 0 0 5px rgba(255,215,0,.6);
+  }
+  .res-icon-mask {
+    width: 13px; height: 13px; flex: none;
+    -webkit-mask-size: contain; mask-size: contain;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-position: center; mask-position: center;
+    image-rendering: pixelated;
+  }
+  .res-val {
+    font-family: 'ShareTechMono', monospace; font-size: 13px; line-height: 1;
+  }
+  .res-lck  .res-val { color: #FFD700; }
+  /* gems: the real magenta gem.png currency icon (not a coin) */
+  .res-gems .res-icon-mask { width: 14px; height: 14px;
+    background-color: transparent; -webkit-mask-image: none; mask-image: none;
+    background-image: url(assets/gem.png); background-size: contain;
+    background-repeat: no-repeat; background-position: center; }
+  .res-gems .res-val { color: #ff4dcd; }
+  .res-vit  .res-icon-mask { background-color: #FF4D6A;
+    -webkit-mask-image: url(assets/icon_drop.png); mask-image: url(assets/icon_drop.png); }
+  .res-vit  .res-val { color: #FF4D6A; }
+
+  /* Side vignette — frames the wall (top + sides) WITHOUT crushing it to black.
+     Gentle now: the lit wall centre stays readable; edges fall into enclosure. */
+  .vignette {
+    position: absolute; left: 0; right: 0; top: 0;
+    bottom: 30%;
+    pointer-events: none; z-index: 10;
+    background:
+      linear-gradient(90deg, rgba(7,7,16,.42) 0%, transparent 26%, transparent 74%, rgba(7,7,16,.42) 100%),
+      radial-gradient(120% 80% at 50% 46%, transparent 58%, rgba(7,7,16,.34) 100%);
+  }
+
+  /* Floor band — a distinct darker plane. Top edge catches a little ambient,
+     receding to near-black at the foot of the screen. */
+  .floor {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 30%;
+    background: linear-gradient(180deg, #131322 0%, #0C0C16 42%, #07070E 100%);
+  }
+  .floor::after {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    /* soft pool of reflected light on the floor under the room centre */
+    background: radial-gradient(ellipse 52% 80% at 50% 8%, rgba(120,135,200,.10) 0%, transparent 70%);
+  }
+
+  /* Wall-floor seam — the neon horizon edge. Brighter now, with a soft bloom. */
+  .floor::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px; z-index: 1;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(0,255,156,.18) 18%,
+      rgba(0,255,156,.42) 50%,
+      rgba(0,255,156,.18) 82%,
+      transparent 100%
+    );
+    box-shadow: 0 0 9px rgba(0,255,156,.22);
+  }
+
+  /* ── Bottom nav ──────────────────────────────────────────────── */
+  .nav {
+    height: 80px; flex: none;
+    position: relative; z-index: 30;
+    display: flex; align-items: flex-end; justify-content: space-around;
+    padding: 0 8px 16px;
+    background: #141428; border-top: 1px solid #252545;
+  }
+  .nav-item {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    background: none; border: none; cursor: pointer;
+    flex: 0 0 18%;
+  }
+  .nav-icon {
+    width: 22px; height: 22px;
+    background-color: #555577;
+    -webkit-mask-size: contain; mask-size: contain;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-position: center; mask-position: center;
+    image-rendering: pixelated;
+  }
+  .nav-icon.active { background-color: #00FF9C; }
+  .nav-label {
+    font-family: 'PressStart2P', monospace; font-size: 6.5px;
+    color: #555577; line-height: 1;
+  }
+  .nav-label.active { color: #00FF9C; }
+
+  /* Train — raised center button */
+  .nav-train {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    transform: translateY(-14px);
+  }
+  .nav-train-btn {
+    width: 56px; height: 56px; border-radius: 4px;
+    background: #00FF9C; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 16px -2px rgba(0,255,156,.4), 0 4px 0 0 #009955;
+    transition: transform 100ms, box-shadow 100ms;
+    image-rendering: pixelated;
+  }
+  .nav-train-btn:active {
+    transform: translateY(3px);
+    box-shadow: 0 0 16px -2px rgba(0,255,156,.4), 0 1px 0 0 #009955;
+  }
+  .nav-train-btn .nav-icon {
+    width: 26px; height: 26px;
+    background-color: #0D0D1A;
+  }
+  .nav-train-label {
+    font-family: 'PressStart2P', monospace; font-size: 6.5px;
+    color: #00FF9C; line-height: 1;
+  }
+
+  /* ── Feed cards ──────────────────────────────────────────────── */
+  .card {
+    position: relative;
+    background: #191929;
+    border: 1px solid #2A2A45;
+    border-radius: 6px;
+    padding: 16px 18px;
+    overflow: hidden;
+  }
+  /* neon left-edge accent — brightest at top, fading down */
+  .card::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, #00FF9C 0%, rgba(0,255,156,.15) 100%);
+  }
+
+  .card-label {
+    font-family: 'ShareTechMono', monospace; font-size: 10px;
+    letter-spacing: 1.5px; color: #7A7A9E; text-transform: uppercase;
+  }
+  .card-title {
+    font-family: 'Gotham', sans-serif; font-weight: 700;
+    font-size: 23px; color: #E8E8FF; letter-spacing: .5px;
+    margin-top: 9px; line-height: 1;
+  }
+  .card-chips {
+    display: flex; gap: 8px; margin-top: 14px;
+  }
+  .chip {
+    font-family: 'ShareTechMono', monospace; font-size: 11px;
+    letter-spacing: .5px; color: #AAAACC;
+    padding: 5px 12px; border-radius: 3px;
+    border: 1px solid #3A3A55; background: rgba(255,255,255,.015);
+  }
+  .card-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 16px;
+  }
+  .card-meta {
+    font-family: 'ShareTechMono', monospace; font-size: 12px; color: #6A6A8E;
+  }
+  .card-cta {
+    font-family: 'ShareTechMono', monospace; font-size: 12px;
+    letter-spacing: .5px; color: #00FF9C;
+    display: flex; align-items: center; gap: 5px; cursor: pointer;
+  }
+
+  /* ── Tweaks panel — dark, on-brand. Hidden until the host activates it. ──── */
+  .twk {
+    position: fixed; right: 16px; bottom: 16px; z-index: 2147483646;
+    width: 248px; display: none; flex-direction: column;
+    background: rgba(13,13,26,.92);
+    -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid #2A2A45; border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
+    overflow: hidden;
+  }
+  .twk.open { display: flex; }
+  .twk-hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 10px 11px 14px; cursor: move; user-select: none;
+    border-bottom: 1px solid rgba(255,255,255,.05);
+  }
+  .twk-hd b {
+    font-family: 'PressStart2P', monospace; font-size: 10px; color: #00FF9C; letter-spacing: .5px;
+  }
+  .twk-x {
+    appearance: none; border: 0; background: transparent; color: #6A6A8E;
+    width: 22px; height: 22px; border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  .twk-x:hover { background: rgba(255,255,255,.06); color: #E8E8FF; }
+  .twk-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .twk-sect {
+    font-family: 'ShareTechMono', monospace; font-size: 10px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: #6A6A8E;
+  }
+  /* 2×2 window picker */
+  .twk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .twk-win {
+    appearance: none; border: 1px solid #2A2A45; background: rgba(7,7,14,.5);
+    border-radius: 6px; padding: 5px; cursor: pointer; overflow: hidden;
+    display: flex; flex-direction: column; gap: 4px; transition: border-color .12s;
+  }
+  .twk-win:hover { border-color: #45437A; }
+  .twk-win[data-on="1"] { border-color: #00FF9C; box-shadow: 0 0 12px -4px rgba(0,255,156,.6); }
+  .twk-win img {
+    display: block; width: 100%; height: 52px; object-fit: cover;
+    image-rendering: pixelated; border-radius: 3px;
+  }
+  .twk-win-lbl {
+    font-family: 'ShareTechMono', monospace; font-size: 8.5px; letter-spacing: .5px;
+    color: #9494B8; text-align: left; line-height: 1.2;
+  }
+  .twk-win[data-on="1"] .twk-win-lbl { color: #E8E8FF; }
+
+  /* segmented row of small toggles (route / scale / glow) */
+  .twk-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .twk-seg button {
+    appearance: none; cursor: pointer; flex: 1 1 auto;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 7px 8px 6px; border-radius: 5px;
+    border: 1px solid #2A2A45; background: rgba(7,7,14,.5);
+    font-family: 'ShareTechMono', monospace; font-size: 9.5px; letter-spacing: .5px;
+    color: #9494B8; transition: border-color .12s, color .12s, background .12s;
+  }
+  .twk-seg button i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .twk-seg button:hover { border-color: #45437A; }
+  .twk-seg button[data-on="1"] {
+    border-color: #00FF9C; color: #E8E8FF; background: rgba(0,255,156,.08);
+    box-shadow: 0 0 12px -5px rgba(0,255,156,.6);
+  }
+  .twk-btn {
+    appearance: none; cursor: pointer; width: 100%;
+    padding: 9px 10px; border-radius: 6px;
+    border: 1px solid #3A3A55; background: rgba(255,215,0,.06);
+    font-family: 'PressStart2P', monospace; font-size: 8.5px; letter-spacing: .5px;
+    color: #FFD700; transition: border-color .12s, background .12s;
+  }
+  .twk-btn:hover { border-color: rgba(255,215,0,.55); background: rgba(255,215,0,.12); }
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="screen">
+
+      <div class="sysbar">
+        <span>9:41</span>
+        <div class="sysbar-dots">
+          <div class="sysbar-dot"></div>
+          <div class="sysbar-dot"></div>
+          <div class="sysbar-dot"></div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="scroller">
+
+          <div class="room">
+            <div class="wall" style="background-size: auto; text-align: left">
+              <div class="ceiling-fixture"></div>
+              <div class="window">
+            <div class="window-glow" id="window-glow"></div>
+            <img class="window-img" id="window-img" src="assets/decor/window_afternoon.png" alt="World window">
+          </div>
+              <!-- mounting points at seam intersections (3 seams × 1 h-seam = 6 pts) -->
+              <div class="mount" style="left:91px; top:44%"></div>
+              <div class="mount" style="left:182px; top:44%"></div>
+              <div class="mount" style="left:273px; top:44%"></div>
+              <div class="mount" style="left:91px; top:0%"></div>
+              <div class="mount" style="left:182px; top:0%"></div>
+              <div class="mount" style="left:273px; top:0%"></div>
+            </div>
+            <div class="floor"></div>
+            <div class="vignette"></div>
+
+            <!-- BIT's hover pad — pixel-art emitter console + dithered light engines -->
+            <canvas class="pad-glow" id="padGlow"></canvas>
+            <div class="pad-contact"></div>
+            <div class="pad">
+              <img class="pad-sprite" src="assets/bit-pad/bit_pad.png" alt="">
+            </div>
+            <canvas class="pad-beam" id="padBeam"></canvas>
+
+            <!-- homecoming FX — mote + amber coalesce, pixel-drawn (1:1 canvas) -->
+            <canvas class="hc-fx" id="hcFx"></canvas>
+
+            <!-- ── HAUL CACHE · code-painted Coffer sitting on the emitter mouth ── -->
+            <div class="haul" id="haul">
+              <div class="haul-glow"></div>
+              <canvas class="haul-canvas" id="haulCanvas"></canvas>
+              <canvas class="haul-fx" id="haulFx" width="120" height="150"></canvas>
+              <button class="haul-hit" id="haulHit" aria-label="Collect haul"></button>
+            </div>
+            <div class="haul-pill" id="haulPill">
+              <span class="dot"></span><span>COLLECT</span>
+            </div>
+            <div class="haul-report" id="haulReport">
+              <div class="hr-head">HAUL CLAIMED</div>
+              <div class="hr-rewards">
+                <span class="hr-gem">+15 ◇ GEMS</span>
+                <span class="hr-xp">+120 XP</span>
+              </div>
+            </div>
+            <div class="hc-live" id="hcLive" aria-live="polite"></div>
+
+            <!-- BIT — mounted by bit.js into #bit; anchor is the fixed hover-centre -->
+            <div class="bit-anchor">
+              <div id="bit" class="bit-host"></div>
+            </div>
+            <div class="identity">
+              <div class="identity-name">VALEN</div>
+              <div class="identity-rank">
+                <span class="identity-lv">LV.7</span>
+                <span class="identity-sep"></span>
+                <span class="identity-title">KNIGHT</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="feed">
+            <div class="card mission-card">
+              <div class="card-label">Today's muscle</div>
+              <div class="card-title">UPPER BODY</div>
+              <div class="card-chips">
+                <span class="chip">CHEST</span>
+                <span class="chip">BACK</span>
+              </div>
+              <div class="card-footer">
+                <span class="card-meta">5 exercises · ~45 min</span>
+                <span class="card-cta">START ON TRAIN <span>&rarr;</span></span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="topbar">
+          <span class="topbar-name">Ironbit</span>
+          <div class="topbar-resources">
+            <div class="res res-lck">
+              <div class="res-icon-diamond"></div>
+              <span class="res-val">2.0x</span>
+            </div>
+            <div class="res res-gems">
+              <div class="res-icon-mask"></div>
+              <span class="res-val">0</span>
+            </div>
+            <div class="res res-vit">
+              <div class="res-icon-mask"></div>
+              <span class="res-val">72</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item">
+          <div class="nav-icon active" style="-webkit-mask-image: url(assets/icon_map.png); mask-image: url(assets/icon_map.png);"></div>
+          <span class="nav-label active">HOME</span>
+        </button>
+        <button class="nav-item">
+          <div class="nav-icon" style="-webkit-mask-image: url(assets/icon_character.png); mask-image: url(assets/icon_character.png);"></div>
+          <span class="nav-label">HERO</span>
+        </button>
+        <div class="nav-train">
+          <button class="nav-train-btn">
+            <div class="nav-icon" style="-webkit-mask-image: url(assets/icon_sword.png); mask-image: url(assets/icon_sword.png);"></div>
+          </button>
+          <span class="nav-train-label">TRAIN</span>
+        </div>
+        <button class="nav-item">
+          <div class="nav-icon" style="-webkit-mask-image: url(assets/icon_scroll.png); mask-image: url(assets/icon_scroll.png);"></div>
+          <span class="nav-label">QUESTS</span>
+        </button>
+        <button class="nav-item">
+          <div class="nav-icon" style="-webkit-mask-image: url(assets/icon_bag.png); mask-image: url(assets/icon_bag.png);"></div>
+          <span class="nav-label">BAG</span>
+        </button>
+      </nav>
+
+    </div>
+  </div>
+
+  <!-- Tweaks panel — populated + toggled by JS; hidden until host activates -->
+  <div class="twk" id="twk">
+    <div class="twk-hd" id="twk-hd">
+      <b>Tweaks</b>
+      <button class="twk-x" id="twk-x" aria-label="Close tweaks">&#10005;</button>
+    </div>
+    <div class="twk-body">
+      <div class="twk-sect">Haul state</div>
+      <button class="twk-btn" id="twk-replay" type="button">↺ REPLAY HAUL</button>
+
+      <div class="twk-sect" style="margin-top:4px">Route seal</div>
+      <div class="twk-seg" id="twk-route">
+        <button type="button" data-r="amber" data-on="1"><i style="background:#ff4dcd"></i>NONE</button>
+        <button type="button" data-r="cyan" data-on="0"><i style="background:#00BFFF"></i>TRACER</button>
+        <button type="button" data-r="violet" data-on="0"><i style="background:#B14DFF"></i>MAZE</button>
+        <button type="button" data-r="red" data-on="0"><i style="background:#FF2D55"></i>IRON</button>
+      </div>
+
+      <div class="twk-sect" style="margin-top:4px">Scale · integer only</div>
+      <div class="twk-seg" id="twk-scale">
+        <button type="button" data-s="2" data-on="1">×2 · 56px</button>
+        <button type="button" data-s="3" data-on="0">×3 · 84px</button>
+      </div>
+
+      <div class="twk-sect" style="margin-top:4px">Glow · stays under BIT</div>
+      <div class="twk-seg" id="twk-glow">
+        <button type="button" data-g="focus" data-on="1">ON FOCUS</button>
+        <button type="button" data-g="ambient" data-on="0">AMBIENT LOW</button>
+      </div>
+
+      <div class="twk-sect" style="margin-top:4px">World window</div>
+      <div class="twk-grid" id="twk-windows"></div>
+    </div>
+  </div>
+
+  <script src="assets/bit/bit.js"></script>
+  <script src="assets/bit-pad/bitpad-light.js"></script>
+  <script src="assets/bit-pad/bitpad-beam.js"></script>
+  <script>
+    /* BIT's hover pad — the user-authored pixel-art light engines.
+       Floor pool (BitPadLight) pools wide on the floor under the pad; the
+       rising beam (BitPadBeam) climbs from the emitter and fades out before
+       BIT's mount height so BIT keeps salience. Configs from beam-dev.html,
+       scaled to the room. */
+    (function () {
+      var glow = document.getElementById('padGlow');
+      var beam = document.getElementById('padBeam');
+      if (glow && window.BitPadLight) {
+        window.__padlight = BitPadLight.init(glow, {
+          cols: 68, rows: 60, cx: 34, cy: 40, rx: 30, ry: 22, ryUp: 10, fps: 14
+        });
+      }
+      if (beam && window.BitPadBeam) {
+        window.__beam = BitPadBeam.init(beam, {
+          cols: 20, rows: 26, apexX: 10, apexY: 22, topY: 9,
+          halfBase: 3.0, spread: -0.05, edgeFlat: 1.7, vfade: 1.1,
+          bandSpeed: 6, bandPeriod: 4, fps: 14
+        });
+      }
+    })();
+  </script>
+
+  <script>
+    /* BIT — mount the canonical engine. Idle motion runs automatically; the
+       press → cheer + one full plate-orbit reaction is auto-wired by mount().
+       (Float here is tuned 2× faster / 1.5× range in this copy of bit.js.) */
+    (function () {
+      var host = document.getElementById('bit');
+      if (host && window.BIT) {
+        window.__bit = BIT.mount(host, { mood: 'NEUTRAL', px: 92, groundGlow: false });
+      }
+    })();
+  </script>
+
+  <script>
+    /* ========================================================================
+       Tweaks — vanilla host protocol. The world-window time-of-day is the one
+       tweak for now. Persisted via the EDITMODE block the host rewrites on disk.
+       ======================================================================== */
+    (function () {
+      var TWEAKS = /*EDITMODE-BEGIN*/{
+        "timeOfDay": "noon",
+        "routeSeal": "amber",
+        "cofferScale": 2,
+        "glowMode": "ambient"
+      }/*EDITMODE-END*/;
+
+      var WINDOWS = [
+        { id:'morning',   src:'assets/decor/window_morning.png',   label:'EARLY MORNING', sub:'sunrise',   glow:'rgba(255,176,96,.38)' },
+        { id:'noon',      src:'assets/decor/window_noon.png',      label:'NOON',          sub:'clear sky', glow:'rgba(127,182,232,.40)' },
+        { id:'afternoon', src:'assets/decor/window_afternoon.png', label:'AFTERNOON',     sub:'sunset',    glow:'rgba(224,104,42,.42)' },
+        { id:'evening',   src:'assets/decor/window_evening.png',   label:'EVENING',       sub:'starry',    glow:'rgba(111,144,216,.36)' },
+      ];
+      var byId = {}; WINDOWS.forEach(function(w){ byId[w.id] = w; });
+
+      var imgEl  = document.getElementById('window-img');
+      var glowEl = document.getElementById('window-glow');
+
+      function applyTime(id) {
+        var w = byId[id] || byId.afternoon;
+        if (imgEl)  imgEl.src = w.src;
+        if (glowEl) glowEl.style.setProperty('--win-glow', w.glow);
+        // reflect active state in the picker
+        var chips = document.querySelectorAll('.twk-win');
+        chips.forEach(function(c){ c.setAttribute('data-on', c.dataset.id === id ? '1' : '0'); });
+      }
+
+      // build the 2×2 picker
+      var grid = document.getElementById('twk-windows');
+      WINDOWS.forEach(function(w){
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'twk-win'; b.dataset.id = w.id;
+        b.innerHTML = '<img src="' + w.src + '" alt=""><span class="twk-win-lbl">' + w.label + ' · ' + w.sub + '</span>';
+        b.addEventListener('click', function(){ setTweak('timeOfDay', w.id); });
+        grid.appendChild(b);
+      });
+
+      applyTime(TWEAKS.timeOfDay);
+
+      /* ======================================================================
+         HAUL CACHE — code-painted Coffer (Option B). Pixel-by-pixel into a
+         28×20 offscreen, blitted at an INTEGER scale, nearest-neighbour.
+         ====================================================================== */
+      var NW = 28, NH = 20;
+      var RM = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var C = {
+        OUT:'#0b0c16', D2:'#15172a', D1:'#212439', M:'#2e3150',
+        L1:'#3d4262', L2:'#525879', L3:'#6b72a0',
+        // magenta gem currency ramp — sampled from gem.png (deep facet → core → bright)
+        aDk:'#961c8c', a:'#e028a0', aMd:'#ff4dcd', aHi:'#ff96e6'
+      };
+      var ROUTE = {
+        amber:{ dk:'#961c8c', md:'#ff4dcd', hi:'#ff96e6' },
+        cyan: { dk:'#1c6e92', md:'#2bb2dc', hi:'#aeeeff' },
+        violet:{ dk:'#5e2a9c', md:'#B14DFF', hi:'#E0B8FF' },
+        red:  { dk:'#8e1430', md:'#FF2D55', hi:'#FF93A9' }
+      };
+      function P(ctx){ return {
+        px:function(x,y,c){ ctx.fillStyle=c; ctx.fillRect(x,y,1,1); },
+        rect:function(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x,y,w,h); },
+        h:function(x,y,w,c){ ctx.fillStyle=c; ctx.fillRect(x,y,w,1); },
+        v:function(x,y,h,c){ ctx.fillStyle=c; ctx.fillRect(x,y,1,h); }
+      };}
+      function bevelBox(p,x,y,w,h,fill,lit,shade,top){
+        p.rect(x,y,w,h,C.OUT); p.rect(x+1,y+1,w-2,h-2,fill);
+        p.h(x+1,y+1,w-2,top||lit); p.v(x+1,y+1,h-2,lit);
+        p.h(x+1,y+h-2,w-2,shade); p.v(x+w-2,y+1,h-2,shade);
+      }
+      function gem(p,x,y){ p.px(x,y,C.aHi); p.px(x+1,y,C.aMd); p.px(x,y+1,C.aMd); p.px(x+1,y+1,C.aDk); }
+      function sealPlate(p,cx,cy,rt){
+        p.rect(cx-3,cy-3,6,7,C.OUT); p.rect(cx-2,cy-2,4,5,C.D2); p.h(cx-2,cy-2,4,C.D1);
+        p.px(cx-1,cy,rt.md); p.px(cx,cy,rt.hi); p.px(cx+1,cy,rt.md);
+        p.px(cx-1,cy-1,rt.dk); p.px(cx,cy-1,rt.md); p.px(cx+1,cy-1,rt.dk);
+        p.px(cx-1,cy+1,rt.dk); p.px(cx,cy+1,rt.md); p.px(cx+1,cy+1,rt.dk); p.px(cx,cy+2,rt.dk);
+      }
+      function paintCoffer(p,rt){
+        bevelBox(p,2,12,24,7,C.M,C.L1,C.D2);              // wide base
+        bevelBox(p,5,6,18,7,C.M,C.L2,C.D1,C.L3);          // stacked top tier
+        p.h(5,12,18,C.D2);                                 // step seam shadow
+        bevelBox(p,7,12,3,7,C.L1,C.L3,C.D2);              // strap L
+        bevelBox(p,18,12,3,7,C.L1,C.L3,C.D2);             // strap R
+        for(var i=0;i<4;i++){ var sx=8+i*3;                // slatted vents w/ amber bleed
+          p.v(sx,8,3,C.OUT); p.px(sx+1,8,C.aDk); p.px(sx+1,9,C.aMd); p.px(sx+1,10,C.a); }
+        sealPlate(p,14,15,rt);                             // route latch
+        gem(p,11,4); gem(p,14,3); gem(p,16,4);             // gem spill over the rim
+        p.px(13,5,C.aHi); p.px(18,5,C.aMd); p.px(10,5,C.aDk);
+      }
+
+      // offscreen native render — kept fresh on route change
+      var off = document.createElement('canvas'); off.width = NW; off.height = NH;
+      var offCtx = off.getContext('2d');
+      function bakeCoffer(){
+        offCtx.clearRect(0,0,NW,NH); offCtx.imageSmoothingEnabled = false;
+        paintCoffer(P(offCtx), ROUTE[TWEAKS.routeSeal] || ROUTE.amber);
+      }
+
+      var haul = document.getElementById('haul');
+      var cv = document.getElementById('haulCanvas');
+      var cctx = cv.getContext('2d');
+      // 'dropout' = set of cleared native pixels during the COLLECT dissolve
+      var dropout = null;
+      function renderCoffer(){
+        var s = TWEAKS.cofferScale;
+        cv.width = NW*s; cv.height = NH*s;
+        cctx.imageSmoothingEnabled = false;
+        if (!dropout){ cctx.drawImage(off,0,0,NW,NH,0,0,NW*s,NH*s); return; }
+        // blit only the pixels not yet dropped (chunky 2×2 dissolve)
+        cctx.clearRect(0,0,cv.width,cv.height);
+        for(var y=0;y<NH;y++) for(var x=0;x<NW;x++){
+          if (dropout.has((x>>1)+','+(y>>1))) continue;
+          cctx.drawImage(off, x,y,1,1, x*s,y*s, s,s);
+        }
+      }
+      // amber underglow intensity (pixel-art pool) per glow mode — held UNDER BIT
+      function glowScales(){
+        return TWEAKS.glowMode === 'ambient' ? { idle:0.5, focus:0.8 } : { idle:0.3, focus:0.85 };
+      }
+      function applyGlowMode(){
+        // small CSS contact halo (idle/focus) — secondary to the pixel pool
+        if (TWEAKS.glowMode === 'ambient'){
+          haul.style.setProperty('--haul-glow-idle', '.3');
+          haul.style.setProperty('--haul-glow-focus', '.5');
+        } else {
+          haul.style.setProperty('--haul-glow-idle', '.12');
+          haul.style.setProperty('--haul-glow-focus', '.5');
+        }
+        // drive the real (pixel) amber pool to the idle level if the haul is present
+        if (padlight && haulPresent()) padlight.set({ tint:1, scale: glowScales().idle });
+      }
+      function applyHaul(){ bakeCoffer(); renderCoffer(); applyGlowMode(); }
+
+      // ── pad signature — the emitter's light identity (cyan home ↔ amber haul) ──
+      var padlight = window.__padlight, beam = window.__beam;
+      function haulPresent(){ return !room.classList.contains('collected'); }
+      // settled "haul on the dock": beam withdrawn into the emitter, underglow amber
+      function padAmber(){
+        if (beam) beam.set({ scale:0, topY01:1 });
+        if (padlight) padlight.set({ tint:1, scale: glowScales().idle });
+      }
+      // claimed/home: cyan beam restored, underglow cyan
+      function padCyan(){
+        if (beam) beam.set({ scale:1, topY01:0 });
+        if (padlight) padlight.set({ tint:0, scale:1 });
+      }
+
+      // ── COLLECT focus/hover — coffer brightens, BIT still leads ──
+      var hit = document.getElementById('haulHit');
+      var pill = document.getElementById('haulPill');
+      function focusOn(){ if(room.classList.contains('collected')) return;
+        haul.classList.add('focus'); pill.classList.add('focus');
+        if (padlight && haulPresent() && !collecting) padlight.set({ tint:1, scale: glowScales().focus }); }
+      function focusOff(){ haul.classList.remove('focus'); pill.classList.remove('focus');
+        if (padlight && haulPresent() && !collecting) padlight.set({ tint:1, scale: glowScales().idle }); }
+      hit.addEventListener('mouseenter', focusOn);
+      hit.addEventListener('mouseleave', focusOff);
+      hit.addEventListener('focus', focusOn);
+      hit.addEventListener('blur', focusOff);
+
+      // ── COLLECT → report → coffer-gone transition ──
+      var room = document.querySelector('.room');
+      var report = document.getElementById('haulReport');
+      var fx = document.getElementById('haulFx');
+      var fctx = fx.getContext('2d');
+      var collecting = false;
+
+      function showReport(){
+        report.classList.add('show');
+        setTimeout(function(){ report.classList.remove('show'); }, 1700);
+      }
+      function tickGems(){
+        var el = document.querySelector('.res-gems .res-val');
+        if(!el) return; var to = 15, t0 = performance.now();
+        (function step(now){ var k = Math.min(1,(now-t0)/700);
+          el.textContent = Math.round(k*to);
+          if(k<1) requestAnimationFrame(step); })(t0);
+      }
+      function finishCollect(){
+        collecting = false; dropout = null;
+        room.classList.add('collected');          // hides coffer + pill — nothing lingers
+        padCyan();                                 // emitter returns to its cyan home signature
+        try { localStorage.setItem('ib_haul', 'collected'); } catch(e){}
+      }
+
+      function collect(){
+        if (hcPlaying){ setSettled(false); return; }            // mid-beat tap → settle first
+        if (performance.now() - hcJustSkipped < 400) return;     // ignore the same tap that skipped
+        if (collecting || room.classList.contains('collected')) return;
+        collecting = true; focusOff();
+        pill.style.display = 'none';
+        if (window.__bit) { __bit.spin ? __bit.spin() : __bit.cheer && __bit.cheer(); }
+        showReport(); tickGems();
+
+        if (RM) {                                  // reduced motion → snap, no animation
+          finishCollect(); return;
+        }
+
+        // amber gem particles burst up into the beam
+        var parts = [];
+        for (var i=0;i<16;i++){
+          parts.push({ x:48+(Math.random()-0.5)*40, y:96+Math.random()*12,
+            vx:(Math.random()-0.5)*0.7, vy:-(1.4+Math.random()*1.8),
+            s:(Math.random()<0.5?4:6), life:600+Math.random()*420, age:0,
+            c:(Math.random()<0.5?C.aMd:C.aHi) });
+        }
+        dropout = new Set();
+        var blocks = [];
+        for (var by=0;by<10;by++) for (var bx=0;bx<14;bx++) blocks.push(bx+','+by);
+        for (var j=blocks.length-1;j>0;j--){ var k=Math.floor(Math.random()*(j+1)); var tmp=blocks[j]; blocks[j]=blocks[k]; blocks[k]=tmp; }
+
+        var t0 = performance.now(), DUR = 620;
+        function frame(now){
+          var dt = 16, el = now - t0, t = Math.min(1, el/DUR);
+          // dissolve: drop blocks proportional to t, lift + fade the coffer
+          var want = Math.floor(t * blocks.length);
+          for (var n=dropout.size; n<want; n++) dropout.add(blocks[n]);
+          renderCoffer();
+          cv.style.transform = 'translateY(' + (-10*t) + 'px)';
+          cv.style.opacity = String(1 - Math.max(0,(t-0.55))/0.45);
+          // reverse the homecoming: amber underglow → cyan, beam re-emerges
+          if (padlight) padlight.set({ tint: 1-t, scale: 0.5 + 0.5*t });
+          if (beam) beam.set({ scale: t, topY01: 1-t });
+          // particles
+          fctx.clearRect(0,0,fx.width,fx.height);
+          for (var p2=0; p2<parts.length; p2++){ var pt=parts[p2];
+            pt.age += dt; if (pt.age>pt.life) continue;
+            pt.x += pt.vx*dt*0.06; pt.y += pt.vy*dt*0.06; pt.vy += 0.012*dt*0.06;
+            var a = 1 - pt.age/pt.life;
+            fctx.globalAlpha = a; fctx.fillStyle = pt.c;
+            fctx.fillRect(Math.round(pt.x), Math.round(pt.y), pt.s, pt.s);
+          }
+          fctx.globalAlpha = 1;
+          if (t < 1 || parts.some(function(p){ return p.age < p.life; })) requestAnimationFrame(frame);
+          else { fctx.clearRect(0,0,fx.width,fx.height); cv.style.transform=''; cv.style.opacity=''; finishCollect(); }
+        }
+        requestAnimationFrame(frame);
+      }
+      hit.addEventListener('click', collect);
+
+      // ════════════════════════════════════════════════════════════════════
+      //  HOMECOMING — plays on open when an expedition has returned (~1.9s).
+      //  Mirrors the launch in reverse: BIT descends, the beam WITHDRAWS into
+      //  the emitter, BIT releases an amber payload mote, the dock fabricates
+      //  the coffer (cyan→amber signature), then settles + the COLLECT chip.
+      //  Skippable (tap anywhere) · reduced-motion → instant settled state.
+      // ════════════════════════════════════════════════════════════════════
+      var bitHost = document.getElementById('bit');
+      var hc = document.getElementById('hcFx'); var hctx = hc.getContext('2d');
+      var live = document.getElementById('hcLive');
+      var ceil = document.querySelector('.ceiling-fixture');
+      var EX = 185, BY = 340, EY = 392;        // emitter x · BIT rest centre y · emitter mouth y
+      var hcPlaying = false, hcRAF = 0, hcJustSkipped = 0;
+
+      // build order for the coffer fabricate — bottom rows coalesce first
+      var BUILD = [];
+      for (var by2=9; by2>=0; by2--) for (var bx2=0; bx2<14; bx2++) BUILD.push(bx2+','+by2);
+
+      function sizeHc(){ hc.width = room.clientWidth; hc.height = room.clientHeight; }
+      function easeOut(t){ return 1 - Math.pow(1-t, 3); }
+      function setBit(dy, op){ bitHost.style.setProperty('--bit-dy', dy+'px'); bitHost.style.setProperty('--bit-op', op); }
+      function clearHc(){ hctx.clearRect(0,0,hc.width,hc.height); }
+
+      function drawMote(x,y,bright){
+        x=Math.round(x); y=Math.round(y);
+        hctx.globalAlpha = 0.45*bright; hctx.fillStyle='#e028a0'; hctx.fillRect(x-4,y-4,9,9);
+        hctx.globalAlpha = 0.9*bright;  hctx.fillStyle='#ff4dcd'; hctx.fillRect(x-2,y-2,5,5);
+        hctx.globalAlpha = 1;           hctx.fillStyle='#ffc8f0'; hctx.fillRect(x-1,y-1,3,3);
+      }
+      function spawnBloom(arr){
+        for (var i=0;i<18;i++){ var ang=Math.PI*2*i/18 + Math.random()*0.3, sp=0.9+Math.random()*1.7;
+          arr.push({ x:EX, y:EY, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp*0.7 - 0.3,
+            life:360+Math.random()*260, age:0, s:(Math.random()<0.5?3:4),
+            c:(Math.random()<0.5?'#ff4dcd':'#ff96e6') }); }
+        arr.push({ core:true, x:EX, y:EY, life:230, age:0 });
+      }
+      function updateSparks(arr, dt){
+        for (var i=0;i<arr.length;i++){ var p=arr[i]; p.age+=dt; if(p.age>p.life) continue;
+          if (p.core){ var a=1-p.age/p.life; hctx.globalAlpha=a*0.8; hctx.fillStyle='#ffeefa';
+            var r=Math.round(3+11*(p.age/p.life)); hctx.fillRect(p.x-r,p.y-r,2*r+1,2*r+1); hctx.globalAlpha=1; continue; }
+          p.x+=p.vx*dt*0.06; p.y+=p.vy*dt*0.06; p.vy+=0.01*dt*0.06;
+          hctx.globalAlpha = 1-p.age/p.life; hctx.fillStyle=p.c;
+          hctx.fillRect(Math.round(p.x), Math.round(p.y), p.s, p.s); }
+        hctx.globalAlpha = 1;
+      }
+
+      function setSettled(announce){
+        hcPlaying = false; if (hcRAF){ cancelAnimationFrame(hcRAF); hcRAF=0; }
+        removeSkip();
+        collecting = false; dropout = null;
+        room.classList.remove('collected');
+        haul.classList.remove('hc');
+        renderCoffer(); cv.style.transform=''; cv.style.opacity='';
+        setBit(0,1);
+        pill.style.opacity=''; pill.style.display=''; pill.classList.remove('focus');
+        report.classList.remove('show');
+        if (ceil) ceil.style.filter='';
+        padAmber(); applyGlowMode();
+        clearHc();
+        if (announce && live) live.textContent = 'BIT has returned with a haul.';
+      }
+      function setClaimed(){
+        hcPlaying=false; if(hcRAF){ cancelAnimationFrame(hcRAF); hcRAF=0; }
+        collecting=false; dropout=null; haul.classList.remove('hc');
+        room.classList.add('collected');
+        cv.style.transform=''; cv.style.opacity=''; setBit(0,1);
+        pill.style.opacity=''; padCyan(); clearHc();
+      }
+
+      // skip — tap anywhere during the beat jumps straight to the settled state
+      function onSkip(){ if(!hcPlaying) return; hcJustSkipped = performance.now(); setSettled(false); }
+      function addSkip(){ document.addEventListener('pointerdown', onSkip, true); }
+      function removeSkip(){ document.removeEventListener('pointerdown', onSkip, true); }
+
+      function playHomecoming(){
+        if (collecting) return;
+        if (hcRAF){ cancelAnimationFrame(hcRAF); hcRAF=0; }   // kill any in-flight beat
+        removeSkip();
+        if (RM){ setSettled(true); return; }      // reduced motion → instant settled + announce
+        // reset to the empty, lit "out" frame
+        room.classList.remove('collected');
+        bakeCoffer();
+        dropout = new Set(BUILD);                  // coffer un-fabricated (hidden)
+        renderCoffer(); cv.style.transform=''; cv.style.opacity='';
+        haul.classList.add('hc');                  // suppress the amber halo until fabricate
+        setBit(-230, 0);
+        pill.style.opacity='0'; pill.style.display=''; pill.classList.remove('focus');
+        report.classList.remove('show');
+        if (padlight) padlight.set({ tint:0, scale:0.42 });  // dim cyan dock
+        if (beam) beam.set({ scale:0.42, topY01:0 });
+        sizeHc(); clearHc();
+        hcPlaying = true; addSkip();
+
+        var sparks = [], bloomed = false, t0 = performance.now();
+        function frame(now){
+          var e = now - t0; clearHc();
+          // P0 anticipation 0–200 — faint brighten at the ceiling, "something's coming"
+          if (ceil) ceil.style.filter = e < 320 ? 'brightness(' + (1 + 0.7*Math.max(0,1-e/320)) + ')' : '';
+
+          if (e < 1000){                           // ── P1 descent 200–1000 ──
+            var dt1 = Math.max(0, Math.min(1, (e-200)/800));
+            var dy = -230 * (1 - easeOut(dt1));
+            setBit(dy, Math.min(1, Math.max(0,(e-200)/150)));
+            if (beam) beam.set({ scale:0.9, topY01:0.65*dt1 });        // beam withdraws as he rides down
+            if (padlight) padlight.set({ tint:0, scale:0.45 + 0.15*dt1 });
+            if (e > 200) drawMote(EX, BY + dy + 10, 1);                // payload mote travels with BIT
+          }
+          else if (e < 1500){                       // ── P2 deposit 1000–1500 ──
+            var dp = (e-1000)/500; setBit(0,1);
+            if (dp < 0.36){                          // mote drops onto the emitter mouth
+              var k = dp/0.36;
+              drawMote(EX, BY + (EY-BY)*easeOut(k), 1);
+              if (beam) beam.set({ scale:0.9*(1-k), topY01:0.65 + 0.35*k });
+            } else {                                 // bloom + the dock fabricates the coffer
+              var fp = (dp-0.36)/0.64;
+              if (!bloomed){ bloomed = true; spawnBloom(sparks); haul.classList.remove('hc'); }
+              var reveal = Math.floor(fp * BUILD.length);
+              for (var n=0; n<reveal; n++) dropout.delete(BUILD[n]);
+              cv.style.transform = 'translateY(' + (fp>0.85?1:0) + 'px)';   // 1px seat dip
+              renderCoffer();
+              if (padlight) padlight.set({ tint:fp, scale:0.45 + (glowScales().idle-0.45)*fp });
+              if (beam) beam.set({ scale:0, topY01:1 });
+            }
+            updateSparks(sparks, 16);
+          }
+          else if (e < 1900){                       // ── P3 settle 1500–1900 ──
+            setBit(0,1); dropout.clear(); renderCoffer(); cv.style.transform='';
+            pill.style.opacity = String((e-1500)/400);
+            if (padlight) padlight.set({ tint:1, scale: glowScales().idle });
+            updateSparks(sparks, 16);
+          }
+          else { setSettled(false); return; }
+          hcRAF = requestAnimationFrame(frame);
+        }
+        hcRAF = requestAnimationFrame(frame);
+      }
+
+      function replayHaul(){
+        try { localStorage.removeItem('ib_haul'); } catch(e){}
+        playHomecoming();
+      }
+      function initHaul(){
+        try { if (localStorage.getItem('ib_haul') === 'collected'){ setClaimed(); return; } } catch(e){}
+        playHomecoming();
+      }
+
+      // ── wire haul tweak buttons ──
+      function seg(id, attr, key, after){
+        document.querySelectorAll('#'+id+' button').forEach(function(b){
+          b.addEventListener('click', function(){
+            var val = b.dataset[attr];
+            if (attr === 'scale' || attr === 's') val = parseInt(val,10);
+            document.querySelectorAll('#'+id+' button').forEach(function(x){ x.setAttribute('data-on', x===b?'1':'0'); });
+            setTweak(key, val);
+          });
+        });
+      }
+      seg('twk-route','r','routeSeal');
+      seg('twk-scale','s','cofferScale');
+      seg('twk-glow','g','glowMode');
+      document.getElementById('twk-replay').addEventListener('click', replayHaul);
+      // reflect persisted state on the buttons
+      function syncSeg(id, attr, val){
+        document.querySelectorAll('#'+id+' button').forEach(function(b){
+          b.setAttribute('data-on', String(b.dataset[attr]) === String(val) ? '1':'0'); });
+      }
+      syncSeg('twk-route','r',TWEAKS.routeSeal);
+      syncSeg('twk-scale','s',TWEAKS.cofferScale);
+      syncSeg('twk-glow','g',TWEAKS.glowMode);
+
+      initHaul();
+
+      function setTweak(key, val) {
+        TWEAKS[key] = val;
+        if (key === 'timeOfDay') applyTime(val);
+        else if (key === 'routeSeal') applyHaul();
+        else if (key === 'cofferScale') { renderCoffer(); }
+        else if (key === 'glowMode') applyGlowMode();
+        // persist via host
+        var edits = {}; edits[key] = val;
+        window.parent.postMessage({ type: '__edit_mode_set_keys', edits: edits }, '*');
+      }
+
+      // ── host protocol ──
+      var panel = document.getElementById('twk');
+      window.addEventListener('message', function (e) {
+        var t = e && e.data && e.data.type;
+        if (t === '__activate_edit_mode') panel.classList.add('open');
+        else if (t === '__deactivate_edit_mode') panel.classList.remove('open');
+      });
+      window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+
+      document.getElementById('twk-x').addEventListener('click', function () {
+        panel.classList.remove('open');
+        window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+      });
+
+      // draggable header
+      (function () {
+        var hd = document.getElementById('twk-hd'), down = false, sx, sy, sr, sb;
+        hd.addEventListener('mousedown', function (e) {
+          down = true; sx = e.clientX; sy = e.clientY;
+          var r = panel.getBoundingClientRect();
+          sr = window.innerWidth - r.right; sb = window.innerHeight - r.bottom;
+          e.preventDefault();
+        });
+        window.addEventListener('mousemove', function (e) {
+          if (!down) return;
+          panel.style.right = Math.max(8, sr - (e.clientX - sx)) + 'px';
+          panel.style.bottom = Math.max(8, sb - (e.clientY - sy)) + 'px';
+        });
+        window.addEventListener('mouseup', function () { down = false; });
+      })();
+    })();
+  </script>
+</body>
+</html>

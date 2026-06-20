@@ -3,11 +3,11 @@ import '../theme/app_fonts.dart';
 
 import '../models/stat_radar_read.dart';
 import '../services/stat_engine.dart';
-import '../services/xp_service.dart';
 import '../theme/tokens.dart';
 import 'motion/phosphor_tap.dart';
 import 'radar_stat_icon.dart';
-import 'segmented_progress_bar.dart';
+import 'arcade_bar.dart';
+import 'lck_pips.dart';
 import 'stat_radar.dart';
 
 const double _statLabelWidth = 38;
@@ -199,10 +199,7 @@ class _StatCardState extends State<StatCard> {
           // capability triangle — their own rows, not graded D->S.
           _RecoveryRow(value: _value('VIT')),
           const SizedBox(height: 9),
-          _LuckRow(
-            value: _value('LCK'),
-            filled: XpService.lckDiamondCount(_value('LCK')),
-          ),
+          _LuckRow(value: _value('LCK')),
           const SizedBox(height: 10),
           _DetailToggle(
             visible: _detailVisible,
@@ -492,7 +489,7 @@ class _StatRow extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: SegmentedProgressBar(
+          child: ArcadeBar.segments(
             totalCells: 10,
             litCells: segments(value),
             height: 8,
@@ -570,12 +567,12 @@ class _RecoveryRow extends StatelessWidget {
 }
 
 /// LCK consistency — the 4-diamond row where each filled diamond is an
-/// XP-multiplier tier (25/50/75/100 streak → x1.5 / x2 / x2.5 / x3).
+/// XP-multiplier tier. The diamonds are the dimensional [LckPips] (faceted amber
+/// gems), not flat glyphs.
 class _LuckRow extends StatelessWidget {
-  const _LuckRow({required this.value, required this.filled});
+  const _LuckRow({required this.value});
 
-  final int value; // streak (LCK)
-  final int filled; // diamonds 0–4
+  final int value; // streak (LCK); LckPips derives the filled count from it
 
   @override
   Widget build(BuildContext context) {
@@ -586,13 +583,9 @@ class _LuckRow extends StatelessWidget {
           child: const _PlainStatusLabel(label: 'LCK'),
         ),
         Expanded(
-          child: Text(
-            List.generate(4, (i) => i < filled ? '◆' : '◇').join(),
-            style: const TextStyle(
-              color: kAmber,
-              fontSize: 14,
-              letterSpacing: 3,
-            ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: LckPips(lck: value, size: 14),
           ),
         ),
         _StatTrailing(
@@ -656,46 +649,20 @@ class _VitalityTintedBar extends StatelessWidget {
   double get _fillFraction => (value.clamp(0, 100) / 100).toDouble();
 
   // Recovery red: a muted dark red at low recovery deepening to vivid kDanger as
-  // the meter fills — mirroring the heart icon, which fills red bottom-up. Alpha
-  // also rises with the value so a fuller meter reads more intense.
-  double get _fillAlpha => (0.6 + 0.4 * _fillFraction).clamp(0.0, 1.0);
-
+  // the meter fills — mirroring the heart icon. The beveled [ArcadeBar] derives
+  // its specular/shadow rows from this accent. (0xFF7A1E32 is the pre-existing
+  // dark-red ramp anchor — procedural, no token shade exists.)
   Color get _fillColor =>
-      Color.lerp(const Color(0xFF7A1E32), kDanger, _fillFraction)!
-          .withValues(alpha: _fillAlpha);
+      Color.lerp(const Color(0xFF7A1E32), kDanger, _fillFraction)!;
 
   @override
   Widget build(BuildContext context) {
-    const height = 10.0;
-
-    return Container(
-      key: const ValueKey('stat_card_vit_tinted_bar'),
-      height: height,
-      decoration: BoxDecoration(
-        color: kBg.withValues(alpha: 0.22),
-        border: Border.all(
-          color: _fillFraction > 0
-              ? kMutedText.withValues(alpha: 0.72)
-              : kBorder.withValues(alpha: 0.62),
-          width: 1,
-        ),
-        borderRadius: BorderRadius.circular(2),
-      ),
-      clipBehavior: Clip.hardEdge,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: FractionallySizedBox(
-          key: const ValueKey('stat_card_vit_fill_fraction'),
-          widthFactor: _fillFraction,
-          // heightFactor: 1 forces the childless ColoredBox to the full bar
-          // height — without it the fill collapses to zero height (invisible).
-          heightFactor: 1,
-          child: ColoredBox(
-            key: const ValueKey('stat_card_vit_fill'),
-            color: _fillFraction > 0 ? _fillColor : Colors.transparent,
-          ),
-        ),
-      ),
+    return ArcadeBar(
+      key: const ValueKey('stat_card_vit_bar'),
+      value: _fillFraction,
+      accent: _fillColor,
+      height: 12,
+      flashOnIncrease: false,
     );
   }
 }

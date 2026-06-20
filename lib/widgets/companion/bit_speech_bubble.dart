@@ -51,6 +51,8 @@ class BitSpeechBubble extends StatefulWidget {
     this.skip = false,
     this.onTypingComplete,
     this.tailDirection = BitTailDirection.left,
+    this.downTailDx = 0,
+    this.downApexFrac = 0.5,
     this.fontSize = 14,
     this.child,
     this.semanticsLabel,
@@ -82,6 +84,17 @@ class BitSpeechBubble extends StatefulWidget {
 
   /// Which side the tail points (where BIT sits). Default [BitTailDirection.left].
   final BitTailDirection tailDirection;
+
+  /// For [BitTailDirection.down] only: shift the tail horizontally off the box's
+  /// centre, in px (negative = left). The comic convention is a tail that leaves
+  /// the balloon slightly *off-centre* and leans back toward the speaker, rather
+  /// than a symmetric nub dead-centre. Default 0 (centred, byte-identical).
+  final double downTailDx;
+
+  /// For [BitTailDirection.down] only: where the tail's apex sits across its own
+  /// width, 0..1 (0.5 = symmetric). >0.5 leans the point toward the box's right,
+  /// so a left-shifted tail still aims back at a centred speaker. Default 0.5.
+  final double downApexFrac;
 
   /// Flip true to complete the type instantly (a tap during typing).
   final bool skip;
@@ -223,7 +236,15 @@ class _BitSpeechBubbleState extends State<BitSpeechBubble> {
       BitTailDirection.down => Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
-          children: [bubbleBox, _downTail()],
+          children: [
+            bubbleBox,
+            // Transform (not layout) so the centred Column still wraps the box;
+            // the tail just slides off-centre and the apex leans back at BIT.
+            Transform.translate(
+              offset: Offset(widget.downTailDx, 0),
+              child: _downTail(),
+            ),
+          ],
         ),
       BitTailDirection.left => Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,11 +272,13 @@ class _BitSpeechBubbleState extends State<BitSpeechBubble> {
         ),
       );
 
-  /// The downward tail under the box (BIT below) — wider than tall, apex at the
-  /// bottom-centre so it points straight down at the character.
-  Widget _downTail() => const CustomPaint(
-        size: Size(12, 7),
-        painter: _TailPainter(down: true),
+  /// The downward tail under the box (BIT below) — wider than tall, apex below so
+  /// it points down at the character. [downApexFrac] biases the apex across the
+  /// width (0.5 = straight down; >0.5 leans the point toward BIT when the tail is
+  /// shifted off-centre).
+  Widget _downTail() => CustomPaint(
+        size: const Size(12, 7),
+        painter: _TailPainter(down: true, downApexFrac: widget.downApexFrac),
       );
 
   TextStyle get _base =>
@@ -376,13 +399,20 @@ class _ShakyEmphasisState extends State<_ShakyEmphasis>
 }
 
 class _TailPainter extends CustomPainter {
-  const _TailPainter({this.pointLeft = true, this.down = false});
+  const _TailPainter({
+    this.pointLeft = true,
+    this.down = false,
+    this.downApexFrac = 0.5,
+  });
 
   /// Apex points left (BIT on the left) when true; right when false.
   final bool pointLeft;
 
   /// Apex points DOWN (BIT below) — the box's bottom edge is the base.
   final bool down;
+
+  /// Where the down-apex sits across the width (0.5 = centred, >0.5 leans right).
+  final double downApexFrac;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -391,7 +421,7 @@ class _TailPainter extends CustomPainter {
     Path tail() => down
         ? (Path()
           ..moveTo(0, 0)
-          ..lineTo(size.width / 2, size.height)
+          ..lineTo(size.width * downApexFrac, size.height)
           ..lineTo(size.width, 0))
         : (Path()
           ..moveTo(baseX, 0)
@@ -409,5 +439,7 @@ class _TailPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TailPainter oldDelegate) =>
-      oldDelegate.pointLeft != pointLeft || oldDelegate.down != down;
+      oldDelegate.pointLeft != pointLeft ||
+      oldDelegate.down != down ||
+      oldDelegate.downApexFrac != downApexFrac;
 }

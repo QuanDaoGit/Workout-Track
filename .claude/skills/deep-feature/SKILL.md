@@ -35,7 +35,9 @@ from the session list, skip it with a note, never block on it.
 |---|---|
 | Vague/new feature, unclear requirements | Brainstorming → `superpowers:brainstorming` (fires before everything else) |
 | UI / visual / motion / copy / screen work | App design language → `ironbit-design` — the **single** owner of all UI/UX here (visual, layout, motion/transitions, micro-interactions, typography, icons, in-app copy, accessibility, and design critique). It supersedes the generic `ui-ux-pro-max` / `design:*` skills; do not also route to those. |
+| Porting a design/asset/animation **handoff** (runnable reference + engine source + assets) into the app | Faithful-port discipline → `port-handoff` — read source-not-summary, inventory + delta contract gate, translate verbatim, adapt only the named delta. It owns the implement stage when a handoff is the input (route layer-1 surfaces here, not `ironbit-design`). |
 | Bug fix / unexpected behavior | Root-cause discipline → `superpowers:systematic-debugging` |
+| Research / evidence gathering (domain, competitor, behavioral, UX, technical, safety) | Field-detecting research engine → `research` — owns field detection (incl. the Safety/clinical overlay), source routing, evidence grading, and the Codex-review-of-the-evidence. **This is the engine Stage 2 runs.** |
 | Implementation phase | TDD → `superpowers:test-driven-development`; Done-claims → `superpowers:verification-before-completion` |
 | Stuck / second implementation opinion | `codex:rescue` |
 
@@ -60,8 +62,10 @@ intent** (e.g. Tank=END radar identity is intent) — intent questions go to the
 
 ## Stage 2 — Research (evidence standard)
 
-Default: **3+ web investigations per identified problem area** for product mechanics and UX.
-Priorities, in order:
+**Run the `research` skill** — it owns field detection (incl. the Safety/clinical overlay), source
+routing, evidence grading, the contrary-evidence guardrail, and the tier-gated
+Codex-review-of-the-evidence. Its brief is the **sole** Stage-2 research artifact; **don't redefine
+its evidence bar here**. This stage only adds product **acceptance criteria** the research must cover:
 
 1. **Domain accuracy** — exercise-science literature for anything touching mechanics
    (volume-vs-intensity, e1RM validity, strength standards, detraining). Physiological claims
@@ -71,10 +75,11 @@ Priorities, in order:
 3. **Leading apps** — Strong/Hevy for tracking mechanics, Duolingo-class for habit mechanics —
    only where real market precedent exists.
 
-Purely internal engineering defects (cache bugs, refactors, test gaps) may skip external
-research with a one-line justification. Cite sources as markdown links. Remember: accuracy and
-the hook usually point the same way — a farmable stat undermines the competence signal that
-makes the number satisfying. *Artifact: findings grouped per problem, with links.*
+Purely internal engineering defects (cache bugs, refactors, test gaps) may skip external research
+with a one-line justification. Remember: accuracy and the hook usually point the same way — a
+farmable stat undermines the competence signal that makes the number satisfying. (The Stage-2
+evidence review inside `research` does **not** replace Stage 4's review of the opinion/plan below.)
+*Artifact: the `research` brief — findings grouped per problem, with links.*
 
 ## Stage 3 — Opinion
 

@@ -6,7 +6,8 @@ import '../models/loot_item.dart';
 import '../models/program_models.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
-import 'arcade_progress_bar.dart';
+import 'arcade_bar.dart';
+import 'arcade_card.dart';
 
 class ProgramPathHud extends StatelessWidget {
   const ProgramPathHud({
@@ -61,9 +62,13 @@ class ProgramPathHud extends StatelessWidget {
     return '$_done / $target';
   }
 
-  Color get _accent {
+  // The state label is an eyebrow — muted in the normal state so the neon stays
+  // on the bar fill (the one interior focal element). Amber only when the state
+  // is *earned* (FINAL STRETCH / PATH COMPLETE), where the colour-shift is the
+  // signal. (The bar accent is computed separately, below.)
+  Color get _labelColor {
     if (_complete || _finalStretch) return kAmber;
-    return kNeon;
+    return kMutedText;
   }
 
   @override
@@ -86,15 +91,14 @@ class ProgramPathHud extends StatelessWidget {
           '${(_ratio * 100).round()} percent complete'
           // Keep the reward name out until it's earned (anticipation).
           '${reward == null || !showReward ? '' : (_complete ? ', reward ${reward.name}' : ', reward locked')}',
-      child: Container(
+      // The PATH zone — the *primary* common-region panel, via the canonical
+      // ArcadeCard so it shares one system with the (lighter) NEXT zone.
+      child: ArcadeCard(
         key: const ValueKey('program_path_hud'),
-        width: double.infinity,
+        background: kCard,
+        backgroundAlpha: compact ? 0.52 : 0.72,
+        borderColor: borderColor,
         padding: EdgeInsets.all(padding),
-        decoration: BoxDecoration(
-          color: kCard.withValues(alpha: compact ? 0.52 : 0.72),
-          border: Border.all(color: borderColor),
-          borderRadius: BorderRadius.circular(kCardRadius),
-        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -103,7 +107,7 @@ class ProgramPathHud extends StatelessWidget {
               style: TextStyle(
                 fontFamily: 'PressStart2P',
                 fontSize: compact ? 7.5 : 9,
-                color: _accent,
+                color: _labelColor,
                 height: 1.35,
               ),
             ),
@@ -111,16 +115,12 @@ class ProgramPathHud extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                ArcadeProgressBar(
+                ArcadeBar(
                   value: _ratio,
                   height: meterHeight,
-                  fillColor: _complete || _finalStretch ? kAmber : kNeon,
-                  trackColor: kBorderDark,
+                  accent: _complete || _finalStretch ? kAmber : kNeon,
                   flashOnIncrease: !reduceMotion && _done > 0,
                   increaseSignal: _done,
-                  duration: reduceMotion
-                      ? Duration.zero
-                      : const Duration(milliseconds: 380),
                 ),
                 if (!reduceMotion && _done > 0 && !_complete)
                   Positioned.fill(
@@ -196,7 +196,9 @@ class ProgramPathHud extends StatelessWidget {
                     ),
                     const SizedBox(width: kSpace2),
                     Text(
-                      'REWARD AT 100%',
+                      // Concise — the lock + the path panel context already say
+                      // "the reward for this path, locked until 100%".
+                      'REWARD',
                       style: TextStyle(
                         fontFamily: 'PressStart2P',
                         fontSize: compact ? 7 : 8.5,

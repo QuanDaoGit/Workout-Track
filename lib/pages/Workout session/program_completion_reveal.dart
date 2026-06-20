@@ -9,7 +9,7 @@ import '../../models/program_models.dart';
 import '../../services/program_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/arcade_progress_bar.dart';
+import '../../widgets/arcade_bar.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/screen_shake.dart';
 import '../../widgets/strobe_flash.dart';
@@ -329,9 +329,9 @@ class _CompletionMeter extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ArcadeProgressBar(
+              ArcadeBar(
                 value: progress.clamp(0.0, 1.0),
-                fillColor: kAmber,
+                accent: kAmber,
                 height: 12,
               ),
               const SizedBox(height: kSpace2),

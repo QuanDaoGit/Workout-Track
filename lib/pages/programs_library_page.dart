@@ -5,7 +5,7 @@ import '../data/programs_library.dart';
 import '../models/program_models.dart';
 import '../services/program_service.dart';
 import '../theme/tokens.dart';
-import '../widgets/arcade_progress_bar.dart';
+import '../widgets/arcade_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_button.dart';
@@ -195,7 +195,7 @@ class _ActiveProgramSummary extends StatelessWidget {
                     ),
                     const SizedBox(height: kSpace1),
                     Text(
-                      'WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}/7',
+                      'WEEK ${progress.currentWeek}',
                       style: AppFonts.shareTechMono(
                         color: kMutedText,
                         fontSize: 12,
@@ -211,10 +211,10 @@ class _ActiveProgramSummary extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: ArcadeProgressBar(
+                child: ArcadeBar(
                   value: target == 0 ? 0 : done / target,
                   height: 6,
-                  fillColor: progress.completedArc ? kAmber : kNeon,
+                  accent: progress.completedArc ? kAmber : kNeon,
                 ),
               ),
               const SizedBox(width: kSpace3),

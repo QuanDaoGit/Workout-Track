@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../theme/tokens.dart';
+
 /// Binary on/off strobe overlay. Each time [trigger] changes value, runs
 /// [toggles] hard cuts of the overlay color at [toggleMs] intervals, then
 /// stays off. No fade, no interpolation.
@@ -10,7 +12,7 @@ class StrobeFlash extends StatefulWidget {
     super.key,
     required this.trigger,
     required this.child,
-    this.color = const Color(0xFF00FF9C),
+    this.color = kNeon,
     this.opacity = 0.25,
     this.borderRadius,
     this.toggles = 6,

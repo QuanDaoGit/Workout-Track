@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"></meta>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"></meta>
+<title>BIT — Side-View Hover-Glide · Reference</title>
+<style>
+  :root{
+    --bg:#11111F; --card:#1C1C34; --surface-2:#232342; --border:#36365E; --border-dark:#2A2A3E;
+    --text:#E8E8FF; --muted:#9494B8; --dim:#555577; --neon:#00FF9C;
+    --mono:"ShareTechMono","Courier New",monospace; --disp:"PressStart2P","Courier New",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--mono);padding:40px 0 64px;}
+  .wrap{width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:32px;}
+  .head{display:flex;flex-direction:column;gap:10px;}
+  .title{font-family:var(--disp);font-size:18px;letter-spacing:.5px;}
+  .meta{font-size:13px;color:var(--muted);line-height:1.55;}
+  .meta b{color:var(--text);}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:4px;padding:20px;display:flex;flex-direction:column;gap:16px;}
+  .phead{display:flex;align-items:baseline;gap:14px;}
+  .pname{font-family:var(--disp);font-size:13px;}
+  .ptag{font-family:var(--disp);font-size:8px;padding:5px 8px 4px;border-radius:4px;border:1px solid var(--neon);color:var(--neon);background:var(--surface-2);}
+  .psub{margin-left:auto;font-size:13px;color:var(--muted);}
+  .viewer{width:960px;height:540px;overflow:hidden;position:relative;border-radius:4px;border:1px solid var(--border);background:#000;}
+  .scene{width:480px;height:270px;position:relative;transform:scale(2);transform-origin:0 0;}
+  .layer{position:absolute;left:0;width:480px;background-repeat:repeat-x;image-rendering:pixelated;}
+  .layer.sky{top:0;height:270px;} .layer.far{top:0;height:270px;} .layer.ground{top:174px;height:96px;}
+  #bit{position:absolute;image-rendering:pixelated;z-index:5;pointer-events:none;}
+  .controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .chip{font-family:var(--disp);font-size:8px;letter-spacing:.3px;padding:7px 10px 6px;border-radius:4px;cursor:pointer;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);}
+  .chip.on{background:var(--neon);border-color:var(--neon);color:var(--bg);}
+  .chip.route.on{background:var(--ac,var(--neon));border-color:var(--ac,var(--neon));color:#11111F;}
+  .speed{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);}
+  .speed input{accent-color:var(--neon);width:150px;} .speed output{color:var(--text);min-width:60px;text-align:right;}
+  .frames{display:flex;gap:0;align-items:flex-end;background:var(--bg);border:1px solid var(--border-dark);border-radius:4px;padding:18px;overflow-x:auto;}
+  .frame{display:flex;flex-direction:column;align-items:center;gap:10px;padding:0 14px;border-right:1px solid var(--border-dark);}
+  .frame:last-child{border-right:none;}
+  .frame canvas{image-rendering:pixelated;background:#0A0A14;border:1px solid var(--border-dark);}
+  .flbl{font-family:var(--disp);font-size:7px;color:var(--dim);letter-spacing:.3px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <div class="title">BIT — SIDE-VIEW HOVER-GLIDE · REFERENCE</div>
+    <div class="meta">BIT has no legs — he <b>floats</b> — so walking a route is a <b>hover-glide</b>: forward-facing glowing screen, trailing back-plate fin, hover-bob, blink, a cyan thrust trail, and a crisp route-tinted hover shimmer on the walk line. Hand-painted on a 40×32 native sprite, integer-upscaled nearest-neighbour. Painter lives in <b>engine/bit-walk.js</b>.</div>
+  </div>
+
+  <section class="panel">
+    <div class="phead"><div class="pname">ON THE ROUTE</div><div class="ptag">LIVE</div><div class="psub" id="sub">Iron Vault · STR</div></div>
+    <div class="viewer"><div class="scene">
+      <div class="layer sky"></div><div class="layer far"></div><div class="layer ground"></div>
+      <canvas id="bit" width="40" height="32"></canvas>
+    </div></div>
+    <div class="controls">
+      <button class="chip route on" data-route="iron" style="--ac:#FF6A3D" type="button">IRON VAULT</button>
+      <button class="chip route" data-route="sky" style="--ac:#B14DFF" type="button">SKY TRACER</button>
+      <button class="chip route" data-route="maze" style="--ac:#00BFFF" type="button">INFINI MAZE</button>
+      <button class="chip on" id="trail" type="button">THRUST TRAIL</button>
+      <button class="chip" id="play" type="button">PAUSE</button>
+      <label class="speed">glide <input id="spd" type="range" min="0" max="120" value="40" step="2"></input> <output id="spdo">40 px/s</output></label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="phead"><div class="pname">HOVER CYCLE — FRAME BREAKDOWN</div><div class="ptag">6 KEYS · 5×</div><div class="psub">bob ±1.5px · plates lag the core · blink on key 04</div></div>
+    <div class="frames" id="strip"></div>
+  </section>
+
+</div>
+
+<script src="../engine/bit-walk.js"></script>
+<script>
+const ROUTES={
+  iron:{sub:"Iron Vault · STR", walk:182, ac:"#FF6A3D", far:"iron_vault_far.png", sky:"iron_vault_sky.png", ground:"iron_vault_ground.png"},
+  sky: {sub:"Sky Tracer · AGI", walk:180, ac:"#B14DFF", far:"sky_tracer_far.png", sky:"sky_tracer_sky.png", ground:"sky_tracer_ground.png"},
+  maze:{sub:"Infini Maze · END",walk:180, ac:"#00BFFF", far:"infini_maze_far.png",sky:"infini_maze_sky.png",ground:"infini_maze_ground.png"},
+};
+const skyL=document.querySelector('.layer.sky'), farL=document.querySelector('.layer.far'), groundL=document.querySelector('.layer.ground');
+const bitCv=document.getElementById('bit');
+const walker=BITWALK.mount(bitCv,{accent:ROUTES.iron.ac, speed:40, trail:true});
+let route='iron', speed=40, playing=true, dist=0, last=performance.now();
+
+function applyRoute(k){
+  route=k; const r=ROUTES[k];
+  skyL.style.backgroundImage=`url('../assets/${r.sky}')`;
+  farL.style.backgroundImage=`url('../assets/${r.far}')`;
+  groundL.style.backgroundImage=`url('../assets/${r.ground}')`;
+  document.getElementById('sub').textContent=r.sub;
+  bitCv.style.left='210px'; bitCv.style.top=(r.walk-30)+'px';
+  walker.setAccent(r.ac);
+  document.querySelectorAll('.chip.route').forEach(c=>c.classList.toggle('on',c.dataset.route===k));
+}
+document.querySelectorAll('.chip.route').forEach(c=>c.addEventListener('click',()=>applyRoute(c.dataset.route)));
+const spd=document.getElementById('spd'), spdo=document.getElementById('spdo');
+spd.addEventListener('input',()=>{ speed=+spd.value; spdo.textContent=speed+' px/s'; walker.setSpeed(speed); });
+document.getElementById('play').addEventListener('click',e=>{ playing=!playing; walker.setPlaying(playing); e.target.textContent=playing?'PAUSE':'PLAY'; e.target.classList.toggle('on',!playing); });
+document.getElementById('trail').addEventListener('click',e=>{ const on=!e.target.classList.contains('on'); e.target.classList.toggle('on',on); walker.setTrail(on); });
+applyRoute('iron');
+
+// world scroll — BIT hovers in place; the ground moves under him
+function world(now){
+  const dt=Math.min(50,now-last); last=now;
+  if(playing){ dist+=speed*(dt/1000);
+    groundL.style.backgroundPosition=(-Math.round(dist))+'px 0';
+    farL.style.backgroundPosition=(-Math.round(dist*0.3))+'px 0';
+  }
+  requestAnimationFrame(world);
+}
+requestAnimationFrame(world);
+
+// frame breakdown — static keys via BITWALK.paint
+const strip=document.getElementById('strip'), SC=5, PER=300;
+for(let i=0;i<6;i++){
+  const t=i*(PER*2*Math.PI/6);
+  const wrap=document.createElement('div'); wrap.className='frame';
+  const cv=document.createElement('canvas'); cv.width=40*SC; cv.height=32*SC;
+  const fm=[{x:6,y:25,life:.8},{x:3,y:26,life:.45},{x:1,y:27,life:.2}];
+  BITWALK.paint(cv.getContext('2d'), SC, t, {accent:"#00BFFF", blink:i===3, motes:fm, shadow:false});
+  const lbl=document.createElement('div'); lbl.className='flbl'; lbl.textContent='KEY '+String(i+1).padStart(2,'0');
+  wrap.appendChild(cv); wrap.appendChild(lbl); strip.appendChild(wrap);
+}
+</script>
+</body>
+</html>

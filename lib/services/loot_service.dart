@@ -10,6 +10,7 @@ import '../models/milestone_models.dart';
 import '../models/workout_models.dart';
 import 'exercise_catalog_service.dart';
 import 'gem_service.dart';
+import 'json_safe.dart';
 
 class LootService {
   static const bool unlockAllLootForTestBuild = false;
@@ -36,11 +37,11 @@ class LootService {
   Future<Map<LootCategory, LootItem>> getEquippedLoot() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_equippedKey);
-    if (raw == null || raw.isEmpty) {
+    final decoded = safeDecodeMap(raw, debugLabel: _equippedKey);
+    if (decoded == null) {
       return {};
     }
 
-    final decoded = jsonDecode(raw) as Map<String, dynamic>;
     final owned = await _ownedIds(prefs);
     final equipped = <LootCategory, LootItem>{};
     for (final entry in decoded.entries) {
@@ -221,6 +222,17 @@ class LootService {
       }
     }
 
+    // Count owned non-default titles *before* this grant pass, so the
+    // first-title auto-equip below can tell a brand-new user (0 titles) from
+    // one who deliberately cleared to "No Title" (owns titles, equips none).
+    final ownedTitlesBefore = owned
+        .map(lootItemById)
+        .whereType<LootItem>()
+        .where(
+          (item) => item.category == LootCategory.titleBadge && !item.isDefault,
+        )
+        .length;
+
     for (final item in lootRegistry) {
       final rule = item.unlockRule;
       if (rule == null) continue;
@@ -233,6 +245,30 @@ class LootService {
 
     if (newlyGranted.isNotEmpty) {
       await _saveOwnedIds(prefs, owned);
+    }
+
+    // The first milestone title a user earns — from *any* source — auto-equips,
+    // mirroring the quest path (QuestService._grantQuestTitle). Guarded on the
+    // pre-grant owned count so it only ever fires for the very first title and
+    // never overrides an existing or deliberately-cleared title. When several
+    // cross at once, the best (highest rarity, ties → registry order) is worn.
+    if (ownedTitlesBefore == 0) {
+      final grantedTitles = newlyGranted
+          .map(lootItemById)
+          .whereType<LootItem>()
+          .where((item) => item.category == LootCategory.titleBadge)
+          .toList();
+      if (grantedTitles.isNotEmpty &&
+          await getEquippedItem(LootCategory.titleBadge) == null) {
+        grantedTitles.sort((a, b) {
+          final byRarity = b.rarity.index.compareTo(a.rarity.index);
+          if (byRarity != 0) return byRarity;
+          return lootRegistry
+              .indexWhere((i) => i.id == a.id)
+              .compareTo(lootRegistry.indexWhere((i) => i.id == b.id));
+        });
+        await equipItem(grantedTitles.first.id);
+      }
     }
     return newlyGranted;
   }

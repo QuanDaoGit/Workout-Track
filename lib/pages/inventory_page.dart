@@ -140,7 +140,7 @@ class _InventoryPageState extends State<InventoryPage> {
         ),
         const SizedBox(height: kSpace3),
         if (items.isEmpty)
-          _EmptyInventoryHint(category: category)
+          const _EmptyInventoryHint()
         else
           GridView.builder(
             shrinkWrap: true,
@@ -226,9 +226,7 @@ class _CategoryHeader extends StatelessWidget {
 }
 
 class _EmptyInventoryHint extends StatelessWidget {
-  const _EmptyInventoryHint({required this.category});
-
-  final LootCategory category;
+  const _EmptyInventoryHint();
 
   @override
   Widget build(BuildContext context) {

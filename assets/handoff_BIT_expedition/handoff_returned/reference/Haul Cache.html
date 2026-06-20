@@ -1,0 +1,343 @@
+<!-- @dsCard group="Components" viewport="1180x980" name="Haul Cache" subtitle="Code-painted pixel-art 'returned haul' object that sits on the pad before COLLECT — 3 options" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ironbit — Haul Cache</title>
+<link rel="stylesheet" href="colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    background-image:linear-gradient(var(--bg-grad-top),var(--bg-grad-bottom));min-height:100%;}
+  body{padding:40px 32px 72px;}
+  .wrap{max-width:1180px;margin:0 auto;}
+  .head{margin:0 auto 30px;}
+  h1{font-family:var(--font-display);font-size:18px;color:#ff4dcd;margin:0 0 12px;
+    text-shadow:0 0 16px -2px rgba(255,77,205,.4);letter-spacing:.5px;}
+  .sub{font-family:var(--font-mono);font-size:13px;color:var(--muted-text);line-height:1.55;max-width:820px;}
+  .sub b{color:var(--text);font-weight:400;}
+  .swatch{display:inline-block;width:9px;height:9px;vertical-align:-1px;margin:0 1px 0 7px;
+    image-rendering:pixelated;border:1px solid #0006;}
+
+  .specbar{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 4px;}
+  .spec{font-family:var(--font-mono);font-size:11px;color:var(--muted-text);
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:7px 11px;}
+  .spec b{color:var(--text);font-weight:400;}
+  .spec.warn{border-color:rgba(255,215,0,.4);color:var(--amber);}
+
+  /* route-tint toggle */
+  .routes{display:flex;align-items:center;gap:9px;margin:22px 0 30px;flex-wrap:wrap;}
+  .routes .lbl{font-family:var(--font-display);font-size:9px;color:var(--muted-text);letter-spacing:.3px;}
+  .rtog{display:flex;gap:7px;}
+  .rbtn{font-family:var(--font-display);font-size:8px;letter-spacing:.3px;color:var(--muted-text);
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:8px 11px 7px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all var(--motion-fast);}
+  .rbtn .dot{width:9px;height:9px;border-radius:50%;}
+  .rbtn[aria-pressed="true"]{color:var(--text);border-color:var(--border-variant);background:var(--surface-2);}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  @media(max-width:1000px){.grid{grid-template-columns:1fr;}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:0 0 18px;display:flex;flex-direction:column;overflow:hidden;}
+
+  /* in-situ pad stage */
+  .stage{position:relative;height:230px;display:flex;align-items:flex-end;justify-content:center;
+    background:radial-gradient(ellipse at 50% 118%,#15233f 0%,#0b0c18 66%);
+    border-bottom:1px solid var(--border-dark);overflow:hidden;}
+  .glow{position:absolute;left:50%;bottom:74px;width:120px;height:54px;transform:translateX(-50%);
+    pointer-events:none;border-radius:50%;filter:blur(7px);
+    background:radial-gradient(ellipse at center,rgba(255,77,205,.34),rgba(224,40,160,.12) 55%,transparent 78%);}
+  .contact{position:absolute;left:50%;bottom:70px;width:148px;height:11px;transform:translateX(-50%);
+    pointer-events:none;border-radius:50%;filter:blur(1.4px);
+    background:radial-gradient(ellipse at center,rgba(3,3,8,.62),rgba(3,3,8,.28) 55%,transparent 80%);}
+  .pad{position:absolute;left:50%;bottom:66px;width:216px;height:80px;transform:translateX(-50%);
+    image-rendering:pixelated;z-index:2;}
+  .cache{position:absolute;left:50%;z-index:3;image-rendering:pixelated;transform:translateX(-50%);}
+
+  /* detail row */
+  .detail{display:flex;align-items:flex-end;gap:22px;padding:22px 20px 6px;}
+  .zoom{image-rendering:pixelated;
+    filter:drop-shadow(0 6px 10px rgba(0,0,0,.45)) drop-shadow(0 0 12px rgba(255,77,205,.16));}
+  .px-col{display:flex;flex-direction:column;gap:10px;}
+  .px-row{display:flex;align-items:flex-end;gap:9px;}
+  .px-row canvas{image-rendering:pixelated;}
+  .tag{font-family:var(--font-mono);font-size:9px;color:var(--dim);}
+  .gridhint{margin-top:7px;font-family:var(--font-mono);font-size:9px;color:var(--dim);}
+
+  .meta{padding:14px 20px 0;margin-top:auto;border-top:1px solid var(--border-dark);}
+  .meta .opt{font-family:var(--font-display);font-size:7.5px;color:var(--muted-text);letter-spacing:.4px;}
+  .nm{font-family:var(--font-display);font-size:11px;color:var(--text);letter-spacing:.3px;margin-top:8px;}
+  .desc{font-family:var(--font-mono);font-size:11px;color:var(--muted-text);margin-top:9px;line-height:1.5;}
+  .desc b{color:#ff4dcd;font-weight:400;}
+
+  .foot{margin:42px auto 0;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:var(--radius);padding:18px 20px;}
+  .foot .h{font-family:var(--font-display);font-size:9px;color:var(--muted-text);letter-spacing:.3px;margin-bottom:11px;}
+  .foot p{font-family:var(--font-mono);font-size:11px;color:var(--muted-text);line-height:1.6;margin:0 0 7px;}
+  .foot code{color:var(--text);background:var(--card);border:1px solid var(--border-dark);
+    border-radius:3px;padding:1px 5px;font-size:10px;}
+  .foot b{color:#ff4dcd;font-weight:400;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>HAUL CACHE · RETURNED-STATE OBJECT</h1>
+    <p class="sub">The tangible <b>"haul waiting to be claimed"</b> that sits on the pad's emitter mouth after an expedition returns &mdash; the endowment hook before <b>COLLECT</b>. A low, beveled strongbox painted in the pad's own metal family (it reads as <b>"the dock produced this"</b>), with a magenta gem spill and an optional route-tinted seal. <b>Closed = unclaimed.</b>
+      <br><br>Every cache here is <b>code-painted</b> &mdash; plotted pixel-by-pixel on a low-res canvas (28&times;20 native) and blitted at an integer scale with nearest-neighbour, exactly like the pad / beam / BIT-fallback. No CSS shapes, no upscaled PNG, no shimmer.
+      Metal<span class="swatch" style="background:#2e3150"></span><span class="swatch" style="background:#525879"></span><span class="swatch" style="background:#6b72a0"></span>· vent cyan<span class="swatch" style="background:#57dbff"></span>· gem magenta<span class="swatch" style="background:#961c8c"></span><span class="swatch" style="background:#e028a0"></span><span class="swatch" style="background:#ff4dcd"></span><span class="swatch" style="background:#ff96e6"></span></p>
+
+    <div class="specbar">
+      <span class="spec">native <b>28&times;20 px</b></span>
+      <span class="spec">on-pad <b>2&times; → 56 px</b> (~¼ pad width)</span>
+      <span class="spec">scale <b>integer only</b> · FilterQuality.none · isAntiAlias:false</span>
+      <span class="spec warn">⚠ non-integer upscale shatters the grid — code-paint instead</span>
+    </div>
+
+    <div class="routes">
+      <span class="lbl">ROUTE SEAL</span>
+      <div class="rtog" id="routes">
+        <button class="rbtn" data-r="amber" aria-pressed="true"><span class="dot" style="background:#ff4dcd"></span>NONE · STEEL</button>
+        <button class="rbtn" data-r="cyan" aria-pressed="false"><span class="dot" style="background:#00BFFF"></span>TRACER</button>
+        <button class="rbtn" data-r="violet" aria-pressed="false"><span class="dot" style="background:#B14DFF"></span>MAZE</button>
+        <button class="rbtn" data-r="red" aria-pressed="false"><span class="dot" style="background:#FF2D55"></span>IRON</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="foot">
+    <div class="h">IMPLEMENTATION NOTES</div>
+    <p>· <b>Code-paint it</b> (recommendation): resolution-independent, dodges the grid shimmer, and matches how the pad, beam and BIT-fallback are all painted. Ship a tiny <code>CustomPainter</code> keyed off the cache kind + route tint.</p>
+    <p>· If you commission a richer PNG later, keep a painted <code>errorBuilder</code> fallback so it <b>never crashes</b> — and still display the PNG at an integer multiple of native only.</p>
+    <p>· The cache sits on the pad's emitter mouth at <code>~⅓ pad width</code>. At a 56&times;40 footprint it grounds with the same warm contact glow the haul casts back onto the deck.</p>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   HAUL CACHE — code-painted pixel art. Each cache is plotted into a 28×20
+   offscreen canvas one pixel at a time, then blitted at an integer scale with
+   imageSmoothing OFF. Mirrors a Flutter CustomPainter (drawRect ops).
+   ========================================================================== */
+const NW = 28, NH = 20;
+
+// pad metal family (sampled from bit_pad.png) + magenta gem (sampled from gem.png) + cyan vent ramps
+const C = {
+  OUT:'#0b0c16', D2:'#15172a', D1:'#212439', M:'#2e3150',
+  L1:'#3d4262', L2:'#525879', L3:'#6b72a0',
+  vDk:'#1c6e92', vMd:'#2bb2dc', vHi:'#57dbff', vBr:'#aeeeff',
+  aDk:'#961c8c', a:'#e028a0', aMd:'#ff4dcd', aHi:'#ff96e6', aBr:'#ffc8f0',
+};
+const ROUTE = {
+  amber:{ dk:'#961c8c', md:'#ff4dcd', hi:'#ff96e6' },
+  cyan: { dk:'#1c6e92', md:'#2bb2dc', hi:'#aeeeff' },
+  violet:{ dk:'#5e2a9c', md:'#B14DFF', hi:'#E0B8FF' },
+  red:  { dk:'#8e1430', md:'#FF2D55', hi:'#FF93A9' },
+};
+
+function painter(ctx){
+  return {
+    px(x,y,c){ ctx.fillStyle=c; ctx.fillRect(x,y,1,1); },
+    clr(x,y){ ctx.clearRect(x,y,1,1); },
+    rect(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x,y,w,h); },
+    hline(x,y,w,c){ ctx.fillStyle=c; ctx.fillRect(x,y,w,1); },
+    vline(x,y,h,c){ ctx.fillStyle=c; ctx.fillRect(x,y,1,h); },
+  };
+}
+
+/* beveled metal block: outline + fill, top/left lit, bottom/right shadowed */
+function bevelBox(p,x,y,w,h,fill,lit,shade,top){
+  p.rect(x,y,w,h,C.OUT);                       // 1px outline
+  p.rect(x+1,y+1,w-2,h-2,fill);                // body
+  p.hline(x+1,y+1,w-2,top||lit);               // top highlight
+  p.vline(x+1,y+1,h-2,lit);                     // left highlight
+  p.hline(x+1,y+h-2,w-2,shade);                // bottom shadow
+  p.vline(x+w-2,y+1,h-2,shade);                // right shadow
+}
+
+/* a 2×2 faceted amber gem with top-left highlight */
+function gem(p,x,y,r){
+  r = r || {dk:C.aDk,md:C.aMd,hi:C.aHi};
+  p.px(x,y,r.hi); p.px(x+1,y,r.md);
+  p.px(x,y+1,r.md); p.px(x+1,y+1,r.dk);
+}
+
+/* route-tinted seal plate: dark recessed plate + glowing gem core */
+function sealPlate(p,cx,cy,rt){
+  // recessed dark plate
+  p.rect(cx-3,cy-3,6,7,C.OUT);
+  p.rect(cx-2,cy-2,4,5,C.D2);
+  p.hline(cx-2,cy-2,4,C.D1);
+  // glowing diamond core
+  p.px(cx-1,cy,rt.md); p.px(cx,cy,rt.hi); p.px(cx+1,cy,rt.md);
+  p.px(cx-1,cy-1,rt.dk); p.px(cx,cy-1,rt.md); p.px(cx+1,cy-1,rt.dk);
+  p.px(cx-1,cy+1,rt.dk); p.px(cx,cy+1,rt.md); p.px(cx+1,cy+1,rt.dk);
+  p.px(cx,cy+2,rt.dk);
+}
+
+/* ---- OPTION A — STRONGBOX : classic low chest, overhanging flat lid ------- */
+function paintStrongbox(p,rt){
+  // body
+  bevelBox(p,3,11,22,8,C.M,C.L1,C.D2);
+  // lid (overhangs body by 1px each side), slightly lighter deck
+  bevelBox(p,2,6,24,6,C.M,C.L2,C.D1,C.L3);
+  // seam shadow under the lid lip
+  p.hline(3,11,22,C.D2);
+  p.hline(2,11,1,C.D2); p.hline(25,11,1,C.D2);
+  // corner bolts on the body face
+  p.px(5,17,C.D2); p.px(22,17,C.D2);
+  p.px(5,13,C.L2); p.px(22,13,C.L2);
+  // route-tinted seal/latch, front-center
+  sealPlate(p,14,14,rt);
+  // amber gem spill — a small mound resting on the lid deck, centre-left
+  gem(p,11,4); gem(p,13,3); gem(p,15,4);
+  gem(p,12,6); gem(p,14,5); gem(p,16,5);
+  p.px(17,4,C.aHi); p.px(10,6,C.aDk); p.px(18,6,C.aMd);
+  // a couple spilling over the front lip at the seam
+  p.px(9,12,C.aMd); p.px(9,13,C.aDk);
+}
+
+/* ---- OPTION B — BANDED COFFER : stepped top + slat vents glowing amber ----- */
+function paintCoffer(p,rt){
+  // wide base
+  bevelBox(p,2,12,24,7,C.M,C.L1,C.D2);
+  // narrower stacked top tier (the coffer step)
+  bevelBox(p,5,6,18,7,C.M,C.L2,C.D1,C.L3);
+  p.hline(5,12,18,C.D2);              // step seam shadow
+  // two vertical metal straps over the base
+  bevelBox(p,7,12,3,7,C.L1,C.L3,C.D2);
+  bevelBox(p,18,12,3,7,C.L1,C.L3,C.D2);
+  // slatted top vents on the upper tier — amber glow bleeding between slats
+  for(let i=0;i<4;i++){
+    const sx = 8 + i*3;
+    p.vline(sx,8,3,C.OUT);            // slat shadow gap
+    p.px(sx+1,8,C.aDk); p.px(sx+1,9,C.aMd); p.px(sx+1,10,C.a); // amber bleed
+  }
+  // central round latch (route-tinted) on the step face
+  sealPlate(p,14,15,rt);
+  // gems peeking over the top rim
+  gem(p,11,4); gem(p,14,3); gem(p,16,4);
+  p.px(13,5,C.aHi); p.px(18,5,C.aMd); p.px(10,5,C.aDk);
+}
+
+/* ---- OPTION C — DROP POD : chamfered canister, amber core slit, seal band -- */
+function paintPod(p,rt){
+  // main body
+  bevelBox(p,3,5,22,14,C.M,C.L1,C.D2,C.L2);
+  // chamfer the four corners → octagonal canister silhouette
+  const chamf=(x,y,dx,dy)=>{ p.clr(x,y); p.clr(x+dx,y); p.clr(x,y+dy);
+    p.px(x+dx,y+dy,C.OUT); };
+  chamf(3,5,1,1); chamf(24,5,-1,1); chamf(3,18,1,-1); chamf(24,18,-1,-1);
+  p.px(4,5,C.L3); p.px(23,5,C.L2);     // re-seat lit top corners
+  // glowing amber core slit across the middle (the haul shows through)
+  p.rect(7,11,14,3,C.OUT);
+  p.rect(8,12,12,1,C.aDk);
+  p.px(9,12,C.a); p.px(12,12,C.aMd); p.px(15,12,C.aHi); p.px(18,12,C.aMd);
+  p.hline(8,11,12,C.aDk);
+  // route-tinted seal band stamped across the upper face
+  p.hline(5,8,18,rt.dk);
+  p.hline(5,9,18,C.OUT);
+  for(let x=7;x<22;x+=3){ p.px(x,8,rt.md); } p.px(13,8,rt.hi);
+  // rivets down the chamfered shoulders
+  p.px(5,7,C.L2); p.px(22,7,C.L2); p.px(5,16,C.D2); p.px(22,16,C.D2);
+  // gem spill escaping the top chamfer seam
+  gem(p,12,2); gem(p,14,3);
+  p.px(16,3,C.aMd); p.px(11,4,C.aDk); p.px(15,2,C.aHi);
+}
+
+const OPTIONS = [
+  { key:'A', kind:'STRONGBOX', paint:paintStrongbox,
+    name:'THE STRONGBOX',
+    desc:'Classic low chest — overhanging flat lid, beveled body, corner bolts. <b>Magenta gem spill</b> mounded on the deck; a route-seal latches the front. Reads instantly as "treasure, closed." The safest, most legible silhouette.' },
+  { key:'B', kind:'COFFER', paint:paintCoffer,
+    name:'THE BANDED COFFER',
+    desc:'Stepped two-tier coffer wrapped in metal straps, with <b>slat vents</b> that echo the pad\'s own louvres — magenta gem-light bleeds between them. Most "of the dock": looks machined by the same fabricator.' },
+  { key:'C', kind:'DROP POD', paint:paintPod,
+    name:'THE DROP POD',
+    desc:'Chamfered octagonal canister with a <b>glowing magenta core slit</b> and a route-tinted seal band stamped across the shoulder. Most sci-fi / expedition — feels deployed, not stored. Strongest route read.' },
+];
+
+/* render one cache kind+route into a fresh 28×20 offscreen canvas */
+function bake(opt, route){
+  const off = document.createElement('canvas');
+  off.width = NW; off.height = NH;
+  const ctx = off.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  opt.paint(painter(ctx), ROUTE[route]);
+  return off;
+}
+
+/* blit an offscreen cache onto a display canvas at an integer scale */
+function blit(off, scale){
+  const cv = document.createElement('canvas');
+  cv.width = NW*scale; cv.height = NH*scale;
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off,0,0,NW,NH,0,0,NW*scale,NH*scale);
+  return cv;
+}
+
+let ROUTE_SEL = 'amber';
+const grid = document.getElementById('grid');
+
+function build(){
+  grid.innerHTML = '';
+  OPTIONS.forEach(opt=>{
+    const off = bake(opt, ROUTE_SEL);
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.screenLabel = 'Haul Cache · Option '+opt.key;
+
+    // in-situ stage
+    const stage = document.createElement('div');
+    stage.className = 'stage';
+    stage.innerHTML =
+      '<div class="glow"></div>'+
+      '<img class="pad" src="assets/bit-pad/bit_pad.png" alt="BIT pad">'+
+      '<div class="contact"></div>';
+    const onPad = blit(off, 2);                 // 56×40, integer 2×
+    onPad.className = 'cache';
+    onPad.style.bottom = '108px';               // rest on the emitter mouth
+    stage.appendChild(onPad);
+
+    // detail row: big zoom + native/2x/3x
+    const detail = document.createElement('div');
+    detail.className = 'detail';
+    const zoom = blit(off, 9); zoom.className = 'zoom';   // 252×180
+    const col = document.createElement('div'); col.className='px-col';
+    const mk = (s,l)=>{ const w=document.createElement('div'); w.className='px-row';
+      const c = blit(off, s); const t=document.createElement('span'); t.className='tag'; t.textContent=l;
+      w.appendChild(c); w.appendChild(t); return w; };
+    col.appendChild(mk(3,'native ×3'));
+    col.appendChild(mk(2,'native ×2'));
+    col.appendChild(mk(1,'28×20'));
+    detail.appendChild(zoom); detail.appendChild(col);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML =
+      '<div class="opt">OPTION '+opt.key+' · '+opt.kind+'</div>'+
+      '<div class="nm">'+opt.name+'</div>'+
+      '<div class="desc">'+opt.desc+'</div>';
+
+    card.appendChild(stage);
+    card.appendChild(detail);
+    card.appendChild(meta);
+    grid.appendChild(card);
+  });
+}
+
+document.getElementById('routes').addEventListener('click', e=>{
+  const b = e.target.closest('.rbtn'); if(!b) return;
+  ROUTE_SEL = b.dataset.r;
+  [...document.querySelectorAll('.rbtn')].forEach(x=>x.setAttribute('aria-pressed', x===b));
+  build();
+});
+
+build();
+</script>
+</body>
+</html>

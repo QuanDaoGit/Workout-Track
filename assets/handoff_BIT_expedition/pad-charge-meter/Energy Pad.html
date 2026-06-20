@@ -1,0 +1,186 @@
+<!-- @dsCard group="Components" viewport="760x560" name="Pad Charge Meter (integrated)" subtitle="The pad's own cyan readout strip split into a 3-segment charge LED — lights 0–3 cyan per banked expedition charge. Pad sprite, size and dimensions unchanged; nothing protrudes." -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ironbit — Pad Charge Meter</title>
+<link rel="stylesheet" href="colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    background-image:linear-gradient(var(--bg-grad-top),var(--bg-grad-bottom));min-height:100%;}
+  body{padding:40px 32px 64px;font-family:var(--font-mono);}
+  .wrap{max-width:760px;margin:0 auto;}
+  .brandline{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .brandline .dot{width:10px;height:10px;background:var(--cyan);box-shadow:var(--glow-cyan);}
+  .brandline span{font-family:var(--font-display);font-size:11px;letter-spacing:1px;color:var(--cyan);}
+  h1{font-family:var(--font-display);font-size:16px;color:var(--text);margin:0 0 12px;letter-spacing:.5px;}
+  .sub{font-family:var(--font-mono);font-size:13px;color:var(--muted-text);line-height:1.55;}
+  .sub b{color:var(--text);font-weight:400;}
+  .sub .cy{color:var(--cyan);}
+
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin-top:22px;}
+  .stage{position:relative;height:260px;border-radius:var(--radius);overflow:hidden;
+    background:radial-gradient(ellipse at 50% 122%,#15233f 0%,#0a0a14 64%),#07070f;border:1px solid var(--border);}
+  .stage .floor{position:absolute;left:0;right:0;bottom:74px;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(120,150,200,.16) 28%,rgba(120,150,200,.16) 72%,transparent);}
+  .contact{position:absolute;left:50%;bottom:76px;transform:translateX(-50%);pointer-events:none;border-radius:50%;
+    width:230px;height:13px;filter:blur(1.5px);background:radial-gradient(ellipse at center,rgba(3,3,8,.6),rgba(3,3,8,.28) 55%,transparent 80%);}
+  /* original pad sprite container — same 216×80 box, unchanged dimensions */
+  .pad{position:absolute;left:50%;bottom:80px;transform:translateX(-50%);width:216px;height:80px;z-index:5;cursor:pointer;}
+  .pad img,.pad canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:block;}
+  .pad canvas{z-index:2;}
+  /* armed glow — sits over the strip, never changes the silhouette */
+  .arm{position:absolute;left:50%;top:56%;transform:translate(-50%,-50%);width:150px;height:42px;border-radius:40px;
+    pointer-events:none;z-index:1;filter:blur(3px);
+    background:radial-gradient(ellipse at center,rgba(0,191,255,.5),rgba(0,191,255,.08) 55%,transparent 78%);opacity:0;}
+
+  .controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:18px;}
+  .readout{display:flex;align-items:baseline;gap:9px;}
+  .readout .lab{font-family:var(--font-display);font-size:9px;color:var(--cyan);}
+  .readout .val{font-family:var(--font-mono);font-size:14px;color:var(--text);}
+  .readout .st{font-family:var(--font-display);font-size:8px;padding:5px 8px;border-radius:var(--radius);border:1px solid rgba(0,191,255,.5);color:var(--cyan);}
+  input[type=range]{flex:1;min-width:180px;accent-color:var(--cyan);height:4px;}
+  .pillrow{display:flex;gap:7px;flex-wrap:wrap;}
+  .pbtn{font-family:var(--font-display);font-size:8px;color:var(--muted-text);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;cursor:pointer;}
+  .pbtn.on{color:var(--bg);background:var(--cyan);border-color:var(--cyan);box-shadow:var(--glow-cyan);}
+  .hint{font-family:var(--font-mono);font-size:11px;color:var(--dim);margin-top:12px;line-height:1.5;}
+  .hint b{color:var(--muted-text);font-weight:400;}
+
+  .states{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:8px;}
+  .scell{background:#07070f;border:1px solid var(--border-dark);border-radius:var(--radius);padding:16px 10px 12px;display:flex;flex-direction:column;align-items:center;gap:10px;}
+  .scell canvas{image-rendering:pixelated;}
+  .scell .n{font-family:var(--font-display);font-size:9px;color:var(--text);}
+  .scell .n i{display:inline-block;width:7px;height:7px;border-radius:2px;vertical-align:-1px;margin-right:5px;}
+  .scell .m{font-family:var(--font-mono);font-size:10px;color:var(--dim);text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brandline"><div class="dot"></div><span>IRONBIT &middot; EXPEDITION</span></div>
+  <h1>PAD CHARGE METER — INTEGRATED LED</h1>
+  <p class="sub">The pad's <b>existing cyan readout strip</b> becomes a <b>3-segment charge LED</b>. The same strip on the console face is split into three short cells; <span class="cy">1&ndash;3 light cyan</span> for BIT's banked expedition charges. Nothing protrudes &mdash; it's the dock's own integrated level bar, so the pad stays <b>exactly as slim as it is now</b>. A lit strip = <b>armed</b>; tap the pad to send (spends one charge).</p>
+
+  <div class="panel">
+    <div class="stage">
+      <div class="floor"></div>
+      <div class="contact"></div>
+      <div class="pad" id="pad" title="Tap to send BIT">
+        <img src="assets/bit-pad/bit_pad.png" alt="BIT hover pad">
+        <div class="arm" id="arm"></div>
+        <canvas class="meter" id="meter" width="108" height="40"></canvas>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="readout"><span class="lab">CHARGES</span><span class="val" id="rdVal">3 / 3</span><span class="st" id="rdSt">ARMED</span></div>
+      <input type="range" id="chg" min="0" max="3" step="1" value="3">
+      <div class="pillrow" id="presets">
+        <button class="pbtn" data-p="3">3</button>
+        <button class="pbtn" data-p="2">2</button>
+        <button class="pbtn" data-p="1">1</button>
+        <button class="pbtn" data-p="0">0</button>
+      </div>
+    </div>
+    <p class="hint">// the meter is painted <b>onto the strip's own pixels</b> (native x25&ndash;82, y21&ndash;24) in the strip's exact cyan — lit <b>#57dbff/#aeeeff</b>, unlit recess <b>#111222</b>. Split into 3 cells by two notch gaps. <b>Tap the pad</b> to spend a charge.</p>
+  </div>
+
+  <div class="sec" style="margin-top:24px;">
+    <div style="font-family:var(--font-display);font-size:11px;color:var(--text);margin-bottom:10px;">THE FOUR READINGS</div>
+    <div class="states" id="states"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   PAD CHARGE METER — the pad's existing readout strip, repainted as a 3-seg LED.
+   Strip lives at native x25..82, y21..24. We cover it and redraw three cells,
+   lighting 0..3 in the strip's own cyan. Pad sprite & dimensions untouched.
+   ========================================================================== */
+const SEGS=[[25,42],[45,62],[65,82]];          // three cell x-ranges (native px)
+const NOTCH=[[43,44],[63,64]];                  // divider gaps cut between cells
+const Y0=21, Y1=24;                             // strip rows
+const LIT=['#57dbff','#aeeeff','#aeeeff','#1c6e92'];   // y21,y22,y23,y24 — strip's own colors
+const OFF=['#1a1c32','#111222','#111222','#0c0d1a'];   // unlit recess
+const DARK='#0a0b14';                           // notch (cut into the face)
+
+function paintMeter(ctx, charge){
+  ctx.clearRect(0,0,108,40);
+  // 1) cover the whole original strip with the dark recess (x25..82)
+  for(let y=Y0;y<=Y1;y++){ ctx.fillStyle=OFF[y-Y0]; ctx.fillRect(25,y,58,1); }
+  // 2) light the segments in the strip's authentic cyan
+  SEGS.forEach((s,i)=>{
+    const on=i<charge, pal=on?LIT:OFF, w=s[1]-s[0]+1;
+    for(let y=Y0;y<=Y1;y++){ ctx.fillStyle=pal[y-Y0]; ctx.fillRect(s[0],y,w,1); }
+  });
+  // 3) cut the two notch dividers (one px taller so the cells read as separate)
+  for(const [a,b] of NOTCH){ ctx.fillStyle=DARK; ctx.fillRect(a,Y0-1,b-a+1,(Y1-Y0)+3); }
+}
+
+const meter=document.getElementById('meter');
+const mctx=meter.getContext('2d'); mctx.imageSmoothingEnabled=false;
+const arm=document.getElementById('arm');
+const rdVal=document.getElementById('rdVal'), rdSt=document.getElementById('rdSt');
+const chg=document.getElementById('chg');
+
+let charge=3;
+function name(n){ return n<=0?'EMPTY':'ARMED'; }
+function render(n){
+  charge=n;
+  paintMeter(mctx, n);
+  arm.style.opacity = n>0 ? (0.30+0.20*n) : 0;
+  rdVal.textContent = n+' / 3';
+  rdSt.textContent = name(n);
+  rdSt.style.color = n>0?'var(--cyan)':'var(--dim)';
+  rdSt.style.borderColor = n>0?'rgba(0,191,255,.5)':'var(--border)';
+  chg.value=n;
+  document.querySelectorAll('#presets .pbtn').forEach(b=>b.classList.toggle('on', +b.dataset.p===n));
+}
+chg.addEventListener('input',()=>render(+chg.value));
+document.getElementById('presets').addEventListener('click',e=>{
+  const b=e.target.closest('.pbtn'); if(b) render(+b.dataset.p);
+});
+
+/* tap the pad to send BIT — spends one charge, quick cyan pulse */
+const pad=document.getElementById('pad');
+pad.addEventListener('click',()=>{
+  if(charge<=0){ // empty bounce
+    arm.style.transition='opacity .12s'; arm.style.opacity='.18';
+    setTimeout(()=>{arm.style.opacity='0';},120); return;
+  }
+  // launch pulse
+  arm.style.transition='opacity .1s'; arm.style.opacity='.9';
+  setTimeout(()=>{ render(charge-1); arm.style.transition='opacity .35s'; },140);
+});
+render(3);
+
+/* ---- the four readings (zoomed strip crops) ---- */
+const ZS=6;                     // zoom
+const CX=18, CW=72, CY=16, CH=12;   // crop window around the strip
+const STATES=[
+  {n:0,nm:'0 / 3',tint:'#343858',m:'empty\nrecharging'},
+  {n:1,nm:'1 / 3',tint:'#2bb8dc',m:'one charge\narmed'},
+  {n:2,nm:'2 / 3',tint:'#45d8f0',m:'two charges'},
+  {n:3,nm:'3 / 3',tint:'#8af0ff',m:'full\nsend freely'},
+];
+const statesEl=document.getElementById('states');
+const padImg=new Image(); padImg.src='assets/bit-pad/bit_pad.png';
+padImg.onload=()=>{
+  STATES.forEach(s=>{
+    const cell=document.createElement('div'); cell.className='scell'; cell.dataset.screenLabel='Meter '+s.nm;
+    // bake a 108×40 frame: pad sprite + meter, then crop+zoom the strip area
+    const full=document.createElement('canvas'); full.width=108; full.height=40;
+    const fx=full.getContext('2d'); fx.imageSmoothingEnabled=false;
+    fx.drawImage(padImg,0,0);
+    paintMeter(fx, s.n);
+    const cv=document.createElement('canvas'); cv.width=CW*ZS; cv.height=CH*ZS;
+    const cx=cv.getContext('2d'); cx.imageSmoothingEnabled=false;
+    cx.drawImage(full, CX,CY,CW,CH, 0,0,CW*ZS,CH*ZS);
+    cell.appendChild(cv);
+    const nm=document.createElement('div'); nm.className='n'; nm.innerHTML='<i style="background:'+s.tint+'"></i>'+s.nm; cell.appendChild(nm);
+    const m=document.createElement('div'); m.className='m'; m.textContent=s.m; cell.appendChild(m);
+    statesEl.appendChild(cell);
+  });
+};
+</script>
+</body>
+</html>

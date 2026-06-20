@@ -367,7 +367,7 @@ class _OptionChip extends StatelessWidget {
                       color: swatch,
                       borderRadius: BorderRadius.circular(2),
                       border: Border.all(
-                        color: Colors.black.withValues(alpha: 0.35),
+                        color: kBlack.withValues(alpha: 0.35),
                       ),
                     ),
                   ),

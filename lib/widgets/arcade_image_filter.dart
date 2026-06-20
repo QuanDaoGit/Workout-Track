@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/tokens.dart';
+
 class ArcadeImageFilter extends StatelessWidget {
   const ArcadeImageFilter({
     super.key,
@@ -35,8 +37,8 @@ class ArcadeImageFilter extends StatelessWidget {
     0,
   ]);
 
-  static const ColorFilter _neonTint = ColorFilter.mode(
-    Color(0x4400FF9C),
+  static final ColorFilter _neonTint = ColorFilter.mode(
+    kNeon.withValues(alpha: 68 / 255),
     BlendMode.color,
   );
 

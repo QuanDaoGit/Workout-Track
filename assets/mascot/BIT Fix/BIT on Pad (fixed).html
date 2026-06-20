@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BIT on the Fixed Pad</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(ellipse at 50% 116%, #14242e 0%, #0a0a14 60%),
+      #0a0a14;
+    color: var(--text); font-family: var(--font-mono);
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    gap: 26px; padding: 40px 20px 56px;
+  }
+  .pix, img { image-rendering: pixelated; }
+
+  header { display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; }
+  .brandline { display: flex; align-items: center; gap: 9px; }
+  .brandline .dot { width: 9px; height: 9px; background: #23D6CC; box-shadow: 0 0 14px -2px rgba(35,214,204,.7); }
+  .brandline span { font-family: var(--font-display); font-size: 10px; letter-spacing: 1px; color: #2FE3D4; }
+  h1 { font-family: var(--font-display); font-size: 17px; color: var(--text); line-height: 1.4; }
+  .sub { font-family: var(--font-mono); font-size: 13px; color: var(--muted-text); max-width: 560px; line-height: 1.55; }
+
+  /* ===== stage ===== */
+  .stage { position: relative; width: 440px; height: 472px; flex: none; }
+  .floor {
+    position: absolute; left: 0; right: 0; bottom: 84px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(120,150,200,.14) 26%, rgba(120,150,200,.14) 74%, transparent);
+  }
+  .glow {
+    position: absolute; left: 50%; bottom: 0; width: 440px; height: 230px;
+    transform: translateX(-50%); image-rendering: pixelated; z-index: 1; pointer-events: none;
+  }
+  .contact {
+    position: absolute; z-index: 2; left: 50%; bottom: 80px; width: 196px; height: 13px;
+    transform: translateX(-50%); pointer-events: none; border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(3,3,8,.6) 0%, rgba(3,3,8,.3) 55%, transparent 80%);
+    filter: blur(1.5px);
+  }
+  .pad {
+    --pad-w: 224px; --pad-h: calc(var(--pad-w) * (40 / 108));
+    position: absolute; z-index: 5; left: 50%; bottom: 84px;
+    width: var(--pad-w); height: var(--pad-h); transform: translateX(-50%);
+  }
+  .pad img { display: block; width: 100%; height: 100%; }
+  .beam {
+    position: absolute; z-index: 6; left: 50%; bottom: 144px; width: 104px; height: 114px;
+    transform: translateX(-50%); image-rendering: pixelated; pointer-events: none; mix-blend-mode: screen;
+  }
+  /* BIT mounts above the emitter, floating */
+  .bit {
+    position: absolute; z-index: 8; left: 50%; bottom: 250px; width: 104px; height: 104px;
+    margin-left: -52px; display: flex; align-items: center; justify-content: center;
+  }
+  .bit .bitglow {
+    position: absolute; inset: -22px; border-radius: 50%; pointer-events: none; filter: blur(3px); z-index: -1;
+    transition: background .25s ease, opacity .25s ease;
+  }
+  .bit img { width: 104px; height: 104px; }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+  .floatbit { animation: bob 3.1s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .floatbit { animation: none; transform: translateY(-3px); } }
+
+  /* ===== controls ===== */
+  .controls { display: flex; flex-direction: column; gap: 14px; align-items: center; }
+  .row { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .row .lbl { font-family: var(--font-display); font-size: 8px; letter-spacing: .4px; color: var(--dim); margin-right: 4px; }
+  .chip {
+    font-family: var(--font-display); font-size: 8px; letter-spacing: .3px; color: var(--muted-text);
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 9px 12px 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+    transition: transform 120ms cubic-bezier(.215,.61,.355,1);
+  }
+  .chip i { width: 9px; height: 9px; border-radius: 2px; }
+  .chip:active { transform: translateY(1px); }
+  .chip.on { color: var(--bg); border-color: transparent; }
+  .chip.on.m-neutral { background: #23D6CC; }
+  .chip.on.m-cheer   { background: var(--amber); }
+  .chip.on.m-alert   { background: #2FA7A0; }
+  .chip.on.m-rest    { background: #2C9AD8; }
+  .seg .chip.on { background: #2FE3D4; box-shadow: 0 0 16px -3px rgba(47,227,212,.5); }
+  .note { font-family: var(--font-mono); font-size: 12px; color: var(--dim); max-width: 520px; text-align: center; line-height: 1.5; }
+  .note b { color: var(--muted-text); }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brandline"><div class="dot"></div><span>IRONBIT &middot; COLOUR FIX</span></div>
+    <h1>BIT ON THE FIXED PAD</h1>
+    <p class="sub">The emitter pool, the rising beam and the pad's lamps now glow BIT's reserved <b style="color:#2FE3D4">turquoise</b> instead of recovery-cyan &mdash; one machine identity, end to end. Switch moods, and flip the emitter to see current vs fixed.</p>
+  </header>
+
+  <div class="stage" id="stage">
+    <div class="floor"></div>
+    <canvas class="glow" id="padGlow"></canvas>
+    <div class="contact"></div>
+    <div class="pad"><img id="padSprite" src="bit_pad.png" alt="BIT hover pad" /></div>
+    <canvas class="beam" id="padBeam"></canvas>
+    <div class="bit floatbit" id="bitMount">
+      <div class="bitglow" id="bitGlow"></div>
+      <img id="bitSprite" src="sprites/bit_neutral_8x.png" alt="BIT" />
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="row" id="moodRow">
+      <span class="lbl">MOOD</span>
+      <button class="chip m-neutral on" data-mood="neutral" type="button"><i style="background:#23D6CC"></i>NEUTRAL</button>
+      <button class="chip m-cheer" data-mood="cheer" type="button"><i style="background:#FFD700"></i>CHEER</button>
+      <button class="chip m-alert" data-mood="alert" type="button"><i style="background:#2FA7A0"></i>ALERT</button>
+      <button class="chip m-rest" data-mood="rest" type="button"><i style="background:#2C9AD8"></i>REST</button>
+    </div>
+    <div class="row seg" id="emitterRow">
+      <span class="lbl">EMITTER</span>
+      <button class="chip" data-mode="current" type="button">CURRENT &middot; CYAN</button>
+      <button class="chip on" data-mode="fixed" type="button">FIXED &middot; TURQUOISE</button>
+    </div>
+    <p class="note" id="note">Fixed: the pad emits BIT's turquoise &mdash; off the recovery-cyan signal, matched to BIT's screen-face.</p>
+  </div>
+
+  <script src="bitpad-light.js"></script>
+  <script src="bitpad-beam.js"></script>
+  <script>
+    const TIERS = {
+      fixed: [ null,
+        { c: '26,150,142',  a: 0.24 }, { c: '40,206,194',  a: 0.46 },
+        { c: '128,240,228', a: 0.70 }, { c: '210,255,250', a: 0.88 } ],
+      current: [ null,
+        { c: '30,130,178',  a: 0.24 }, { c: '48,190,232',  a: 0.46 },
+        { c: '132,232,255', a: 0.70 }, { c: '214,250,255', a: 0.88 } ],
+    };
+    const BIT_GLOW = { neutral: '#17D6CC', cheer: '#FFD700', alert: '#0E6E70', rest: '#0E4F74' };
+    const BIT_GLOW_STR = { neutral: 0.70, cheer: 0.85, alert: 0.42, rest: 0.42 };
+
+    const stage = document.getElementById('stage');
+    let mode = 'fixed', mood = 'neutral';
+
+    function buildPad() {
+      // replace canvases so old animation loops self-terminate (canvas.isConnected guard)
+      const oldGlow = document.getElementById('padGlow');
+      const oldBeam = document.getElementById('padBeam');
+      const glow = document.createElement('canvas'); glow.className = 'glow'; glow.id = 'padGlow';
+      const beam = document.createElement('canvas'); beam.className = 'beam'; beam.id = 'padBeam';
+      stage.replaceChild(glow, oldGlow);
+      stage.replaceChild(beam, oldBeam);
+      BitPadLight.init(glow, { cols: 88, rows: 46, cx: 44, cy: 30, rx: 38, ry: 17, ryUp: 10, fps: 14, tiers: TIERS[mode] });
+      BitPadBeam.init(beam, { cols: 21, rows: 23, apexX: 10, apexY: 21, topY: 8,
+        halfBase: 3.0, spread: -0.05, edgeFlat: 1.7, vfade: 1.0, bandSpeed: 6, bandPeriod: 4, fps: 14, tiers: TIERS[mode] });
+      document.getElementById('padSprite').src = mode === 'fixed' ? 'bit_pad.png' : 'bit_pad_current.png';
+      document.getElementById('note').innerHTML = mode === 'fixed'
+        ? "Fixed: the pad emits BIT's <b>turquoise</b> &mdash; off the recovery-cyan signal, matched to BIT's screen-face."
+        : "Current: the pad emits <b>recovery-cyan</b> &mdash; the same hue the app uses for recovery / rest status.";
+    }
+
+    function setMood(m) {
+      mood = m;
+      document.getElementById('bitSprite').src = 'sprites/bit_' + m + '_8x.png';
+      const g = document.getElementById('bitGlow');
+      g.style.background = 'radial-gradient(circle at 50% 48%, ' + BIT_GLOW[m] + ' 0%, rgba(0,0,0,0) 64%)';
+      g.style.opacity = BIT_GLOW_STR[m];
+      document.querySelectorAll('#moodRow .chip').forEach(c => c.classList.toggle('on', c.dataset.mood === m));
+    }
+
+    document.querySelectorAll('#moodRow .chip').forEach(c =>
+      c.addEventListener('click', () => setMood(c.dataset.mood)));
+    document.querySelectorAll('#emitterRow .chip').forEach(c =>
+      c.addEventListener('click', () => {
+        mode = c.dataset.mode;
+        document.querySelectorAll('#emitterRow .chip').forEach(o => o.classList.toggle('on', o === c));
+        buildPad();
+      }));
+
+    buildPad();
+    setMood('neutral');
+  </script>
+</body>
+</html>

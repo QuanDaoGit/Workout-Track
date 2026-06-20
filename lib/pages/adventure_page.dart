@@ -4,12 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../data/adventure_routes.dart';
 import '../models/adventure_models.dart';
-import '../models/avatar_spec.dart';
-import '../models/character_class.dart';
 import '../services/adventure_service.dart';
-import '../services/class_service.dart';
 import '../services/guild_service.dart';
-import '../services/profile_service.dart';
 import '../services/stat_engine.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
@@ -40,8 +36,6 @@ class _AdventurePageState extends State<AdventurePage> {
   bool _busy = false;
   bool _showBreakdown = false;
   AdventureState _state = AdventureState();
-  AvatarSpec _avatar = AvatarSpec.fallback;
-  CharacterClass? _class;
   Map<String, int> _stats = const {};
   String? _armedRouteId;
   Timer? _ticker;
@@ -60,14 +54,10 @@ class _AdventurePageState extends State<AdventurePage> {
 
   Future<void> _load() async {
     final state = await AdventureService().loadState();
-    final profile = await ProfileService().loadProfile();
-    final cls = await ClassService().getCurrentClass();
     final stats = await StatEngine().getStoredStats();
     if (!mounted) return;
     setState(() {
       _state = state;
-      _avatar = profile.avatarSpec;
-      _class = cls;
       _stats = stats;
       _loading = false;
     });
@@ -131,8 +121,6 @@ class _AdventurePageState extends State<AdventurePage> {
         arcadeRoute(
           (_) => ExpeditionReportPage(
             report: report,
-            avatarSpec: _avatar,
-            characterClass: _class,
           ),
           motion: ArcadeRouteMotion.fade,
         ),
@@ -180,8 +168,6 @@ class _AdventurePageState extends State<AdventurePage> {
               _RouteBackdrop(
                 route: route,
                 role: _roleFor(route),
-                avatar: _avatar,
-                characterClass: _class,
                 rank: StatEngine().getRank(_stats[route.statKey] ?? 0),
                 vit: _vit,
                 pending: _state.pending,
@@ -309,8 +295,6 @@ class _RouteBackdrop extends StatelessWidget {
   const _RouteBackdrop({
     required this.route,
     required this.role,
-    required this.avatar,
-    required this.characterClass,
     required this.rank,
     required this.vit,
     required this.pending,
@@ -322,8 +306,6 @@ class _RouteBackdrop extends StatelessWidget {
 
   final AdventureRouteDef route;
   final _TileRole role;
-  final AvatarSpec avatar;
-  final CharacterClass? characterClass;
   final String rank;
   final int vit;
   final Expedition? pending;
@@ -350,8 +332,6 @@ class _RouteBackdrop extends StatelessWidget {
           children: [
             RouteDiorama(
               route: route,
-              avatarSpec: avatar,
-              characterClass: characterClass,
               height: 132,
               animate: _animate,
               showWalker: _showWalker,

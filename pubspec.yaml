@@ -31,8 +31,6 @@ dependencies:
   flutter:
     sdk: flutter
   fl_chart: ^0.69.0
-  drift: ^2.22.0
-  sqlite3_flutter_libs: ^0.5.0
   path_provider: ^2.1.0
   shared_preferences: ^2.5.5
   mcp_toolkit: ^3.0.0
@@ -44,8 +42,6 @@ dev_dependencies:
     sdk: flutter
   # Fake video platform in widget tests (test/helpers/fake_video_platform.dart).
   video_player_platform_interface: ^6.7.0
-  drift_dev: ^2.22.0
-  build_runner: ^2.4.0
   # Launcher-icon generation (build-time only).
   flutter_launcher_icons: ^0.14.4
 
@@ -233,19 +229,25 @@ flutter:
     - assets/exercises/exercises/Zottman_Curl/
     - assets/adventure/
     - assets/adventure/loot/
-    - assets/adventure/body/
-    - assets/adventure/body/frames/
     - assets/icons/control/
     - assets/icons/control/ui/
     - assets/icons/economy/
     - assets/icons/radar/
-    - assets/unlocks/frames/
+    - assets/unlocks/avatar_frames/iron/
+    - assets/unlocks/avatar_frames/stone/
+    - assets/unlocks/avatar_frames/bronze/
+    - assets/unlocks/avatar_frames/silver/
+    - assets/unlocks/avatar_frames/gold/
+    - assets/unlocks/avatar_frames/neon/
+    - assets/unlocks/avatar_frames/inferno/
+    - assets/unlocks/avatar_frames/void/
     - assets/unlocks/themes/
     - assets/classes/icons/
     - assets/classes/sigils/
     - assets/classes/avatars/
     - assets/branding/
     - assets/mascot/bit-sprites/
+    - assets/room/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -1,8 +1,9 @@
 """Normalize the form-demo clips into app-ready mp4s + poster stills.
 
 The curated program lifts (FULL BODY A Day-1 lifts plus the chest/back lifts
-across Full Body / Upper-Lower / PPL) each have a short source .mp4 in
-assets/exercises/animated-videos/. The app plays them with the video_player
+across Full Body / Upper-Lower / PPL) each have a short source .mp4 filed by
+muscle group under assets/exercises/animated-videos/<Group>/<Catalog_Id>.mp4
+(e.g. Chest/, Back/, Legs/). The app plays them with the video_player
 plugin (ExoPlayer — hardware-decoded, pausable), so each source produces two
 outputs in assets/exercises/demos/:
 
@@ -26,25 +27,27 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC_DIR = os.path.join(REPO_ROOT, "assets", "exercises", "animated-videos")
 OUT_DIR = os.path.join(REPO_ROOT, "assets", "exercises", "demos")
 
-# source filename -> output slug (matches lib/data/exercise_demos.dart)
+# source path (muscle-group subfolder / Catalog_Id.mp4) -> output slug.
+# Sources are filed by muscle group under animated-videos/; the filename is the
+# exercise's catalog id (matches the keys in lib/data/exercise_demos.dart).
 CLIPS = {
     # FULL BODY A (Day-1) lifts.
-    "barbell-bench-press.mp4": "barbell_bench_press",
-    "WideGripLatPullDown (2).mp4": "wide_grip_lat_pulldown",
-    "barbell-back-squat.mp4": "barbell_squat",
-    "DumbbellBicepCurl (2).mp4": "dumbbell_bicep_curl",
-    "TricepPushDown (2).mp4": "triceps_pushdown",
+    "Chest/Barbell_Bench_Press_-_Medium_Grip.mp4": "barbell_bench_press",
+    "Back/Wide-Grip_Lat_Pulldown.mp4": "wide_grip_lat_pulldown",
+    "Legs/Barbell_Squat.mp4": "barbell_squat",
+    "Arms/Dumbbell_Bicep_Curl.mp4": "dumbbell_bicep_curl",
+    "Arms/Triceps_Pushdown.mp4": "triceps_pushdown",
     # Remaining chest + back program lifts (Full Body / Upper-Lower / PPL).
-    "dumbbell-bench-press.mp4": "dumbbell_bench_press",
-    "InclineDumbbellBenchPress.mp4": "incline_dumbbell_press",
-    "InclineBarbellBenchPress.mp4": "barbell_incline_bench_press",
-    "CableCrossover.mp4": "cable_crossover",
-    "DumbbellFlye.mp4": "dumbbell_flyes",
-    "OneArmDumbbellRow.mp4": "one_arm_dumbbell_row",
-    "SeatedCableRow.mp4": "seated_cable_rows",
-    "CloseGripLatPulldown.mp4": "close_grip_lat_pulldown",
-    "BentOverBarbellRow.mp4": "bent_over_barbell_row",
-    "StraightArmPulldown.mp4": "straight_arm_pulldown",
+    "Chest/Dumbbell_Bench_Press.mp4": "dumbbell_bench_press",
+    "Chest/Incline_Dumbbell_Press.mp4": "incline_dumbbell_press",
+    "Chest/Barbell_Incline_Bench_Press_-_Medium_Grip.mp4": "barbell_incline_bench_press",
+    "Chest/Cable_Crossover.mp4": "cable_crossover",
+    "Chest/Dumbbell_Flyes.mp4": "dumbbell_flyes",
+    "Back/One-Arm_Dumbbell_Row.mp4": "one_arm_dumbbell_row",
+    "Back/Seated_Cable_Rows.mp4": "seated_cable_rows",
+    "Back/Close-Grip_Front_Lat_Pulldown.mp4": "close_grip_lat_pulldown",
+    "Back/Bent_Over_Barbell_Row.mp4": "bent_over_barbell_row",
+    "Back/Straight-Arm_Pulldown.mp4": "straight_arm_pulldown",
 }
 
 # 480p H.264 keeps form legible at small file size; -an strips audio;
@@ -64,7 +67,7 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
 
     for src_name, slug in CLIPS.items():
-        src = os.path.join(SRC_DIR, src_name)
+        src = os.path.join(SRC_DIR, *src_name.split("/"))
         if not os.path.isfile(src):
             sys.exit(f"Missing source clip: {src}")
 

@@ -7,7 +7,6 @@ import '../models/character_class.dart';
 import '../models/guild_models.dart';
 import '../models/loot_item.dart';
 import '../models/program_models.dart';
-import '../models/shadow_models.dart';
 import '../models/unit_models.dart';
 import '../models/workout_models.dart';
 import '../services/character_service.dart';
@@ -16,13 +15,11 @@ import '../services/guild_service.dart';
 import '../services/loot_service.dart';
 import '../services/profile_service.dart';
 import '../services/program_service.dart';
-import '../services/shadow_service.dart';
 import '../services/unit_settings_service.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
 import '../widgets/avatar/ironbit_avatar.dart';
-import '../widgets/shadow/shadow_detail.dart';
 
 /// Weekly volume tonnage (stored kg) rendered in the active unit.
 String _vol(int kg) =>
@@ -50,7 +47,6 @@ class GuildPageState extends State<GuildPage> {
   AvatarSpec _playerAvatar = AvatarSpec.fallback;
   LootItem? _equippedTitle;
   List<ProgramCompletion> _completions = const [];
-  ShadowEvaluation? _shadowEval;
 
   @override
   void initState() {
@@ -97,7 +93,6 @@ class GuildPageState extends State<GuildPage> {
       LootCategory.titleBadge,
     );
     final completions = await ProgramService().completedPrograms();
-    final shadowEval = await ShadowService().evaluate();
     if (!mounted) return;
     setState(() {
       _guildData = view.guild;
@@ -112,7 +107,6 @@ class GuildPageState extends State<GuildPage> {
       _playerAvatar = profile.avatarSpec;
       _equippedTitle = equippedTitle;
       _completions = completions;
-      _shadowEval = shadowEval;
       _loading = false;
     });
   }
@@ -147,12 +141,6 @@ class GuildPageState extends State<GuildPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // The Shadow arena — you vs you, deliberately above the social
-            // roster (intimate, not competitive-with-others).
-            if (_shadowEval != null) ...[
-              ShadowDetail(evaluation: _shadowEval!, avatarSpec: _playerAvatar),
-              const SizedBox(height: 16),
-            ],
             _header(guild),
             const SizedBox(height: 16),
             _guildCard(),

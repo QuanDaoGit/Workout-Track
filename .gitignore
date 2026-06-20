@@ -58,3 +58,4 @@ android/key.properties
 
 # Windows shell metadata
 desktop.ini
+.claude/worktrees/

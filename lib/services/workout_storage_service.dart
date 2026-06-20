@@ -7,6 +7,8 @@ import '../data/muscle_groups.dart';
 import '../models/workout_models.dart';
 import 'adventure_service.dart';
 import 'calibration_service.dart';
+import 'json_safe.dart';
+import 'keyed_lock.dart';
 import 'ongoing_program_swap_service.dart';
 import 'rest_service.dart';
 import 'stat_engine.dart';
@@ -38,13 +40,21 @@ class WorkoutStorageService {
   static Stream<void> get changes => _changes.stream;
 
   Future<void> saveSession(WorkoutSession session) async {
-    final sessions = await getSessions();
-    // Incremental autosave leaves an ongoing checkpoint row under this session's
-    // id; the completed save replaces it (otherwise we'd keep both an ongoing and
-    // a completed row with the same id — a duplicate + a lingering resume dock).
-    sessions.removeWhere((s) => s.id == session.id && s.isOngoing);
-    sessions.add(session);
-    await _writeSessions(sessions);
+    // Only the read-modify-write is serialised (against checkpoint/finish races
+    // on the same blob); the sub-service orchestration below runs *outside* the
+    // lock — some of those services mutate sessions themselves, so holding the
+    // lock across them would deadlock on the same key.
+    final sessions = await prefsWriteLock.synchronized(_sessionsKey, () async {
+      final sessions = await getSessions();
+      // Incremental autosave leaves an ongoing checkpoint row under this
+      // session's id; the completed save replaces it (otherwise we'd keep both
+      // an ongoing and a completed row with the same id — a duplicate + a
+      // lingering resume dock).
+      sessions.removeWhere((s) => s.id == session.id && s.isOngoing);
+      sessions.add(session);
+      await _writeSessions(sessions);
+      return sessions;
+    });
     if (!session.isPartial) {
       // A finalized session can never be resumed — drop its ephemeral program
       // swaps (Codex plan-review F3 lifecycle).
@@ -107,9 +117,13 @@ class WorkoutStorageService {
     MissionFinishState state,
   ) async {
     if (state == MissionFinishState.none) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lastCompletedDateKey, _dateKey(date));
-    await prefs.setString(_lastMissionFinishTypeKey, state.name);
+    // Serialise the (date, type) pair so two concurrent writers can't interleave
+    // into a mismatched date-from-A / type-from-B record.
+    await prefsWriteLock.synchronized(_lastCompletedDateKey, () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastCompletedDateKey, _dateKey(date));
+      await prefs.setString(_lastMissionFinishTypeKey, state.name);
+    });
     _emitChanged();
   }
 
@@ -118,9 +132,11 @@ class WorkoutStorageService {
   }
 
   Future<void> replaceOngoingSession(WorkoutSession session) async {
-    final sessions = await getSessions();
-    final updated = sessions.where((s) => !s.isOngoing).toList()..add(session);
-    await _writeSessions(updated);
+    await prefsWriteLock.synchronized(_sessionsKey, () async {
+      final sessions = await getSessions();
+      final updated = sessions.where((s) => !s.isOngoing).toList()..add(session);
+      await _writeSessions(updated);
+    });
   }
 
   /// Incrementally persist the live session (at start and on each set log) so a
@@ -129,9 +145,12 @@ class WorkoutStorageService {
   /// active page is on top, and the RootPage resume dock already refreshes from
   /// its 1-second poll, so we avoid churning a quest-tab reload on every set.
   Future<void> checkpointOngoingSession(WorkoutSession session) async {
-    final sessions = await getSessions();
-    final updated = sessions.where((s) => !s.isOngoing).toList()..add(session);
-    await _writeSessions(updated, notify: false);
+    await prefsWriteLock.synchronized(_sessionsKey, () async {
+      final sessions = await getSessions();
+      final updated = sessions.where((s) => !s.isOngoing).toList()
+        ..add(session);
+      await _writeSessions(updated, notify: false);
+    });
   }
 
   /// The most-idle live session eligible for idle auto-save: ongoing,
@@ -159,11 +178,13 @@ class WorkoutStorageService {
     WorkoutSession session, {
     bool markMissionFinished = false,
   }) async {
-    final sessions = await getSessions();
-    final updated =
-        sessions.where((s) => !s.isOngoing && s.id != session.id).toList()
-          ..add(session);
-    await _writeSessions(updated);
+    await prefsWriteLock.synchronized(_sessionsKey, () async {
+      final sessions = await getSessions();
+      final updated =
+          sessions.where((s) => !s.isOngoing && s.id != session.id).toList()
+            ..add(session);
+      await _writeSessions(updated);
+    });
     await OngoingProgramSwapService().clear(session.id);
     if (markMissionFinished) {
       await WorkoutStorageService.markMissionFinished(
@@ -177,14 +198,16 @@ class WorkoutStorageService {
     String sessionId,
     Map<String, int> delta,
   ) async {
-    final sessions = await getSessions();
-    var found = false;
-    final updated = [
-      for (final session in sessions)
-        _annotatedIfMatch(session, sessionId, delta, () => found = true),
-    ];
-    if (!found) return;
-    await _writeSessions(updated);
+    await prefsWriteLock.synchronized(_sessionsKey, () async {
+      final sessions = await getSessions();
+      var found = false;
+      final updated = [
+        for (final session in sessions)
+          _annotatedIfMatch(session, sessionId, delta, () => found = true),
+      ];
+      if (!found) return;
+      await _writeSessions(updated);
+    });
   }
 
   Future<WorkoutSession?> getOngoingSession() async {
@@ -228,10 +251,13 @@ class WorkoutStorageService {
       // Copy on the way out: callers mutate the returned list (sort/add).
       return List.of(cached);
     }
-    final sessions = [
-      for (final item in jsonDecode(raw) as List<dynamic>)
-        WorkoutSession.fromJson(item as Map<String, dynamic>),
-    ];
+    // Corruption-tolerant: a malformed blob or a single bad record yields the
+    // salvageable subset (or []) instead of throwing on the boot/home path.
+    final sessions = safeMapList(
+      raw,
+      WorkoutSession.fromJson,
+      debugLabel: _sessionsKey,
+    );
     _cachedRaw = raw;
     _sessionCache = List.of(sessions);
     return sessions;
@@ -348,9 +374,11 @@ class WorkoutStorageService {
   }
 
   Future<void> deleteSession(String id) async {
-    final sessions = await getSessions();
-    final updated = sessions.where((s) => s.id != id).toList();
-    await _writeSessions(updated);
+    await prefsWriteLock.synchronized(_sessionsKey, () async {
+      final sessions = await getSessions();
+      final updated = sessions.where((s) => s.id != id).toList();
+      await _writeSessions(updated);
+    });
     await OngoingProgramSwapService().clear(id);
   }
 
@@ -359,11 +387,13 @@ class WorkoutStorageService {
   /// left to the caller: XP was earned at save time — edits fix the record,
   /// not the reward (and editing must never farm XP).
   Future<void> updateSession(WorkoutSession session) async {
-    final sessions = await getSessions();
-    final index = sessions.indexWhere((s) => s.id == session.id);
-    if (index < 0) return;
-    sessions[index] = session;
-    await _writeSessions(sessions);
+    await prefsWriteLock.synchronized(_sessionsKey, () async {
+      final sessions = await getSessions();
+      final index = sessions.indexWhere((s) => s.id == session.id);
+      if (index < 0) return;
+      sessions[index] = session;
+      await _writeSessions(sessions);
+    });
   }
 
   static void _emitChanged() {

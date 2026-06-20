@@ -1,19 +1,25 @@
-import 'dart:async';
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/arcade_bar.dart';
+import '../../widgets/companion/bit_boot.dart' show BitVoiceWaveform;
+import '../../widgets/companion/bit_core_engine.dart' show bitGlow;
+import '../../widgets/companion/bit_mood_core.dart';
 import '../../widgets/pixel_button.dart';
-import '../../widgets/screen_shake.dart';
-import '../../widgets/streak_orbit_icon.dart';
-import '../../widgets/strobe_flash.dart';
 
-/// Screen 3 — the Solution. The loudest beat of the onboarding intro: states
-/// the payoff, builds to a level-up slam on line 2, then resolves into the CTA
-/// that hands off to character building. Out-animates the quiet Screen 2 on
-/// purpose. Only the CTA advances; a background tap merely completes the intro.
+/// Screen 3 — the Solution. The **emotional peak** of the onboarding intro and
+/// the payoff to Screen 2's low: the companion **BIT**, carried in still slumped
+/// (rest), **bursts into a cheer face** (energetic, amber — eyes open, a grin,
+/// plates spread) as he says *"HERE, EVERY REP LEVELS YOU UP"*, then **settles to
+/// a steady neutral** (turquoise) for *"YOU WILL KEEP COMING BACK FOR MORE"*.
+/// Now present, he runs a small **level-up preview** (fills then resets — a
+/// demonstration, never an earned reward). Only the CTA advances; a background
+/// tap completes the intro.
+///
+/// The cheer burst → neutral settle is the focal beat (one phosphor-soft glow
+/// surge + one haptic; no rapid strobe/shake). Reduced motion renders the
+/// settled, revealed *neutral* state directly.
 class SolutionView extends StatefulWidget {
   const SolutionView({super.key, required this.onContinue});
 
@@ -22,18 +28,35 @@ class SolutionView extends StatefulWidget {
   static const designWidth = 390.0;
   static const designHeight = 844.0;
 
-  // Intro timeline (ms within a ~2300ms controller).
-  static const _totalMs = 2300;
-  static const _line1StartMs = 100;
-  static const _line1DurMs = 200;
-  static const _slamMs = 600;
-  static const _motivStartMs = 1100;
-  static const _motivStaggerMs = 150;
-  static const _motivFadeMs = 400;
-  static const _ctaStartMs = 1900;
-  static const _ctaDurMs = 300;
+  // Intro timeline (ms within a ~3700ms controller). The weighty power-up:
+  // carry-in → anticipation INHALE → surge → peak HOLD → settle. Tunable knobs.
+  static const _totalMs = 3700;
+  static const _inhaleStartMs = 520; // the coil begins to gather (ease in)
+  static const _inhalePeakMs = 760; // deepest inhale; pose flips rest→cheer here
+  static const _surgeStartMs = 760; // (== inhale peak) the surge fires
+  static const _releaseEndMs = 980; // the coil snaps released as BIT rises
+  static const _revealStartMs = 820; // eyes begin opening with the surge
+  static const _revealEndMs = 1320; // eyes fully open
+  static const _bloomAtMs = 1340; // the surge punch — glow surge + haptic
+  static const _blinkStartMs = 1380; // one blink — the "sign of life"
+  static const _blinkEndMs = 1540;
+  static const _settleStartMs = 1920; // peak-hold done → cheer → neutral settle
+  static const _idleRampEndMs = 2320; // idle bob/breathe faded back to full
+  static const _line1StartMs = 880; // "HERE, EVERY REP / LEVELS YOU UP" (cheer)
+  static const _line1EndMs = 1720;
+  static const _line2StartMs = 2000; // "YOU WILL KEEP COMING / BACK FOR MORE"
+  static const _line2EndMs = 2840;
+  static const _demoStartMs = 1100; // the level preview fills (with line 1)…
+  static const _demoFillEndMs = 1720;
+  static const _demoHoldMs = 1880; // …shows LV 2 briefly…
+  static const _demoResetEndMs = 2200; // …then resets to locked (honest)
+  static const _ctaStartMs = 3000;
+  static const _ctaEndMs = 3400;
 
-  static const _strobeWindowMs = 480; // 6 toggles × 80ms
+  // BIT rises from the Screen-2 carry-in home up to its Screen-3 stage as it
+  // bursts (motivates the rise; leaves room for the lines + preview below).
+  static const _bitCarryTop = 232.0;
+  static const _bitStageTop = 150.0;
 
   @override
   State<SolutionView> createState() => _SolutionViewState();
@@ -54,14 +77,8 @@ class _SolutionViewState extends State<SolutionView>
   bool _reducedMotion = false;
   bool _handed = false;
 
-  int _slamTrigger = 0;
-  bool _slamFired = false;
-  bool _frameReacting = false;
-  Timer? _frameTimer;
-
-  // Bumped on CTA press so the button wrapper StrobeFlash fires one short
-  // amber halo before the handoff transition takes over.
-  int _pressTrigger = 0;
+  // One haptic at the cheer-burst peak.
+  bool _bloomFired = false;
 
   @override
   void initState() {
@@ -69,7 +86,7 @@ class _SolutionViewState extends State<SolutionView>
     _introController.addStatusListener((status) {
       if (status == AnimationStatus.completed) _finishIntro();
     });
-    _introController.addListener(_maybeFireSlam);
+    _introController.addListener(_maybeFireBloom);
   }
 
   @override
@@ -85,7 +102,7 @@ class _SolutionViewState extends State<SolutionView>
       _introController.stop();
       _ctaPulseController.stop();
       _complete = true;
-      _slamFired = true;
+      _bloomFired = true;
       _introController.value = 1;
     } else if (!_complete && !_introController.isAnimating) {
       _introController.forward(from: 0);
@@ -94,27 +111,17 @@ class _SolutionViewState extends State<SolutionView>
 
   @override
   void dispose() {
-    _frameTimer?.cancel();
     _introController.dispose();
     _ctaPulseController.dispose();
     super.dispose();
   }
 
-  void _maybeFireSlam() {
-    if (_slamFired || _reducedMotion) return;
+  void _maybeFireBloom() {
+    if (_bloomFired || _reducedMotion) return;
     if (_introController.value * SolutionView._totalMs >=
-        SolutionView._slamMs) {
-      _slamFired = true;
-      setState(() {
-        _slamTrigger++;
-        _frameReacting = true;
-      });
-      _frameTimer = Timer(
-        const Duration(milliseconds: SolutionView._strobeWindowMs),
-        () {
-          if (mounted) setState(() => _frameReacting = false);
-        },
-      );
+        SolutionView._bloomAtMs) {
+      _bloomFired = true;
+      HapticFeedback.mediumImpact();
     }
   }
 
@@ -123,6 +130,7 @@ class _SolutionViewState extends State<SolutionView>
     _introController.stop();
     _introController.value = 1;
     _complete = true;
+    _bloomFired = true;
     if (!_reducedMotion && !_ctaPulseController.isAnimating) {
       _ctaPulseController.repeat(reverse: true);
     }
@@ -135,22 +143,16 @@ class _SolutionViewState extends State<SolutionView>
   }
 
   Future<void> _handleCta() async {
-    if (_handed) return;
+    if (_handed || !_complete) return; // gated until the settled state
     _handed = true;
-    if (_reducedMotion) {
-      widget.onContinue();
-      return;
-    }
-    setState(() => _pressTrigger++);
-    // Long enough for the one-toggle amber halo to play before navigation.
-    await Future<void>.delayed(const Duration(milliseconds: 120));
-    if (mounted) widget.onContinue();
+    widget.onContinue();
   }
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'Solution screen.',
+      button: true,
+      label: 'Here, every rep levels you up. You will keep coming back for more.',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _handleBackgroundTap,
@@ -175,41 +177,298 @@ class _SolutionViewState extends State<SolutionView>
                     key: _solutionDesignFrameKey,
                     width: SolutionView.designWidth,
                     height: SolutionView.designHeight,
-                    child: _reducedMotion
-                        ? _SolutionComposition(host: this)
-                        : ScreenShake(
-                            trigger: _slamTrigger,
-                            magnitude: 2,
-                            frames: 4,
-                            child: _SolutionComposition(host: this),
-                          ),
-                  ),
-                ),
-              ),
-              if (!_reducedMotion)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: _SolutionEffectLayer(
-                      slamTrigger: _slamTrigger,
-                      frameReacting: _frameReacting,
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([
+                        _introController,
+                        _ctaPulseController,
+                      ]),
+                      builder: (context, _) => _composition(),
                     ),
                   ),
                 ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _composition() {
+    final ms = (_complete ? 1.0 : _introController.value) * SolutionView._totalMs;
+
+    // The weighty power-up: rest (carry-in) → an anticipation INHALE (the coil
+    // deepens BIT then releases) → a surge into cheer (gentle overshoot in the
+    // engine) → a still peak-cheer HOLD → a calm settle to neutral (grounded,
+    // not the sunk/tilted deflate of Screen 2).
+    final pose = ms < SolutionView._surgeStartMs
+        ? BitPose.rest
+        : (ms < SolutionView._settleStartMs ? BitPose.cheer : BitPose.neutral);
+    final anticipation = _anticipationFor(ms);
+    final idleAmp = _idleAmpFor(ms);
+    final reveal = _complete
+        ? 1.0
+        : Curves.easeOutCubic.transform(
+            ((ms - SolutionView._revealStartMs) /
+                    (SolutionView._revealEndMs - SolutionView._revealStartMs))
+                .clamp(0.0, 1.0),
+          );
+    final blink =
+        !_complete &&
+        ms >= SolutionView._blinkStartMs &&
+        ms < SolutionView._blinkEndMs;
+    final bitTop =
+        SolutionView._bitCarryTop +
+        (SolutionView._bitStageTop - SolutionView._bitCarryTop) * reveal;
+
+    // A brief scale surge centred on the burst punch — the "pop".
+    final surge = _complete
+        ? 0.0
+        : (1 - ((ms - SolutionView._bloomAtMs).abs() / 260)).clamp(0.0, 1.0);
+    final bitScale = 1 + 0.07 * Curves.easeOut.transform(surge);
+
+    final line1Count = _countFor(ms, SolutionView._line1StartMs,
+        SolutionView._line1EndMs, _line1.length);
+    final line2Count = _countFor(ms, SolutionView._line2StartMs,
+        SolutionView._line2EndMs, _line2.length);
+    final speaking = !_complete &&
+        ((ms >= SolutionView._line1StartMs && ms < SolutionView._line1EndMs) ||
+            (ms >= SolutionView._line2StartMs && ms < SolutionView._line2EndMs));
+
+    final demo = _demoState(ms);
+
+    final ctaT = _complete
+        ? 1.0
+        : ((ms - SolutionView._ctaStartMs) /
+                (SolutionView._ctaEndMs - SolutionView._ctaStartMs))
+            .clamp(0.0, 1.0);
+    final pulse = (_complete && !_reducedMotion) ? _ctaPulseController.value : 0.0;
+
+    return Stack(
+      children: [
+        // BIT — the continuous subject, bursting into cheer then settling.
+        Positioned(
+          top: bitTop,
+          left: 63,
+          child: Transform.scale(
+            scale: bitScale,
+            child: BitMoodCore(
+              key: const ValueKey('solution_bit'),
+              pose: pose,
+              reveal: reveal,
+              blink: blink,
+              anticipation: anticipation,
+              // Idle is held through the carry-in + inhale + surge + peak hold (a
+              // clean choreography and a still hitstop), then ramped back in as
+              // BIT settles to its neutral idle — no resume pop.
+              idleAmp: idleAmp,
+            ),
+          ),
+        ),
+        // Voice cue — BIT is the one speaking.
+        Positioned(
+          top: 440,
+          left: 137,
+          child: speaking
+              ? const BitVoiceWaveform(width: 115, height: 30, intensity: 1)
+              : const SizedBox.shrink(),
+        ),
+        // The two lines: white statement (during cheer), turquoise hook (as BIT
+        // settles to neutral). Excluded from semantics (the screen node carries
+        // the full line) so a reader never announces half-typed text. Sat lower
+        // (was 470) so the speaking waveform at 440 has clear breathing room and
+        // doesn't cramp the text; the freed space comes from the empty lower third.
+        Positioned(
+          top: 505,
+          left: 20,
+          right: 20,
+          child: ExcludeSemantics(
+            child: Column(
+              children: [
+                _StrongLine(text: _visible(_line1, line1Count)),
+                const SizedBox(height: 14),
+                _StrongLine(text: _visible(_line2, line2Count), accent: true),
+              ],
+            ),
+          ),
+        ),
+        // Level-up PREVIEW — a demonstration BIT runs, not a reward (no caption).
+        Positioned(
+          top: 632,
+          left: 0,
+          right: 0,
+          child: ExcludeSemantics(
+            child: Opacity(
+              opacity: reveal.clamp(0.0, 1.0),
+              child: _LevelDemoMeter(fill: demo.$1, levelTwo: demo.$2),
+            ),
+          ),
+        ),
+        // CTA — slides up + fades, then idle-pulses. Disabled until settled.
+        Positioned(
+          top: 700,
+          left: 32,
+          right: 32,
+          child: Opacity(
+            opacity: ctaT,
+            child: Transform.translate(
+              offset: Offset(0, (1 - ctaT) * 20),
+              child: Transform.scale(
+                scale: 1 + 0.02 * pulse,
+                child: PixelButton(
+                  label: "LET'S BUILD MY CHARACTER",
+                  fontSize: 12,
+                  minHeight: 64,
+                  onPressed: _complete ? _handleCta : null,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Two beats: the white statement (BIT cheers it), then the turquoise hook (BIT
+  // settles to neutral). Deliberate line breaks keep PressStart2P readable.
+  static const _line1 = 'HERE, EVERY REP\nLEVELS YOU UP';
+  static const _line2 = 'YOU WILL KEEP COMING\nBACK FOR MORE';
+
+  /// The anticipation coil 0..1: eases up to a deep inhale, then releases as the
+  /// surge fires — the wind-up the cold launch was missing.
+  double _anticipationFor(double ms) {
+    if (_complete || ms < SolutionView._inhaleStartMs) return 0;
+    if (ms < SolutionView._inhalePeakMs) {
+      final t =
+          ((ms - SolutionView._inhaleStartMs) /
+                  (SolutionView._inhalePeakMs - SolutionView._inhaleStartMs))
+              .clamp(0.0, 1.0);
+      return Curves.easeIn.transform(t);
+    }
+    if (ms < SolutionView._releaseEndMs) {
+      final t =
+          ((ms - SolutionView._inhalePeakMs) /
+                  (SolutionView._releaseEndMs - SolutionView._inhalePeakMs))
+              .clamp(0.0, 1.0);
+      return 1 - Curves.easeOut.transform(t);
+    }
+    return 0;
+  }
+
+  /// Idle amplitude 0..1: off through the burst, then eased in over ~400ms from
+  /// the settle so the float + breathe resume without a step pop.
+  double _idleAmpFor(double ms) {
+    if (_complete) return 1;
+    if (ms < SolutionView._settleStartMs) return 0;
+    final t =
+        ((ms - SolutionView._settleStartMs) /
+                (SolutionView._idleRampEndMs - SolutionView._settleStartMs))
+            .clamp(0.0, 1.0);
+    return Curves.easeOut.transform(t);
+  }
+
+  int _countFor(double ms, int startMs, int endMs, int length) {
+    if (_complete) return length;
+    final t = ((ms - startMs) / (endMs - startMs)).clamp(0.0, 1.0);
+    return (t * length).floor();
+  }
+
+  String _visible(String full, int count) =>
+      full.substring(0, count.clamp(0, full.length));
+
+  /// (fill 0..1, showingLevelTwo). Resting/complete = locked at 0 (nothing
+  /// earned before training).
+  (double, bool) _demoState(double ms) {
+    if (_complete) return (0.0, false);
+    if (ms < SolutionView._demoStartMs) return (0.0, false);
+    if (ms < SolutionView._demoFillEndMs) {
+      final t = ((ms - SolutionView._demoStartMs) /
+              (SolutionView._demoFillEndMs - SolutionView._demoStartMs))
+          .clamp(0.0, 1.0);
+      return (Curves.easeOut.transform(t), false);
+    }
+    if (ms < SolutionView._demoHoldMs) return (1.0, true);
+    if (ms < SolutionView._demoResetEndMs) {
+      final t = ((ms - SolutionView._demoHoldMs) /
+              (SolutionView._demoResetEndMs - SolutionView._demoHoldMs))
+          .clamp(0.0, 1.0);
+      return (1 - t, false);
+    }
+    return (0.0, false);
+  }
 }
 
 const _solutionDesignFrameKey = ValueKey('solution_design_frame');
-const _solutionEffectLayerKey = ValueKey('solution_effect_layer');
-const _solutionEffectBorderKey = ValueKey('solution_effect_border');
 const _solutionBackdropKey = ValueKey('solution_backdrop');
-const _solutionFutureSelfTop = 472.0;
-const _solutionCtaTop = 704.0;
 
+/// A bold screen line. PressStart2P caps reads as solid/declarative; line 1 is
+/// white (BIT's cheered statement), line 2 the turquoise hook (BIT's steady
+/// voice). Deliberate `\n` breaks keep the wide font on tidy rows.
+class _StrongLine extends StatelessWidget {
+  const _StrongLine({required this.text, this.accent = false});
+
+  final String text;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        fontFamily: 'PressStart2P',
+        fontSize: 14,
+        height: 1.5,
+        color: accent ? bitGlow : kText,
+      ),
+    );
+  }
+}
+
+/// The level-up PREVIEW: a small pixel meter BIT runs as a demonstration. It
+/// fills LV 1 → LV 2 once, then resets to locked — it never awards a level (real
+/// progression is earned by training). Turquoise (BIT's own light), not
+/// reward-amber, so it reads as "BIT's system", not a payout.
+class _LevelDemoMeter extends StatelessWidget {
+  const _LevelDemoMeter({required this.fill, required this.levelTwo});
+
+  final double fill; // 0..1
+  final bool levelTwo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _lvTag('LV 1', active: !levelTwo),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 170,
+          child: ArcadeBar.segments(
+            litCells: (fill * 10).round().clamp(0, 10),
+            totalCells: 10,
+            accent: bitGlow,
+            height: 12,
+          ),
+        ),
+        const SizedBox(width: 10),
+        _lvTag('LV 2', active: levelTwo),
+      ],
+    );
+  }
+
+  Widget _lvTag(String label, {required bool active}) => Text(
+        label,
+        style: TextStyle(
+          fontFamily: 'PressStart2P',
+          fontSize: 10,
+          color: active ? bitGlow : kMutedText,
+        ),
+      );
+}
+
+
+/// Always-on faint CRT scanlines + a soft vignette (no flashing).
 class _CrtScreenPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -228,268 +487,11 @@ class _CrtScreenPainter extends CustomPainter {
         colors: [
           Colors.transparent,
           Colors.transparent,
-          Colors.black.withValues(alpha: 0.42),
+          kBlack.withValues(alpha: 0.42),
         ],
         stops: const [0, 0.58, 1],
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, vignettePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _SolutionEffectLayer extends StatelessWidget {
-  const _SolutionEffectLayer({
-    required this.slamTrigger,
-    required this.frameReacting,
-  });
-
-  final int slamTrigger;
-  final bool frameReacting;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox.expand(
-      key: _solutionEffectLayerKey,
-      child: StrobeFlash(
-        trigger: slamTrigger,
-        color: kAmber,
-        toggles: 6,
-        opacity: 0.3,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (frameReacting) ...[
-              CustomPaint(painter: _BrightScanlinePainter()),
-              DecoratedBox(
-                key: _solutionEffectBorderKey,
-                decoration: BoxDecoration(
-                  border: Border.all(color: kAmber, width: 3),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SolutionComposition extends StatelessWidget {
-  const _SolutionComposition({required this.host});
-
-  final _SolutionViewState host;
-
-  double _opacityFor(double ms, double startMs, double durMs) {
-    if (host._complete) return 1;
-    return ((ms - startMs) / durMs).clamp(0.0, 1.0).toDouble();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([
-        host._introController,
-        host._ctaPulseController,
-      ]),
-      builder: (context, _) {
-        final ms = host._complete
-            ? SolutionView._totalMs.toDouble()
-            : host._introController.value * SolutionView._totalMs;
-
-        final line1Opacity = _opacityFor(
-          ms,
-          SolutionView._line1StartMs.toDouble(),
-          SolutionView._line1DurMs.toDouble(),
-        );
-        // Line 2 slams in — a hard cut, not a fade.
-        final line2Visible = host._complete || ms >= SolutionView._slamMs;
-
-        final ctaT = _opacityFor(
-          ms,
-          SolutionView._ctaStartMs.toDouble(),
-          SolutionView._ctaDurMs.toDouble(),
-        );
-        final pulse = (host._complete && !host._reducedMotion)
-            ? host._ctaPulseController.value
-            : 0.0;
-        final futureSelfOpacity = _futureSelfOpacity(ms);
-        return Stack(
-          children: [
-            // Solution statement.
-            Positioned(
-              top: 132,
-              left: 24,
-              right: 24,
-              child: Column(
-                children: [
-                  Opacity(
-                    opacity: line1Opacity,
-                    child: const Text(
-                      'HERE, EVERY REP',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: 'PressStart2P',
-                        fontSize: 18,
-                        color: kText,
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Opacity(
-                    opacity: line2Visible ? 1.0 : 0.0,
-                    child: const Text(
-                      'LEVELS YOU UP',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: 'PressStart2P',
-                        fontSize: 18,
-                        color: kAmber,
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Motivation block — three lines arriving in sequence.
-            Positioned(
-              top: 320,
-              left: 32,
-              right: 32,
-              child: Column(
-                children: [
-                  _motivLine(ms, 0, 'you can ', 'see', ' your work.'),
-                  _motivLine(ms, 1, 'you become ', 'stronger', ' every rep.'),
-                  _motivLine(ms, 2, "and ", 'you', ' will keep coming back.'),
-                ],
-              ),
-            ),
-            // CTA — slides up + fades in, then idle-pulses.
-            if (futureSelfOpacity > 0)
-              Positioned(
-                top: _solutionFutureSelfTop,
-                left: 0,
-                right: 0,
-                child: IgnorePointer(
-                  child: Opacity(
-                    opacity: futureSelfOpacity,
-                    child: const Column(
-                      key: ValueKey('solution_aspiration_tease'),
-                      children: [StreakOrbitIcon(size: 168)],
-                    ),
-                  ),
-                ),
-              ),
-            Positioned(
-              top: _solutionCtaTop,
-              left: 32,
-              right: 32,
-              child: Opacity(
-                opacity: ctaT,
-                child: Transform.translate(
-                  offset: Offset(0, (1 - ctaT) * 20),
-                  child: Transform.scale(
-                    scale: 1 + 0.02 * pulse,
-                    child: StrobeFlash(
-                      trigger: host._pressTrigger,
-                      color: kAmber,
-                      opacity: 0.35,
-                      toggles: 1,
-                      toggleMs: 120,
-                      child: PixelButton(
-                        label: 'LET\'S BUILD MY CHARACTER',
-                        fontSize: 12,
-                        minHeight: 64,
-                        onPressed: host._handleCta,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  double _futureSelfOpacity(double ms) {
-    const settledOpacity = 0.9;
-    if (host._complete || host._reducedMotion) return settledOpacity;
-    if (ms < 1550) return 0;
-    if (ms < 1750) return ((ms - 1550) / 200).clamp(0.0, 1.0).toDouble();
-    if (ms < 2500) return 1;
-    if (ms < 3000) {
-      final fadeT = ((ms - 2500) / 200).clamp(0.0, 1.0).toDouble();
-      return 1 - fadeT * (1 - settledOpacity);
-    }
-    return settledOpacity;
-  }
-
-  Widget _motivLine(
-    double ms,
-    int index,
-    String pre,
-    String neon,
-    String post,
-  ) {
-    final startMs =
-        SolutionView._motivStartMs + index * SolutionView._motivStaggerMs;
-    final opacity = _opacityFor(
-      ms,
-      startMs.toDouble(),
-      SolutionView._motivFadeMs.toDouble(),
-    );
-    // Gentle one-shot flicker on the neon word as the line arrives.
-    double neonAlpha = 1;
-    if (!host._complete && neon.isNotEmpty) {
-      final since = ms - (startMs + SolutionView._motivFadeMs);
-      if (since >= 0 && since < 200) {
-        neonAlpha = 0.55 + 0.45 * (0.5 - 0.5 * math.cos(since / 200 * math.pi));
-      }
-    }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Opacity(
-        opacity: opacity,
-        child: RichText(
-          textAlign: TextAlign.center,
-          text: TextSpan(
-            style: AppFonts.shareTechMono(
-              color: kMutedText,
-              fontSize: 14,
-              height: 1.6,
-            ),
-            children: [
-              TextSpan(text: pre),
-              if (neon.isNotEmpty)
-                TextSpan(
-                  text: neon,
-                  style: TextStyle(color: kNeon.withValues(alpha: neonAlpha)),
-                ),
-              if (post.isNotEmpty) TextSpan(text: post),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Brightened scanlines for the transient line-2 frame reaction. Stronger than
-/// the always-on global 4% overlay; rendered only while the strobe fires.
-class _BrightScanlinePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0x14FFFFFF)
-      ..strokeWidth = 1;
-    for (double y = 0; y < size.height; y += 4) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
   }
 
   @override

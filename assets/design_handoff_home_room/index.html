@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ironbit — Home Room · Handoff</title>
+<style>
+  @font-face { font-family:'PS2P'; src:url('fonts/pressstart2p/PressStart2P-Regular.ttf'); }
+  @font-face { font-family:'STM'; src:url('fonts/sharetechmono/ShareTechMono-Regular.ttf'); }
+  :root{
+    --bg:#0B0B16; --panel:#13131F; --panel2:#1A1A2A; --line:#26263A;
+    --ink:#E8E8FF; --mut:#9494B8; --dim:#6A6A8E; --cyan:#39D6F0; --gold:#FFD700; --mint:#00FF9C;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    background:
+      radial-gradient(ellipse at 80% -10%, #18223e 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink); font-family:'STM',ui-monospace,monospace;
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1060px; margin:0 auto; padding:48px 28px 80px;}
+  header{display:flex; flex-direction:column; gap:14px; margin-bottom:8px;}
+  .kicker{font-family:'STM'; font-size:12px; letter-spacing:3px; text-transform:uppercase; color:var(--cyan);}
+  h1{font-family:'PS2P'; font-size:26px; line-height:1.35; margin:0; color:var(--ink); text-shadow:0 0 18px rgba(57,214,240,.18);}
+  .lede{color:var(--mut); max-width:60ch; font-size:15px;}
+  .grid-top{display:grid; grid-template-columns:300px 1fr; gap:32px; margin:36px 0 8px; align-items:start;}
+  @media (max-width:760px){ .grid-top{grid-template-columns:1fr;} }
+  .device{
+    background:#000; border-radius:30px; padding:10px; border:1px solid var(--line);
+    box-shadow:0 20px 60px rgba(0,0,0,.5); position:relative;
+  }
+  .device iframe{ width:280px; height:600px; border:0; border-radius:22px; display:block; background:#11111F; }
+  .device .cap{ text-align:center; color:var(--dim); font-size:11px; padding:8px 0 2px; letter-spacing:1px;}
+  .principles{display:flex; flex-direction:column; gap:12px;}
+  .p{display:flex; gap:12px; padding:12px 14px; background:var(--panel); border:1px solid var(--line); border-radius:10px;}
+  .p b{color:var(--cyan); font-family:'PS2P'; font-size:10px; min-width:18px; padding-top:2px;}
+  .p span{color:var(--mut); font-size:13.5px;}
+  .p i{color:var(--ink); font-style:normal; font-weight:bold;}
+  h2{font-family:'PS2P'; font-size:13px; letter-spacing:1px; margin:48px 0 4px; color:var(--ink);}
+  .sub{color:var(--dim); font-size:13px; margin:0 0 18px;}
+  .docs{display:grid; grid-template-columns:repeat(2,1fr); gap:14px;}
+  @media (max-width:680px){ .docs{grid-template-columns:1fr;} }
+  a.card{
+    display:block; text-decoration:none; background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:18px 18px; transition:border-color .15s, transform .15s, background .15s;
+  }
+  a.card:hover{ border-color:var(--cyan); transform:translateY(-2px); background:var(--panel2); }
+  a.card .t{font-family:'PS2P'; font-size:11px; color:var(--ink); display:block; margin-bottom:7px;}
+  a.card .d{color:var(--mut); font-size:13px;}
+  a.card .tag{display:inline-block; margin-bottom:10px; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--cyan);}
+  .comp a.card .tag{color:var(--gold);}
+  .pill{display:inline-block; padding:2px 9px; border:1px solid var(--line); border-radius:20px; font-size:11px; color:var(--mut); margin-right:6px;}
+  .start{
+    margin:40px 0 0; padding:22px 24px; border-radius:14px;
+    background:linear-gradient(180deg, rgba(57,214,240,.06), transparent), var(--panel);
+    border:1px solid var(--line);
+  }
+  .start b{font-family:'PS2P'; font-size:11px; color:var(--mint);}
+  .start ol{margin:12px 0 0; padding-left:20px; color:var(--mut); font-size:14px;}
+  .start ol li{margin:5px 0;}
+  .start a{color:var(--cyan);}
+  footer{margin-top:56px; color:var(--dim); font-size:12px; border-top:1px solid var(--line); padding-top:20px;}
+  code{background:#0c0c16; border:1px solid var(--line); border-radius:5px; padding:1px 6px; font-size:12.5px; color:var(--cyan);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="kicker">Ironbit · Developer Handoff</span>
+    <h1>Home Room</h1>
+    <p class="lede">The Core chamber — a single coherent scene the user calls home.
+    The procedural face/BIT is the centerpiece, hovering over a neon emitter pad in a lit
+    room whose every surface maps to a game system. Body-neutral, anti-guilt, calm.</p>
+    <div>
+      <span class="pill">High fidelity</span>
+      <span class="pill">Flutter target</span>
+      <span class="pill">Pixel-art light</span>
+      <span class="pill">3 canvas engines</span>
+    </div>
+  </header>
+
+  <div class="grid-top">
+    <div class="device">
+      <iframe src="preview.html" title="Live preview"></iframe>
+      <div class="cap">LIVE PREVIEW · preview.html</div>
+    </div>
+    <div>
+      <h2 style="margin-top:0">Why this screen exists</h2>
+      <p class="sub">Six product principles. The whole build serves these.</p>
+      <div class="principles">
+        <div class="p"><b>1</b><span><i>Home is a place, not a stack of cards.</i> Old widgets become things in the room.</span></div>
+        <div class="p"><b>2</b><span><i>The face is the centerpiece, projected.</i> BIT is the single brightest thing — you open Home and see you.</span></div>
+        <div class="p"><b>3</b><span><i>BIT is the life and the explorer.</i> The reacting creature you fuel with Core and send scouting.</span></div>
+        <div class="p"><b>4</b><span><i>The room is wired to the lore.</i> Every surface is the economy made visible.</span></div>
+        <div class="p"><b>5</b><span><i>It pulls you back without pressure.</i> Time-of-day window; the room rests, never sulks.</span></div>
+        <div class="p"><b>6</b><span><i>It's built to grow.</i> The wall is a modular grid — collection slots in without re-layout.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="start">
+    <b>START HERE</b>
+    <ol>
+      <li>Open <a href="preview.html">preview.html</a> — the spec made real.</li>
+      <li>Read <a href="GUARDRAILS.md">GUARDRAILS.md</a> — the rules that govern every decision (salience, anti-guilt, pixel-art light).</li>
+      <li>Read <a href="LAYOUT-SPEC.md">LAYOUT-SPEC.md</a> then <a href="IMPLEMENTATION.md">IMPLEMENTATION.md</a> — coordinates, z-order, build order, exact engine configs.</li>
+      <li>Build component-by-component from <code>components/</code>.</li>
+    </ol>
+  </div>
+
+  <h2>Guides</h2>
+  <p class="sub">The four core documents.</p>
+  <div class="docs">
+    <a class="card" href="README.md"><span class="tag">Overview</span><span class="t">README</span><span class="d">What this bundle is, fidelity, asset inventory, the six principles.</span></a>
+    <a class="card" href="GUARDRAILS.md"><span class="tag">Read first</span><span class="t">Guardrails</span><span class="d">Hard rules — BIT wins salience, anti-guilt tone, pixel-art light, reduced-motion, strip the dev scaffolding.</span></a>
+    <a class="card" href="LAYOUT-SPEC.md"><span class="tag">Spec</span><span class="t">Layout Spec</span><span class="d">Coordinate system, every element's position/size, the z-index map, hover geometry, reserved space.</span></a>
+    <a class="card" href="IMPLEMENTATION.md"><span class="tag">Build</span><span class="t">Implementation</span><span class="d">Build order, the three engines' APIs + exact configs, the native (Flutter) mapping, acceptance checks.</span></a>
+  </div>
+
+  <h2>Components</h2>
+  <p class="sub">One doc each — purpose, exact styling, states, native notes.</p>
+  <div class="docs comp">
+    <a class="card" href="components/01-room-shell.md"><span class="tag">Component</span><span class="t">Room Shell</span><span class="d">Three value planes + ceiling key light. Panel-seam grid. What makes it a place.</span></a>
+    <a class="card" href="components/02-bit-companion.md"><span class="tag">Component</span><span class="t">BIT</span><span class="d">The centerpiece. Mount config, moods, idle + press-to-spin, how he maps to systems.</span></a>
+    <a class="card" href="components/03-hover-pad.md"><span class="tag">Component</span><span class="t">Hover Pad</span><span class="d">Emitter sprite + floor-pool + contact shadow + rising beam. The two light engines.</span></a>
+    <a class="card" href="components/04-world-window.md"><span class="tag">Component</span><span class="t">World Window</span><span class="d">Four time-of-day APNGs + wall glow. Driven by the device clock.</span></a>
+    <a class="card" href="components/05-identity-resources.md"><span class="tag">Component</span><span class="t">Identity + HUD</span><span class="d">Nameplate and the LCK / Gems / VIT resource readout.</span></a>
+    <a class="card" href="components/06-bottom-nav.md"><span class="tag">Component</span><span class="t">Bottom Nav</span><span class="d">Five destinations with the raised center TRAIN commit button.</span></a>
+    <a class="card" href="components/07-feed-cards.md"><span class="tag">Component</span><span class="t">Feed Card</span><span class="d">The minimal below-the-fold prompt. Companion to the room, not the home.</span></a>
+  </div>
+
+  <h2>Assets &amp; tokens</h2>
+  <p class="sub">Everything the screen references is in this folder.</p>
+  <div class="docs">
+    <a class="card" href="colors_and_type.css"><span class="tag">Tokens</span><span class="t">colors_and_type.css</span><span class="d">Palette, type ramp, spacing, motion, glow — the mirror of tokens.dart.</span></a>
+    <a class="card" href="assets/bit/bit.js"><span class="tag">Engine</span><span class="t">bit.js</span><span class="d">BIT companion engine — window.BIT.mount(host, opts).</span></a>
+    <a class="card" href="assets/bit-pad/bitpad-light.js"><span class="tag">Engine</span><span class="t">bitpad-light.js</span><span class="d">Floor-pool pixel-art light — window.BitPadLight.init(canvas, cfg).</span></a>
+    <a class="card" href="assets/bit-pad/bitpad-beam.js"><span class="tag">Engine</span><span class="t">bitpad-beam.js</span><span class="d">Rising hover beam — window.BitPadBeam.init(canvas, cfg).</span></a>
+  </div>
+
+  <footer>
+    Ironbit Design System · Home Room handoff. Built body-neutral and anti-guilt by design.
+    When in doubt, the calmer option wins.
+  </footer>
+</div>
+</body>
+</html>

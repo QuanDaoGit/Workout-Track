@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/pages/home.dart';
 import 'package:workout_track/theme/tokens.dart';
+import 'package:workout_track/widgets/loot_avatar_frame.dart';
 import 'package:workout_track/widgets/pixel_loader.dart';
 import 'package:workout_track/widgets/radar_stat_icon.dart';
 
@@ -75,7 +76,7 @@ void main() {
     );
   });
 
-  testWidgets('HomeStatusHud collapsed rail keeps the same live metrics', (
+  testWidgets('HomeStatusHud renders hot LCK and large balances', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -88,7 +89,6 @@ void main() {
               lckMultiplier: 2,
               gemBalance: 2400,
               vitality: 40,
-              collapseT: 1,
             ),
           ),
         ),
@@ -142,7 +142,6 @@ void main() {
                 lckMultiplier: 1.5,
                 gemBalance: 125,
                 vitality: 80,
-                collapseT: 1,
               ),
             ),
           ),
@@ -159,7 +158,20 @@ void main() {
   testWidgets('HomePage shows sticky HUD without removing main Home surfaces', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: HomePage()));
+    // Phone-sized surface: the Home Room is the top hero and the level strip +
+    // mission card peek below it. The default 800×600 test surface would push
+    // the room to its min-height and bury the cards off-screen.
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(disableAnimations: true),
+          child: HomePage(),
+        ),
+      ),
+    );
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
@@ -172,8 +184,13 @@ void main() {
     expect(find.byKey(const ValueKey('home_status_hud')), findsOneWidget);
     expect(find.byType(PixelLoader), findsNothing);
     expect(find.text("TODAY'S MISSION"), findsWidgets);
-    // The quests card sits below the Shadow/Adventure callouts now — scroll
-    // it into the lazily-built sliver viewport before asserting it exists.
+    // The level strip is Home's single competence surface, above the mission.
+    expect(find.byType(HomeLevelStrip), findsOneWidget);
+    // The character bar (and its avatar) moved to Labs — Home keeps identity
+    // via BIT + the level strip, no profile card.
+    expect(find.byType(LootAvatarFrame), findsNothing);
+    // The quests card sits below the Adventure callout now — scroll it into the
+    // lazily-built sliver viewport before asserting it exists.
     await tester.scrollUntilVisible(
       find.text('WEEKLY QUESTS'),
       240,
@@ -245,7 +262,7 @@ void main() {
       ),
     );
 
-    // Streak/LCK → workout history.
+    // LCK → stat board (luck is a combat stat shown there).
     await tester.tap(find.byKey(const ValueKey('home_status_lck_multiplier')));
     await tester.pumpAndSettle();
     expect([lckTaps, gemTaps, vitTaps], [1, 0, 0]);

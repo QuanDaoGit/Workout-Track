@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ironbit — Home Room</title>
+<link rel="stylesheet" href="colors_and_type.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%; background: #07070E;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'ShareTechMono', monospace;
+  }
+
+  /* ── Phone bezel ─────────────────────────────────────────────── */
+  .phone {
+    width: 390px; height: 844px; flex: none;
+    background: #0A0A0A; border-radius: 44px; padding: 10px;
+    box-shadow: 0 0 0 2px #2A2A3E, 0 30px 80px -20px rgba(0,0,0,.9);
+    position: relative;
+  }
+  .screen {
+    width: 100%; height: 100%; border-radius: 36px; overflow: hidden;
+    background: #11111F; position: relative;
+    display: flex; flex-direction: column;
+  }
+  .notch {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 118px; height: 24px; background: #000;
+    border-radius: 0 0 13px 13px; z-index: 10;
+  }
+
+  /* ── System bar ──────────────────────────────────────────────── */
+  .sysbar {
+    height: 44px; flex: none;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 0 24px 8px;
+    font-family: 'ShareTechMono', monospace; font-size: 12px; color: rgba(232,232,255,.5);
+  }
+  .sysbar-dots { display: flex; gap: 4px; }
+  .sysbar-dot { width: 5px; height: 5px; border-radius: 1px; background: #00FF9C; }
+
+  /* ── Content area — scroll host ──────────────────────────────── */
+  .content {
+    flex: 1; min-height: 0;
+    background: #11111F;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* The scroller: room is the top of one long scroll, cards stack below */
+  .scroller {
+    position: absolute; inset: 0;
+    overflow-y: auto; overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scroller::-webkit-scrollbar { width: 0; height: 0; }
+
+  /* The room — top viewport. Sits just shy of full height so the first card
+     peeks above the fold (Finch's scroll cue). */
+  .room {
+    position: relative;
+    height: calc(100% - 58px);
+    min-height: 520px;
+    background: #11111F;
+  }
+
+  /* The card feed — floating cards on kBg below the room */
+  .feed {
+    position: relative; z-index: 1;
+    background: #11111F;
+    padding: 14px 16px 28px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+
+  /* Back wall — a clearly LIGHTER plane, top-lit by the ceiling fixture.
+     bg=#11111F  <  wall=#1C1C36 (a clear shade up)  >  floor=darker. */
+  .wall {
+    position: absolute; left: 0; right: 0; top: 0;
+    bottom: 30%;
+    background-color: #1C1C36;
+    /* layers (top→bottom): panel seams · horizontal seam · ceiling-lit gradient */
+    background-image:
+      repeating-linear-gradient(90deg,
+        transparent 0px,
+        transparent 91px,
+        rgba(0,0,0,.30) 91px,
+        rgba(255,255,255,.04) 92px,
+        transparent 93px
+      ),
+      linear-gradient(180deg,
+        transparent 0%, transparent 43%,
+        rgba(0,0,0,.22) 43%, rgba(255,255,255,.03) 43.6%,
+        transparent 44.2%
+      ),
+      linear-gradient(180deg,
+        rgba(150,165,235,.16) 0%,
+        rgba(120,135,210,.05) 26%,
+        transparent 52%,
+        rgba(0,0,0,.10) 84%,
+        rgba(0,0,0,.22) 100%
+      );
+  }
+
+  /* Ceiling fixture — ambient light spilling DOWN from under the topbar */
+  .ceiling-fixture {
+    position: absolute; left: 0; right: 0; top: 42px;
+    height: 4px; z-index: 2; pointer-events: none;
+    background: linear-gradient(90deg,
+      transparent 6%, rgba(150,170,255,.45) 32%, rgba(170,185,255,.55) 50%,
+      rgba(150,170,255,.45) 68%, transparent 94%);
+    box-shadow: 0 0 16px 1px rgba(120,150,255,.22);
+  }
+  .ceiling-fixture::after {
+    content: '';
+    position: absolute; left: 4%; right: 4%; top: 3px; height: 120px;
+    background: radial-gradient(ellipse 64% 100% at 50% 0%,
+      rgba(135,155,235,.16) 0%, rgba(135,155,235,.05) 45%, transparent 78%);
+    pointer-events: none;
+  }
+
+  /* Window — real decor art on the wall. Snapped to panel 3 (182–273px seam).
+     Frame asset is 575×454 (ratio 1.27); box matches so there's no distortion. */
+  .window {
+    position: absolute; z-index: 4;
+    left: 182px; width: 91px;
+    top: 56px; height: 76px;
+  }
+  .window-glow {
+    position: absolute; inset: -16px; z-index: 0; border-radius: 8px;
+    background: radial-gradient(ellipse at center, var(--win-glow, rgba(120,150,220,.32)) 0%, transparent 68%);
+    filter: blur(3px); opacity: .55; pointer-events: none;
+  }
+  .window-img {
+    position: relative; z-index: 1;
+    display: block; width: 100%; height: 100%;
+    image-rendering: pixelated;
+  }
+
+  /* Identity anchor — rank / level / title, left side of the room */
+  .identity {
+    position: absolute; z-index: 8;
+    left: 16px; top: 56px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .identity-name {
+    font-family: 'PressStart2P', monospace; font-size: 14px;
+    color: #E8E8FF; line-height: 1; letter-spacing: .5px;
+    text-shadow: 0 0 12px rgba(232,232,255,.25);
+  }
+  .identity-rank {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .identity-lv {
+    font-family: 'ShareTechMono', monospace; font-size: 13px;
+    color: #9494B8; line-height: 1;
+  }
+  .identity-sep {
+    width: 1px; height: 11px; background: rgba(255,215,0,.4);
+  }
+  .identity-title {
+    font-family: 'PressStart2P', monospace; font-size: 9px;
+    color: #FFD700; line-height: 1; letter-spacing: .5px;
+    text-shadow: 0 0 10px rgba(255,215,0,.35);
+  }
+
+  /* ── BIT — the room's inhabitant. Canonical engine, mounted by bit.js. ────
+     Anchor rule: hover-center is a FIXED point; bit.js paints its canvas +
+     ground-glow INTO #bit, so swapping moods / accessories never shifts him. */
+  .bit-anchor {
+    position: absolute; z-index: 7;
+    left: 185px; top: 340px;   /* hover-center (≈ horiz centre, lower-middle) */
+    width: 0; height: 0;
+  }
+  .bit-host {
+    position: absolute; left: 0; top: 0;
+    width: 92px; height: 92px;
+    transform: translate(-50%, -50%);
+    filter: drop-shadow(0 0 5px rgba(0,191,255,.28));
+  }
+  /* ── BIT's hover pad — emitter on the floor; BIT floats ~80px above it ────
+     Pad base rests at the floor band (~y452); emitter top at ~y420. */
+  /* floor pool — BitPadLight pixel-art canvas, scaled up chunky, BEHIND pad.
+     Held at ~0.8 opacity so BIT's concentrated lens still wins the eye. */
+  .pad-glow {
+    position: absolute; z-index: 3;
+    left: 185px; top: 354px; width: 228px; height: 192px;
+    transform: translateX(-50%); opacity: .8;
+    image-rendering: pixelated; pointer-events: none;
+  }
+  /* dark contact shadow grounding the pad on the floor */
+  .pad-contact {
+    position: absolute; z-index: 4;
+    left: 185px; top: 470px; width: 130px; height: 11px;
+    transform: translate(-50%, -50%); pointer-events: none;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(3,3,8,.6) 0%, rgba(3,3,8,.3) 55%, transparent 80%);
+    filter: blur(1.5px);
+  }
+  /* the metal console sprite (108×40 native, shown ~1.4×) */
+  .pad {
+    position: absolute; z-index: 5;
+    left: 185px; top: 414px; width: 150px; height: 56px;
+    transform: translateX(-50%);
+  }
+  .pad-sprite {
+    display: block; width: 100%; height: 100%; image-rendering: pixelated;
+  }
+  /* rising energy beam — BitPadBeam canvas, additive, fades before BIT */
+  .pad-beam {
+    position: absolute; z-index: 6;
+    left: 185px; top: 366px; width: 64px; height: 64px;
+    transform: translateX(-50%);
+    image-rendering: pixelated; pointer-events: none; mix-blend-mode: screen;
+  }
+
+  /* Mounting points — small dots at seam intersections */
+  .mount {
+    position: absolute; width: 4px; height: 4px; z-index: 3;
+    border-radius: 50%;
+    background: #0E0E22;
+    border: 1px solid rgba(255,255,255,.07);
+    transform: translate(-50%, -50%);
+  }
+
+  /* Top bar — resource strip, PINNED over the scroll */
+  .topbar {
+    position: absolute; top: 0; left: 0; right: 0;
+    z-index: 20; padding: 11px 16px 10px;
+    display: flex; align-items: center;
+    background: rgba(11,11,22,.85);
+    border-bottom: 1px solid rgba(255,255,255,.05);
+  }
+  .topbar-name {
+    font-family: 'PressStart2P', monospace; font-size: 11px;
+    color: #00FF9C; line-height: 1;
+  }
+  .topbar-resources {
+    margin-left: auto; display: flex; gap: 14px; align-items: center;
+  }
+  /* bare icon + value pair, no container */
+  .res {
+    display: flex; align-items: center; gap: 5px;
+  }
+  .res-icon {
+    width: 12px; height: 12px; flex: none;
+    image-rendering: pixelated;
+  }
+  /* luck: rotated square diamond (inline) */
+  .res-icon-diamond {
+    width: 9px; height: 9px; flex: none;
+    transform: rotate(45deg);
+    background: #FFD700;
+    box-shadow: 0 0 5px rgba(255,215,0,.6);
+  }
+  .res-icon-mask {
+    width: 13px; height: 13px; flex: none;
+    -webkit-mask-size: contain; mask-size: contain;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-position: center; mask-position: center;
+    image-rendering: pixelated;
+  }
+  .res-val {
+    font-family: 'ShareTechMono', monospace; font-size: 13px; line-height: 1;
+  }
+  .res-lck  .res-val { color: #FFD700; }
+  .res-gems .res-icon-mask { background-color: #00E5A0;
+    -webkit-mask-image: url(assets/icon_coin.png); mask-image: url(assets/icon_coin.png); }
+  .res-gems .res-val { color: #00E5A0; }
+  .res-vit  .res-icon-mask { background-color: #FF4D6A;
+    -webkit-mask-image: url(assets/icon_drop.png); mask-image: url(assets/icon_drop.png); }
+  .res-vit  .res-val { color: #FF4D6A; }
+
+  /* Side vignette — frames the wall (top + sides) WITHOUT crushing it to black.
+     Gentle now: the lit wall centre stays readable; edges fall into enclosure. */
+  .vignette {
+    position: absolute; left: 0; right: 0; top: 0;
+    bottom: 30%;
+    pointer-events: none; z-index: 10;
+    background:
+      linear-gradient(90deg, rgba(7,7,16,.42) 0%, transparent 26%, transparent 74%, rgba(7,7,16,.42) 100%),
+      radial-gradient(120% 80% at 50% 46%, transparent 58%, rgba(7,7,16,.34) 100%);
+  }
+
+  /* Floor band — a distinct darker plane. Top edge catches a little ambient,
+     receding to near-black at the foot of the screen. */
+  .floor {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 30%;
+    background: linear-gradient(180deg, #131322 0%, #0C0C16 42%, #07070E 100%);
+  }
+  .floor::after {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    /* soft pool of reflected light on the floor under the room centre */
+    background: radial-gradient(ellipse 52% 80% at 50% 8%, rgba(120,135,200,.10) 0%, transparent 70%);
+  }
+
+  /* Wall-floor seam — the neon horizon edge. Brighter now, with a soft bloom. */
+  .floor::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px; z-index: 1;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(0,255,156,.18) 18%,
+      rgba(0,255,156,.42) 50%,
+      rgba(0,255,156,.18) 82%,
+      transparent 100%
+    );
+    box-shadow: 0 0 9px rgba(0,255,156,.22);
+  }
+
+  /* ── Bottom nav ──────────────────────────────────────────────── */
+  .nav {
+    height: 80px; flex: none;
+    position: relative; z-index: 30;
+    display: flex; align-items: flex-end; justify-content: space-around;
+    padding: 0 8px 16px;
+    background: #141428; border-top: 1px solid #252545;
+  }
+  .nav-item {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    background: none; border: none; cursor: pointer;
+    flex: 0 0 18%;
+  }
+  .nav-icon {
+    width: 22px; height: 22px;
+    background-color: #555577;
+    -webkit-mask-size: contain; mask-size: contain;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-position: center; mask-position: center;
+    image-rendering: pixelated;
+  }
+  .nav-icon.active { background-color: #00FF9C; }
+  .nav-label {
+    font-family: 'PressStart2P', monospace; font-size: 6.5px;
+    color: #555577; line-height: 1;
+  }
+  .nav-label.active { color: #00FF9C; }
+
+  /* Train — raised center button */
+  .nav-train {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    transform: translateY(-14px);
+  }
+  .nav-train-btn {
+    width: 56px; height: 56px; border-radius: 4px;
+    background: #00FF9C; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 16px -2px rgba(0,255,156,.4), 0 4px 0 0 #009955;
+    transition: transform 100ms, box-shadow 100ms;
+    image-rendering: pixelated;
+  }
+  .nav-train-btn:active {
+    transform: translateY(3px);
+    box-shadow: 0 0 16px -2px rgba(0,255,156,.4), 0 1px 0 0 #009955;
+  }
+  .nav-train-btn .nav-icon {
+    width: 26px; height: 26px;
+    background-color: #0D0D1A;
+  }
+  .nav-train-label {
+    font-family: 'PressStart2P', monospace; font-size: 6.5px;
+    color: #00FF9C; line-height: 1;
+  }
+
+  /* ── Feed cards ──────────────────────────────────────────────── */
+  .card {
+    position: relative;
+    background: #191929;
+    border: 1px solid #2A2A45;
+    border-radius: 6px;
+    padding: 16px 18px;
+    overflow: hidden;
+  }
+  /* neon left-edge accent — brightest at top, fading down */
+  .card::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, #00FF9C 0%, rgba(0,255,156,.15) 100%);
+  }
+
+  .card-label {
+    font-family: 'ShareTechMono', monospace; font-size: 10px;
+    letter-spacing: 1.5px; color: #7A7A9E; text-transform: uppercase;
+  }
+  .card-title {
+    font-family: 'Gotham', sans-serif; font-weight: 700;
+    font-size: 23px; color: #E8E8FF; letter-spacing: .5px;
+    margin-top: 9px; line-height: 1;
+  }
+  .card-chips {
+    display: flex; gap: 8px; margin-top: 14px;
+  }
+  .chip {
+    font-family: 'ShareTechMono', monospace; font-size: 11px;
+    letter-spacing: .5px; color: #AAAACC;
+    padding: 5px 12px; border-radius: 3px;
+    border: 1px solid #3A3A55; background: rgba(255,255,255,.015);
+  }
+  .card-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 16px;
+  }
+  .card-meta {
+    font-family: 'ShareTechMono', monospace; font-size: 12px; color: #6A6A8E;
+  }
+  .card-cta {
+    font-family: 'ShareTechMono', monospace; font-size: 12px;
+    letter-spacing: .5px; color: #00FF9C;
+    display: flex; align-items: center; gap: 5px; cursor: pointer;
+  }
+
+  /* ── Tweaks panel — dark, on-brand. Hidden until the host activates it. ──── */
+  .twk {
+    position: fixed; right: 16px; bottom: 16px; z-index: 2147483646;
+    width: 248px; display: none; flex-direction: column;
+    background: rgba(13,13,26,.92);
+    -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid #2A2A45; border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
+    overflow: hidden;
+  }
+  .twk.open { display: flex; }
+  .twk-hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 10px 11px 14px; cursor: move; user-select: none;
+    border-bottom: 1px solid rgba(255,255,255,.05);
+  }
+  .twk-hd b {
+    font-family: 'PressStart2P', monospace; font-size: 10px; color: #00FF9C; letter-spacing: .5px;
+  }
+  .twk-x {
+    appearance: none; border: 0; background: transparent; color: #6A6A8E;
+    width: 22px; height: 22px; border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  .twk-x:hover { background: rgba(255,255,255,.06); color: #E8E8FF; }
+  .twk-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .twk-sect {
+    font-family: 'ShareTechMono', monospace; font-size: 10px; letter-spacing: 1.5px;
+    text-transform: uppercase; color: #6A6A8E;
+  }
+  /* 2×2 window picker */
+  .twk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .twk-win {
+    appearance: none; border: 1px solid #2A2A45; background: rgba(7,7,14,.5);
+    border-radius: 6px; padding: 5px; cursor: pointer; overflow: hidden;
+    display: flex; flex-direction: column; gap: 4px; transition: border-color .12s;
+  }
+  .twk-win:hover { border-color: #45437A; }
+  .twk-win[data-on="1"] { border-color: #00FF9C; box-shadow: 0 0 12px -4px rgba(0,255,156,.6); }
+  .twk-win img {
+    display: block; width: 100%; height: 52px; object-fit: cover;
+    image-rendering: pixelated; border-radius: 3px;
+  }
+  .twk-win-lbl {
+    font-family: 'ShareTechMono', monospace; font-size: 8.5px; letter-spacing: .5px;
+    color: #9494B8; text-align: left; line-height: 1.2;
+  }
+  .twk-win[data-on="1"] .twk-win-lbl { color: #E8E8FF; }
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="screen">
+
+      <div class="sysbar">
+        <span>9:41</span>
+        <div class="sysbar-dots">
+          <div class="sysbar-dot"></div>
+          <div class="sysbar-dot"></div>
+          <div class="sysbar-dot"></div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="scroller">
+
+          <div class="room">
+            <div class="wall" style="background-size: auto; text-align: left">
+              <div class="ceiling-fixture"></div>
+              <div class="window">
+            <div class="window-glow" id="window-glow"></div>
+            <img class="window-img" id="window-img" src="assets/decor/window_afternoon.png" alt="World window">
+          </div>
+              <!-- mounting points at seam intersections (3 seams × 1 h-seam = 6 pts) -->
+              <div class="mount" style="left:91px; top:44%"></div>
+              <div class="mount" style="left:182px; top:44%"></div>
+              <div class="mount" style="left:273px; top:44%"></div>
+              <div class="mount" style="left:91px; top:0%"></div>
+              <div class="mount" style="left:182px; top:0%"></div>
+              <div class="mount" style="left:273px; top:0%"></div>
+            </div>
+            <div class="floor"></div>
+            <div class="vignette"></div>
+
+            <!-- BIT's hover pad — pixel-art emitter console + dithered light engines -->
+            <canvas class="pad-glow" id="padGlow"></canvas>
+            <div class="pad-contact"></div>
+            <div class="pad">
+              <img class="pad-sprite" src="assets/bit-pad/bit_pad.png" alt="">
+            </div>
+            <canvas class="pad-beam" id="padBeam"></canvas>
+
+            <!-- BIT — mounted by bit.js into #bit; anchor is the fixed hover-centre -->
+            <div class="bit-anchor">
+              <div id="bit" class="bit-host"></div>
+            </div>
+            <div class="identity">
+              <div class="identity-name">VALEN</div>
+              <div class="identity-rank">
+                <span class="identity-lv">LV.7</span>
+                <span class="identity-sep"></span>
+                <span class="identity-title">KNIGHT</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="feed">
+            <div class="card mission-card">
+              <div class="card-label">Today's muscle</div>
+              <div class="card-title">UPPER BODY</div>
+              <div class="card-chips">
+                <span class="chip">CHEST</span>
+                <span class="chip">BACK</span>
+              </div>
+              <div class="card-footer">
+                <span class="card-meta">5 exercises · ~45 min</span>
+                <span class="card-cta">START ON TRAIN <span>&rarr;</span></span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="topbar">
+          <span class="topbar-name">Ironbit</span>
+          <div class="topbar-resources">
+            <div class="res res-lck">
+              <div class="res-icon-diamond"></div>
+              <span class="res-val">2.0x</span>
+            </div>
+            <div class="res res-gems">
+              <div class="res-icon-mask"></div>
+              <span class="res-val">0</span>
+            </div>
+            <div class="res res-vit">
+              <div class="res-icon-mask"></div>
+              <span class="res-val">72</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item">
+          <div class="nav-icon active" style="-webkit-mask-image: url(assets/icon_map.png); mask-image: url(assets/icon_map.png);"></div>
+          <span class="nav-label active">HOME</span>
+        </button>
+        <button class="nav-item">
+          <div class="nav-icon" style="-webkit-mask-image: url(assets/icon_character.png); mask-image: url(assets/icon_character.png);"></div>
+          <span class="nav-label">HERO</span>
+        </button>
+        <div class="nav-train">
+          <button class="nav-train-btn">
+            <div class="nav-icon" style="-webkit-mask-image: url(assets/icon_sword.png); mask-image: url(assets/icon_sword.png);"></div>
+          </button>
+          <span class="nav-train-label">TRAIN</span>
+        </div>
+        <button class="nav-item">
+          <div class="nav-icon" style="-webkit-mask-image: url(assets/icon_scroll.png); mask-image: url(assets/icon_scroll.png);"></div>
+          <span class="nav-label">QUESTS</span>
+        </button>
+        <button class="nav-item">
+          <div class="nav-icon" style="-webkit-mask-image: url(assets/icon_bag.png); mask-image: url(assets/icon_bag.png);"></div>
+          <span class="nav-label">BAG</span>
+        </button>
+      </nav>
+
+    </div>
+  </div>
+
+  <!-- Tweaks panel — populated + toggled by JS; hidden until host activates -->
+  <div class="twk" id="twk">
+    <div class="twk-hd" id="twk-hd">
+      <b>Tweaks</b>
+      <button class="twk-x" id="twk-x" aria-label="Close tweaks">&#10005;</button>
+    </div>
+    <div class="twk-body">
+      <div class="twk-sect">World window</div>
+      <div class="twk-grid" id="twk-windows"></div>
+    </div>
+  </div>
+
+  <script src="assets/bit/bit.js"></script>
+  <script src="assets/bit-pad/bitpad-light.js"></script>
+  <script src="assets/bit-pad/bitpad-beam.js"></script>
+  <script>
+    /* BIT's hover pad — the user-authored pixel-art light engines.
+       Floor pool (BitPadLight) pools wide on the floor under the pad; the
+       rising beam (BitPadBeam) climbs from the emitter and fades out before
+       BIT's mount height so BIT keeps salience. Configs from beam-dev.html,
+       scaled to the room. */
+    (function () {
+      var glow = document.getElementById('padGlow');
+      var beam = document.getElementById('padBeam');
+      if (glow && window.BitPadLight) {
+        BitPadLight.init(glow, {
+          cols: 68, rows: 60, cx: 34, cy: 40, rx: 30, ry: 22, ryUp: 10, fps: 14
+        });
+      }
+      if (beam && window.BitPadBeam) {
+        BitPadBeam.init(beam, {
+          cols: 20, rows: 26, apexX: 10, apexY: 22, topY: 9,
+          halfBase: 3.0, spread: -0.05, edgeFlat: 1.7, vfade: 1.1,
+          bandSpeed: 6, bandPeriod: 4, fps: 14
+        });
+      }
+    })();
+  </script>
+
+  <script>
+    /* BIT — mount the canonical engine. Idle motion runs automatically; the
+       press → cheer + one full plate-orbit reaction is auto-wired by mount().
+       (Float here is tuned 2× faster / 1.5× range in this copy of bit.js.) */
+    (function () {
+      var host = document.getElementById('bit');
+      if (host && window.BIT) {
+        window.__bit = BIT.mount(host, { mood: 'NEUTRAL', px: 92, groundGlow: false });
+      }
+    })();
+  </script>
+
+  <script>
+    /* ========================================================================
+       Tweaks — vanilla host protocol. The world-window time-of-day is the one
+       tweak for now. Persisted via the EDITMODE block the host rewrites on disk.
+       ======================================================================== */
+    (function () {
+      var TWEAKS = /*EDITMODE-BEGIN*/{
+        "timeOfDay": "evening"
+      }/*EDITMODE-END*/;
+
+      var WINDOWS = [
+        { id:'morning',   src:'assets/decor/window_morning.png',   label:'EARLY MORNING', sub:'sunrise',   glow:'rgba(255,176,96,.38)' },
+        { id:'noon',      src:'assets/decor/window_noon.png',      label:'NOON',          sub:'clear sky', glow:'rgba(127,182,232,.40)' },
+        { id:'afternoon', src:'assets/decor/window_afternoon.png', label:'AFTERNOON',     sub:'sunset',    glow:'rgba(224,104,42,.42)' },
+        { id:'evening',   src:'assets/decor/window_evening.png',   label:'EVENING',       sub:'starry',    glow:'rgba(111,144,216,.36)' },
+      ];
+      var byId = {}; WINDOWS.forEach(function(w){ byId[w.id] = w; });
+
+      var imgEl  = document.getElementById('window-img');
+      var glowEl = document.getElementById('window-glow');
+
+      function applyTime(id) {
+        var w = byId[id] || byId.afternoon;
+        if (imgEl)  imgEl.src = w.src;
+        if (glowEl) glowEl.style.setProperty('--win-glow', w.glow);
+        // reflect active state in the picker
+        var chips = document.querySelectorAll('.twk-win');
+        chips.forEach(function(c){ c.setAttribute('data-on', c.dataset.id === id ? '1' : '0'); });
+      }
+
+      // build the 2×2 picker
+      var grid = document.getElementById('twk-windows');
+      WINDOWS.forEach(function(w){
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'twk-win'; b.dataset.id = w.id;
+        b.innerHTML = '<img src="' + w.src + '" alt=""><span class="twk-win-lbl">' + w.label + ' · ' + w.sub + '</span>';
+        b.addEventListener('click', function(){ setTweak('timeOfDay', w.id); });
+        grid.appendChild(b);
+      });
+
+      applyTime(TWEAKS.timeOfDay);
+
+      function setTweak(key, val) {
+        TWEAKS[key] = val;
+        if (key === 'timeOfDay') applyTime(val);
+        // persist via host
+        var edits = {}; edits[key] = val;
+        window.parent.postMessage({ type: '__edit_mode_set_keys', edits: edits }, '*');
+      }
+
+      // ── host protocol ──
+      var panel = document.getElementById('twk');
+      window.addEventListener('message', function (e) {
+        var t = e && e.data && e.data.type;
+        if (t === '__activate_edit_mode') panel.classList.add('open');
+        else if (t === '__deactivate_edit_mode') panel.classList.remove('open');
+      });
+      window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+
+      document.getElementById('twk-x').addEventListener('click', function () {
+        panel.classList.remove('open');
+        window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+      });
+
+      // draggable header
+      (function () {
+        var hd = document.getElementById('twk-hd'), down = false, sx, sy, sr, sb;
+        hd.addEventListener('mousedown', function (e) {
+          down = true; sx = e.clientX; sy = e.clientY;
+          var r = panel.getBoundingClientRect();
+          sr = window.innerWidth - r.right; sb = window.innerHeight - r.bottom;
+          e.preventDefault();
+        });
+        window.addEventListener('mousemove', function (e) {
+          if (!down) return;
+          panel.style.right = Math.max(8, sr - (e.clientX - sx)) + 'px';
+          panel.style.bottom = Math.max(8, sb - (e.clientY - sy)) + 'px';
+        });
+        window.addEventListener('mouseup', function () { down = false; });
+      })();
+    })();
+  </script>
+</body>
+</html>

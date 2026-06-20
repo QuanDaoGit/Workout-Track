@@ -3,14 +3,12 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../data/adventure_routes.dart';
-import '../../models/avatar_spec.dart';
-import '../../models/character_class.dart';
 import '../../theme/tokens.dart';
-import 'pixel_walker.dart';
+import 'bit_route_walker.dart';
 
 /// The expedition diorama: a continuously-scrolling parallax scene built
 /// from a route's three still layers (sky static, far at ~30% speed, ground
-/// at full speed wrapping seamlessly) with the user's walking character on
+/// at full speed wrapping seamlessly) with [BitRouteWalker] hover-gliding on
 /// top. Backdrops are authored at 480×270 / 480×96 native pixel art and
 /// scaled with nearest-neighbor ([FilterQuality.none]) so pixels stay crisp.
 ///
@@ -22,8 +20,6 @@ class RouteDiorama extends StatefulWidget {
   const RouteDiorama({
     super.key,
     required this.route,
-    required this.avatarSpec,
-    this.characterClass,
     this.height = 200,
     this.animate = true,
     this.showWalker = true,
@@ -32,8 +28,6 @@ class RouteDiorama extends StatefulWidget {
   });
 
   final AdventureRouteDef route;
-  final AvatarSpec avatarSpec;
-  final CharacterClass? characterClass;
   final double height;
 
   /// Scroll the parallax layers + particles. Exactly one diorama on a screen
@@ -55,6 +49,11 @@ class RouteDiorama extends StatefulWidget {
   static const _nativeW = 480.0;
   static const _nativeH = 270.0;
   static const _groundNativeH = 96.0;
+
+  /// BIT renders at this multiple of the world pixel-density — a deliberate
+  /// foreground-emphasis so the focal protagonist reads at a glance (1×
+  /// world-scale was too small). Chosen by eye against the live backdrop.
+  static const _bitDensity = 3.5;
 
   @override
   State<RouteDiorama> createState() => _RouteDioramaState();
@@ -122,13 +121,11 @@ class _RouteDioramaState extends State<RouteDiorama>
             return AnimatedBuilder(
               animation: _clock,
               builder: (context, _) {
+                final reduceMotion = MediaQuery.of(context).disableAnimations;
                 final t = _clock.lastElapsedDuration?.inMilliseconds ?? 0;
                 final seconds = t / 1000.0;
                 final groundShift = seconds * route.scrollSpeed * scale;
                 final farShift = groundShift * 0.3;
-                // Walk cycle: advance one of 4 frames per ~13px ground scroll
-                // (rig cadence), so the feet stay synced to the moving ground.
-                final frame = (groundShift / 13).floor() % 4;
                 return Stack(
                   fit: StackFit.expand,
                   children: [
@@ -159,17 +156,23 @@ class _RouteDioramaState extends State<RouteDiorama>
                       fallbackTop: kCard,
                       fallbackBottom: kBg,
                     ),
-                    // The traveler, planted on the ground line (only when this
-                    // diorama owns the sprite — selection backdrops hide it).
+                    // BIT, hover-gliding near the left of the route with his
+                    // body above the walk line (only when this diorama owns the
+                    // sprite — selection backdrops hide it). His native y29
+                    // contact line anchors on the route's walk line.
                     if (widget.showWalker)
                       Positioned(
-                        left: w * 0.3,
-                        bottom: groundH * 0.55,
-                        child: PixelWalker(
-                          spec: widget.avatarSpec,
-                          characterClass: widget.characterClass,
-                          frame: frame,
-                          size: 40 * scale.clamp(0.8, 1.6),
+                        left: w * 0.08,
+                        top: (route.walkLineNative -
+                                29 * RouteDiorama._bitDensity) *
+                            scale,
+                        child: BitRouteWalker(
+                          tMs: reduceMotion ? 0 : t.toDouble(),
+                          accent: route.accent,
+                          speed: (widget.animate && !reduceMotion)
+                              ? route.scrollSpeed
+                              : 0,
+                          scale: scale * RouteDiorama._bitDensity,
                         ),
                       ),
                     // Route particles (embers / motes / rune dust).

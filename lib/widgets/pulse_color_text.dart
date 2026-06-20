@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../theme/tokens.dart';
+
 /// Renders [text] alternating between [colorA] and [colorB] every
 /// [periodMs]. Hard color swap — no gradient lerp, no AnimatedDefaultTextStyle.
 class PulseColorText extends StatefulWidget {
@@ -9,8 +11,8 @@ class PulseColorText extends StatefulWidget {
     this.text, {
     super.key,
     required this.style,
-    this.colorA = const Color(0xFFFFD700),
-    this.colorB = const Color(0xFFFFA500),
+    this.colorA = kAmber,
+    this.colorB = kAmberDark,
     this.periodMs = 500,
     this.textAlign,
   });

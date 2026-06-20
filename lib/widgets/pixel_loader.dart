@@ -3,11 +3,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../theme/tokens.dart';
+
 class PixelLoader extends StatefulWidget {
   const PixelLoader({
     super.key,
     this.size = 24,
-    this.color = const Color(0xFF00FF9C),
+    this.color = kNeon,
   });
 
   final double size;

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/gem_ledger_entry.dart';
+import 'json_safe.dart';
+import 'keyed_lock.dart';
 
 class GemService {
   static const String ledgerKey = 'gem_ledger_v1';
@@ -15,13 +17,9 @@ class GemService {
   Future<List<GemLedgerEntry>> ledger() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(ledgerKey);
-    if (raw == null || raw.isEmpty) return const [];
-    final decoded = jsonDecode(raw) as List<dynamic>;
-    return [
-      for (final entry in decoded)
-        if (entry is Map)
-          GemLedgerEntry.fromJson(Map<String, dynamic>.from(entry)),
-    ];
+    // Corruption-tolerant: a malformed ledger or a single bad entry yields the
+    // salvageable subset instead of throwing (this is the currency store).
+    return safeMapList(raw, GemLedgerEntry.fromJson, debugLabel: ledgerKey);
   }
 
   Future<int> awardQuestGems({
@@ -32,20 +30,22 @@ class GemService {
   }) async {
     if (amount <= 0) return 0;
     final id = 'quest:$claimKey';
-    final entries = await ledger();
-    if (entries.any((entry) => entry.id == id)) return 0;
-    await _save([
-      ...entries,
-      GemLedgerEntry(
-        id: id,
-        amount: amount,
-        sourceKind: GemLedgerSourceKind.quest,
-        sourceId: claimKey,
-        label: label,
-        createdAt: now ?? DateTime.now(),
-      ),
-    ]);
-    return amount;
+    return prefsWriteLock.synchronized(ledgerKey, () async {
+      final entries = await ledger();
+      if (entries.any((entry) => entry.id == id)) return 0;
+      await _save([
+        ...entries,
+        GemLedgerEntry(
+          id: id,
+          amount: amount,
+          sourceKind: GemLedgerSourceKind.quest,
+          sourceId: claimKey,
+          label: label,
+          createdAt: now ?? DateTime.now(),
+        ),
+      ]);
+      return amount;
+    });
   }
 
   /// Awards an expedition's gem payout. Idempotent by expedition id — a
@@ -59,20 +59,22 @@ class GemService {
   }) async {
     if (amount <= 0) return 0;
     final id = 'adventure:$expeditionId';
-    final entries = await ledger();
-    if (entries.any((entry) => entry.id == id)) return 0;
-    await _save([
-      ...entries,
-      GemLedgerEntry(
-        id: id,
-        amount: amount,
-        sourceKind: GemLedgerSourceKind.adventure,
-        sourceId: expeditionId,
-        label: label,
-        createdAt: now ?? DateTime.now(),
-      ),
-    ]);
-    return amount;
+    return prefsWriteLock.synchronized(ledgerKey, () async {
+      final entries = await ledger();
+      if (entries.any((entry) => entry.id == id)) return 0;
+      await _save([
+        ...entries,
+        GemLedgerEntry(
+          id: id,
+          amount: amount,
+          sourceKind: GemLedgerSourceKind.adventure,
+          sourceId: expeditionId,
+          label: label,
+          createdAt: now ?? DateTime.now(),
+        ),
+      ]);
+      return amount;
+    });
   }
 
   /// Awards the general warm-up bonus. Idempotent by **day** — the id is
@@ -86,20 +88,22 @@ class GemService {
   }) async {
     if (amount <= 0) return 0;
     final id = 'warmup:$dayKey';
-    final entries = await ledger();
-    if (entries.any((entry) => entry.id == id)) return 0;
-    await _save([
-      ...entries,
-      GemLedgerEntry(
-        id: id,
-        amount: amount,
-        sourceKind: GemLedgerSourceKind.warmup,
-        sourceId: dayKey,
-        label: label,
-        createdAt: now ?? DateTime.now(),
-      ),
-    ]);
-    return amount;
+    return prefsWriteLock.synchronized(ledgerKey, () async {
+      final entries = await ledger();
+      if (entries.any((entry) => entry.id == id)) return 0;
+      await _save([
+        ...entries,
+        GemLedgerEntry(
+          id: id,
+          amount: amount,
+          sourceKind: GemLedgerSourceKind.warmup,
+          sourceId: dayKey,
+          label: label,
+          createdAt: now ?? DateTime.now(),
+        ),
+      ]);
+      return amount;
+    });
   }
 
   Future<int> awardDemoGems({
@@ -110,19 +114,21 @@ class GemService {
   }) async {
     if (amount <= 0) return 0;
     final timestamp = now ?? DateTime.now();
-    final entries = await ledger();
-    await _save([
-      ...entries,
-      GemLedgerEntry(
-        id: 'demo:$packId:${timestamp.microsecondsSinceEpoch}',
-        amount: amount,
-        sourceKind: GemLedgerSourceKind.demoTopUp,
-        sourceId: packId,
-        label: label,
-        createdAt: timestamp,
-      ),
-    ]);
-    return amount;
+    return prefsWriteLock.synchronized(ledgerKey, () async {
+      final entries = await ledger();
+      await _save([
+        ...entries,
+        GemLedgerEntry(
+          id: 'demo:$packId:${timestamp.microsecondsSinceEpoch}',
+          amount: amount,
+          sourceKind: GemLedgerSourceKind.demoTopUp,
+          sourceId: packId,
+          label: label,
+          createdAt: timestamp,
+        ),
+      ]);
+      return amount;
+    });
   }
 
   Future<void> spendGems({
@@ -134,26 +140,30 @@ class GemService {
     if (amount <= 0) {
       throw ArgumentError.value(amount, 'amount', 'Must be positive.');
     }
-    final entries = await ledger();
-    final currentBalance = entries.fold<int>(
-      0,
-      (sum, entry) => sum + entry.amount,
-    );
-    if (currentBalance < amount) {
-      throw StateError('Not enough gems.');
-    }
-    final timestamp = now ?? DateTime.now();
-    await _save([
-      ...entries,
-      GemLedgerEntry(
-        id: 'spend:$sourceId:${timestamp.microsecondsSinceEpoch}',
-        amount: -amount,
-        sourceKind: GemLedgerSourceKind.cosmeticPurchase,
-        sourceId: sourceId,
-        label: label,
-        createdAt: timestamp,
-      ),
-    ]);
+    // Balance check + write are one critical section so a concurrent spend can't
+    // both pass the check against the same balance and overdraw.
+    await prefsWriteLock.synchronized(ledgerKey, () async {
+      final entries = await ledger();
+      final currentBalance = entries.fold<int>(
+        0,
+        (sum, entry) => sum + entry.amount,
+      );
+      if (currentBalance < amount) {
+        throw StateError('Not enough gems.');
+      }
+      final timestamp = now ?? DateTime.now();
+      await _save([
+        ...entries,
+        GemLedgerEntry(
+          id: 'spend:$sourceId:${timestamp.microsecondsSinceEpoch}',
+          amount: -amount,
+          sourceKind: GemLedgerSourceKind.cosmeticPurchase,
+          sourceId: sourceId,
+          label: label,
+          createdAt: timestamp,
+        ),
+      ]);
+    });
   }
 
   Future<void> _save(List<GemLedgerEntry> entries) async {

@@ -16,8 +16,8 @@ import '../../widgets/pixel_button.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/strobe_flash.dart';
 import '../../widgets/avatar/ironbit_avatar.dart';
+import '../../widgets/companion/bit_mood_core.dart';
 import '../../widgets/companion/bit_speech_bubble.dart';
-import '../../widgets/companion/bit_sprite.dart';
 import '../../widgets/typewriter_text.dart';
 import '../root_page.dart';
 
@@ -197,8 +197,12 @@ class _StartGateScreenState extends State<StartGateScreen> {
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const BitSprite(
-                                    mood: BitMood.neutral,
+                                  // The living, painted core — breathing plates +
+                                  // glow, reduced-motion-safe — the same companion
+                                  // engine the cold open / quiz / loader carry.
+                                  const BitMoodCore(
+                                    pose: BitPose.neutral,
+                                    reveal: 1,
                                     size: 56,
                                   ),
                                   const SizedBox(width: 12),
@@ -297,7 +301,10 @@ class _StartGateScreenState extends State<StartGateScreen> {
                       width: 96,
                       height: 96,
                       decoration: BoxDecoration(
-                        border: Border.all(color: clazz.themeColor),
+                        // Neutral identity frame (matches the Profile avatar
+                        // frame); the class is conveyed elsewhere, not by tinting
+                        // the user's own face.
+                        border: Border.all(color: kBorderVariant),
                         borderRadius: BorderRadius.circular(kCardRadius),
                         color: kBg,
                       ),

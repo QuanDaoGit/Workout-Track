@@ -8,6 +8,16 @@ import 'loot_service.dart';
 import 'ongoing_program_swap_service.dart';
 import 'program_customization_service.dart';
 import 'rest_service.dart';
+import 'schedule_resolver.dart';
+
+/// A const synthetic rest day returned by [ProgramService.getTodayDay] on a
+/// non-training weekday. Rest is calendar-derived under the weekday-anchored
+/// schedule, so it is no longer a slot in the program's progression.
+const ProgramDay _calendarRestDay = ProgramDay(
+  dayNumber: 0,
+  type: ProgramDayType.rest,
+  label: 'REST',
+);
 
 class ProgramService {
   ProgramService({DateTime Function()? nowProvider})
@@ -27,19 +37,23 @@ class ProgramService {
 
   final DateTime Function() _nowProvider;
 
+  RestService get _restService => RestService(nowProvider: _nowProvider);
+
+  static DateTime _dateOnly(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
+
   Future<ProgramProgress?> getActiveProgress({DateTime? now}) async {
     final prefs = await SharedPreferences.getInstance();
-    final progress = _loadProgress(prefs);
-    if (progress == null) return null;
-    final normalized = await _rollForwardCreditedRestDay(
-      prefs,
-      progress,
-      now ?? _nowProvider(),
-    );
-    if (normalized != progress) {
-      await _saveProgress(prefs, normalized);
-    }
-    return normalized;
+    return _loadProgress(prefs);
+  }
+
+  /// The training weekdays in effect for [date] (the frozen historical snapshot
+  /// for past weeks, the committed/pending set for the current/future week).
+  /// Single resolution point so [getTodayDay] and `RestService.dayInfoForState`
+  /// can never disagree about whether a day is a training day.
+  Future<Set<int>> _effectiveWeekdays(DateTime date) async {
+    final state = await _restService.loadState(now: date);
+    return _restService.trainingWeekdaysForDate(date, state);
   }
 
   Future<ProgramProgress> startProgram(String programId) async {
@@ -48,6 +62,7 @@ class ProgramService {
       programId: programId,
       currentWeek: 1,
       currentDayIndex: 0,
+      workoutIndex: 0,
       startedAt: _nowProvider(),
       completedSessions: 0,
     );
@@ -74,14 +89,41 @@ class ProgramService {
     // Guild Card keeps a record even after a program is quit.
   }
 
+  /// Today's resolved program day under the weekday-anchored schedule: the
+  /// next-up workout ([Program.workouts]`[workoutIndex]`) on a training weekday,
+  /// or a synthetic [ProgramDay] REST on a non-training weekday. Rest is
+  /// calendar-derived — it is no longer a slot in the progression.
   Future<ProgramDay?> getTodayDay({DateTime? now}) async {
     final progress = await getActiveProgress(now: now);
     if (progress == null) return null;
     final program = programById(progress.programId);
-    if (program == null || program.weekSchedule.isEmpty) return null;
-    return program.weekSchedule[progress.currentDayIndex];
+    if (program == null || program.workouts.isEmpty) return null;
+    final date = _dateOnly(now ?? _nowProvider());
+    final resolved = const ScheduleResolver().resolve(
+      date: date,
+      program: program,
+      workoutIndex: progress.workoutIndex,
+      effectiveWeekdays: await _effectiveWeekdays(date),
+    );
+    return resolved.displayedWorkout ?? _calendarRestDay;
   }
 
+  /// The workout the user is mid-session on (or would start now), regardless of
+  /// weekday — used for prescriptions/resume so off-anchor (forgiveness)
+  /// training still gets its TARGET banners. Null when no program/workouts.
+  Future<ProgramDay?> activeWorkoutDay() async {
+    final progress = await getActiveProgress();
+    if (progress == null) return null;
+    final program = programById(progress.programId);
+    if (program == null || program.workouts.isEmpty) return null;
+    return program.workouts[progress.workoutIndex % program.workouts.length];
+  }
+
+  /// Advances the workout-only cursor by exactly one on a completed workout
+  /// (wrapping mod the workout count), bumping [ProgramProgress.currentWeek] each
+  /// time the cycle wraps to 0 (one "week" = one full pass of the program's
+  /// workouts — the cadence the legacy 7-slot wrap used). Guarded once-per-day so
+  /// a double save can't double-advance.
   Future<ProgramProgress?> advanceDay({DateTime? now}) async {
     final prefs = await SharedPreferences.getInstance();
     final progress = await getActiveProgress(now: now);
@@ -91,18 +133,14 @@ class ProgramService {
     if (prefs.getString(lastAdvancedDateKey) == todayKey) return progress;
 
     final program = programById(progress.programId);
-    if (program == null || program.weekSchedule.isEmpty) return progress;
-    final currentDay = program.weekSchedule[progress.currentDayIndex];
+    if (program == null || program.workouts.isEmpty) return progress;
     final snapshot = ProgramDaySnapshot(
       programId: progress.programId,
       week: progress.currentWeek,
-      dayIndex: progress.currentDayIndex,
+      dayIndex: progress.workoutIndex,
       dateKey: todayKey,
     );
-    final next = _nextProgress(
-      progress,
-      completedSessionDelta: currentDay.isWorkout ? 1 : 0,
-    );
+    final next = _nextProgress(progress, program);
 
     await _saveProgress(prefs, next);
     await prefs.setString(lastAdvancedDateKey, todayKey);
@@ -202,48 +240,6 @@ class ProgramService {
     return snapshot;
   }
 
-  Future<ProgramDaySnapshot?> creditedRestSnapshotForToday({
-    DateTime? now,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final snapshot = _loadSnapshot(prefs.getString(lastRestCreditSnapshotKey));
-    final todayKey = RestService.dateKey(now ?? _nowProvider());
-    if (snapshot == null || snapshot.dateKey != todayKey) return null;
-    return snapshot;
-  }
-
-  Future<ProgramDaySnapshot?> creditRestDayForToday({DateTime? now}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final progress = await getActiveProgress(now: now);
-    if (progress == null) return null;
-    final program = programById(progress.programId);
-    if (program == null || program.weekSchedule.isEmpty) return null;
-    final day = program.weekSchedule[progress.currentDayIndex];
-    if (day.isWorkout) return null;
-
-    final todayKey = RestService.dateKey(now ?? _nowProvider());
-    final existing = _loadSnapshot(prefs.getString(lastRestCreditSnapshotKey));
-    if (existing != null &&
-        existing.dateKey == todayKey &&
-        existing.programId == progress.programId &&
-        existing.week == progress.currentWeek &&
-        existing.dayIndex == progress.currentDayIndex) {
-      return existing;
-    }
-
-    final snapshot = ProgramDaySnapshot(
-      programId: progress.programId,
-      week: progress.currentWeek,
-      dayIndex: progress.currentDayIndex,
-      dateKey: todayKey,
-    );
-    await prefs.setString(
-      lastRestCreditSnapshotKey,
-      jsonEncode(snapshot.toJson()),
-    );
-    return snapshot;
-  }
-
   Future<void> markOngoingProgramSession(
     String sessionId, {
     bool restDayWorkout = false,
@@ -278,7 +274,9 @@ class ProgramService {
   ) async {
     if (!await isOngoingProgramSession(sessionId)) return const {};
     final progress = await getActiveProgress();
-    final day = await getTodayDay();
+    // The in-session workout is the active workout-index slot regardless of
+    // weekday, so off-anchor (forgiveness) training keeps its TARGET banners.
+    final day = await activeWorkoutDay();
     if (progress == null || day == null || !day.isWorkout) return const {};
     final effective = await ProgramCustomizationService().effectiveDay(
       progress.programId,
@@ -311,12 +309,12 @@ class ProgramService {
     final decoded = jsonDecode(raw) as Map<String, dynamic>;
     final progress = ProgramProgress.fromJson(decoded);
     final program = programById(progress.programId);
-    if (program == null || program.weekSchedule.isEmpty) return null;
+    if (program == null || program.workouts.isEmpty) return null;
     return progress.copyWith(
       currentWeek: progress.currentWeek < 1 ? 1 : progress.currentWeek,
-      currentDayIndex: progress.currentDayIndex.clamp(
+      workoutIndex: progress.workoutIndex.clamp(
         0,
-        program.weekSchedule.length - 1,
+        program.workouts.length - 1,
       ),
       completedSessions: progress.completedSessions < 0
           ? 0
@@ -324,46 +322,18 @@ class ProgramService {
     );
   }
 
-  Future<ProgramProgress> _rollForwardCreditedRestDay(
-    SharedPreferences prefs,
-    ProgramProgress progress,
-    DateTime now,
-  ) async {
-    final snapshot = _loadSnapshot(prefs.getString(lastRestCreditSnapshotKey));
-    if (snapshot == null) return progress;
-    final todayKey = RestService.dateKey(now);
-    if (snapshot.dateKey == todayKey) return progress;
-    if (snapshot.programId != progress.programId ||
-        snapshot.week != progress.currentWeek ||
-        snapshot.dayIndex != progress.currentDayIndex) {
-      return progress;
-    }
-    final program = programById(progress.programId);
-    if (program == null || program.weekSchedule.isEmpty) return progress;
-    final day = program.weekSchedule[progress.currentDayIndex];
-    if (day.isWorkout) return progress;
-    final next = _nextProgress(progress, completedSessionDelta: 0);
-    await prefs.remove(lastRestCreditSnapshotKey);
-    return next;
-  }
-
-  ProgramProgress _nextProgress(
-    ProgramProgress progress, {
-    required int completedSessionDelta,
-  }) {
-    final program = programById(progress.programId);
-    if (program == null || program.weekSchedule.isEmpty) return progress;
-    var nextIndex = progress.currentDayIndex + 1;
-    var nextWeek = progress.currentWeek;
-    if (nextIndex >= program.weekSchedule.length) {
-      nextIndex = 0;
-      nextWeek++;
-    }
+  ProgramProgress _nextProgress(ProgramProgress progress, Program program) {
+    final count = program.workouts.length;
+    if (count == 0) return progress;
+    final nextWorkoutIndex = (progress.workoutIndex + 1) % count;
+    // A wrap back to 0 means a full cycle of the program's workouts elapsed.
+    final nextWeek = nextWorkoutIndex == 0
+        ? progress.currentWeek + 1
+        : progress.currentWeek;
     return progress.copyWith(
       currentWeek: nextWeek,
-      currentDayIndex: nextIndex,
-      completedSessions:
-          progress.completedSessions + completedSessionDelta.clamp(0, 1),
+      workoutIndex: nextWorkoutIndex,
+      completedSessions: progress.completedSessions + 1,
     );
   }
 

@@ -200,7 +200,7 @@ class _WelcomeLandingViewState extends State<WelcomeLandingView>
                 child: IgnorePointer(
                   child: Opacity(
                     opacity: veil,
-                    child: const ColoredBox(color: Colors.white),
+                    child: const ColoredBox(color: kWhite),
                   ),
                 ),
               ),

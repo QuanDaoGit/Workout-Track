@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:workout_track/data/bit_interview_copy.dart';
 import 'package:workout_track/models/body_goal_models.dart';
 import 'package:workout_track/models/calibration_quiz_models.dart';
 import 'package:workout_track/models/character_class.dart';
@@ -54,11 +55,14 @@ void main() {
   Finder optionCard(String label) =>
       find.ancestor(of: find.text(label), matching: find.byType(HoldDepress));
 
-  // Fully settle the prompt typewriter + card wipe-in so option cards paint at
-  // their final transform and are hit-testable (a dirty frame leaves the card
-  // NEEDS-PAINT and the tap coordinate misses).
+  // Settle the prompt typewriter + card wipe-in so option cards are hit-testable.
+  // BIT's idle is a perpetual ticker on the BIT-asked questions, so pumpAndSettle
+  // would never return under normal motion — pump a bounded run of frames instead
+  // (a single large pump leaves the card needing paint and the tap misses).
   Future<void> settleQuestion(WidgetTester tester) async {
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
   }
 
   group('system-back guards (PopScope canPop:false)', () {
@@ -102,7 +106,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: CalibrationQuizPage(
-            questions: const [QuizQuestion.goal, QuizQuestion.weightSex],
+            questions: const [QuizQuestion.frequency, QuizQuestion.weightSex],
             onComplete: (_) => completions++,
           ),
         ),
@@ -111,17 +115,18 @@ void main() {
       await settleQuestion(tester);
 
       // Two taps within the 280 ms select-hold window.
-      await tester.tap(optionCard('GET LEANER'));
-      await tester.tap(optionCard('GET LEANER'));
+      await tester.tap(optionCard('4–5 DAYS'));
+      await tester.tap(optionCard('4–5 DAYS'));
 
-      // Resolve the hold. Only the first tap should advance — to weight/sex.
+      // Resolve the hold. The guard means a single commit → BIT reacts once
+      // (not double-fired, not skipped past), and onComplete has not fired.
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(completions, 0, reason: 'onComplete must not fire early');
-      // Weight/sex body labels render immediately (the 'DIAL IT IN' prompt is a
-      // typewriter that hasn't finished, so assert on the plain body instead).
-      expect(find.text('BODYWEIGHT (KG)'), findsOneWidget);
-      expect(find.text("WHAT'S THE GOAL?"), findsNothing);
+      // A single commit → BIT is reacting (the options are replaced by the
+      // promise), and it has not advanced past the question into weight/sex.
+      expect(find.text('4–5 DAYS'), findsNothing);
+      expect(find.text('BODYWEIGHT (KG)'), findsNothing);
     });
 
     testWidgets('system back steps to the previous question, not a route pop', (
@@ -139,17 +144,16 @@ void main() {
       );
       await settleQuestion(tester);
 
-      // Advance to weight/sex.
+      // Advance to weight/sex (goal is ask-only, so a pick advances directly).
       await tester.tap(optionCard('GET LEANER'));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('BODYWEIGHT (KG)'), findsOneWidget);
 
       // System back should return to the goal question (step--), not exit.
       await tester.binding.handlePopRoute();
-      await tester.pump();
-      await tester.pump();
+      await settleQuestion(tester); // BIT re-types the goal ask on back
 
-      expect(find.text("WHAT'S THE GOAL?"), findsOneWidget);
+      expect(find.text(BitInterviewCopy.ask(QuizQuestion.goal)), findsOneWidget);
       expect(exits, 0);
     });
 
@@ -180,32 +184,43 @@ void main() {
       tester,
     ) async {
       QuizAnswers? captured;
+      // Reduced motion freezes BIT's idle ticker (so pumpAndSettle is safe) and
+      // types the reactions instantly — this test is about answer capture, not
+      // the typewriter, so the deterministic path keeps it focused.
       await tester.pumpWidget(
         MaterialApp(
-          home: CalibrationQuizPage(
-            questions: const [
-              QuizQuestion.trainingWhy,
-              QuizQuestion.winningVision,
-            ],
-            onComplete: (a) => captured = a,
+          home: MediaQuery(
+            data: const MediaQueryData(disableAnimations: true),
+            child: CalibrationQuizPage(
+              questions: const [
+                QuizQuestion.trainingWhy,
+                QuizQuestion.winningVision,
+              ],
+              onComplete: (a) => captured = a,
+            ),
           ),
         ),
       );
-      await settleQuestion(tester);
+      await tester.pumpAndSettle();
 
       // Vow — multi-select: pick the top two (both on-screen), then CONTINUE.
       await tester.tap(optionCard(TrainingWhy.feelAlive.label));
       await tester.pump();
       await tester.tap(optionCard(TrainingWhy.doneQuitting.label));
       await tester.pump();
-      await tester.tap(find.text('CONTINUE'));
-      await settleQuestion(tester);
+      await tester.tap(find.text('CONTINUE')); // confirm the vow set
+      await tester.pumpAndSettle();
+      // Vow reacts now — tap to continue past BIT's promise to reach vision.
+      await tester.tap(find.text('tap to continue ›'));
+      await tester.pumpAndSettle();
 
-      // Vision — pick one, then CONTINUE → onComplete (last question).
+      // Vision — pick one, CONTINUE → BIT reacts, then tap to continue → done.
       await tester.tap(optionCard(WinningVision.strongCapable.label));
       await tester.pump();
-      await tester.tap(find.text('CONTINUE'));
-      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('CONTINUE')); // confirm the vision set
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('tap to continue ›'));
+      await tester.pumpAndSettle();
 
       expect(captured, isNotNull);
       expect(captured!.trainingWhy, {

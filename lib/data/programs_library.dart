@@ -319,6 +319,31 @@ Program? programById(String id) {
   return null;
 }
 
+/// Maps a legacy 7-slot [currentDayIndex] (the pre-weekday-anchor cursor over
+/// the full workout+rest cycle) to the workout-only [Program.workouts] index the
+/// user should resume at: the next workout slot at or after [currentDayIndex],
+/// wrapping. A legacy cursor parked on a rest slot resolves to the upcoming
+/// workout; one already on a workout slot resolves to that workout. Pure +
+/// deterministic so the `weekdayAnchoredScheduleV1` migration is unit-testable.
+int workoutIndexForLegacyDayIndex(Program program, int currentDayIndex) {
+  final schedule = program.weekSchedule;
+  if (schedule.isEmpty) return 0;
+  final len = schedule.length;
+  final start = ((currentDayIndex % len) + len) % len; // normalize negatives
+  for (var offset = 0; offset < len; offset++) {
+    final i = (start + offset) % len;
+    if (schedule[i].isWorkout) {
+      // Position of slot i among workout-only slots = workouts before it.
+      var pos = 0;
+      for (var j = 0; j < i; j++) {
+        if (schedule[j].isWorkout) pos++;
+      }
+      return pos;
+    }
+  }
+  return 0; // schedule has no workout slots (not expected)
+}
+
 /// Deterministic next program offered when an arc completes (BEGIN NEXT PATH).
 /// Push Pull Legs chains to itself — a fresh, harder-earned cycle.
 const Map<String, String> programChainNext = {
@@ -414,30 +439,37 @@ class ProgramLookahead {
   final int daysAway;
 }
 
-/// The next WORKOUT day after the user's current position, with an on-track
-/// estimate of how many calendar days away it is. Rest slots auto-advance ~1
-/// per day; a pending or just-finished workout's successor becomes "today" the
-/// next day.
+/// The next WORKOUT under the weekday-anchored schedule, plus how many calendar
+/// days away it lands — the first training weekday strictly after [today].
 ///
-/// [todayConsumed] must be true ONLY on the completed-today surface, where
-/// `ProgramService.advanceDay` has already moved [currentDayIndex] onto the
-/// next slot. Returns null only for an empty schedule (no workout days).
+/// [workoutIndex] is the user's progression cursor into [Program.workouts].
+/// [todayWorkoutPending] is true only on the active-workout panel, where today
+/// still shows an undone workout (`workouts[workoutIndex]`), so the teaser points
+/// at the FOLLOWING workout (`workoutIndex + 1`). On the rest panel and the
+/// completed-today panel (where `advanceDay` already moved the cursor) it points
+/// at `workouts[workoutIndex]`. Returns null for a program with no workouts or no
+/// training weekdays.
 ProgramLookahead? nextWorkoutLookahead(
   Program program,
-  int currentDayIndex, {
-  required bool todayConsumed,
+  int workoutIndex, {
+  required Set<int> trainingWeekdays,
+  required DateTime today,
+  required bool todayWorkoutPending,
 }) {
-  final schedule = program.weekSchedule;
-  if (schedule.isEmpty) return null;
-  final startK = todayConsumed ? 0 : 1; // inclusive vs strictly-after
-  final dayBase = todayConsumed ? 1 : 0; // daysAway = k + dayBase
-  for (var k = startK; k < startK + schedule.length; k++) {
-    final idx = (currentDayIndex + k) % schedule.length;
-    if (schedule[idx].isWorkout) {
-      return ProgramLookahead(schedule[idx], k + dayBase);
-    }
+  final workouts = program.workouts;
+  if (workouts.isEmpty || trainingWeekdays.isEmpty) return null;
+
+  final labelIndex =
+      (workoutIndex + (todayWorkoutPending ? 1 : 0)) % workouts.length;
+
+  // Days until the next training weekday strictly after today (1..7).
+  var daysAway = 1;
+  while (daysAway <= 7) {
+    final weekday = (today.weekday - 1 + daysAway) % 7 + 1;
+    if (trainingWeekdays.contains(weekday)) break;
+    daysAway++;
   }
-  return null;
+  return ProgramLookahead(workouts[labelIndex], daysAway);
 }
 
 /// Relative wording for a [ProgramLookahead.daysAway] count. The single swap

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/tokens.dart';
+
 class RestAssets {
   const RestAssets._();
 
@@ -57,7 +59,7 @@ class RestScene extends StatelessWidget {
             assetPath: RestAssets.campfire,
             fallbackAssetPath: 'assets/icons/control/icon_time.png',
             size: 36,
-            color: Color(0xFFFFD700),
+            color: kAmber,
           ),
         ),
       ),

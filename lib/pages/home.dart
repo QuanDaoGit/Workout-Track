@@ -1,9 +1,12 @@
 import 'dart:async';
-import 'dart:ui' show lerpDouble;
+import 'dart:math';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
+import '../data/adventure_routes.dart';
+import '../data/bit_room_copy.dart';
 import '../data/muscle_groups.dart';
 import '../data/programs_library.dart';
 import '../models/adventure_models.dart';
@@ -12,20 +15,19 @@ import '../models/loot_item.dart';
 import '../models/program_models.dart';
 import '../models/profile_models.dart';
 import '../models/rest_models.dart';
-import '../models/shadow_models.dart';
 import '../models/workout_models.dart';
 import '../services/adventure_service.dart';
 import '../services/calorie_service.dart';
 import '../services/class_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/gem_service.dart';
+import '../services/guild_service.dart';
 import '../services/loot_service.dart';
 import '../services/profile_service.dart';
 import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
-import '../services/shadow_service.dart';
 import '../services/stat_engine.dart';
 import '../services/workout_defaults_service.dart';
 import '../services/workout_storage_service.dart';
@@ -34,13 +36,12 @@ import '../services/xp_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/adventure/adventure_card.dart';
 import '../widgets/arcade_dialog_button_column.dart';
-import '../widgets/arcade_progress_bar.dart';
+import '../widgets/arcade_bar.dart';
+import '../widgets/arcade_card.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
 import '../widgets/active_session_found_dialog.dart';
 import '../widgets/last_session_tag.dart';
-import '../widgets/lck_buff_badge.dart';
-import '../widgets/loot_avatar_frame.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/motion/phosphor_tap.dart';
 import '../widgets/pixel_button.dart';
@@ -48,8 +49,9 @@ import '../widgets/pixel_loader.dart';
 import '../widgets/program_path_hud.dart';
 import '../widgets/pulse_color_text.dart';
 import '../widgets/radar_stat_icon.dart';
+import '../widgets/room/expedition_dispatch_sheet.dart';
+import '../widgets/room/room_scene.dart';
 import '../widgets/screen_shake.dart';
-import '../widgets/shadow/shadow_card.dart';
 import '../widgets/strobe_flash.dart';
 import '../widgets/rest_icon.dart';
 import 'adventure_page.dart';
@@ -120,7 +122,6 @@ class HomePage extends StatefulWidget {
     this.onViewProfile,
     this.onViewWorkouts,
     this.onOpenShop,
-    this.onViewGuild,
   });
 
   final VoidCallback? onViewQuests;
@@ -132,14 +133,11 @@ class HomePage extends StatefulWidget {
   /// Gem metric → the gem store.
   final VoidCallback? onOpenShop;
 
-  /// Shadow callout → the Guild tab (where the Shadow arena lives).
-  final VoidCallback? onViewGuild;
-
   @override
   HomePageState createState() => HomePageState();
 }
 
-class HomePageState extends State<HomePage> {
+class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _loading = true;
   List<WorkoutSession> _ongoingSessions = [];
   int _totalXP = 0;
@@ -148,6 +146,7 @@ class HomePageState extends State<HomePage> {
   int _todayXP = 0;
   int _weeklyQuestCompleted = 0;
   int _weeklyQuestTotal = 5;
+  int _questClaimable = 0;
   WorkoutSession? _lastWorkout;
   WorkoutSession? _completedWorkoutToday;
   bool _isNewUser = false;
@@ -176,17 +175,46 @@ class HomePageState extends State<HomePage> {
   ProgramProgress? _programProgress;
   ProgramDay? _programDay;
   ProgramDaySnapshot? _programCompletedToday;
-  ShadowEvaluation? _shadowEval;
+  // Training weekdays in effect this week — drives the program "NEXT ▸" teaser's
+  // days-away under the weekday-anchored schedule.
+  Set<int> _trainingWeekdays = const {1, 3, 5};
   AdventureState? _adventureState;
   CharacterClass? _characterClass;
+  Map<String, int> _combatStats = const {};
+  // BIT's home-room voice: a rotating advice cursor (advanced on Home re-entry,
+  // no immediate repeat) + the expedition whose "I'm back" greeting was shown
+  // (persisted, so it fires once when the hologram first appears). _lastVoice*
+  // record the line the last build showed, so a re-entry can consume a shown
+  // greeting (flip to the away status) without recomputing phase.
+  final Random _adviceRng = Random();
+  int _adviceIndex = 0;
+  String? _greetedExpeditionId;
+  BitRoomVoiceKind? _lastVoiceKind;
+  String? _lastVoicePendingId;
   // Single-flight guard for the on-open expedition reveal (Home can load
   // twice in quick succession: initState + the storage-change listener).
   bool _expeditionRevealInFlight = false;
+  // Single-flight guard for the silent settle-on-open/resume/timer routine.
+  bool _expeditionSettleInFlight = false;
+  // Monotonic one-shot homecoming token: bumped only when a pending settles
+  // *this* refresh, so the room animates the arrival once (backlog = static).
+  int _homecomingTick = 0;
+  // Fires the homecoming the moment a pending returns while Home stays open.
+  Timer? _expeditionReturnTimer;
   StreamSubscription<void>? _storageSubscription;
+
+  // Drives the room's subtle background parallax: the scroll offset feeds a
+  // ValueListenable the room reads (a tiny scoped rebuild, no setState on scroll).
+  final ScrollController _scrollController = ScrollController();
+  final ValueNotifier<double> _roomScroll = ValueNotifier<double>(0);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _scrollController.addListener(
+      () => _roomScroll.value = _scrollController.offset,
+    );
     _storageSubscription = WorkoutStorageService.changes.listen((_) {
       if (!mounted) return;
       setState(() => _ongoingSessions = []);
@@ -197,8 +225,60 @@ class HomePageState extends State<HomePage> {
 
   Future<void> reload() => _loadData();
 
+  /// Home became the active surface again (app foregrounded or the Home tab
+  /// re-selected) — rotate BIT's advice line + consume a shown greeting, then
+  /// settle/refresh. Distinct from [reload]: quest-claim refreshes reload data
+  /// but must NOT churn BIT's line.
+  void onReenter() {
+    if (!mounted) return;
+    // The greeting was on screen → consume it so this return shows the away
+    // status, not "I'm back" again. Commit locally + rotate in one setState,
+    // then persist the flag BEFORE reload re-reads it (else the re-read resets
+    // it and the greeting re-shows — a fire-and-forget write race).
+    final consumeGreetingId = (_lastVoiceKind == BitRoomVoiceKind.greeting &&
+            _lastVoicePendingId != null &&
+            _greetedExpeditionId != _lastVoicePendingId)
+        ? _lastVoicePendingId
+        : null;
+    setState(() {
+      if (consumeGreetingId != null) _greetedExpeditionId = consumeGreetingId;
+      _rotateAdvice();
+    });
+    _persistGreetingThenReload(consumeGreetingId);
+  }
+
+  Future<void> _persistGreetingThenReload(String? greetedId) async {
+    if (greetedId != null) {
+      await AdventureService().setGreetedExpeditionId(greetedId);
+    }
+    if (mounted) await reload(); // re-reads the flag + settles a returned haul
+  }
+
+  /// Advance the home-advice cursor to a different random line (no immediate
+  /// repeat). Used only on a real Home re-entry.
+  void _rotateAdvice() {
+    final n = bitRoomAdvice.length;
+    if (n <= 1) return;
+    var next = _adviceRng.nextInt(n);
+    if (next == _adviceIndex) next = (next + 1) % n;
+    _adviceIndex = next;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // An expedition can return while Home is backgrounded — settle + play the
+    // homecoming on the way back in (the deterministic foreground path; the
+    // in-foreground due-time is covered by _expeditionReturnTimer). A resume is
+    // a Home re-entry → rotate BIT's advice too.
+    if (state == AppLifecycleState.resumed) onReenter();
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _expeditionReturnTimer?.cancel();
+    _scrollController.dispose();
+    _roomScroll.dispose();
     _storageSubscription?.cancel();
     super.dispose();
   }
@@ -210,21 +290,12 @@ class HomePageState extends State<HomePage> {
     final programProgress = await programService.getActiveProgress();
     final programDay = await programService.getTodayDay();
     final today = DateUtils.dateOnly(DateTime.now());
+    // Under the weekday-anchored schedule the program no longer stamps today as
+    // training/rest: a training weekday is a training day natively, and a
+    // non-training weekday is planned rest — both via RestService.trainingWeekdays.
+    // Off-anchor (forgiveness) training is credited by the completed session
+    // itself, never an extra obligation.
     var restState = await restService.refreshWeeklyShieldProgress(all);
-    if (programDay != null) {
-      if (programDay.isWorkout) {
-        restState = await restService.addProgramTrainingDate(
-          today,
-          state: restState,
-        );
-      } else {
-        restState = await restService.addProgramPlannedRestDate(
-          today,
-          state: restState,
-        );
-        await programService.creditRestDayForToday(now: today);
-      }
-    }
     final questClaimedXP = await QuestService().claimedRewardXP();
     final potionBonusXP = await XpBoostService().getTotalBonusXP();
     final currentRecoveryXP = restService.effectiveRecoveryXPForState(
@@ -254,8 +325,8 @@ class HomePageState extends State<HomePage> {
         .completedSnapshotForToday(now: today);
     final missionFinishState =
         await WorkoutStorageService.missionFinishStateToday();
-    final shadowEval = await ShadowService().evaluate();
     final adventureState = await _loadAdventureStateSafely();
+    final greetedExpeditionId = await AdventureService().loadGreetedExpeditionId();
     final characterClass = await ClassService().getCurrentClass();
     if (!mounted) return;
 
@@ -358,6 +429,7 @@ class HomePageState extends State<HomePage> {
       _todayXP = todayXP;
       _weeklyQuestCompleted = questSummary.weeklyCompleted;
       _weeklyQuestTotal = questSummary.weeklyTotal;
+      _questClaimable = questSummary.claimableCount;
       _lastWorkout = lastCompleted;
       // Home only renders post-onboarding, so no completed sessions == new user.
       _isNewUser = completed.isEmpty;
@@ -374,9 +446,11 @@ class HomePageState extends State<HomePage> {
       _programProgress = programProgress;
       _programDay = programDay;
       _programCompletedToday = programCompletedToday;
-      _shadowEval = shadowEval;
+      _trainingWeekdays = restService.trainingWeekdaysForDate(today, restState);
       _adventureState = adventureState;
+      _greetedExpeditionId = greetedExpeditionId;
       _characterClass = characterClass;
+      _combatStats = storedStats;
       _lckMultiplier = lckMultiplier;
       _lck = lck;
       _gemBalance = gemBalance;
@@ -384,7 +458,7 @@ class HomePageState extends State<HomePage> {
       _loading = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _maybeRevealExpeditionReport();
+      _settleAndRefreshExpedition();
     });
   }
 
@@ -400,9 +474,69 @@ class HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _maybeRevealExpeditionReport() async {
+  bool _pendingRevealable(Expedition p, DateTime now) {
+    final r = p.returnsAtIso == null ? null : DateTime.tryParse(p.returnsAtIso!);
+    return r == null || !now.isBefore(r);
+  }
+
+  /// Settle a returned expedition **silently** (gems are durable on open) and
+  /// refresh the room — the report is NOT pushed here. The coffer shows itself
+  /// (driven by the persisted `haulReady`), and the user collects by tapping it.
+  /// Bumps [_homecomingTick] only when a pending actually settles this pass, so
+  /// the descent animation plays once for a fresh arrival (a backlog/already-
+  /// waiting haul stays a static coffer — Codex). Called on open, on app resume,
+  /// and by the due-time timer.
+  Future<void> _settleAndRefreshExpedition() async {
+    if (!mounted || _expeditionSettleInFlight || _expeditionRevealInFlight) {
+      return;
+    }
+    _expeditionSettleInFlight = true;
+    try {
+      final before = _adventureState;
+      final pending = before?.pending;
+      final willSettle =
+          pending != null && _pendingRevealable(pending, DateTime.now());
+      // Durable: awards gems + moves a returned pending to unviewed history.
+      // No push — the coffer + COLLECT tap own the reveal now.
+      await AdventureService().settleAndPeekReport();
+      final fresh = await _loadAdventureStateSafely();
+      if (!mounted) return;
+      setState(() {
+        if (fresh != null) _adventureState = fresh;
+        if (willSettle) _homecomingTick++;
+      });
+      _scheduleExpeditionReturnTimer();
+    } catch (_) {
+      // Adventure is optional Home chrome; a settle failure must never break the
+      // dashboard. The coffer derivation is fail-open (re-derived next refresh).
+    } finally {
+      _expeditionSettleInFlight = false;
+    }
+  }
+
+  /// While Home stays open, fire the homecoming the instant a pending returns
+  /// (rather than waiting for an unrelated reload). One-shot, re-armed each
+  /// refresh; harmless if it never fires (resume/open also settle).
+  void _scheduleExpeditionReturnTimer() {
+    _expeditionReturnTimer?.cancel();
+    final p = _adventureState?.pending;
+    if (p?.returnsAtIso == null) return;
+    final r = DateTime.tryParse(p!.returnsAtIso!);
+    if (r == null) return;
+    final delay = r.difference(DateTime.now());
+    if (delay <= Duration.zero) return; // already due — settled on next refresh
+    _expeditionReturnTimer = Timer(delay + const Duration(seconds: 1), () {
+      if (mounted) _settleAndRefreshExpedition();
+    });
+  }
+
+  /// The COLLECT path — a user tap on the coffer. Re-peeks the (already-settled)
+  /// report and runs the single full-screen reveal, then acknowledges + reloads.
+  /// [fromUserTap] keeps the signature for the pad callback; the on-open auto-
+  /// push was removed (the coffer is the curtain now).
+  Future<void> _maybeRevealExpeditionReport({bool fromUserTap = false}) async {
     if (!mounted || _expeditionRevealInFlight) return;
-    if (_ongoingSessions.isNotEmpty) return; // idle-session flow first
+    if (!fromUserTap && _ongoingSessions.isNotEmpty) return; // idle-session first
     final route = ModalRoute.of(context);
     if (route == null || !route.isCurrent) return;
     _expeditionRevealInFlight = true;
@@ -418,8 +552,6 @@ class HomePageState extends State<HomePage> {
         arcadeRoute(
           (_) => ExpeditionReportPage(
             report: report,
-            avatarSpec: _profile.avatarSpec,
-            characterClass: _characterClass,
           ),
           motion: ArcadeRouteMotion.fade,
         ),
@@ -448,14 +580,156 @@ class HomePageState extends State<HomePage> {
         });
   }
 
-  Color _rankColor() {
-    return switch (_rank) {
-      'Legend' => kDanger,
-      'Champion' => kDanger,
-      'Knight' => kAmber,
-      'Squire' => kNeon,
-      _ => kMutedText,
-    };
+  // ── Expedition dock (the home-room pad) ────────────────────────────────────
+
+  /// The room's dock view-model, derived fresh from the authoritative service
+  /// state (never cached) so the pad can't disagree with the report flow.
+  RoomAdventureView? _buildRoomAdventure() {
+    final state = _adventureState;
+    if (state == null) return null;
+    final now = DateTime.now();
+    final ui = adventureUiStateOf(
+      state,
+      now,
+      currentWeekIso: GuildService.weekIso(now),
+    );
+    final route = adventureRouteById(
+      state.pending?.routeId ?? state.standingOrderRouteId,
+    );
+    int? backInHours;
+    final pending = state.pending;
+    if (ui.phase == AdventurePhase.out && pending?.returnsAtIso != null) {
+      final returnsAt = DateTime.tryParse(pending!.returnsAtIso!);
+      if (returnsAt != null) {
+        backInHours = (returnsAt.difference(now).inMinutes / 60).ceil();
+        if (backInHours < 1) backInHours = 1;
+      }
+    }
+    // haulReady is the persisted authority for the coffer (Codex) and also
+    // blocks dispatch while a haul sits uncollected (single-track pad).
+    final haulReady = hasUncollectedHaul(state, now);
+    // BIT's voice line — a pure function of the room state. greeted: this
+    // expedition's "I'm back" was already consumed. _lastVoice* are recorded so
+    // a re-entry can flip a shown greeting to the away status.
+    final pendingId = state.pending?.id;
+    final greeted = pendingId != null && _greetedExpeditionId == pendingId;
+    final voice = BitRoomVoice.select(
+      phase: ui.phase,
+      haulReady: haulReady,
+      greeted: greeted,
+      adviceIndex: _adviceIndex,
+      routeName: route.name,
+      backInHours: backInHours,
+      claimableCount: _questClaimable,
+    );
+    _lastVoiceKind = voice.kind;
+    _lastVoicePendingId = pendingId;
+    return RoomAdventureView(
+      phase: ui.phase,
+      charges: ui.charges,
+      canDispatch: ui.canDispatch && !haulReady,
+      haulReady: haulReady,
+      homecomingTick: _homecomingTick,
+      routeName: route.name,
+      routeAccent: route.accent,
+      backInHours: backInHours,
+      voice: voice,
+    );
+  }
+
+  /// Pad tapped while idle: open the console if a charge is ready, else nudge.
+  void _onPadDispatch() {
+    final state = _adventureState;
+    if (state == null) return;
+    final now = DateTime.now();
+    // Centralized guard (Codex): never open the console while an uncollected
+    // haul sits — collect it first (the dispatch entry must check this too, not
+    // just the room's canDispatch flag).
+    if (hasUncollectedHaul(state, now)) {
+      _showArcadeSnack('COLLECT YOUR HAUL FIRST');
+      return;
+    }
+    final ui = adventureUiStateOf(
+      state,
+      now,
+      currentWeekIso: GuildService.weekIso(now),
+    );
+    if (!ui.canDispatch) {
+      _showArcadeSnack(
+        ui.weeklyCapped
+            ? 'WEEKLY EXPEDITION LIMIT REACHED'
+            : 'TRAIN TO EARN A CHARGE',
+      );
+      return;
+    }
+    final defaultRoute =
+        state.standingOrderRouteId ??
+        (_characterClass != null
+            ? defaultRouteForClass(_characterClass!).id
+            : adventureRoutes.first.id);
+    showExpeditionDispatchSheet(
+      context,
+      charges: ui.charges,
+      vit: _vitality,
+      stats: _combatStats,
+      selectedRouteId: defaultRoute,
+      onSend: _dispatchExpedition,
+    );
+  }
+
+  /// Spend a charge. The service's null return is the source of truth; reloading
+  /// flips the room to `out`, which plays the launch overlay.
+  Future<bool> _dispatchExpedition(String routeId) async {
+    final expedition = await AdventureService().dispatchExpedition(routeId);
+    if (!mounted) return expedition != null;
+    if (expedition == null) _showArcadeSnack('CANNOT DISPATCH RIGHT NOW');
+    await _loadData();
+    return expedition != null;
+  }
+
+  void _showArcadeSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: AppFonts.shareTechMono(color: kBg, fontSize: 11),
+        ),
+        backgroundColor: kAmber,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// kDebugMode-only: preview the expedition loop without waiting out the timer.
+  /// `+CHARGE` mints a charge (tap the pad → SEND to watch the launch); `RETURN
+  /// NOW` backdates the haul so reloading settles it + plays the homecoming and
+  /// drops the coffer (tap it to run the report). Compiled out of release builds.
+  Widget _buildDebugExpeditionControls() {
+    Future<void> run(Future<void> Function() op) async {
+      await op();
+      if (mounted) await _loadData();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: kSpace2),
+      child: Row(
+        children: [
+          Expanded(
+            child: FilledButton(
+              onPressed: () => run(AdventureService().debugGrantCharge),
+              child: const Text('DBG +CHARGE'),
+            ),
+          ),
+          const SizedBox(width: kSpace2),
+          Expanded(
+            child: FilledButton(
+              onPressed: () => run(AdventureService().debugReturnPendingNow),
+              child: const Text('DBG RETURN NOW'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _homeCard({
@@ -468,37 +742,36 @@ class HomePageState extends State<HomePage> {
     EdgeInsetsGeometry? padding,
     List<BoxShadow>? boxShadow,
   }) {
-    return Container(
-      width: double.infinity,
-      padding: padding ?? const EdgeInsets.all(kCardPadding),
-      decoration: BoxDecoration(
-        color: background.withValues(alpha: backgroundAlpha),
-        border: Border.all(
-          color: borderColor.withValues(alpha: borderAlpha),
-          width: borderWidth,
-        ),
-        borderRadius: BorderRadius.circular(kCardRadius),
-        boxShadow: boxShadow,
-      ),
+    return ArcadeCard(
+      background: background,
+      borderColor: borderColor,
+      borderAlpha: borderAlpha,
+      backgroundAlpha: backgroundAlpha,
+      borderWidth: borderWidth,
+      padding: padding,
+      boxShadow: boxShadow,
       child: child,
     );
   }
 
   Widget _missionHeader({required Color accent, Widget? trailing}) {
+    // Eyebrow label — kept muted so neon is reserved for the card border + the
+    // progress bar (the one interior focal element). The title carries identity;
+    // this row just names the card. `accent` still feeds the card border.
     return Row(
       children: [
-        ImageIcon(
-          const AssetImage('assets/icons/control/icon_play.png'),
+        const ImageIcon(
+          AssetImage('assets/icons/control/icon_play.png'),
           size: 18,
-          color: accent,
+          color: kMutedText,
         ),
         const SizedBox(width: kSpace2),
-        Text(
+        const Text(
           'TODAY\'S MISSION',
           style: TextStyle(
             fontFamily: 'PressStart2P',
             fontSize: 10,
-            color: accent,
+            color: kMutedText,
           ),
         ),
         if (trailing != null) ...[const Spacer(), trailing],
@@ -530,7 +803,9 @@ class HomePageState extends State<HomePage> {
       background: kSurface2,
       borderColor: borderColor ?? accent,
       borderWidth: kPrimaryCardBorderWidth,
-      boxShadow: neonGlow(color: borderColor ?? accent),
+      // Gentle bloom — the neon border reads as structure (the "today" frame),
+      // not a shout; the interior progress bar stays the brighter focal point.
+      boxShadow: neonGlow(color: borderColor ?? accent, opacity: 0.12, blur: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -557,7 +832,10 @@ class HomePageState extends State<HomePage> {
             ),
           ),
           if (detail != null && detail.isNotEmpty) ...[
-            const SizedBox(height: kSpace3),
+            // Tight to the title — the detail is a hero sub-label (tier 1), not a
+            // peer of the zones below; the bigger gap before `middle` separates
+            // the tiers.
+            const SizedBox(height: kSpace2),
             Text(
               detail,
               style: AppFonts.shareTechMono(
@@ -642,8 +920,6 @@ class HomePageState extends State<HomePage> {
   }
 
   LootItem? get _equippedTitle => _equippedLoot[LootCategory.titleBadge];
-
-  LootItem? get _equippedFrame => _equippedLoot[LootCategory.avatarFrame];
 
   void _confirmDelete(WorkoutSession session) {
     showDialog<void>(
@@ -885,7 +1161,7 @@ class HomePageState extends State<HomePage> {
     final xpDelta = _totalXP - oldXP;
     if (xpDelta <= 0) return;
 
-    // Step 1: XP gain display (ArcadeProgressBar handles fill animation)
+    // Step 1: XP gain display (the ArcadeBar lights cells on increase)
     setState(() {
       _showXPGain = true;
       _xpGainAmount = xpDelta;
@@ -1043,204 +1319,6 @@ class HomePageState extends State<HomePage> {
     return session.elapsedSecondsForDisplay(DateTime.now());
   }
 
-  // ── Character bar ──────────────────────────────────────────────────────────
-
-  Widget _buildCharacterBar() {
-    final xpProgress = XpService.progressForTotalXP(_totalXP);
-    final rankColor = _rankColor();
-    final titleItem = _equippedTitle;
-    final titleLabel = titleItem?.name ?? 'untitled';
-    final titleColor = titleItem?.color ?? kMutedText;
-
-    final card = _homeCard(
-      background: kCard,
-      borderColor: kBorder,
-      borderAlpha: 0.85,
-      child: Row(
-        children: [
-          LootAvatarFrame(
-            avatarSpec: _profile.avatarSpec,
-            framePath: _equippedFrame?.assetPath,
-            size: 64,
-            borderColor: rankColor,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _profile.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppFonts.shareTechMono(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFFE8E8FF),
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  titleLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppFonts.shareTechMono(
-                    fontSize: 11,
-                    color: titleColor,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: rankColor, width: 1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        _rank.toUpperCase(),
-                        style: TextStyle(
-                          fontFamily: 'PressStart2P',
-                          fontSize: 8,
-                          color: rankColor,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ArcadeProgressBar(
-                        value: xpProgress.fraction,
-                        height: 10,
-                        flashOnIncrease: true,
-                        increaseSignal: _totalXP,
-                      ),
-                    ),
-                    if (_lckMultiplier > 1.0) ...[
-                      const SizedBox(width: 8),
-                      LckBuffBadge(multiplier: _lckMultiplier, lck: _lck),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    Text(
-                      xpProgress.label,
-                      style: AppFonts.shareTechMono(
-                        color: kMutedText,
-                        fontSize: 10,
-                      ),
-                    ),
-                    if (_todayXP > 0) ...[
-                      const Spacer(),
-                      Text(
-                        '+$_todayXP today',
-                        style: AppFonts.shareTechMono(
-                          color: const Color(0xFF00FF9C),
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                if (_showXPGain) ...[
-                  const SizedBox(height: 4),
-                  PulseColorText(
-                    '+$_xpGainAmount XP',
-                    style: const TextStyle(
-                      fontFamily: 'PressStart2P',
-                      fontSize: 8,
-                    ),
-                    colorA: kAmber,
-                    colorB: Colors.white,
-                    periodMs: 500,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          _buildLevelBadge(),
-        ],
-      ),
-    );
-
-    if (widget.onViewProfile == null) return card;
-    return Semantics(
-      button: true,
-      label: 'Open profile guild card',
-      child: ArcadeTap(
-        onTap: widget.onViewProfile,
-        borderRadius: BorderRadius.circular(4),
-        child: card,
-      ),
-    );
-  }
-
-  Widget _buildLevelBadge() {
-    final badge = Container(
-      height: 22,
-      padding: const EdgeInsets.symmetric(horizontal: 7),
-      decoration: BoxDecoration(
-        color: kCard,
-        border: Border.all(color: kBorderVariant, width: 1),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            'LV.$_level',
-            style: const TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 8,
-              color: Color(0xFFE8E8FF),
-              height: 1,
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ScreenShake(
-          trigger: _levelUpShakeTrigger,
-          magnitude: 2,
-          frames: 4,
-          child: StrobeFlash(
-            trigger: _levelUpShakeTrigger,
-            color: kAmber,
-            opacity: 0.3,
-            borderRadius: BorderRadius.circular(4),
-            child: badge,
-          ),
-        ),
-        if (_showLevelUp) ...[
-          const SizedBox(height: 4),
-          const Text(
-            'LEVEL UP!',
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 10,
-              color: kAmber,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
 
   // ── Weekly Quests card ─────────────────────────────────────────────────────
 
@@ -1288,21 +1366,10 @@ class HomePageState extends State<HomePage> {
               ],
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                for (int i = 0; i < _weeklyQuestTotal; i++) ...[
-                  Expanded(
-                    child: Container(
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: i < _weeklyQuestCompleted ? kNeon : kBorder,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                  if (i < _weeklyQuestTotal - 1) const SizedBox(width: 4),
-                ],
-              ],
+            ArcadeBar.segments(
+              litCells: _weeklyQuestCompleted,
+              totalCells: _weeklyQuestTotal,
+              height: 10,
             ),
           ],
         ),
@@ -1399,7 +1466,7 @@ class HomePageState extends State<HomePage> {
         ? Row(
             children: [
               Expanded(
-                child: ArcadeProgressBar(
+                child: ArcadeBar(
                   value: _sessionExerciseProgress(session),
                   height: 6,
                 ),
@@ -1534,10 +1601,12 @@ class HomePageState extends State<HomePage> {
       title: _programMissionTitle(day),
       detail: _targetLineFromSummary(programDayFocusSummary(day)),
       middle: _programArcMeter(progress),
-      nextUp: _programNextUp(progress, todayConsumed: false),
-      // The big START button is gone — the center Train action is the primary
-      // "start today's mission" now (the card would just duplicate it). The
-      // Manual-workout escape stays for a free-form pick.
+      nextUp: _programNextUp(progress, todayWorkoutPending: true),
+      // The card owns its primary action again — START TRAINING funnels through
+      // the same `_startProgramWorkout` launcher as the first-quest panel + the
+      // center Train button (one entry API). Manual-workout stays the escape.
+      primaryLabel: 'START TRAINING',
+      onPrimary: () => _startProgramWorkout(day),
       secondaryLabel: 'Manual workout',
       onSecondary: () => _startWorkout(trainAnyway: true),
     );
@@ -1560,7 +1629,7 @@ class HomePageState extends State<HomePage> {
           : _programArcMeter(_programProgress!),
       nextUp: _programProgress == null
           ? null
-          : _programNextUp(_programProgress!, todayConsumed: true),
+          : _programNextUp(_programProgress!, todayWorkoutPending: false),
       supportText: 'Session logged.',
       supportColor: kNeon,
       supportIconPath: 'assets/icons/control/ui/icon_session_logged.png',
@@ -1575,8 +1644,7 @@ class HomePageState extends State<HomePage> {
     return _missionCard(
       accent: kNeon,
       trailing: _MissionRewardChip(label: '+${restInfo.recoveryXP} XP'),
-      meta:
-          'RECOVERY HOLDS THE PATH  \u2022  WEEK ${progress.currentWeek} - DAY ${progress.currentDayIndex + 1}',
+      meta: 'RECOVERY HOLDS THE PATH  \u2022  WEEK ${progress.currentWeek}',
       title: _programMissionTitle(day),
       detail: 'Rest day. The path is protected.',
       middle: Column(
@@ -1600,7 +1668,7 @@ class HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      nextUp: _programNextUp(progress, todayConsumed: false),
+      nextUp: _programNextUp(progress, todayWorkoutPending: false),
       primaryLabel: 'KEEP RESTING',
       onPrimary: () {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1621,28 +1689,34 @@ class HomePageState extends State<HomePage> {
   Widget _programArcMeter(ProgramProgress progress) {
     final program = programById(progress.programId);
     if (program == null) return const SizedBox.shrink();
+    // The framed "PATH" panel — one common-region box grouping the bar + count +
+    // locked reward, a deliberate zone inside the mission card.
     return ProgramPathHud(program: program, progress: progress, compact: true);
   }
 
   /// Forward `NEXT ▸ <label> · <when>` cue for the program mission cards.
-  /// [todayConsumed] is true only on the completed-today panel, where
-  /// `advanceDay` has already moved `currentDayIndex` onto the next slot.
+  /// [todayWorkoutPending] is true only on the active-workout panel, where today
+  /// still shows an undone workout, so the teaser points at the following one.
   Widget? _programNextUp(
     ProgramProgress progress, {
-    required bool todayConsumed,
+    required bool todayWorkoutPending,
   }) {
     final program = programById(progress.programId);
     if (program == null) return null;
     final lookahead = nextWorkoutLookahead(
       program,
-      progress.currentDayIndex,
-      todayConsumed: todayConsumed,
+      progress.workoutIndex,
+      trainingWeekdays: _trainingWeekdays,
+      today: DateUtils.dateOnly(DateTime.now()),
+      todayWorkoutPending: todayWorkoutPending,
     );
     if (lookahead == null) return null;
+    // A teaser, not a detail dump — the label + when carry the forward pull
+    // (Zeigarnik); the focus line is dropped (it repeated today's for same-split
+    // days and stacked a redundant band). Full detail is seen on arrival.
     return _NextUpPeek(
       label: lookahead.workout.label,
       whenText: relativeWhen(lookahead.daysAway),
-      focus: _targetLineFromSummary(programDayFocusSummary(lookahead.workout)),
     );
   }
 
@@ -1663,7 +1737,7 @@ class HomePageState extends State<HomePage> {
           ? '${progress.arcSessions} sessions forged'
           : '${program.name} • ${progress.arcSessions} sessions forged',
       middle: program == null
-          ? ArcadeProgressBar(value: 1, fillColor: kAmber, height: 6)
+          ? ArcadeBar(value: 1, accent: kAmber, height: 6)
           : ProgramPathHud(program: program, progress: progress, compact: true),
       supportText: next == null
           ? 'Path complete. Choose how to continue.'
@@ -1775,7 +1849,7 @@ class HomePageState extends State<HomePage> {
           style: TextStyle(
             fontFamily: 'PressStart2P',
             fontSize: 8,
-            color: allPaused ? kCyan : const Color(0xFFFFD700),
+            color: allPaused ? kCyan : kAmber,
           ),
         ),
         const SizedBox(height: 8),
@@ -1807,7 +1881,7 @@ class HomePageState extends State<HomePage> {
               const ImageIcon(
                 AssetImage('assets/icons/control/icon_sword.png'),
                 size: 18,
-                color: Color(0xFF00FF9C),
+                color: kNeon,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -1820,7 +1894,7 @@ class HomePageState extends State<HomePage> {
                         fontFamily: 'ShareTechMono',
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFFE8E8FF),
+                        color: kText,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1886,6 +1960,12 @@ class HomePageState extends State<HomePage> {
     final subtitle = session == null
         ? 'Start your first run today'
         : _lastWorkoutSubtitle(session);
+    // Once there is a completed session, this card stops being a dead stat and
+    // becomes the discoverable gate to the full training log (history, calendar,
+    // stats). Before, the only door was the LCK pip — an unlabelled luck tap no
+    // one could guess. The trailing "VIEW LOG" is the visible signifier.
+    final onOpenLog = widget.onViewWorkouts;
+    final isLogGate = session != null && onOpenLog != null;
 
     final card = _homeCard(
       background: kCard,
@@ -1932,20 +2012,49 @@ class HomePageState extends State<HomePage> {
               ],
             ),
           ),
+          if (isLogGate) ...[
+            const SizedBox(width: kSpace2),
+            Text(
+              'VIEW LOG →',
+              style: AppFonts.shareTechMono(
+                color: kCyan,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ],
       ),
     );
 
-    // No completed workouts yet → make the whole card a Start Workout entry.
-    if (session != null) return card;
+    // No completed workouts yet → the whole card is a Start Workout entry.
+    if (session == null) {
+      return Semantics(
+        button: true,
+        label: 'No completed workouts yet, tap to start your first workout',
+        child: PhosphorTap(
+          onTap: _startWorkout,
+          borderRadius: BorderRadius.circular(kCardRadius),
+          child: HoldDepress(
+            onTap: _startWorkout,
+            borderRadius: BorderRadius.circular(kCardRadius),
+            child: card,
+          ),
+        ),
+      );
+    }
+
+    // Completed session → the card opens the full training log.
+    if (!isLogGate) return card;
     return Semantics(
       button: true,
-      label: 'No completed workouts yet, tap to start your first workout',
+      label: 'Last workout: $title, $subtitle. Opens your training log.',
       child: PhosphorTap(
-        onTap: _startWorkout,
+        key: const ValueKey('home_training_log_gate'),
+        onTap: onOpenLog,
         borderRadius: BorderRadius.circular(kCardRadius),
         child: HoldDepress(
-          onTap: _startWorkout,
+          onTap: onOpenLog,
           borderRadius: BorderRadius.circular(kCardRadius),
           child: card,
         ),
@@ -1962,8 +2071,20 @@ class HomePageState extends State<HomePage> {
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: [
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Measured scroll-viewport height (RootPage reserves the bottom
+            // nav). The room is the hero; below it we reserve space for the
+            // level strip + a peek of the mission card — glanceable progress on
+            // open plus a scroll cue.
+            final viewportH = constraints.maxHeight;
+            final belowFold = (viewportH * 0.18).clamp(120.0, 200.0);
+            final roomHeight =
+                (viewportH - _HomeStatusHudSliverDelegate._height - belowFold)
+                    .clamp(HomeRoomScene.minHeight, viewportH);
+            return CustomScrollView(
+              controller: _scrollController,
+              slivers: [
             SliverPersistentHeader(
               pinned: true,
               delegate: _HomeStatusHudSliverDelegate(
@@ -1971,20 +2092,54 @@ class HomePageState extends State<HomePage> {
                 lckMultiplier: _lckMultiplier,
                 gemBalance: _gemBalance,
                 vitality: _vitality,
-                onLckTap: widget.onViewWorkouts,
+                // LCK is a combat stat → the stat board explains it (same home
+                // as VIT). History now has its own discoverable doors (the Home
+                // last-workout card + the Labs "Training Log" row), so the luck
+                // pip is no longer a hidden gate to the log.
+                onLckTap: widget.onViewProfile,
                 onGemTap: widget.onOpenShop,
                 onVitTap: widget.onViewProfile,
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: HomeRoomScene(
+                height: roomHeight,
+                name: _profile.displayName,
+                level: _level,
+                title: _equippedTitle?.name ?? _rank,
+                titleColor: _equippedTitle?.color ?? kAmber,
+                scrollOffset: _roomScroll,
+                adventure: _buildRoomAdventure(),
+                onDispatchTap: _onPadDispatch,
+                onStatusTap: _openAdventure,
+                onCollect: () => _maybeRevealExpeditionReport(fromUserTap: true),
+                questWeeklyFilled: _weeklyQuestCompleted,
+                questWeeklyTotal: _weeklyQuestTotal,
+                questClaimable: _questClaimable,
+                onViewQuests: widget.onViewQuests,
               ),
             ),
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
                 kHomeHorizontalPadding,
-                kSectionGap,
+                kSpace2,
                 kHomeHorizontalPadding,
                 kSpace5 + MediaQuery.of(context).padding.bottom,
               ),
               sliver: SliverList(
                 delegate: SliverChildListDelegate.fixed([
+                  if (kDebugMode) _buildDebugExpeditionControls(),
+                  HomeLevelStrip(
+                    level: _level,
+                    totalXP: _totalXP,
+                    todayXP: _todayXP,
+                    showXPGain: _showXPGain,
+                    xpGainAmount: _xpGainAmount,
+                    showLevelUp: _showLevelUp,
+                    levelUpShakeTrigger: _levelUpShakeTrigger,
+                    onTap: widget.onViewProfile,
+                  ),
+                  const SizedBox(height: kSpace1),
                   StrobeFlash(
                     trigger: _missionFlashTrigger,
                     borderRadius: BorderRadius.circular(kCardRadius),
@@ -1993,21 +2148,11 @@ class HomePageState extends State<HomePage> {
                     child: _buildMainMissionPanel(),
                   ),
                   _buildSecondaryOngoingSessions(),
-                  const SizedBox(height: kSectionGap),
-                  _buildCharacterBar(),
                   if (_showLastSessionDelta) ...[
                     const SizedBox(height: kSpace2),
                     LastSessionTag(
                       delta: _lastSessionDelta,
                       stats: _lastSessionStats,
-                    ),
-                  ],
-                  if (_shadowEval != null) ...[
-                    const SizedBox(height: kSectionGap),
-                    ShadowCard(
-                      evaluation: _shadowEval!,
-                      avatarSpec: _profile.avatarSpec,
-                      onTap: widget.onViewGuild,
                     ),
                   ],
                   if (_adventureState != null) ...[
@@ -2025,7 +2170,9 @@ class HomePageState extends State<HomePage> {
                 ]),
               ),
             ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -2043,8 +2190,10 @@ class _HomeStatusHudSliverDelegate extends SliverPersistentHeaderDelegate {
     required this.onVitTap,
   });
 
-  static const double _maxHeight = 58;
-  static const double _minHeight = 42;
+  // Constant, non-morphing sticky bar — the chamber's lit ceiling. min==max so
+  // it pins without collapsing (a resource HUD is persistent key UI, not
+  // reading content).
+  static const double _height = 52;
 
   final int lck;
   final double lckMultiplier;
@@ -2055,10 +2204,10 @@ class _HomeStatusHudSliverDelegate extends SliverPersistentHeaderDelegate {
   final VoidCallback? onVitTap;
 
   @override
-  double get maxExtent => _maxHeight;
+  double get maxExtent => _height;
 
   @override
-  double get minExtent => _minHeight;
+  double get minExtent => _height;
 
   @override
   Widget build(
@@ -2066,42 +2215,56 @@ class _HomeStatusHudSliverDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    final collapseT = (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0);
-    final topInset = lerpDouble(kSpace3, 0, collapseT)!;
-    final sideInset = lerpDouble(kHomeHorizontalPadding, 0, collapseT)!;
-    final innerSideInset = lerpDouble(0, kHomeHorizontalPadding, collapseT)!;
-    final ruleAlpha = collapseT <= 0.01
-        ? 0.0
-        : (0.35 + collapseT * 0.45).clamp(0.0, 1.0);
-
+    // Solid, edge-to-edge ceiling strip — the same dark plane as the room
+    // background, so the metrics float on the chamber's ceiling. The key-light
+    // line is always on; the room's top glow always receives it.
     return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Color.lerp(Colors.transparent, kBg, collapseT),
-        border: Border(
-          bottom: BorderSide(
-            color: kBorder.withValues(alpha: ruleAlpha),
-            width: collapseT <= 0.01 ? 0 : 1,
-          ),
-        ),
-      ),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(sideInset, topInset, sideInset, 0),
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: innerSideInset),
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: HomeStatusHud(
-              lck: lck,
-              lckMultiplier: lckMultiplier,
-              gemBalance: gemBalance,
-              vitality: vitality,
-              onLckTap: onLckTap,
-              onGemTap: onGemTap,
-              onVitTap: onVitTap,
-              collapseT: collapseT,
+      decoration: const BoxDecoration(color: kBg),
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: kHomeHorizontalPadding,
+            ),
+            child: Center(
+              child: HomeStatusHud(
+                lck: lck,
+                lckMultiplier: lckMultiplier,
+                gemBalance: gemBalance,
+                vitality: vitality,
+                onLckTap: onLckTap,
+                onGemTap: onGemTap,
+                onVitTap: onVitTap,
+              ),
             ),
           ),
-        ),
+          // Ceiling fixture key-light at the bottom edge — the resource bar
+          // reads as the chamber's lit ceiling, and the room below receives this
+          // glow. It sits below the metrics, so it never reduces their contrast.
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: 3,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      kCyan.withValues(alpha: 0.45),
+                      kText.withValues(alpha: 0.65),
+                      kCyan.withValues(alpha: 0.45),
+                      Colors.transparent,
+                    ],
+                    stops: const [0.06, 0.32, 0.5, 0.68, 0.94],
+                  ),
+                  boxShadow: neonGlow(color: kCyan, opacity: 0.22, blur: 12),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2118,6 +2281,161 @@ class _HomeStatusHudSliverDelegate extends SliverPersistentHeaderDelegate {
   }
 }
 
+/// Home's single competence surface — level + XP progress placed right above
+/// the primary action (goal-gradient). Hosts the post-workout XP-gain and
+/// level-up reveal that used to live on the character bar; tapping it opens the
+/// profile (Labs), the identity destination per the app IA. Quiet by design
+/// (amber/reward, never the neon CTA) so it never out-shouts the mission card.
+class HomeLevelStrip extends StatelessWidget {
+  const HomeLevelStrip({
+    super.key,
+    required this.level,
+    required this.totalXP,
+    required this.todayXP,
+    this.showXPGain = false,
+    this.xpGainAmount = 0,
+    this.showLevelUp = false,
+    this.levelUpShakeTrigger = 0,
+    this.onTap,
+  });
+
+  final int level;
+  final int totalXP;
+  final int todayXP;
+  final bool showXPGain;
+  final int xpGainAmount;
+  final bool showLevelUp;
+  final int levelUpShakeTrigger;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final xpProgress = XpService.progressForTotalXP(totalXP);
+    final pct = (xpProgress.fraction.clamp(0.0, 1.0) * 100).round();
+
+    final strip = Row(
+      key: const ValueKey('home_level_strip'),
+      children: [
+        // LV badge — shakes + strobes on level-up (frozen under reduced motion).
+        ScreenShake(
+          trigger: levelUpShakeTrigger,
+          magnitude: 2,
+          frames: 4,
+          child: StrobeFlash(
+            trigger: levelUpShakeTrigger,
+            color: kAmber,
+            opacity: 0.3,
+            borderRadius: BorderRadius.circular(kCardRadius),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+              decoration: BoxDecoration(
+                color: kCard,
+                // Neutral chip border — the amber XP fill is the strip's single
+                // accent, so the chip doesn't add a second competing colour.
+                border: Border.all(color: kBorder, width: 1),
+                borderRadius: BorderRadius.circular(kCardRadius),
+              ),
+              child: Text(
+                'LV.$level',
+                style: const TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 9,
+                  color: kText,
+                  height: 1,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: kSpace2),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ArcadeBar(
+                value: xpProgress.fraction,
+                // Chunky enough to carry the beveled console volume; amber keeps
+                // it the reward/XP read, not the neon action.
+                height: 12,
+                accent: kAmber,
+                flashOnIncrease: true,
+                increaseSignal: totalXP,
+              ),
+              const SizedBox(height: 5),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(
+                      xpProgress.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppFonts.shareTechMono(
+                        color: kMutedText,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // One trailing signal, by priority: level-up → XP gain → today.
+                  if (showLevelUp)
+                    const Text(
+                      'LEVEL UP!',
+                      style: TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 9,
+                        color: kAmber,
+                      ),
+                    )
+                  else if (showXPGain)
+                    PulseColorText(
+                      '+$xpGainAmount XP',
+                      style: const TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 8,
+                      ),
+                      colorA: kAmber,
+                      colorB: kText,
+                      periodMs: 500,
+                    )
+                  else if (todayXP > 0)
+                    Text(
+                      // Calm info, not an action — muted so it doesn't add neon.
+                      '+$todayXP today',
+                      style: AppFonts.shareTechMono(
+                        color: kMutedText,
+                        fontSize: 10,
+                      ),
+                    )
+                  else
+                    const SizedBox.shrink(),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (onTap == null) {
+      return Semantics(
+        label: 'Level $level, $pct percent to next level',
+        child: strip,
+      );
+    }
+    return Semantics(
+      button: true,
+      label: 'Level $level, $pct percent to next level, open profile',
+      child: ArcadeTap(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(kCardRadius),
+        child: strip,
+      ),
+    );
+  }
+}
+
 class HomeStatusHud extends StatelessWidget {
   const HomeStatusHud({
     super.key,
@@ -2128,7 +2446,6 @@ class HomeStatusHud extends StatelessWidget {
     this.onLckTap,
     this.onGemTap,
     this.onVitTap,
-    this.collapseT = 0,
   });
 
   final int lck;
@@ -2138,41 +2455,23 @@ class HomeStatusHud extends StatelessWidget {
   final VoidCallback? onLckTap;
   final VoidCallback? onGemTap;
   final VoidCallback? onVitTap;
-  final double collapseT;
 
   @override
   Widget build(BuildContext context) {
-    final t = collapseT.clamp(0.0, 1.0);
-    final shellAlpha = (1 - t).clamp(0.0, 1.0);
-    final borderRadius = BorderRadius.circular(lerpDouble(kCardRadius, 0, t)!);
-    final horizontalPadding = lerpDouble(12, 0, t)!;
-    final verticalPadding = lerpDouble(7, 6, t)!;
-    final brandGap = lerpDouble(16, 8, t)!;
-    // Small gap; per-metric tap padding (below) supplies most of the spacing
-    // and the ≥44px-wide hit area.
-    final metricGap = lerpDouble(4, 2, t)!;
-    final lckIconSize = lerpDouble(17, 14, t)!;
-    final gemIconSize = lerpDouble(16, 14, t)!;
-    final vitIconSize = lerpDouble(17, 14, t)!;
-    final valueFontSize = lerpDouble(9, 7.5, t)!;
+    // No card chrome — the delegate paints the solid ceiling plane behind us.
+    // Per-metric tap padding supplies the spacing and the ≥44px-wide hit area.
+    const brandGap = 16.0;
+    const metricGap = 4.0;
+    const lckIconSize = 17.0;
+    const gemIconSize = 16.0;
+    const vitIconSize = 17.0;
+    const valueFontSize = 9.0;
     final content = Container(
       key: const ValueKey('home_status_hud'),
-      padding: EdgeInsets.symmetric(
-        horizontal: horizontalPadding,
-        vertical: verticalPadding,
-      ),
-      decoration: BoxDecoration(
-        color: kCard.withValues(alpha: shellAlpha),
-        border: Border.all(
-          color: kBorder.withValues(alpha: shellAlpha),
-          width: shellAlpha <= 0.01 ? 0 : 1,
-        ),
-        borderRadius: borderRadius,
-      ),
       child: Row(
         children: [
-          _HomeHudBrand(collapseT: t),
-          SizedBox(width: brandGap),
+          const _HomeHudBrand(),
+          const SizedBox(width: brandGap),
           Expanded(
             child: Align(
               alignment: Alignment.centerRight,
@@ -2196,7 +2495,7 @@ class HomeStatusHud extends StatelessWidget {
                       valueColor: lckMultiplier > 1.0 ? kAmber : kMutedText,
                       valueFontSize: valueFontSize,
                       onTap: onLckTap,
-                      navHint: 'Opens your workout history',
+                      navHint: 'Opens your stat board',
                     ),
                     SizedBox(width: metricGap),
                     _HomeHudMetric(
@@ -2248,20 +2547,19 @@ class HomeStatusHud extends StatelessWidget {
 }
 
 class _HomeHudBrand extends StatelessWidget {
-  const _HomeHudBrand({required this.collapseT});
-
-  final double collapseT;
+  const _HomeHudBrand();
 
   @override
   Widget build(BuildContext context) {
-    final fontSize = lerpDouble(16, 13.5, collapseT)!;
     return Text(
       'Ironbit',
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-        color: kNeon,
-        fontSize: fontSize,
+        // Quiet wordmark, not an action — neon is reserved for the primary
+        // action (TRAIN / mission / nav), so the bar reads calm.
+        color: kText,
+        fontSize: 16,
         height: 1.1,
       ),
     );
@@ -2401,7 +2699,7 @@ class _MissionRewardChip extends StatelessWidget {
         children: [
           if (isGemReward) ...[
             Image.asset(
-              'assets/icons/economy/icon_gem_reward.png',
+              'assets/icons/economy/icon_gem.png',
               key: const ValueKey('home_mission_gem_reward_icon'),
               width: 12,
               height: 12,
@@ -2427,63 +2725,56 @@ class _MissionRewardChip extends StatelessWidget {
 /// Surfaces what's next + when (relative) without leaving Home — an open-loop
 /// glance, never a guilt/appointment. Static (reduced-motion safe), no red.
 class _NextUpPeek extends StatelessWidget {
-  const _NextUpPeek({required this.label, required this.whenText, this.focus});
+  const _NextUpPeek({required this.label, required this.whenText});
 
   final String label;
   final String whenText;
-  final String? focus;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const ImageIcon(
-              AssetImage('assets/icons/control/ui/icon_next_program.png'),
-              size: 14,
-              color: kNeon,
+    // The NEXT zone — a *secondary* common-region panel, lighter than the PATH
+    // zone (dimmer border + fainter fill + tighter padding) so PATH leads while
+    // the two read as one system (section-consistency within the tier).
+    return ArcadeCard(
+      background: kCard,
+      backgroundAlpha: 0.28,
+      borderColor: kBorder,
+      borderAlpha: 0.45,
+      padding: const EdgeInsets.symmetric(
+        horizontal: kSpace3,
+        vertical: kSpace2,
+      ),
+      child: Row(
+        children: [
+          const ImageIcon(
+            AssetImage('assets/icons/control/ui/icon_next_program.png'),
+            size: 14,
+            color: kMutedText,
+          ),
+          const SizedBox(width: kSpace2),
+          const Text(
+            'NEXT',
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 8,
+              color: kMutedText,
+              height: 1.35,
             ),
-            const SizedBox(width: kSpace2),
-            const Text(
-              'NEXT',
-              style: TextStyle(
-                fontFamily: 'PressStart2P',
-                fontSize: 8,
-                color: kNeon,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(width: kSpace2),
-            Expanded(
-              child: Text(
-                '$label · $whenText',
-                overflow: TextOverflow.ellipsis,
-                style: AppFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 13,
-                  height: 1.2,
-                ),
-              ),
-            ),
-          ],
-        ),
-        if (focus != null && focus!.isNotEmpty) ...[
-          const SizedBox(height: 2),
-          Padding(
-            padding: const EdgeInsets.only(left: 20),
+          ),
+          const SizedBox(width: kSpace2),
+          Expanded(
             child: Text(
-              focus!,
+              '$label · $whenText',
+              overflow: TextOverflow.ellipsis,
               style: AppFonts.shareTechMono(
-                color: kMutedText.withValues(alpha: 0.7),
-                fontSize: 11,
+                color: kMutedText,
+                fontSize: 13,
                 height: 1.2,
               ),
             ),
           ),
         ],
-      ],
+      ),
     );
   }
 }

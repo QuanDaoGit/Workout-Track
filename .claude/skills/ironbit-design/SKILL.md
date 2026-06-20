@@ -31,6 +31,11 @@ exactly what makes things look generic and off-brand here. **Do the opposite:**
 This skill **supersedes** the generic `ui-ux-pro-max` / `design:*` skills for this app — don't run
 them; their output fights the locked language.
 
+**One hand-off the other way:** when the task is **porting a design/asset/animation handoff** (a
+package with a runnable reference + engine source) into the app, that work is **translation, not
+design** — route to `port-handoff` and **do not re-style its layer-1 surfaces** (the handoff already
+specified them). Only its *silent* / genuinely-new surfaces come back to you.
+
 ## Workflow (a loop, not a lookup)
 
 1. **Understand intent + the soul hook.** What is this surface *for*, and which long-term hook does it

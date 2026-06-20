@@ -183,7 +183,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   void goTo(AppDestination destination) {
     switch (destination) {
       case AppDestination.home:
-        _homeKey.currentState?.reload();
+        _homeKey.currentState?.onReenter(); // re-entry → rotate BIT's advice
       case AppDestination.inventory:
         break; // InventoryPage reloads itself on init.
       case AppDestination.guild:
@@ -485,7 +485,6 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       onViewProfile: () => goTo(AppDestination.labs),
       onViewWorkouts: _pushLogs,
       onOpenShop: _openShop,
-      onViewGuild: () => goTo(AppDestination.guild),
     ),
     const InventoryPage(),
     GuildPage(key: _guildKey),
@@ -720,7 +719,10 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? kNeon : kMutedText;
+    // Active tab is identity-white, not neon: neon is reserved for the single
+    // hero — the center Train keycap — so the primary action can't be confused
+    // with the "you are here" selection state.
+    final color = active ? kText : kMutedText;
     return Expanded(
       child: InkWell(
         onTap: onTap,

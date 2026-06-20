@@ -1070,7 +1070,7 @@ class _BarbellBarPainter extends CustomPainter {
     final centerY = size.height / 2;
     final barPaint = Paint()..color = kBorder;
     final scanPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
+      ..color = kWhite.withValues(alpha: 0.08)
       ..strokeWidth = 1;
 
     final rect = Rect.fromLTWH(0, centerY - 3, size.width, 6);

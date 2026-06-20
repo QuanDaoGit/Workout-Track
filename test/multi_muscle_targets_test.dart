@@ -89,7 +89,10 @@ void main() {
     );
   });
 
-  test('loot muscle session rules credit selected targets', () async {
+  test('frozen Shadow Slayer title is never newly granted', () async {
+    // The chest-sessions title was retired (ruleless) when the per-muscle
+    // ladder unified onto muscleVolume; even qualifying chest-credited sessions
+    // no longer grant it, though existing owners keep it (see loot_registry).
     final sessions = [
       for (var i = 0; i < 10; i++)
         _session(
@@ -104,7 +107,7 @@ void main() {
       sessions: sessions,
     );
 
-    expect(unlocked, contains('title_shadow_slayer'));
+    expect(unlocked, isNot(contains('title_shadow_slayer')));
   });
 
   test('loot muscle volume uses exercise-attributed volume', () async {
@@ -118,7 +121,9 @@ void main() {
             ExerciseLog(
               exerciseId: 'Barbell_Bench_Press_-_Medium_Grip',
               exerciseName: 'Bench Press',
-              sets: [SetEntry(weight: 100, reps: 50)],
+              // 100 kg × 90 = 9,000 kg, clearing the uniform 8,000 kg
+              // muscle-volume threshold for the Chest title only.
+              sets: [SetEntry(weight: 100, reps: 90)],
             ),
           ],
         ),

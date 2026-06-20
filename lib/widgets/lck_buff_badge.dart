@@ -70,7 +70,7 @@ class LckBuffBadge extends StatelessWidget {
                 _label,
                 style: const TextStyle(fontFamily: 'PressStart2P', fontSize: 7),
                 colorA: kAmber,
-                colorB: Colors.white,
+                colorB: kWhite,
                 periodMs: 1000,
               ),
             ],

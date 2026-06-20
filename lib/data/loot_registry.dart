@@ -1,7 +1,7 @@
 import '../models/loot_item.dart';
 import '../models/loot_unlock_rule.dart';
 
-const String unlockFramePath = 'assets/unlocks/frames';
+const String unlockFramePath = 'assets/unlocks/avatar_frames';
 
 const List<LootItem> lootRegistry = [
   LootItem(
@@ -10,7 +10,7 @@ const List<LootItem> lootRegistry = [
     description: 'Simple dark iron pixel border.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.common,
-    assetPath: '$unlockFramePath/frame_iron.png',
+    assetPath: '$unlockFramePath/iron/iron.png',
     colorValue: 0xFF6B6B8A,
     isDefault: true,
   ),
@@ -20,7 +20,7 @@ const List<LootItem> lootRegistry = [
     description: 'Grey cobblestone border. 4 completed sessions.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.common,
-    assetPath: '$unlockFramePath/frame_stone.png',
+    assetPath: '$unlockFramePath/stone/stone.png',
     colorValue: 0xFF9A9AAA,
     gemPrice: 150,
     unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 4),
@@ -31,7 +31,7 @@ const List<LootItem> lootRegistry = [
     description: 'Warm bronze metallic border. 8 completed sessions.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.uncommon,
-    assetPath: '$unlockFramePath/frame_bronze.png',
+    assetPath: '$unlockFramePath/bronze/bronze.png',
     colorValue: 0xFFB77A3A,
     gemPrice: 300,
     unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 8),
@@ -39,73 +39,60 @@ const List<LootItem> lootRegistry = [
   LootItem(
     id: 'frame_silver',
     name: 'Silver Frame',
-    description: 'Polished silver pixel border. 1,000 lifetime reps.',
+    description: 'Polished silver pixel border. 14 completed sessions.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.uncommon,
-    assetPath: '$unlockFramePath/frame_silver.png',
+    assetPath: '$unlockFramePath/silver/silver.png',
     colorValue: 0xFFC8D0E0,
     gemPrice: 600,
-    unlockRule: LootUnlockRule(kind: UnlockKind.lifetimeReps, threshold: 1000),
+    unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 14),
   ),
   LootItem(
     id: 'frame_gold',
     name: 'Gold Frame',
-    description: 'Ornate gold border. 500 lifetime reps.',
+    description: 'Ornate gold border. 22 completed sessions.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.rare,
-    assetPath: '$unlockFramePath/frame_gold.png',
+    assetPath: '$unlockFramePath/gold/gold.png',
     colorValue: 0xFFFFD700,
     gemPrice: 1200,
-    unlockRule: LootUnlockRule(kind: UnlockKind.lifetimeReps, threshold: 500),
+    unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 22),
   ),
   LootItem(
     id: 'frame_neon',
     name: 'Neon Frame',
-    description: 'Glowing green pixel border. 16 completed sessions.',
+    description: 'Glowing green pixel border. 30 completed sessions.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.rare,
-    assetPath: '$unlockFramePath/frame_neon.png',
+    assetPath: '$unlockFramePath/neon/neon.png',
     colorValue: 0xFF00FF9C,
     gemPrice: 2000,
-    unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 16),
+    unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 30),
   ),
   LootItem(
     id: 'frame_inferno',
     name: 'Inferno Frame',
-    description: 'Flame border.',
+    description: 'Flame border. 40 completed sessions.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.epic,
-    assetPath: '$unlockFramePath/frame_inferno.png',
+    assetPath: '$unlockFramePath/inferno/inferno_0.png',
     colorValue: 0xFFFF6B1A,
     gemPrice: 3500,
-    unlockRule: LootUnlockRule(
-      kind: UnlockKind.lifetimeVolume,
-      threshold: 120000,
-    ),
+    frameCount: 10,
+    unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 40),
   ),
   LootItem(
     id: 'frame_void',
     name: 'Void Frame',
     description:
-        'Dark purple border with pixel particles. 42 completed sessions.',
+        'Dark purple border with pixel particles. 52 completed sessions.',
     category: LootCategory.avatarFrame,
     rarity: LootRarity.epic,
-    assetPath: '$unlockFramePath/frame_void.png',
+    assetPath: '$unlockFramePath/void/void_0.png',
     colorValue: 0xFF9B59B6,
     gemPrice: 6000,
-    unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 42),
-  ),
-  LootItem(
-    id: 'frame_spectral',
-    name: 'Spectral Frame',
-    description: 'Ghost-light border left behind by a defeated Shadow.',
-    category: LootCategory.avatarFrame,
-    rarity: LootRarity.epic,
-    // Asset deferred — LootAvatarFrame's errorBuilder renders the colorValue
-    // placeholder until real art lands. Granted only by ShadowService
-    // (no unlockRule, no gemPrice).
-    assetPath: '$unlockFramePath/frame_spectral.png',
-    colorValue: 0xFF7FD4E8,
+    frameCount: 10,
+    unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 52),
   ),
   LootItem(
     id: 'title_recruit',
@@ -117,15 +104,6 @@ const List<LootItem> lootRegistry = [
     isDefault: true,
   ),
   LootItem(
-    id: 'title_shadowbane',
-    name: 'Shadowbane',
-    description: 'Outpaced your own Shadow at full strength.',
-    category: LootCategory.titleBadge,
-    rarity: LootRarity.epic,
-    assetPath: '',
-    // Granted only by ShadowService on the first genuine defeat.
-  ),
-  LootItem(
     id: 'title_iron_will',
     name: 'Iron Will',
     description: 'Completed 25 workout sessions.',
@@ -134,6 +112,10 @@ const List<LootItem> lootRegistry = [
     assetPath: '',
     unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 25),
   ),
+  // Frozen (grandfathered): the chest-sessions outlier was retired when the
+  // per-muscle ladder unified onto muscleVolume (Chest now = Golem Breaker).
+  // Ruleless so it's never newly granted, but the item is kept so existing
+  // owners keep it owned + equipped — no destructive migration, no cleared card.
   LootItem(
     id: 'title_shadow_slayer',
     name: 'Shadow Slayer',
@@ -141,22 +123,17 @@ const List<LootItem> lootRegistry = [
     category: LootCategory.titleBadge,
     rarity: LootRarity.common,
     assetPath: '',
-    unlockRule: LootUnlockRule(
-      kind: UnlockKind.muscleSessions,
-      threshold: 10,
-      muscleGroup: 'Chest',
-    ),
   ),
   LootItem(
     id: 'title_grinder',
     name: 'The Grinder',
     description: '',
     category: LootCategory.titleBadge,
-    rarity: LootRarity.uncommon,
+    rarity: LootRarity.epic,
     assetPath: '',
     unlockRule: LootUnlockRule(
       kind: UnlockKind.lifetimeVolume,
-      threshold: 55000,
+      threshold: 100000,
     ),
   ),
   LootItem(
@@ -181,6 +158,10 @@ const List<LootItem> lootRegistry = [
     assetPath: '',
     unlockRule: LootUnlockRule(kind: UnlockKind.sessions, threshold: 50),
   ),
+  // Per-muscle ladder: one rare title per trainable group on a uniform
+  // 8,000 kg muscleVolume threshold (symmetric collection — Chest/Back/
+  // Shoulders/Arms/Legs/Core). Legs accrue volume faster than Core, so they
+  // arrive in training order; that's fine for a collectible.
   LootItem(
     id: 'title_golem_breaker',
     name: 'Golem Breaker',
@@ -190,7 +171,7 @@ const List<LootItem> lootRegistry = [
     assetPath: '',
     unlockRule: LootUnlockRule(
       kind: UnlockKind.muscleVolume,
-      threshold: 5000,
+      threshold: 8000,
       muscleGroup: 'Chest',
     ),
   ),
@@ -203,8 +184,60 @@ const List<LootItem> lootRegistry = [
     assetPath: '',
     unlockRule: LootUnlockRule(
       kind: UnlockKind.muscleVolume,
-      threshold: 10000,
+      threshold: 8000,
       muscleGroup: 'Back',
+    ),
+  ),
+  LootItem(
+    id: 'title_skybreaker',
+    name: 'Skybreaker',
+    description: '',
+    category: LootCategory.titleBadge,
+    rarity: LootRarity.rare,
+    assetPath: '',
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.muscleVolume,
+      threshold: 8000,
+      muscleGroup: 'Shoulders',
+    ),
+  ),
+  LootItem(
+    id: 'title_gauntlet',
+    name: 'Gauntlet',
+    description: '',
+    category: LootCategory.titleBadge,
+    rarity: LootRarity.rare,
+    assetPath: '',
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.muscleVolume,
+      threshold: 8000,
+      muscleGroup: 'Arms',
+    ),
+  ),
+  LootItem(
+    id: 'title_colossus',
+    name: 'Colossus',
+    description: '',
+    category: LootCategory.titleBadge,
+    rarity: LootRarity.rare,
+    assetPath: '',
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.muscleVolume,
+      threshold: 8000,
+      muscleGroup: 'Legs',
+    ),
+  ),
+  LootItem(
+    id: 'title_keystone',
+    name: 'Keystone',
+    description: '',
+    category: LootCategory.titleBadge,
+    rarity: LootRarity.rare,
+    assetPath: '',
+    unlockRule: LootUnlockRule(
+      kind: UnlockKind.muscleVolume,
+      threshold: 8000,
+      muscleGroup: 'Core',
     ),
   ),
   LootItem(

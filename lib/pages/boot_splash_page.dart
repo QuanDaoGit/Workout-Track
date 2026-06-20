@@ -247,7 +247,7 @@ class _CrtPainter extends CustomPainter {
       ..shader = RadialGradient(
         center: const Alignment(0, -0.04),
         radius: 0.95,
-        colors: [Colors.transparent, Colors.transparent, Colors.black.withValues(alpha: 0.6)],
+        colors: [Colors.transparent, Colors.transparent, kBlack.withValues(alpha: 0.6)],
         stops: const [0, 0.5, 1],
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, vignette);

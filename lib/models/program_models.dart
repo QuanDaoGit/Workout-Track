@@ -87,6 +87,13 @@ class Program {
   /// scheduled workout day across the recommended span. Powers the goal-gradient
   /// finish line (e.g. 3x8 = 24, 4x8 = 32, 6x8 = 48).
   int get targetSessions => daysPerWeek * recommendedWeeks;
+
+  /// The workout-only sublist of [weekSchedule], in cycle order. This is the
+  /// progression spine under the weekday-anchored schedule: rest slots leave the
+  /// progression entirely (rest is calendar-derived from training weekdays), so
+  /// `ProgramProgress.workoutIndex` indexes into THIS list, never [weekSchedule].
+  List<ProgramDay> get workouts =>
+      weekSchedule.where((d) => d.isWorkout).toList(growable: false);
 }
 
 class ProgramProgress {
@@ -96,15 +103,28 @@ class ProgramProgress {
     required this.currentDayIndex,
     required this.startedAt,
     required this.completedSessions,
+    this.workoutIndex = 0,
     this.arcStartSessions = 0,
     this.completedArc = false,
   });
 
   final String programId;
   final int currentWeek;
+
+  /// Legacy 7-slot cycle index (workout+rest). Deprecated under the
+  /// weekday-anchored schedule — frozen at its migration value and no longer
+  /// advanced. Kept serialized one release for migration input / rollback.
+  /// Read [workoutIndex] instead.
   final int currentDayIndex;
   final DateTime startedAt;
   final int completedSessions;
+
+  /// Index into the program's workout-only sublist ([Program.workouts]). The
+  /// authoritative progression cursor under the weekday-anchored schedule:
+  /// advances by exactly 1 (mod workout count) on each completed workout. Rest
+  /// is calendar-derived (a non-training weekday), never a slot here. Seeded by
+  /// the `weekdayAnchoredScheduleV1` migration from [currentDayIndex].
+  final int workoutIndex;
 
   /// Baseline of [completedSessions] at the start of the current arc. Each new
   /// cycle (a fresh finish line) rolls this forward instead of wiping history.
@@ -126,6 +146,7 @@ class ProgramProgress {
     int? currentDayIndex,
     DateTime? startedAt,
     int? completedSessions,
+    int? workoutIndex,
     int? arcStartSessions,
     bool? completedArc,
   }) {
@@ -135,6 +156,7 @@ class ProgramProgress {
       currentDayIndex: currentDayIndex ?? this.currentDayIndex,
       startedAt: startedAt ?? this.startedAt,
       completedSessions: completedSessions ?? this.completedSessions,
+      workoutIndex: workoutIndex ?? this.workoutIndex,
       arcStartSessions: arcStartSessions ?? this.arcStartSessions,
       completedArc: completedArc ?? this.completedArc,
     );
@@ -146,6 +168,7 @@ class ProgramProgress {
     'currentDayIndex': currentDayIndex,
     'startedAt': startedAt.toIso8601String(),
     'completedSessions': completedSessions,
+    'workoutIndex': workoutIndex,
     'arcStartSessions': arcStartSessions,
     'completedArc': completedArc,
   };
@@ -159,6 +182,7 @@ class ProgramProgress {
           DateTime.tryParse(json['startedAt'] as String? ?? '') ??
           DateTime.now(),
       completedSessions: (json['completedSessions'] as num?)?.toInt() ?? 0,
+      workoutIndex: (json['workoutIndex'] as num?)?.toInt() ?? 0,
       arcStartSessions: (json['arcStartSessions'] as num?)?.toInt() ?? 0,
       completedArc: json['completedArc'] as bool? ?? false,
     );

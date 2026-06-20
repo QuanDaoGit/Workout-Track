@@ -15,7 +15,7 @@ import '../../services/workout_storage_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_dialog_button_column.dart';
 import '../../widgets/idle_session_dialog.dart';
-import '../../widgets/arcade_progress_bar.dart';
+import '../../widgets/arcade_bar.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/arcade_tap.dart';
 import '../../widgets/blinking_colon.dart';
@@ -675,8 +675,8 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                     _abandonAndShowSummary();
                   },
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF2D55),
-                    foregroundColor: Colors.white,
+                    backgroundColor: kDanger,
+                    foregroundColor: kWhite,
                   ),
                   child: const Text('END EARLY'),
                 ),
@@ -723,11 +723,11 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                     Colors.transparent,
                   ),
                   foregroundColor: const WidgetStatePropertyAll(
-                    Color(0xFFFF2D55),
+                    kDanger,
                   ),
                   shadowColor: const WidgetStatePropertyAll(Colors.transparent),
                   overlayColor: WidgetStatePropertyAll(
-                    const Color(0xFFFF2D55).withValues(alpha: 0.12),
+                    kDanger.withValues(alpha: 0.12),
                   ),
                   padding: const WidgetStatePropertyAll(
                     EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -872,14 +872,14 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                             Text(
                               '$_completedExerciseCount/${widget.exercises.length} cleared',
                               style: AppFonts.shareTechMono(
-                                color: const Color(0xFFE8E8FF),
+                                color: kText,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
-                        ArcadeProgressBar(value: _exerciseProgress, height: 8),
+                        ArcadeBar(value: _exerciseProgress, height: 8),
                       ],
                     ),
                   ),
@@ -928,7 +928,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                                             .textTheme
                                             .bodyLarge
                                             ?.copyWith(
-                                              color: Colors.white,
+                                              color: kWhite,
                                               fontWeight: FontWeight.bold,
                                             ),
                                         maxLines: 2,

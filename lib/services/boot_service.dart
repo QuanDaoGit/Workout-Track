@@ -29,6 +29,8 @@ class BootService {
       await MigrationService.runAvatarSpecSeedOnce();
       await MigrationService.runWeightLogRewardAnchorOnce();
       await MigrationService.runThemeLootCleanupOnce();
+      await MigrationService.runShadowRemovalCleanupOnce();
+      await MigrationService.runWeekdayAnchoredScheduleOnce();
       await MigrationService.runStatsRecomputeIfRulesChanged();
       await StatEngine().applyDecayIfNeeded();
       await ClassMigrationService().migrateIfNeeded();

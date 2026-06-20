@@ -355,7 +355,7 @@ class _ProgramDetailPageState extends State<ProgramDetailPage> {
                     onPressed: _quitProgram,
                     style: FilledButton.styleFrom(
                       backgroundColor: kDanger,
-                      foregroundColor: Colors.white,
+                      foregroundColor: kWhite,
                     ),
                     child: const Text('QUIT PROGRAM'),
                   )

@@ -6,7 +6,7 @@ import '../../models/character_draft.dart';
 import '../../services/character_service.dart';
 import '../../services/profile_service.dart';
 import '../../services/program_service.dart';
-import '../../theme/app_fonts.dart';
+import '../../services/rest_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/motion/arcade_name_field.dart';
@@ -117,6 +117,12 @@ class _NameScreenState extends State<NameScreen>
     final selectedProgramId = draft.selectedProgramId;
     if (selectedProgramId != null) {
       await ProgramService().startProgram(selectedProgramId);
+      final weekdays = draft.trainingWeekdays;
+      if (weekdays != null) {
+        // Immediate (no next-Monday pending): a brand-new user has no shield/
+        // streak history to protect, so their chosen anchor takes effect now.
+        await RestService().saveTrainingWeekdays(weekdays, immediate: true);
+      }
     }
     // Mirror identity into ProfileService so Home/Profile (which read the
     // profile store, not the Character blob) show the real name + face.
@@ -144,7 +150,6 @@ class _NameScreenState extends State<NameScreen>
             final ms = (_controller.value * 2000).round();
             final promptDone = _promptStartMs + _prompt.length * _charMs;
             final prompt = _typedPrompt(ms);
-            final subtextOpacity = _progress(ms, promptDone, 200);
             final fieldOpacity = _progress(ms, promptDone + 200, 200);
             final buttonOpacity = _progress(ms, promptDone + 400, 200);
 
@@ -165,21 +170,6 @@ class _NameScreenState extends State<NameScreen>
                             fontFamily: 'PressStart2P',
                             fontSize: 16,
                             color: kNeon,
-                            height: 1.45,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: kSpace2),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: kSpace4),
-                      child: Opacity(
-                        opacity: subtextOpacity,
-                        child: Text(
-                          "this is who you'll become.",
-                          style: AppFonts.shareTechMono(
-                            color: kMutedText,
-                            fontSize: 13,
                             height: 1.45,
                           ),
                         ),

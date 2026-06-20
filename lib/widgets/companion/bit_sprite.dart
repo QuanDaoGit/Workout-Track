@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/tokens.dart';
+import 'bit_core_engine.dart' show bitGlow;
 
 /// BIT's expression. The screen-face + plate pose are baked into each sprite;
 /// the body metal never changes — only the screen tint and eyes carry the mood.
@@ -52,7 +53,7 @@ class BitSprite extends StatelessWidget {
   }
 }
 
-/// Painted last-resort BIT: a dim metal box with a cyan screen, themed and
+/// Painted last-resort BIT: a dim metal box with a turquoise screen, themed and
 /// recognizable. Shown only when the sprite asset cannot load.
 class _BitFallback extends StatelessWidget {
   const _BitFallback({required this.size});
@@ -88,7 +89,7 @@ class _BitFallbackPainter extends CustomPainter {
     );
     canvas.drawRect(
       Rect.fromCenter(center: center, width: s * 0.42, height: s * 0.42),
-      Paint()..color = kCyan,
+      Paint()..color = bitGlow,
     );
   }
 

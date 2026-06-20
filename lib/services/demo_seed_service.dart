@@ -80,7 +80,8 @@ class DemoSeedService {
     final progress = ProgramProgress(
       programId: 'full_body_3x',
       currentWeek: 4,
-      currentDayIndex: 0, // FULL BODY A — today's mission stays actionable
+      currentDayIndex: 0,
+      workoutIndex: 0, // FULL BODY A — next-up workout stays actionable
       startedAt: today.subtract(const Duration(days: 35)),
       completedSessions: 10, // of ~24 → ~42%
     );

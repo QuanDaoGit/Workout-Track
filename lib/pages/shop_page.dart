@@ -10,12 +10,13 @@ import '../services/profile_service.dart';
 import '../services/unit_settings_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
+import '../widgets/arcade_bar.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/motion/phosphor_tap.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/loot_avatar_frame.dart';
 
-enum _ShopFilter { all, frames, affordable }
+enum _ShopFilter { all, affordable }
 
 class _DemoGemPack {
   const _DemoGemPack({
@@ -52,10 +53,6 @@ const List<_DemoGemPack> _demoGemPacks = [
     bonus: '+30% BONUS',
   ),
 ];
-
-String _shopCategoryLabel(LootItem item) {
-  return item.category == LootCategory.avatarFrame ? 'Frame' : 'Theme';
-}
 
 class ShopPage extends StatefulWidget {
   const ShopPage({super.key});
@@ -112,7 +109,6 @@ class _ShopPageState extends State<ShopPage> {
         .where((item) {
           return switch (_filter) {
             _ShopFilter.all => true,
-            _ShopFilter.frames => item.category == LootCategory.avatarFrame,
             _ShopFilter.affordable => (item.gemPrice ?? 0) <= _gemBalance,
           };
         })
@@ -563,11 +559,6 @@ class _FilterRail extends StatelessWidget {
           onTap: () => onChanged(_ShopFilter.all),
         ),
         _FilterChipButton(
-          label: 'FRAMES',
-          selected: selected == _ShopFilter.frames,
-          onTap: () => onChanged(_ShopFilter.frames),
-        ),
-        _FilterChipButton(
           label: 'AFFORDABLE',
           selected: selected == _ShopFilter.affordable,
           onTap: () => onChanged(_ShopFilter.affordable),
@@ -791,7 +782,7 @@ class _ShopItemCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    _shopCategoryLabel(item),
+                    'Frame',
                     style: AppFonts.shareTechMono(
                       color: kMutedText,
                       fontSize: 11,
@@ -945,19 +936,7 @@ class _AffordabilityProgress extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Container(
-          height: 4,
-          decoration: BoxDecoration(
-            color: kBg,
-            border: Border.all(color: kBorderDark),
-            borderRadius: BorderRadius.circular(kCardRadius),
-          ),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: ratio,
-            child: const ColoredBox(color: kNeon),
-          ),
-        ),
+        ArcadeBar(value: ratio, accent: kNeon, height: 6),
       ],
     );
   }
@@ -1052,8 +1031,11 @@ class _LiveShopPreview extends StatelessWidget {
           child: LootAvatarFrame(
             avatarSpec: avatarSpec,
             framePath: item.assetPath,
-            size: expanded ? 180 : 128,
-            borderColor: kBorderVariant,
+            frameCount: item.frameCount,
+            animate: true,
+            // Integer multiples of the 260px frame master (×1 / ÷2) so the
+            // nearest-neighbour scale stays pixel-crisp.
+            size: expanded ? 260 : 130,
           ),
         ),
       ),

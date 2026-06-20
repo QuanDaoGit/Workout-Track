@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workout_track/data/bit_interview_copy.dart';
 import 'package:workout_track/models/body_goal_models.dart';
 import 'package:workout_track/models/calibration_quiz_models.dart';
 import 'package:workout_track/models/character_class.dart';
@@ -109,7 +110,8 @@ void main() {
     ) async {
       await _openQuiz(tester, reducedMotion: true);
 
-      expect(find.text("WHAT'S THE GOAL?"), findsOneWidget);
+      // Goal is now BIT-asked (its line replaces the old neon prompt).
+      expect(find.text(BitInterviewCopy.ask(QuizQuestion.goal)), findsOneWidget);
       expect(find.text('GET LEANER'), findsOneWidget);
       expect(find.text('STAY + STRENGTHEN'), findsOneWidget);
       expect(find.text('GET BIGGER'), findsOneWidget);
@@ -132,23 +134,29 @@ void main() {
 
       await tester.tap(find.text('GET LEANER'));
       await tester.pumpAndSettle();
-
-      expect(find.text('HOW OFTEN?'), findsOneWidget);
+      // Goal is ask-only, so it advances straight to Q2 (frequency, BIT-asked).
+      expect(find.text(BitInterviewCopy.ask(QuizQuestion.frequency)),
+          findsOneWidget);
       expect(find.text('2/7'), findsOneWidget);
     });
 
     testWidgets('Full happy path returns populated answers', (tester) async {
       final obs = await _openQuiz(tester, reducedMotion: true);
 
-      await tester.tap(find.text('GET BIGGER'));
+      await tester.tap(find.text('GET BIGGER')); // goal ask-only → frequency
       await tester.pumpAndSettle();
-      await tester.tap(find.text('4–5 DAYS'));
+      await tester.tap(find.text('4–5 DAYS')); // frequency → reaction
       await tester.pumpAndSettle();
-      await tester.tap(find.text('INTERMEDIATE'));
+      await tester.tap(find.text('tap to continue ›')); // → experience
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('INTERMEDIATE')); // experience → reaction
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('tap to continue ›')); // → weight/sex
       await tester.pumpAndSettle();
       // Q4 — enter bodyweight, pick sex, CONTINUE. pump(Duration) instead of
       // pumpAndSettle because the TextField cursor blink never settles.
-      expect(find.text('DIAL IT IN'), findsOneWidget);
+      expect(find.text(BitInterviewCopy.ask(QuizQuestion.weightSex)),
+          findsOneWidget);
       // Q4 now has weight + height fields; the first is bodyweight.
       await tester.enterText(find.byType(TextField).first, '78');
       await tester.pump(const Duration(milliseconds: 50));
@@ -174,11 +182,15 @@ void main() {
       (tester) async {
         final obs = await _openQuiz(tester, reducedMotion: true);
 
-        await tester.tap(find.text('GET LEANER'));
+        await tester.tap(find.text('GET LEANER')); // goal ask-only → frequency
         await tester.pumpAndSettle();
-        await tester.tap(find.text('2–3 DAYS'));
+        await tester.tap(find.text('2–3 DAYS')); // frequency → reaction
         await tester.pumpAndSettle();
-        await tester.tap(find.text('NOVICE'));
+        await tester.tap(find.text('tap to continue ›')); // → experience
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('NOVICE')); // experience → reaction
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('tap to continue ›')); // → weight/sex
         await tester.pumpAndSettle();
 
         // Q4's longer layout (unit toggles + height) pushes CONTINUE near the
@@ -211,31 +223,33 @@ void main() {
     ) async {
       await _openQuiz(tester, reducedMotion: true);
 
-      await tester.tap(find.text('GET LEANER'));
+      await tester.tap(find.text('GET LEANER')); // goal ask-only → frequency
       await tester.pumpAndSettle();
-      expect(find.text('HOW OFTEN?'), findsOneWidget);
+      expect(find.text(BitInterviewCopy.ask(QuizQuestion.frequency)),
+          findsOneWidget);
 
       await tester.tap(find.bySemanticsLabel('Back'));
       await tester.pumpAndSettle();
 
-      expect(find.text("WHAT'S THE GOAL?"), findsOneWidget);
+      expect(find.text(BitInterviewCopy.ask(QuizQuestion.goal)), findsOneWidget);
       expect(find.text('GET LEANER'), findsOneWidget);
     });
 
     testWidgets('returning to a question shows its prompt instantly', (
       tester,
     ) async {
-      await _openQuiz(tester);
-      await tester.pumpAndSettle();
+      // Reduced motion freezes BIT's idle ticker, so pumpAndSettle is safe and
+      // the return is deterministically instant.
+      await _openQuiz(tester, reducedMotion: true);
 
-      await tester.tap(find.text('GET LEANER'));
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text('GET LEANER')); // goal ask-only → frequency
       await tester.pumpAndSettle();
-      expect(find.text('HOW OFTEN?'), findsOneWidget);
+      expect(find.text(BitInterviewCopy.ask(QuizQuestion.frequency)),
+          findsOneWidget);
 
       await tester.tap(find.bySemanticsLabel('Back'));
       await tester.pump();
-      expect(find.text("WHAT'S THE GOAL?"), findsOneWidget);
+      expect(find.text(BitInterviewCopy.ask(QuizQuestion.goal)), findsOneWidget);
     });
   });
 }

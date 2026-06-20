@@ -108,7 +108,7 @@ class QuizAnswers {
     this.sex = UserProfileSex.preferNotToSay,
     this.trainingWhy = const <TrainingWhy>{},
     this.winningVision = const <WinningVision>{},
-    this.obstacle = const <Obstacle>{},
+    this.obstacle,
   });
 
   BodyGoal? goal;
@@ -118,10 +118,11 @@ class QuizAnswers {
   double? heightCm;
   UserProfileSex sex;
 
-  // Identity beats (Resolve questions) — interleaved into the quiz. Multi-select.
+  // Identity beats (Resolve questions) — interleaved into the quiz. Vow + vision
+  // are multi-select; obstacle is single-select (one barrier BIT responds to).
   Set<TrainingWhy> trainingWhy;
   Set<WinningVision> winningVision;
-  Set<Obstacle> obstacle;
+  Obstacle? obstacle;
 
   QuizAnswers copy() => QuizAnswers(
     goal: goal,
@@ -132,7 +133,7 @@ class QuizAnswers {
     sex: sex,
     trainingWhy: {...trainingWhy},
     winningVision: {...winningVision},
-    obstacle: {...obstacle},
+    obstacle: obstacle,
   );
 }
 

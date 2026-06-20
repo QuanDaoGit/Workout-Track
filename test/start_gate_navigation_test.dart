@@ -9,7 +9,7 @@ import 'package:workout_track/models/user_profile_sex.dart';
 import 'package:workout_track/pages/Workout session/start_workout.dart';
 import 'package:workout_track/pages/onboarding/start_gate_screen.dart';
 import 'package:workout_track/pages/root_page.dart';
-import 'package:workout_track/widgets/companion/bit_sprite.dart';
+import 'package:workout_track/widgets/companion/bit_mood_core.dart';
 
 /// Regression for the reported bug: starting the first workout from the
 /// onboarding finale dropped the user on the exercise picker instead of Home,
@@ -105,7 +105,9 @@ void main() {
       // Run the post-frame skip-to-end so the reveal flags are all set.
       await tester.pump();
 
-      expect(find.byType(BitSprite), findsOneWidget);
+      // BIT is the living, painted core (breathing plates + glow), not a static
+      // sprite — the same companion engine used across the onboarding.
+      expect(find.byType(BitMoodCore), findsOneWidget);
       expect(
         find.textContaining('What should we do first', findRichText: true),
         findsOneWidget,

@@ -31,7 +31,7 @@ Future<ActiveSessionAction?> showActiveSessionFoundDialog(
                 ).pop(ActiveSessionAction.endOldAndStartNew),
                 style: FilledButton.styleFrom(
                   backgroundColor: kDanger,
-                  foregroundColor: Colors.white,
+                  foregroundColor: kWhite,
                 ),
                 child: const Text('END OLD & START NEW'),
               ),

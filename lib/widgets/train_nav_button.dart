@@ -191,9 +191,12 @@ class _TrainNavButtonState extends State<TrainNavButton>
                 style: TextStyle(
                   fontFamily: 'PressStart2P',
                   fontSize: 7,
+                  // Caption is identity-white, never neon — the neon belongs to
+                  // the keycap face alone (the lone hero in the bar). The
+                  // TRAIN→START text swap still carries the armed-ready cue.
                   color: widget.mode == TrainButtonMode.armedLocked
                       ? kMutedText
-                      : kNeon,
+                      : kText,
                 ),
               ),
             ),
@@ -293,6 +296,20 @@ class _KeycapPainter extends CustomPainter {
       Paint()
         ..isAntiAlias = false
         ..color = faceColor,
+    );
+
+    // Dark seating bezel — a crisp dark frame (darker than the kCard bar) so the
+    // bright cap reads as a physical key *seated* in the bar (figure/ground),
+    // not a flat neon fill flush with it. On the dark live/locked faces it just
+    // merges; it earns its keep on the bright idle/armed-ready neon face. Drawn
+    // under the live halo/ring so those state signals still win.
+    canvas.drawPath(
+      mainPath,
+      Paint()
+        ..isAntiAlias = false
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = kBg,
     );
 
     // Breathing phosphor halo (armedReady + live) — the "lure"/"alive" cue.

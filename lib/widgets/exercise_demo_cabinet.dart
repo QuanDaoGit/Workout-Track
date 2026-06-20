@@ -409,7 +409,7 @@ class _ExerciseDemoFullscreenState extends State<_ExerciseDemoFullscreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: kBlack,
       body: Stack(
         children: [
           // Backdrop: tapping anywhere outside the clip dismisses.

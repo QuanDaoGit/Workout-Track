@@ -1,63 +1,60 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/companion/bit_boot.dart';
+import '../../widgets/companion/bit_core_engine.dart' show bitGlow;
 import '../../widgets/motion/power_on.dart';
-import '../../widgets/welcome_bench_press_scene.dart';
+import '../../widgets/typewriter_text.dart';
 
-/// Screen 1 - Cold Open. Arcade boot screen for first-run onboarding. Tap to
-/// continue. Rendered inside the onboarding flow's scaffold.
-class ColdOpenView extends StatelessWidget {
-  const ColdOpenView({super.key, required this.onContinue});
+/// Style for BIT's first spoken line at the cold open — BIT's turquoise (its
+/// voice), not neon. Neon is reserved for the one action (PRESS START), so it
+/// never competes with BIT's colour right beside the sprite.
+const _greetingStyle = TextStyle(
+  fontFamily: 'PressStart2P',
+  fontSize: 14,
+  height: 1,
+  color: bitGlow,
+  letterSpacing: 1,
+);
+
+/// Screen 1 - Cold Open. BIT lies dormant on the floor; the user taps to wake it
+/// (accelerating flicker → gather → fly up → plates spin out as it says
+/// "WELCOME, WARRIOR"), then taps again to continue. Inside the flow's scaffold.
+class ColdOpenView extends StatefulWidget {
+  const ColdOpenView({
+    super.key,
+    required this.onContinue,
+    this.hideBit = false,
+  });
 
   final VoidCallback onContinue;
+
+  /// During the hand-off to the problem screen the flow renders this cold open
+  /// fading out as **chrome only** — BIT is hidden here so the problem screen's
+  /// identical BIT (at the same hover home) stays the single, solid companion
+  /// across the cut (a "constant subject", not a cross-dissolve of two BITs).
+  final bool hideBit;
 
   static const _designWidth = 390.0;
   static const _designHeight = 844.0;
 
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      hint: 'Press start to continue',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onContinue,
-        child: const ColoredBox(
-          color: kBg,
-          child: Center(
-            child: FittedBox(
-              fit: BoxFit.contain,
-              child: SizedBox(
-                width: _designWidth,
-                height: _designHeight,
-                child: _ColdOpenComposition(),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  State<ColdOpenView> createState() => _ColdOpenViewState();
 }
 
-class _ColdOpenComposition extends StatefulWidget {
-  const _ColdOpenComposition();
-
-  @override
-  State<_ColdOpenComposition> createState() => _ColdOpenCompositionState();
-}
-
-class _ColdOpenCompositionState extends State<_ColdOpenComposition>
-    with SingleTickerProviderStateMixin {
-  // Staged CRT entrance: the IRONBIT wordmark flies up into its slot first (the
-  // shared element the boot transition powers on into), then the scene, meter,
-  // lines, and prompt power on in sequence. Static under reduced motion.
-  late final AnimationController _entrance = AnimationController(
+class _ColdOpenViewState extends State<ColdOpenView>
+    with TickerProviderStateMixin {
+  // Tap-triggered power-on: BIT flickers, lights, then the plates spin out as
+  // the greeting types. Its 0..1 value drives the whole composition.
+  late final AnimationController _boot = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1200),
+    duration: const Duration(milliseconds: 3000), // deliberate wake + slow stretch
+  );
+  // Slow blink for the OFF "TAP TO WAKE" hint.
+  late final AnimationController _standby = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
   );
 
   bool get _reduceMotion {
@@ -69,107 +66,198 @@ class _ColdOpenCompositionState extends State<_ColdOpenComposition>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_reduceMotion) {
-      _entrance.value = 1;
-    } else if (!_entrance.isAnimating && _entrance.value == 0) {
-      _entrance.forward();
+      _standby.stop();
+    } else if (_boot.isDismissed && !_standby.isAnimating) {
+      _standby.repeat(reverse: true);
     }
+  }
+
+  void _handleTap() {
+    if (_boot.isDismissed) {
+      _standby.stop();
+      if (_reduceMotion) {
+        _boot.value = 1; // instant power-on
+      } else {
+        _boot.forward();
+      }
+    } else if (_boot.isCompleted) {
+      widget.onContinue();
+    }
+    // Mid-boot taps are ignored — the user just triggered the brief power-on.
   }
 
   @override
   void dispose() {
-    _entrance.dispose();
+    _boot.dispose();
+    _standby.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _entrance,
-      builder: (context, _) {
-        final e = _reduceMotion ? 1.0 : _entrance.value;
-        // Wordmark flies up into its slot first (top 300 → 94).
-        final wt = Curves.easeOutCubic.transform(
-          (e / 0.30).clamp(0.0, 1.0).toDouble(),
-        );
-        final wordTop = 300 - (300 - 94) * wt;
-        final wordOpacity = (e / 0.20).clamp(0.0, 1.0).toDouble();
+    return Semantics(
+      button: true,
+      label: _boot.isCompleted ? 'Continue' : 'Power on BIT',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _handleTap,
+        child: ColoredBox(
+          // During the hand-off this view is the outgoing CHROME-ONLY layer
+          // composited over the live problem screen — paint no background so the
+          // problem's BIT shows continuously beneath (no opaque-over-opaque
+          // cross-fade dip / "darken"). Otherwise it owns the screen → kBg.
+          color: widget.hideBit ? Colors.transparent : kBg,
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: SizedBox(
+                width: ColdOpenView._designWidth,
+                height: ColdOpenView._designHeight,
+                child: AnimatedBuilder(
+                  animation: Listenable.merge([_boot, _standby]),
+                  builder: (context, _) => _composition(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-        return Stack(
-          children: [
-            Positioned(
-              top: wordTop,
-              left: 0,
-              right: 0,
-              child: Opacity(
-                opacity: wordOpacity,
-                child: const Text(
-                  'IRONBIT',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'PressStart2P',
-                    fontSize: 14,
-                    height: 1,
-                    color: kNeon,
-                    letterSpacing: 1,
+  // Stable Stack order — only each slot's child swaps, so stateful children
+  // (BIT, the waveform) keep their identity across the boot.
+  Widget _composition() {
+    final b = _boot.value; // 0..1 boot progress
+    final off = b <= 0;
+    final reduce = _reduceMotion;
+    return Stack(
+      children: [
+        const Positioned(
+          top: 108,
+          left: 0,
+          right: 0,
+          child: Text(
+            'IRONBIT',
+            textAlign: TextAlign.center,
+            // White brand/identity — not neon. Keeps the action colour for the
+            // one action and stops the wordmark fighting BIT's turquoise below.
+            style: TextStyle(
+              fontFamily: 'PressStart2P',
+              fontSize: 16,
+              height: 1,
+              color: kText,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+        // Taller than the sprite so BIT has floor to lie on and sky to rise
+        // into; at hover (boot done) the sprite lands where it always has.
+        // Hidden during the hand-off so the problem screen's BIT carries the cut.
+        if (!widget.hideBit)
+          Positioned(
+            top: 194,
+            left: 63,
+            child: BitBootCore(
+              width: 264,
+              height: 432,
+              boot: b,
+              // Once the boot settles, BIT keeps a gentle idle float + breathe
+              // (faded in by the boot's own settle ramp) — the missing screen-1
+              // life after "WELCOME, WARRIOR". The small bob delta at the
+              // cold→problem cut is masked by the problem BIT's immediate
+              // drift-in; reduced motion zeroes the idle (clean still home).
+            ),
+          ),
+        // DORMANT: blinking "TAP TO WAKE" hint, sat under BIT on the floor.
+        Positioned(
+          top: 640,
+          left: 0,
+          right: 0,
+          child: off
+              ? Opacity(
+                  opacity: reduce ? 1.0 : 0.35 + 0.45 * _standby.value,
+                  child: Text(
+                    'TAP TO WAKE',
+                    textAlign: TextAlign.center,
+                    style: AppFonts.shareTechMono(
+                      color: kMutedText,
+                      fontSize: 12,
+                      letterSpacing: 2,
+                    ),
                   ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        // Voice waveform — appears with the spoken line, set clear below BIT.
+        Positioned(
+          top: 494,
+          left: 137,
+          child: b >= kBitSpeakAt
+              ? const BitVoiceWaveform(width: 115, height: 33)
+              : const SizedBox.shrink(),
+        ),
+        // The spoken greeting — types in sync with the plate spin.
+        Positioned(
+          top: 538,
+          left: 0,
+          right: 0,
+          child: b < kBitSpeakAt
+              ? const SizedBox.shrink()
+              : reduce
+              ? const Text(
+                  'WELCOME, WARRIOR',
+                  textAlign: TextAlign.center,
+                  style: _greetingStyle,
+                )
+              : const TypewriterText(
+                  'WELCOME, WARRIOR',
+                  textAlign: TextAlign.center,
+                  style: _greetingStyle,
+                  charMs: 60,
                 ),
-              ),
-            ),
-            _PoweredSlot(
-              enabled: e >= 0.34,
-              top: 250,
-              left: 67,
-              child: const WelcomeBenchPressScene(width: 256, height: 192),
-            ),
-            _PoweredSlot(
-              enabled: e >= 0.46,
-              top: 456,
-              left: 75,
-              child: const _StrMeter(),
-            ),
-            _PoweredSlot(
-              enabled: e >= 0.58,
-              top: 574,
-              left: 0,
-              right: 0,
-              child: const Text(
-                'WELCOME, RECRUIT',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 16,
-                  height: 1,
-                  color: kNeon,
-                  letterSpacing: 1,
+        ),
+        // Settled chrome (CRT power-on reveal once BIT is up). BIT's faceless
+        // self-introduction — it's the voice through screens 1-2. Big white mono
+        // (the machine's terminal voice), with its own name in BIT's turquoise
+        // (bitGlow, matching the sprite) and the aspiration "dream self" in amber
+        // (the token reserved for celebrating progression). Coloured spans mirror
+        // the problem screen's RichText; wider margins let the longer line breathe.
+        _PoweredSlot(
+          enabled: b >= kBitSettleAt,
+          top: 584,
+          left: 34,
+          right: 34,
+          child: Text.rich(
+            const TextSpan(
+              children: [
+                TextSpan(text: 'I am '),
+                TextSpan(text: 'BIT', style: TextStyle(color: bitGlow)),
+                TextSpan(
+                  text:
+                      ', and I will accompany you on your journey of becoming '
+                      'your ',
                 ),
-              ),
+                TextSpan(text: 'dream self', style: TextStyle(color: kAmber)),
+              ],
             ),
-            _PoweredSlot(
-              enabled: e >= 0.68,
-              top: 607,
-              left: 42,
-              right: 42,
-              child: Text(
-                'YOUR TRAINING BUILDS YOUR CHARACTER',
-                textAlign: TextAlign.center,
-                style: AppFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 13,
-                  height: 1.35,
-                  letterSpacing: 0.5,
-                ),
-              ),
+            textAlign: TextAlign.center,
+            style: AppFonts.shareTechMono(
+              color: kText,
+              fontSize: 18,
+              height: 1.4,
+              letterSpacing: 0.5,
             ),
-            _PoweredSlot(
-              enabled: e >= 0.80,
-              top: 774,
-              left: 0,
-              right: 0,
-              child: const _PressStartPrompt(),
-            ),
-          ],
-        );
-      },
+          ),
+        ),
+        _PoweredSlot(
+          enabled: b >= 0.97,
+          top: 729,
+          left: 0,
+          right: 0,
+          child: const _PressStartPrompt(),
+        ),
+      ],
     );
   }
 }
@@ -201,195 +289,6 @@ class _PoweredSlot extends StatelessWidget {
         enabled: enabled,
         builder: (context, power) =>
             Opacity(opacity: power.clamp(0.0, 1.0), child: child),
-      ),
-    );
-  }
-}
-
-class _StrMeter extends StatefulWidget {
-  const _StrMeter();
-
-  @override
-  State<_StrMeter> createState() => _StrMeterState();
-}
-
-class _StrMeterState extends State<_StrMeter>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 6300),
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final disableMotion = MediaQuery.of(context).disableAnimations;
-    if (disableMotion) {
-      _controller.stop();
-      _controller.value = 0;
-    } else if (!_controller.isAnimating) {
-      _controller.repeat();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final disableMotion = MediaQuery.of(context).disableAnimations;
-    return SizedBox(
-      width: 240,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'STR',
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 10,
-              height: 1,
-              color: kNeon,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 8),
-          AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) {
-              final states = disableMotion
-                  ? List.generate(4, (_) => const _StrCellState(1, 0))
-                  : _cellStates(_controller.value);
-              return Row(
-                children: [
-                  for (var i = 0; i < 4; i++) ...[
-                    Expanded(child: _StrCell(state: states[i])),
-                    if (i != 3) const SizedBox(width: 5),
-                  ],
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<_StrCellState> _cellStates(double progress) {
-    const repSeconds = 1.4;
-    final seconds = progress * 6.3;
-    if (seconds >= 5.6) {
-      final fade = math.max(0.0, 1 - ((seconds - 5.6) / 0.28));
-      return List.generate(4, (_) => _StrCellState(fade, fade * 0.18));
-    }
-
-    final repIndex = math.min(3, (seconds / repSeconds).floor());
-    final repT = seconds - repIndex * repSeconds;
-    final states = List.generate(4, (_) => const _StrCellState(0, 0));
-
-    for (var i = 0; i < repIndex; i++) {
-      states[i] = const _StrCellState(1, 0);
-    }
-
-    if (repT >= 1.13) {
-      var brightness = 0.0;
-      final flashAge = repT - 1.13;
-      if (flashAge < 0.12) brightness = 1 - flashAge / 0.12;
-      states[repIndex] = _StrCellState(1, brightness);
-    }
-
-    if (repIndex == 3 && repT >= 1.13) {
-      final flashT = repT - 1.13;
-      var pulse = 0.0;
-      for (final phase in const [0.05, 0.15, 0.24]) {
-        final distance = (flashT - phase).abs();
-        if (distance < 0.04) pulse = math.max(pulse, 1 - distance / 0.04);
-      }
-      for (var i = 0; i < states.length; i++) {
-        if (states[i].opacity > 0) {
-          states[i] = _StrCellState(
-            states[i].opacity,
-            math.max(states[i].brightness, pulse),
-          );
-        }
-      }
-    }
-
-    return states;
-  }
-}
-
-class _StrCellState {
-  const _StrCellState(this.opacity, this.brightness);
-
-  final double opacity;
-  final double brightness;
-}
-
-class _StrCell extends StatelessWidget {
-  const _StrCell({required this.state});
-
-  final _StrCellState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final litColor = Color.lerp(
-      kNeon,
-      const Color(0xFFC8FFDC),
-      state.brightness,
-    )!;
-
-    return Container(
-      height: 20,
-      decoration: BoxDecoration(
-        color: kCard,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: kBorder),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: state.opacity,
-              child: ColoredBox(color: litColor),
-            ),
-          ),
-          if (state.brightness > 0.45) ...[
-            Positioned(
-              top: -1,
-              right: 8,
-              child: _Spark(opacity: state.brightness),
-            ),
-            Positioned(
-              top: 4,
-              right: -1,
-              child: _Spark(opacity: state.brightness * 0.75),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _Spark extends StatelessWidget {
-  const _Spark({required this.opacity});
-
-  final double opacity;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: opacity.clamp(0.0, 1.0).toDouble(),
-      child: const SizedBox(
-        width: 3,
-        height: 3,
-        child: DecoratedBox(decoration: BoxDecoration(color: kNeon)),
       ),
     );
   }

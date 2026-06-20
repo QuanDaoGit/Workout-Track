@@ -1,16 +1,31 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/pages/onboarding/cold_open_page.dart';
 import 'package:workout_track/pages/onboarding/onboarding_flow_page.dart';
 import 'package:workout_track/pages/onboarding/problem_question_page.dart';
 import 'package:workout_track/pages/onboarding/solution_page.dart';
-import 'package:workout_track/theme/tokens.dart';
+import 'package:workout_track/widgets/companion/bit_mood_core.dart';
 import 'package:workout_track/widgets/pixel_button.dart';
-import 'package:workout_track/widgets/streak_orbit_icon.dart';
+import 'package:workout_track/widgets/strobe_flash.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  // Real fonts so the golden's text metrics match the device (else tofu boxes).
+  setUpAll(() async {
+    Future<ByteData> font(String path) async =>
+        ByteData.view((await File(path).readAsBytes()).buffer);
+    await (FontLoader('ShareTechMono')
+          ..addFont(font('fonts/sharetechmono/ShareTechMono-Regular.ttf')))
+        .load();
+    await (FontLoader('PressStart2P')
+          ..addFont(font('fonts/pressstart2p/PressStart2P-Regular.ttf')))
+        .load();
+  });
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -23,7 +38,7 @@ void main() {
     );
   }
 
-  testWidgets('Reduced motion renders the final solution copy and CTA', (
+  testWidgets('Reduced motion renders the settled, revealed solution', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -31,37 +46,41 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('HERE, EVERY REP'), findsOneWidget);
-    expect(find.text('LEVELS YOU UP'), findsOneWidget);
-    expect(
-      find.text('you can see your work.', findRichText: true),
-      findsOneWidget,
-    );
-    expect(
-      find.text('you become stronger every rep.', findRichText: true),
-      findsOneWidget,
-    );
-    expect(
-      find.text('and you will keep coming back.', findRichText: true),
-      findsOneWidget,
-    );
+    // BIT is present and its face is fully revealed (eyes open) at rest state.
+    final bit = tester.widget<BitMoodCore>(find.byType(BitMoodCore));
+    expect(bit.reveal, 1.0);
+    expect(bit.pose, BitPose.neutral);
+
+    // Both lines are on screen in full.
+    expect(find.text('HERE, EVERY REP\nLEVELS YOU UP'), findsOneWidget);
+    expect(find.text('YOU WILL KEEP COMING\nBACK FOR MORE'), findsOneWidget);
+    // The meter caption was removed (only the bar remains).
+    expect(find.text('every rep fills this'), findsNothing);
+    // The reveal bloom is the engine's circular glow — never a StrobeFlash
+    // rectangle (the "square layer" bug).
+    expect(find.byType(StrobeFlash), findsNothing);
+
     expect(find.text("LET'S BUILD MY CHARACTER"), findsOneWidget);
     expect(find.byKey(const ValueKey('solution_backdrop')), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('solution_aspiration_tease')),
-      findsOneWidget,
-    );
-    final streak = tester.widget<StreakOrbitIcon>(
-      find.byType(StreakOrbitIcon),
-    );
-    expect(streak.size, 168);
 
     final cta = tester.widget<PixelButton>(find.byType(PixelButton));
     expect(cta.fontSize, 12);
     expect(cta.minHeight, 64);
+  });
 
-    final levelLine = tester.widget<Text>(find.text('LEVELS YOU UP'));
-    expect(levelLine.style?.color, kAmber);
+  testWidgets('Screen exposes the full spoken line to screen readers', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      wrapWithApp(SolutionView(onContinue: () {}), reducedMotion: true),
+    );
+    await tester.pump();
+
+    final label = tester.getSemantics(find.byType(SolutionView)).label;
+    expect(label, contains('every rep levels you up'));
+    expect(label, contains('keep coming back'));
+    handle.dispose();
   });
 
   testWidgets('CTA advances the flow (reduced motion fires immediately)', (
@@ -90,87 +109,79 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 50));
 
-    // Tap the background (screen center is well above the CTA at y640).
     await tester.tap(find.byType(SolutionView));
     await tester.pump();
 
     expect(continued, isFalse);
-    // Statement is now in its completed state.
-    expect(find.text('LEVELS YOU UP'), findsOneWidget);
+    // Snapped to the completed state: the full line is shown.
+    expect(find.text('YOU WILL KEEP COMING\nBACK FOR MORE'), findsOneWidget);
   });
 
-  testWidgets('Slam effects cover the full viewport, not the design frame', (
-    tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(430, 932);
-    addTearDown(() {
-      tester.view.resetDevicePixelRatio();
-      tester.view.resetPhysicalSize();
-    });
-
-    await tester.pumpWidget(wrapWithApp(SolutionView(onContinue: () {})));
-    await tester.pump(const Duration(milliseconds: 650));
-
-    expect(
-      tester.getSize(find.byKey(const ValueKey('solution_effect_layer'))),
-      const Size(430, 932),
-    );
-    expect(
-      tester.getSize(find.byKey(const ValueKey('solution_effect_border'))),
-      const Size(430, 932),
-    );
-    final borderBox = tester.widget<DecoratedBox>(
-      find.byKey(const ValueKey('solution_effect_border')),
-    );
-    final decoration = borderBox.decoration as BoxDecoration;
-    final border = decoration.border! as Border;
-    expect(border.top.color, kAmber);
-    expect(
-      tester.getSize(find.byKey(const ValueKey('solution_design_frame'))),
-      const Size(390, 844),
-    );
-  });
-
-  testWidgets('Solution keeps the promise screen free of transient sprites', (
-    tester,
-  ) async {
-    await tester.pumpWidget(wrapWithApp(SolutionView(onContinue: () {})));
-    await tester.pump(const Duration(milliseconds: 1220));
-
-    expect(
-      find.byKey(const ValueKey('solution_aspiration_tease')),
-      findsNothing,
-    );
-  });
-
-  testWidgets('Reduced motion skips active full-screen effects', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      wrapWithApp(SolutionView(onContinue: () {}), reducedMotion: true),
-    );
-    await tester.pump();
-
-    expect(find.byKey(const ValueKey('solution_effect_layer')), findsNothing);
-    expect(find.byKey(const ValueKey('solution_effect_border')), findsNothing);
-  });
-
-  testWidgets('CTA advances after the intro is snapped complete', (
+  testWidgets('Background tap mid-anticipation snaps to the settled state', (
     tester,
   ) async {
     var continued = false;
     await tester.pumpWidget(
       wrapWithApp(SolutionView(onContinue: () => continued = true)),
     );
-    await tester.pump(const Duration(milliseconds: 50));
+    // Into the anticipation inhale window (~520–760ms) — before the surge/hold —
+    // a tap must not strand the user mid-power-up.
+    await tester.pump(const Duration(milliseconds: 600));
 
     await tester.tap(find.byType(SolutionView));
     await tester.pump();
-    await tester.tap(find.text("LET'S BUILD MY CHARACTER"));
-    await tester.pump(const Duration(milliseconds: 300));
 
+    // Snapped to settled: never advances, both lines whole, the revealed neutral
+    // BIT, and the CTA now advances (skip stays responsive while CTA-gated).
+    expect(continued, isFalse);
+    expect(find.text('HERE, EVERY REP\nLEVELS YOU UP'), findsOneWidget);
+    expect(find.text('YOU WILL KEEP COMING\nBACK FOR MORE'), findsOneWidget);
+    final bit = tester.widget<BitMoodCore>(find.byType(BitMoodCore));
+    expect(bit.reveal, 1.0);
+    expect(bit.pose, BitPose.neutral);
+
+    await tester.tap(find.text("LET'S BUILD MY CHARACTER"));
+    await tester.pump();
     expect(continued, isTrue);
+  });
+
+  testWidgets('CTA is gated until the intro settles', (tester) async {
+    var continued = false;
+    await tester.pumpWidget(
+      wrapWithApp(SolutionView(onContinue: () => continued = true)),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // Mid-intro: the CTA is disabled, so a tap does not advance.
+    await tester.tap(find.byType(PixelButton), warnIfMissed: false);
+    await tester.pump();
+    expect(continued, isFalse);
+
+    // Complete the intro (background tap), then the CTA advances.
+    await tester.tap(find.byType(SolutionView));
+    await tester.pump();
+    await tester.tap(find.text("LET'S BUILD MY CHARACTER"));
+    await tester.pump();
+    expect(continued, isTrue);
+  });
+
+  testWidgets('Reduced-motion solution matches its golden', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+
+    await tester.pumpWidget(
+      wrapWithApp(SolutionView(onContinue: () {}), reducedMotion: true),
+    );
+    await tester.pump();
+
+    await expectLater(
+      find.byType(SolutionView),
+      matchesGoldenFile('goldens/solution_settled.png'),
+    );
   });
 
   testWidgets('Flow advances from problem screen to solution screen', (
@@ -189,7 +200,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
     await tester.pump();
 
-    await tester.tap(find.byType(ColdOpenView));
+    // Cold open is user-powered: tap to wake BIT, let it boot, tap to continue.
+    await tester.tap(find.byType(ColdOpenView)); // wake
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 3100)); // boot completes
+    await tester.tap(find.byType(ColdOpenView)); // continue
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 460));
     await tester.pump();
@@ -204,38 +219,5 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SolutionView), findsOneWidget);
-  });
-
-  testWidgets('Solution keeps the aspiration tease after settling', (
-    tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
-    addTearDown(() {
-      tester.view.resetDevicePixelRatio();
-      tester.view.resetPhysicalSize();
-    });
-
-    await tester.pumpWidget(wrapWithApp(SolutionView(onContinue: () {})));
-    await tester.pump(const Duration(milliseconds: 1850));
-
-    expect(
-      find.byKey(const ValueKey('solution_aspiration_tease')),
-      findsOneWidget,
-    );
-
-    await tester.pump(const Duration(milliseconds: 600));
-    await tester.pump(const Duration(milliseconds: 120));
-    expect(
-      find.byKey(const ValueKey('solution_aspiration_tease')),
-      findsOneWidget,
-    );
-    expect(find.byType(StreakOrbitIcon), findsOneWidget);
-
-    final futureSelfBottom = tester
-        .getBottomLeft(find.byKey(const ValueKey('solution_aspiration_tease')))
-        .dy;
-    final ctaTop = tester.getTopLeft(find.byType(PixelButton)).dy;
-    expect(ctaTop - futureSelfBottom, greaterThanOrEqualTo(32));
   });
 }

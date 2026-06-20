@@ -10,7 +10,10 @@ import '../models/loot_item.dart';
 import '../models/unit_models.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
+import '../widgets/session_projection.dart';
+import '../widgets/weekday_picker.dart';
 
+import '../data/programs_library.dart';
 import '../models/profile_models.dart';
 import '../models/quest_models.dart';
 import '../models/rest_models.dart';
@@ -22,6 +25,7 @@ import '../services/body_metrics_service.dart';
 import '../services/calibration_service.dart';
 import '../services/class_service.dart';
 import '../services/profile_service.dart';
+import '../services/program_service.dart';
 import '../services/progression_settings_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
@@ -36,7 +40,8 @@ import '../services/workout_storage_service.dart';
 import '../services/xp_boost_service.dart';
 import '../services/xp_service.dart';
 import '../theme/tokens.dart';
-import '../widgets/arcade_progress_bar.dart';
+import '../widgets/arcade_bar.dart';
+import '../widgets/arcade_badge.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/lck_buff_badge.dart';
 import '../widgets/loot_avatar_frame.dart';
@@ -215,7 +220,10 @@ class ProfilePageState extends State<ProfilePage> {
 
   /// The identity frame doubles as the avatar-edit entry — tap to open the
   /// customizer. A small brush chip keeps the affordance discoverable.
-  Widget _buildAvatarEntry() {
+  Widget _buildAvatarEntry({double size = 130}) {
+    // No equipped frame falls back to the default iron frame, so the identity
+    // tile always has exactly one border source (never a bare box).
+    final frame = _equippedFrame ?? lootItemById('frame_iron');
     return Semantics(
       button: true,
       label: 'Edit avatar',
@@ -226,9 +234,13 @@ class ProfilePageState extends State<ProfilePage> {
           children: [
             LootAvatarFrame(
               avatarSpec: _profile.avatarSpec,
-              framePath: _equippedFrame?.assetPath,
-              size: 130,
-              borderColor: kBorderVariant,
+              framePath: frame?.assetPath,
+              frameCount: frame?.frameCount ?? 1,
+              animate: true,
+              size: size,
+              // Seat the face ~1 grid row lower so it reads optically centred in
+              // the hero well (the sprite is top-biased — see avatarDropPx).
+              avatarDropPx: size * 0.76 / 20,
             ),
             Positioned(
               right: 4,
@@ -280,6 +292,21 @@ class ProfilePageState extends State<ProfilePage> {
     await Navigator.of(context).push(
       arcadeRoute(
         (_) => const WorkoutLibraryPage(),
+        motion: ArcadeRouteMotion.fade,
+      ),
+    );
+    await reload();
+    widget.onProfileChanged?.call();
+  }
+
+  /// Workout history / calendar / analytics — the second discoverable door to
+  /// the log (the first is Home's last-workout card). Both routes land on the
+  /// same [WorkoutLogsPage]; before this, the log was reachable only via an
+  /// unlabelled tap on Home's LCK pip.
+  Future<void> _openLogs() async {
+    await Navigator.of(context).push(
+      arcadeRoute(
+        (_) => const WorkoutLogsPage(),
         motion: ArcadeRouteMotion.fade,
       ),
     );
@@ -387,7 +414,7 @@ class ProfilePageState extends State<ProfilePage> {
                   ImageIcon(
                     AssetImage(iconPath),
                     size: 22,
-                    color: const Color(0xFF00FF9C),
+                    color: kNeon,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -396,7 +423,7 @@ class ProfilePageState extends State<ProfilePage> {
                       style: const TextStyle(
                         fontFamily: 'PressStart2P',
                         fontSize: 11,
-                        color: Color(0xFFE8E8FF),
+                        color: kText,
                       ),
                     ),
                   ),
@@ -434,10 +461,15 @@ class ProfilePageState extends State<ProfilePage> {
     return ordered.map((day) => labels[day]!).join(' / ');
   }
 
-  void _showTrainingGoalsSheet() {
+  Future<void> _showTrainingGoalsSheet() async {
     var selected = Set<int>.from(
       _restState.pendingTrainingWeekdays ?? _restState.trainingWeekdays,
     );
+    // The active program (if any) lets the sheet show which session lands on
+    // each chosen weekday — the legibility win that makes the picker feel wired.
+    final progress = await ProgramService().getActiveProgress();
+    final program = progress == null ? null : programById(progress.programId);
+    if (!mounted) return;
 
     showModalBottomSheet<void>(
       context: context,
@@ -469,7 +501,7 @@ class ProfilePageState extends State<ProfilePage> {
                         fallbackAssetPath:
                             'assets/icons/control/icon_shield.png',
                         size: 22,
-                        color: Color(0xFF00FF9C),
+                        color: kNeon,
                       ),
                       const SizedBox(width: 10),
                       const Expanded(
@@ -478,7 +510,7 @@ class ProfilePageState extends State<ProfilePage> {
                           style: TextStyle(
                             fontFamily: 'PressStart2P',
                             fontSize: 11,
-                            color: Color(0xFF00FF9C),
+                            color: kNeon,
                           ),
                         ),
                       ),
@@ -510,41 +542,29 @@ class ProfilePageState extends State<ProfilePage> {
                     ),
                   ],
                   const SizedBox(height: 18),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final day in const [
-                        (1, 'MON'),
-                        (2, 'TUE'),
-                        (3, 'WED'),
-                        (4, 'THU'),
-                        (5, 'FRI'),
-                        (6, 'SAT'),
-                        (7, 'SUN'),
-                      ])
-                        _WeekdayToggle(
-                          label: day.$2,
-                          selected: selected.contains(day.$1),
-                          onTap: () {
-                            setSheetState(() {
-                              if (selected.contains(day.$1)) {
-                                selected.remove(day.$1);
-                              } else {
-                                selected.add(day.$1);
-                              }
-                            });
-                          },
-                        ),
-                    ],
+                  WeekdayPicker(
+                    selected: selected,
+                    onToggle: (weekday) {
+                      setSheetState(() {
+                        if (selected.contains(weekday)) {
+                          selected.remove(weekday);
+                        } else {
+                          selected.add(weekday);
+                        }
+                      });
+                    },
                   ),
+                  if (program != null && valid) ...[
+                    const SizedBox(height: 18),
+                    SessionProjection(selected: selected, program: program),
+                  ],
                   const SizedBox(height: 12),
                   Text(
                     valid
                         ? 'Changes start next Monday.'
                         : 'Choose at least one training day and one rest day.',
                     style: TextStyle(
-                      color: valid ? kMutedText : const Color(0xFFFFD700),
+                      color: valid ? kMutedText : kAmber,
                       fontSize: 12,
                     ),
                   ),
@@ -626,8 +646,8 @@ class ProfilePageState extends State<ProfilePage> {
             icon: ImageIcon(
               const AssetImage('assets/icons/control/icon_hammer.png'),
               color: _editingName
-                  ? const Color(0xFFFFD700)
-                  : const Color(0xFF00FF9C),
+                  ? kAmber
+                  : kNeon,
             ),
           ),
         ],
@@ -707,48 +727,50 @@ class ProfilePageState extends State<ProfilePage> {
             borderRadius: BorderRadius.circular(4),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildAvatarEntry(),
-                  const SizedBox(width: kSpace4),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _editingName ? _buildNameEditor() : _buildNameBlock(),
-                        const SizedBox(height: kSpace3),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _RankBadge(label: rank),
-                            _StatusBadge(label: 'LV. $level'),
-                          ],
-                        ),
-                        if (_classState?.mostRecentFormerClass != null) ...[
-                          const SizedBox(height: kSpace2),
-                          Text(
-                            'Former path: '
-                            '${_classState!.mostRecentFormerClass!.clazz.displayName}',
-                            style: AppFonts.shareTechMono(
-                              color: kMutedText,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
+              // The character is the hero: the framed pixel-face avatar, large
+              // and centred in its own recessed `kBg` well (figure-ground), is
+              // the single focal element — hierarchy by size + position, not
+              // colour (neon stays the action/meter, never the identity frame).
+              Center(child: _buildAvatarEntry(size: 150)),
+              const SizedBox(height: kSpace2),
+              // Level — the competence stamp seated under the hero. Amber is the
+              // token's reserved level-up colour; it reads as achievement, kept
+              // distinct from the neon XP meter below.
+              Center(
+                child: ArcadeBadge(
+                  label: 'LV. $level',
+                  color: kAmber,
+                  filled: true,
+                  fontSize: 10,
+                ),
               ),
+              const SizedBox(height: kSpace3),
+              // Name (white identity) + equipped title, centred under the hero.
+              _editingName
+                  ? _buildNameEditor()
+                  : _buildNameBlock(centered: true),
+              const SizedBox(height: kSpace2),
+              // Rank — a quiet identity badge (neon is reserved for the meter).
+              Center(child: _RankBadge(label: rank)),
+              if (_classState?.mostRecentFormerClass != null) ...[
+                const SizedBox(height: kSpace2),
+                Text(
+                  'Former path: '
+                  '${_classState!.mostRecentFormerClass!.clazz.displayName}',
+                  textAlign: TextAlign.center,
+                  style: AppFonts.shareTechMono(
+                    color: kMutedText,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
               const SizedBox(height: kSpace4),
               Row(
                 children: [
                   Expanded(
-                    child: ArcadeProgressBar(value: xpProgress.fraction),
+                    child: ArcadeBar(value: xpProgress.fraction),
                   ),
                   if (lckMultiplier > 1.0) ...[
                     const SizedBox(width: 8),
@@ -760,15 +782,27 @@ class ProfilePageState extends State<ProfilePage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    xpProgress.label,
-                    style: const TextStyle(color: kMutedText, fontSize: 11),
+                  // Flexible + ellipsis so the dual readout never overflows at a
+                  // narrow width × large text (320dp × 1.3 matrix).
+                  Flexible(
+                    child: Text(
+                      xpProgress.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: kMutedText, fontSize: 11),
+                    ),
                   ),
-                  Text(
-                    '${summary.claimableCount} rewards ready',
-                    style: TextStyle(
-                      color: summary.claimableCount > 0 ? kAmber : kMutedText,
-                      fontSize: 11,
+                  const SizedBox(width: kSpace2),
+                  Flexible(
+                    child: Text(
+                      '${summary.claimableCount} rewards ready',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: TextStyle(
+                        color: summary.claimableCount > 0 ? kAmber : kMutedText,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ],
@@ -1027,7 +1061,7 @@ class ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: kSpace1),
                     Text(
-                      'Owned frames, titles, and themes live here.',
+                      'Owned frames and titles live here.',
                       style: AppFonts.shareTechMono(
                         color: kMutedText,
                         fontSize: 12,
@@ -1199,14 +1233,14 @@ class ProfilePageState extends State<ProfilePage> {
             children: [
               const ImageIcon(
                 AssetImage('assets/icons/control/icon_potion.png'),
-                color: Color(0xFFFFD700),
+                color: kAmber,
                 size: 16,
               ),
               const SizedBox(width: 6),
               Text(
                 _activeBoostLabel!,
                 style: AppFonts.shareTechMono(
-                  color: const Color(0xFFFFD700),
+                  color: kAmber,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1226,21 +1260,24 @@ class ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildNameBlock() {
+  Widget _buildNameBlock({bool centered = false}) {
     final titleItem = _equippedTitle;
     final title = titleItem?.name ?? 'untitled';
     final titleColor = titleItem?.color ?? kMutedText;
+    final align = centered ? TextAlign.center : TextAlign.start;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          centered ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: [
         Text(
           _profile.displayName,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          textAlign: align,
           style: AppFonts.shareTechMono(
             fontSize: 22,
             fontWeight: FontWeight.w700,
-            color: const Color(0xFFE8E8FF),
+            color: kText,
           ),
         ),
         const SizedBox(height: 5),
@@ -1248,6 +1285,7 @@ class ProfilePageState extends State<ProfilePage> {
           title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          textAlign: align,
           style: AppFonts.shareTechMono(color: titleColor, fontSize: 13),
         ),
       ],
@@ -1265,7 +1303,7 @@ class ProfilePageState extends State<ProfilePage> {
             style: AppFonts.shareTechMono(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: const Color(0xFFE8E8FF),
+              color: kText,
             ),
             counterText: '',
             contentPadding: const EdgeInsets.symmetric(
@@ -1277,7 +1315,7 @@ class ProfilePageState extends State<ProfilePage> {
         const SizedBox(width: 6),
         _SmallIconButton(
           iconPath: 'assets/icons/control/icon_save.png',
-          color: const Color(0xFF00FF9C),
+          color: kNeon,
           onPressed: _saveDisplayName,
         ),
         _SmallIconButton(
@@ -1308,6 +1346,12 @@ class ProfilePageState extends State<ProfilePage> {
       children: [
         const _SectionHeader(title: 'TRAINING'),
         const SizedBox(height: 10),
+        _SettingsRow(
+          iconPath: 'assets/icons/control/icon_timeline.png',
+          title: 'Training Log',
+          subtitle: 'History, calendar, and stats.',
+          onTap: _openLogs,
+        ),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_sword.png',
           title: 'Training Library',
@@ -1477,7 +1521,7 @@ class _UnitsSheetState extends State<_UnitsSheet> {
               ImageIcon(
                 AssetImage('assets/icons/control/icon_stat.png'),
                 size: 22,
-                color: Color(0xFF00FF9C),
+                color: kNeon,
               ),
               SizedBox(width: 10),
               Text(
@@ -1485,7 +1529,7 @@ class _UnitsSheetState extends State<_UnitsSheet> {
                 style: TextStyle(
                   fontFamily: 'PressStart2P',
                   fontSize: 11,
-                  color: Color(0xFF00FF9C),
+                  color: kNeon,
                 ),
               ),
             ],
@@ -1662,7 +1706,7 @@ class _HeightSheetState extends State<_HeightSheet> {
                     const ImageIcon(
                       AssetImage('assets/icons/control/icon_stat.png'),
                       size: 22,
-                      color: Color(0xFF00FF9C),
+                      color: kNeon,
                     ),
                     const SizedBox(width: 10),
                     Text(
@@ -1670,7 +1714,7 @@ class _HeightSheetState extends State<_HeightSheet> {
                       style: const TextStyle(
                         fontFamily: 'PressStart2P',
                         fontSize: 11,
-                        color: Color(0xFF00FF9C),
+                        color: kNeon,
                       ),
                     ),
                   ],
@@ -1792,7 +1836,7 @@ class _WorkoutDefaultsSheetState extends State<_WorkoutDefaultsSheet> {
                     ImageIcon(
                       AssetImage('assets/icons/control/icon_gear.png'),
                       size: 22,
-                      color: Color(0xFF00FF9C),
+                      color: kNeon,
                     ),
                     SizedBox(width: 10),
                     Expanded(
@@ -1801,7 +1845,7 @@ class _WorkoutDefaultsSheetState extends State<_WorkoutDefaultsSheet> {
                         style: TextStyle(
                           fontFamily: 'PressStart2P',
                           fontSize: 11,
-                          color: Color(0xFF00FF9C),
+                          color: kNeon,
                         ),
                       ),
                     ),
@@ -1886,14 +1930,14 @@ class _DefaultStepper extends StatelessWidget {
                   style: const TextStyle(
                     fontFamily: 'PressStart2P',
                     fontSize: 8,
-                    color: Color(0xFFFFD700),
+                    color: kAmber,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   value,
                   style: AppFonts.shareTechMono(
-                    color: const Color(0xFFE8E8FF),
+                    color: kText,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1922,9 +1966,9 @@ class _DefaultStepButton extends StatelessWidget {
       onPressed: onPressed,
       style: FilledButton.styleFrom(
         backgroundColor: onPressed == null
-            ? const Color(0xFF2A2A3E)
-            : const Color(0xFF00FF9C),
-        foregroundColor: onPressed == null ? const Color(0xFF555577) : kBg,
+            ? kBorderDark
+            : kNeon,
+        foregroundColor: onPressed == null ? kDim : kBg,
         minimumSize: const Size(40, 40),
         padding: EdgeInsets.zero,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -2023,24 +2067,11 @@ class _RankBadge extends StatelessWidget {
 
   final String label;
 
+  // Quiet identity accent: rank is a competence signal, but neon is reserved
+  // for the one action / the XP meter, so the rank pill stays muted.
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFF00FF9C)),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        label.toUpperCase(),
-        style: const TextStyle(
-          fontFamily: 'PressStart2P',
-          fontSize: 8,
-          color: Color(0xFF00FF9C),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      ArcadeBadge(label: label, color: kMutedText);
 }
 
 class _StatusBadge extends StatelessWidget {
@@ -2049,24 +2080,8 @@ class _StatusBadge extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFF00FF9C).withValues(alpha: 0.12),
-        border: Border.all(color: const Color(0xFF00FF9C)),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        label.toUpperCase(),
-        style: const TextStyle(
-          fontFamily: 'PressStart2P',
-          fontSize: 8,
-          color: Color(0xFF00FF9C),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      ArcadeBadge(label: label, color: kNeon, filled: true);
 }
 
 class _GlanceMetricsStrip extends StatelessWidget {
@@ -2257,55 +2272,13 @@ class _ScheduleInfoRow extends StatelessWidget {
               value,
               textAlign: TextAlign.right,
               style: AppFonts.shareTechMono(
-                color: const Color(0xFFE8E8FF),
+                color: kText,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _WeekdayToggle extends StatelessWidget {
-  const _WeekdayToggle({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return HoldDepress(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOutCubic,
-        width: 52,
-        height: 40,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF00FF9C) : kCard,
-          border: Border.all(
-            color: selected ? const Color(0xFF00FF9C) : kBorder,
-          ),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: 'PressStart2P',
-            fontSize: 8,
-            color: selected ? kBg : kMutedText,
-          ),
-        ),
       ),
     );
   }
@@ -2342,7 +2315,7 @@ class _SettingsRow extends StatelessWidget {
               ImageIcon(
                 AssetImage(iconPath),
                 size: 20,
-                color: const Color(0xFF00FF9C),
+                color: kNeon,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -2352,7 +2325,7 @@ class _SettingsRow extends StatelessWidget {
                     Text(
                       title,
                       style: const TextStyle(
-                        color: Color(0xFFE8E8FF),
+                        color: kText,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -2408,7 +2381,7 @@ class _SettingsToggleRow extends StatelessWidget {
             ImageIcon(
               AssetImage(iconPath),
               size: 20,
-              color: const Color(0xFF00FF9C),
+              color: kNeon,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -2418,7 +2391,7 @@ class _SettingsToggleRow extends StatelessWidget {
                   Text(
                     title,
                     style: const TextStyle(
-                      color: Color(0xFFE8E8FF),
+                      color: kText,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -2434,8 +2407,8 @@ class _SettingsToggleRow extends StatelessWidget {
             Switch(
               value: value,
               onChanged: onChanged,
-              activeThumbColor: const Color(0xFF00FF9C),
-              activeTrackColor: const Color(0xFF00FF9C).withValues(alpha: 0.3),
+              activeThumbColor: kNeon,
+              activeTrackColor: kNeon.withValues(alpha: 0.3),
               inactiveThumbColor: kMutedText,
               inactiveTrackColor: kBorder,
             ),

@@ -11,6 +11,7 @@ import 'package:workout_track/pages/onboarding/name_screen.dart';
 import 'package:workout_track/theme/tokens.dart';
 import 'package:workout_track/widgets/pixel_loader.dart';
 import 'package:workout_track/widgets/strobe_flash.dart';
+import 'package:workout_track/widgets/weekday_picker.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -223,6 +224,89 @@ void main() {
 
       final name = tester.widget<NameScreen>(find.byType(NameScreen));
       expect(name.draft.selectedProgramId, isNull);
+    });
+  });
+
+  group('ProgramSelectionPage — discoverability fix', () {
+    Widget page() => _wrap(
+      ProgramSelectionPage(
+        draft: CharacterDraft(
+          calibration: _recompResult, // recommends UPPER LOWER
+          classConfirmedAt: DateTime(2026, 6, 6, 10),
+        ),
+      ),
+      reducedMotion: true,
+    );
+
+    testWidgets('recommended program is the first card (seen on load)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(page());
+
+      // UPPER LOWER is normally 2nd in library order (after FULL BODY 3X); the
+      // reorder puts the recommended one above it. (PPL is below the fold and
+      // lazily un-built, so the on-screen pair is the proof.)
+      final recommendedY = tester.getTopLeft(find.text('UPPER LOWER')).dy;
+      final fullBodyY = tester.getTopLeft(find.text('FULL BODY 3X')).dy;
+      expect(recommendedY, lessThan(fullBodyY));
+    });
+
+    testWidgets('training-days summary is pinned + visible, and opens the '
+        'editor without scrolling', (tester) async {
+      await tester.pumpWidget(page());
+
+      // The pinned summary is present on load (no scroll), with the seeded pick.
+      expect(find.text('TRAINING DAYS'), findsOneWidget);
+      expect(find.text('MON·TUE·THU·FRI'), findsOneWidget); // UL seed = 4 days
+
+      await tester.tap(find.text('TRAINING DAYS'));
+      await tester.pumpAndSettle();
+
+      // The editor sheet opens with the shared picker.
+      expect(find.text('WHEN WILL YOU TRAIN?'), findsOneWidget);
+      expect(find.byType(WeekdayPicker), findsOneWidget);
+    });
+
+    testWidgets('editing days in the sheet updates the summary + the draft', (
+      tester,
+    ) async {
+      await tester.pumpWidget(page());
+
+      await tester.tap(find.text('TRAINING DAYS'));
+      await tester.pumpAndSettle();
+
+      // Drop Tuesday (scoped to the sheet's picker), then commit.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(WeekdayPicker),
+          matching: find.text('TUE'),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('DONE'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('MON·THU·FRI'), findsOneWidget); // summary updated
+
+      await tester.tap(find.text('START THIS PATH'));
+      await tester.pumpAndSettle();
+      final name = tester.widget<NameScreen>(find.byType(NameScreen));
+      expect(name.draft.trainingWeekdays, {1, 4, 5});
+    });
+
+    testWidgets('page golden (recommended-first + pinned summary)', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(page());
+      await tester.pump();
+      await expectLater(
+        find.byType(ProgramSelectionPage),
+        matchesGoldenFile('goldens/program_selection_discoverability.png'),
+      );
     });
   });
 }

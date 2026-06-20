@@ -18,6 +18,7 @@ class AdventureRouteDef {
     required this.farAsset,
     required this.groundAsset,
     required this.scrollSpeed,
+    required this.walkLineNative,
     required this.flavorLines,
   });
 
@@ -41,6 +42,11 @@ class AdventureRouteDef {
   /// matches the standalone HTML demo's per-route tuning.
   final double scrollSpeed;
 
+  /// The route's walk-line Y in native (270-tall) scene pixels — where a
+  /// traveller's contact point lands. BIT's native y29 anchors here so he
+  /// hovers with his body above the line. Mirrors the BIT-Walk handoff.
+  final double walkLineNative;
+
   /// Report flavor lines; one is picked (seeded) at dispatch.
   final List<String> flavorLines;
 }
@@ -58,6 +64,7 @@ const List<AdventureRouteDef> adventureRoutes = [
     farAsset: '$_routeAssetBase/iron_vault_far.png',
     groundAsset: '$_routeAssetBase/iron_vault_ground.png',
     scrollSpeed: 36,
+    walkLineNative: 182,
     flavorLines: [
       'The vault gate did not open. It nodded.',
       'Ember seams glowed brighter where you walked.',
@@ -76,6 +83,7 @@ const List<AdventureRouteDef> adventureRoutes = [
     farAsset: '$_routeAssetBase/sky_tracer_far.png',
     groundAsset: '$_routeAssetBase/sky_tracer_ground.png',
     scrollSpeed: 48,
+    walkLineNative: 180,
     flavorLines: [
       'The rail hummed under a sure step.',
       'One gap was wider than it looked. You were faster.',
@@ -94,6 +102,7 @@ const List<AdventureRouteDef> adventureRoutes = [
     farAsset: '$_routeAssetBase/infini_maze_far.png',
     groundAsset: '$_routeAssetBase/infini_maze_ground.png',
     scrollSpeed: 28,
+    walkLineNative: 180,
     flavorLines: [
       'The maze added a corridor. You added a mile.',
       'Every archway looked the same. You did not stop to check.',

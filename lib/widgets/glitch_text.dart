@@ -76,7 +76,7 @@ class _GlitchTextState extends State<GlitchText>
                 child: Text(
                   widget.text,
                   textAlign: TextAlign.center,
-                  style: style.copyWith(color: const Color(0xFFFF2D55)),
+                  style: style.copyWith(color: kDanger),
                 ),
               ),
             ),

@@ -81,8 +81,24 @@ Motion / micro-interaction wrappers (`lib/widgets/motion/`):
 - `focus_frame` — an animated focus bezel.
 - `arcade_text_field` / `arcade_name_field` — themed inputs.
 
+Canonical components — **the locked standard (2026-06); reach for these, don't re-roll bespoke**:
+- **`arcade_bar`** — the **one progress bar**. Segmented pixel cells in a recessed track (dimensional,
+  never a flat fill). Continuous `ArcadeBar(value: 0..1)` or explicit
+  `ArcadeBar.segments(litCells:, totalCells:)`; `accent` colour, `flashOnIncrease`+`increaseSignal`,
+  reduced-motion-safe. *Replaced the flat `arcade_progress_bar` **and** `segmented_progress_bar` (both
+  removed) — never reintroduce a `ClipRRect`+`ColoredBox` smooth fill.*
+- **`arcade_card`** — the **one panel** (token bg/border, `kCardRadius`, `kCardPadding`, optional accent
+  border + `glow`). Promote bespoke `Container`+`BoxDecoration` cards onto it.
+- **`arcade_badge`** — the **one status/label pill** (bordered PressStart2P micro-label, optional
+  `filled` wash). Absorbs the `_RankBadge`/`_StatusBadge`/`_TierBadge`/`_RarityBadge` family.
+- **`lck_pips`** — the **stat-board** LCK row's four faceted diamond pips (painted, zero-asset),
+  replacing the flat `◆◇` glyphs. The home HUD + `LckBuffBadge` keep the purple `RadarStatIcon` energy
+  icon — don't swap those. (`arcade_chip` and `LevelBadge` are also canonical — keep.)
+- *Long tail: many one-off `_…Card`/`_…Badge`/chip classes across screens still need migrating onto
+  these — do it opportunistically.*
+
 Structure / surface widgets (`lib/widgets/`, representative):
-- `pixel_button`, `arcade_chip`, `arcade_progress_bar` — core controls.
+- `pixel_button`, `arcade_chip` — core controls (chunky CTA / selectable chip).
 - `arcade_route` — the app's page-transition routes (`ArcadeRouteMotion.flow/fade/reveal`); use these,
   not bare `MaterialPageRoute`, so transitions stay in-language.
 - `arcade_dialog_button_column` — the dialog action stack.

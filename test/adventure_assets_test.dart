@@ -29,14 +29,10 @@ void main() {
     }
   });
 
-  test('the generic body sprite frames + generic emblem are bundled', () async {
-    // v3 core surfaces: the 4-frame walk strip and the no-expedition emblem.
-    // A non-recursive pubspec decl or a rename would fail here, not on device.
-    for (var f = 0; f < 4; f++) {
-      final asset = 'assets/adventure/body/frames/walk_$f.png';
-      final data = await rootBundle.load(asset);
-      expect(data.lengthInBytes, greaterThan(0), reason: asset);
-    }
+  test('the generic adventure emblem is bundled', () async {
+    // The on-route traveller is now BIT (a code-painted sprite, no asset —
+    // see BitRouteWalker); the old human body strip was removed. The
+    // no-expedition emblem is still a real asset that must stay bundled.
     final emblem = await rootBundle.load(
       'assets/adventure/emblem_adventure_mode.png',
     );

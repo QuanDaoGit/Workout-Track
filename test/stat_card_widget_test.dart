@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:workout_track/theme/tokens.dart';
 import 'package:workout_track/widgets/radar_stat_icon.dart';
-import 'package:workout_track/widgets/segmented_progress_bar.dart';
+import 'package:workout_track/widgets/arcade_bar.dart';
+import 'package:workout_track/widgets/lck_pips.dart';
 import 'package:workout_track/widgets/stat_card.dart';
 import 'package:workout_track/widgets/stat_radar.dart';
 
@@ -206,7 +207,7 @@ void main() {
       expect(find.byKey(const ValueKey('stat_card_lck_icon')), findsNothing);
       // LCK consistency row is back: 4 diamonds, 2 filled at 4 clean weeks.
       expect(find.text('LCK'), findsOneWidget);
-      expect(find.text('◆◆◇◇'), findsOneWidget);
+      expect(tester.widget<LckPips>(find.byType(LckPips)).lck, 4);
       expect(find.text('[ SHOW DETAIL ]'), findsOneWidget);
 
       await tester.tap(find.text('[ SHOW DETAIL ]'));
@@ -316,7 +317,7 @@ void main() {
   testWidgets('StatCard VIT bar fills red-deepening with the value', (
     tester,
   ) async {
-    Future<({Color color, double widthFactor, double fillHeight})> fillFor(
+    Future<({Color accent, double fraction, double height})> fillFor(
       int value,
     ) async {
       await tester.pumpWidget(
@@ -338,38 +339,37 @@ void main() {
           ),
         ),
       );
-      final fillKey = const ValueKey('stat_card_vit_fill');
-      final box = tester.widget<ColoredBox>(find.byKey(fillKey));
-      final fill = tester.widget<FractionallySizedBox>(
-        find.byKey(const ValueKey('stat_card_vit_fill_fraction')),
-      );
+      await tester.pumpAndSettle();
+      final barKey = const ValueKey('stat_card_vit_bar');
+      final bar = tester.widget<ArcadeBar>(find.byKey(barKey));
       return (
-        color: box.color,
-        widthFactor: fill.widthFactor ?? 0,
-        fillHeight: tester.getSize(find.byKey(fillKey)).height,
+        accent: bar.accent,
+        fraction: bar.value ?? 0,
+        height: tester.getSize(find.byKey(barKey)).height,
       );
     }
 
     final low = await fillFor(10);
     final high = await fillFor(100);
 
-    // Width scales with the value.
-    expect(low.widthFactor, 0.1);
-    expect(high.widthFactor, 1.0);
+    // Fill fraction scales with the value.
+    expect(low.fraction, closeTo(0.1, 1e-9));
+    expect(high.fraction, 1.0);
 
-    // Regression: the fill paints with real height (it previously collapsed to
-    // zero, rendering the bar empty regardless of value).
-    expect(low.fillHeight, greaterThan(0));
-    expect(high.fillHeight, greaterThan(0));
+    // Regression: the bar renders with real height (it previously collapsed to
+    // zero, rendering the meter empty regardless of value).
+    expect(low.height, greaterThan(0));
+    expect(high.height, greaterThan(0));
 
-    // Red-deepening: a full meter is red-ward (red channel dominant) and more
-    // opaque than a near-empty one.
-    expect(high.color.r, greaterThan(high.color.g));
-    expect(high.color.r, greaterThan(high.color.b));
-    expect(low.color.a, lessThan(high.color.a));
+    // Red-deepening: a full meter is red-ward (red channel dominant) and a more
+    // vivid red than a near-empty one (dark anchor deepens to kDanger).
+    expect(high.accent.r, greaterThan(high.accent.g));
+    expect(high.accent.r, greaterThan(high.accent.b));
+    expect(high.accent.r, greaterThan(low.accent.r));
+    expect(high.accent, kDanger);
     // Not the avoided accent colors.
-    expect(high.color, isNot(kAmber));
-    expect(high.color, isNot(kCyan));
+    expect(high.accent, isNot(kAmber));
+    expect(high.accent, isNot(kCyan));
   });
 
   test('RadarStatIcons maps LCK values to streak assets', () {
@@ -490,9 +490,12 @@ void main() {
       );
       await tester.tap(find.text('[ SHOW DETAIL ]'));
       await tester.pumpAndSettle();
+      // Only the discrete stat detail bars (segments); the continuous VIT meter
+      // is also an ArcadeBar but carries no litCells.
       return tester
-          .widgetList<SegmentedProgressBar>(find.byType(SegmentedProgressBar))
-          .map((bar) => bar.litCells)
+          .widgetList<ArcadeBar>(find.byType(ArcadeBar))
+          .where((bar) => bar.isSegments)
+          .map((bar) => bar.litCells!)
           .toList();
     }
 
