@@ -4,6 +4,7 @@ import '../theme/app_fonts.dart';
 import '../data/class_definitions.dart';
 import '../models/character_class.dart';
 import '../services/class_service.dart';
+import '../services/haptic_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/class_sprite.dart';
@@ -42,6 +43,8 @@ class _ClassSelectPageState extends State<ClassSelectPage> {
         builder: (_) => const TypeAgreeDialog(),
       );
       if (agreed != true || !mounted) return;
+      // Irreversible class switch confirmed — a heavy warning beat.
+      HapticService.instance.warning();
       await ClassService().switchClass(cls);
     } else {
       await ClassService().selectClass(cls);

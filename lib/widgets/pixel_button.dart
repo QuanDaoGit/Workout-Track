@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../services/haptic_service.dart';
 import '../theme/tokens.dart';
 import 'motion/power_on.dart';
 import 'pixel_loader.dart';
@@ -18,6 +19,13 @@ class PixelButton extends StatefulWidget {
   final Color? disabledLabelColor;
   final Color? disabledBorderColor;
   final bool powerOn;
+
+  /// The haptic fired on a completed press (tap-up), synced with the flash.
+  /// Defaults to a light [HapticIntent.tap] so every pixel button feels
+  /// consistent; set [HapticIntent.none] when the button's own handler already
+  /// fires a semantic haptic (avoids a double-buzz), or a heavier intent
+  /// ([HapticIntent.success]/[HapticIntent.warning]/…) for a meaningful action.
+  final HapticIntent haptic;
 
   /// Secondary style: filled blue-grey (`kBorderVariant`) with a white label,
   /// no glow. Use for dismiss/secondary actions (CLOSE, CANCEL). Neon is
@@ -38,6 +46,7 @@ class PixelButton extends StatefulWidget {
     this.disabledLabelColor,
     this.disabledBorderColor,
     this.powerOn = false,
+    this.haptic = HapticIntent.tap,
   });
 
   @override
@@ -89,6 +98,9 @@ class _PixelButtonState extends State<PixelButton> {
       if (!mounted) return;
       setState(() => _flashing = false);
     });
+    // Tactile feedback at the press, synced with the flash. Fire-and-forget and
+    // self-guarded (mute toggle / fail-open) inside the service.
+    HapticService.instance.fire(widget.haptic);
     widget.onPressed!.call();
   }
 

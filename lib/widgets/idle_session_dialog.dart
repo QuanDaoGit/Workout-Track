@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/haptic_service.dart';
 import '../theme/tokens.dart';
 import 'arcade_dialog_button_column.dart';
 
@@ -43,13 +44,17 @@ Future<IdleSessionChoice?> showIdleSessionDialog(
             children: [
               if (hasSets)
                 FilledButton(
-                  onPressed: () =>
-                      Navigator.of(ctx).pop(IdleSessionChoice.save),
+                  onPressed: () {
+                    HapticService.instance.success();
+                    Navigator.of(ctx).pop(IdleSessionChoice.save);
+                  },
                   child: const Text('SAVE & FINISH'),
                 ),
               FilledButton(
-                onPressed: () =>
-                    Navigator.of(ctx).pop(IdleSessionChoice.resume),
+                onPressed: () {
+                  HapticService.instance.selection();
+                  Navigator.of(ctx).pop(IdleSessionChoice.resume);
+                },
                 style: hasSets
                     ? FilledButton.styleFrom(
                         backgroundColor: kBorderVariant,
@@ -60,8 +65,10 @@ Future<IdleSessionChoice?> showIdleSessionDialog(
                 child: Text(resumeLabel),
               ),
               FilledButton(
-                onPressed: () =>
-                    Navigator.of(ctx).pop(IdleSessionChoice.discard),
+                onPressed: () {
+                  HapticService.instance.warning();
+                  Navigator.of(ctx).pop(IdleSessionChoice.discard);
+                },
                 style: FilledButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   foregroundColor: kDanger,

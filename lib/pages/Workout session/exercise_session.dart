@@ -7,6 +7,7 @@ import '../../models/overload_models.dart';
 import '../../models/program_models.dart';
 import '../../models/unit_models.dart';
 import '../../models/workout_models.dart';
+import '../../services/haptic_service.dart';
 import '../../services/plate_calculator.dart';
 import '../../services/progression_settings_service.dart';
 import '../../services/progressive_overload_service.dart';
@@ -294,6 +295,8 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       if (isPR) {
         _prSets.add(index);
         _prFlashTriggers[index] = (_prFlashTriggers[index] ?? 0) + 1;
+        // A personal record is a peak moment — the strongest set-logging beat.
+        HapticService.instance.reward();
       }
       if (index == 0) {
         // Linear progression: copy Set 1's load into all empty subsequent
@@ -312,6 +315,8 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
         }
       }
     });
+    // Every logged set ticks; a PR already fired the stronger reward() above.
+    if (!isPR) HapticService.instance.selection();
     _startRest();
   }
 
@@ -652,7 +657,11 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
 
                     const SizedBox(height: kSpace5),
 
-                    PixelButton(label: 'Finish Exercise', onPressed: _finish),
+                    PixelButton(
+                      label: 'Finish Exercise',
+                      haptic: HapticIntent.success,
+                      onPressed: _finish,
+                    ),
                   ],
                 ),
               ),

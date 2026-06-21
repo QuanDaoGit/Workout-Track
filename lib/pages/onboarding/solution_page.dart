@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import '../../services/haptic_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_bar.dart';
 import '../../widgets/companion/bit_boot.dart' show BitVoiceWaveform;
@@ -121,7 +121,7 @@ class _SolutionViewState extends State<SolutionView>
     if (_introController.value * SolutionView._totalMs >=
         SolutionView._bloomAtMs) {
       _bloomFired = true;
-      HapticFeedback.mediumImpact();
+      HapticService.instance.reward();
     }
   }
 

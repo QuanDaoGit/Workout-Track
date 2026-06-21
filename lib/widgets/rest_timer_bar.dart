@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
+import '../services/haptic_service.dart';
 import '../services/rest_timer_service.dart';
 import '../theme/tokens.dart';
 import 'arcade_bar.dart';
@@ -26,6 +27,15 @@ class _RestTimerBarState extends State<RestTimerBar>
       if (!mounted) return;
       final snap = RestTimerService.instance.current.value;
       if (snap != null && !snap.isActive) {
+        // Rest just elapsed — a single "go" haptic the lifter feels without
+        // watching. Only for a *live* finish: if the app was backgrounded past
+        // the end, the rest-end notification already covered it, so a stale
+        // buzz on resume is suppressed. cancel() de-dupes if another bar (the
+        // other rest surface) is mounted, so this fires exactly once.
+        if (DateTime.now().difference(snap.endsAt) <
+            const Duration(seconds: 3)) {
+          HapticService.instance.success();
+        }
         RestTimerService.instance.cancel();
         if (_expanded) _expanded = false;
       }

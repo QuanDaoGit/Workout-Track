@@ -4,6 +4,7 @@ import '../theme/app_fonts.dart';
 import '../models/unit_models.dart';
 import '../services/body_goal_service.dart';
 import '../services/body_metrics_service.dart';
+import '../services/haptic_service.dart';
 import '../services/unit_settings_service.dart';
 import '../services/xp_boost_service.dart';
 import '../theme/tokens.dart';
@@ -117,6 +118,9 @@ class _LogWeightPageState extends State<LogWeightPage> {
             PixelButton(
               label: 'CONFIRM',
               powerOn: true,
+              // Button is disabled unless the entry is valid, so a press is a
+              // committed weigh-in — a success beat, not a light tap.
+              haptic: HapticIntent.success,
               onPressed: _isValid && !_saving ? _confirm : null,
               isLoading: _saving,
             ),

@@ -10,6 +10,7 @@ import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
 import '../../services/exercise_catalog_service.dart';
 import '../../services/favorite_service.dart';
+import '../../services/haptic_service.dart';
 import '../../services/program_service.dart';
 import '../../services/workout_defaults_service.dart';
 import '../../services/workout_draft_controller.dart';
@@ -429,6 +430,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
   }
 
   void _toggleMuscleGroup(String muscleGroup) {
+    HapticService.instance.selection(); // tactile tick on a muscle-group choice
     final wasSelected = _selectedMuscleGroups.contains(muscleGroup);
     setState(() {
       final selected = _selectedMuscleGroups.toSet();

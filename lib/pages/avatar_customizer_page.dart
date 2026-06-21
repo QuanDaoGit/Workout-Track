@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../models/avatar_spec.dart';
+import '../services/haptic_service.dart';
 import '../services/profile_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
@@ -90,7 +91,10 @@ class _AvatarCustomizerPageState extends State<AvatarCustomizerPage> {
             child: const Text('KEEP EDITING'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
+            onPressed: () {
+              HapticService.instance.warning();
+              Navigator.of(ctx).pop(true);
+            },
             child: const Text('DISCARD'),
           ),
         ],
