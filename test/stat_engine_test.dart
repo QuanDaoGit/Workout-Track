@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/models/rest_models.dart';
 import 'package:workout_track/models/stat_radar_read.dart';
 import 'package:workout_track/models/workout_models.dart';
+import 'package:workout_track/services/migration_service.dart';
 import 'package:workout_track/services/rest_service.dart';
 import 'package:workout_track/services/stat_engine.dart';
 import 'package:workout_track/services/xp_service.dart';
@@ -432,85 +433,34 @@ void main() {
     expect(XpService.lckXpMultiplier(100), 3.0);
   });
 
-  test('planned rest days do not advance decay', () async {
+  test('inactivity no longer decays earned stats (they are immutable)', () async {
     final prefs = await SharedPreferences.getInstance();
     await _seedSessions([
-      _session(date: DateTime(2026, 5, 11), logs: [_log('bench')]),
+      _session(date: DateTime(2026, 5, 8), logs: [_log('bench')]),
     ]);
-    await prefs.setString(
-      StatEngine.combatStatsKey,
-      jsonEncode({
-        'STR': 800,
-        'DEF': 500,
-        'VIT': 100,
-        'AGI': 0,
-        'END': 30,
-        'LCK': 40,
-      }),
-    );
-    await prefs.setString(
-      'combat_stat_peaks',
-      jsonEncode({
-        'STR': 1000,
-        'DEF': 1000,
-        'VIT': 100,
-        'AGI': 0,
-        'END': 30,
-        'LCK': 40,
-      }),
-    );
-    await prefs.setString(
-      'combat_stats_last_session_date',
-      DateTime(2026, 5, 11).toIso8601String(),
-    );
-
-    await StatEngine(
-      nowProvider: () => DateTime(2026, 5, 15, 9),
+    // The earned board from a real session.
+    final full = await StatEngine(
+      nowProvider: () => DateTime(2026, 5, 8, 12),
       catalog: catalog,
-    ).applyDecayIfNeeded();
+    ).calculateAllStats();
 
-    final decayed =
+    // Two weeks later with no training: the boot pass runs, earned stats hold.
+    await StatEngine(
+      nowProvider: () => DateTime(2026, 5, 22, 9),
+      catalog: catalog,
+    ).processMissedTrainingDays();
+
+    final stored =
         jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
             as Map<String, dynamic>;
-
-    expect(decayed['STR'], 800);
-    expect(decayed['DEF'], 500);
+    expect(stored['STR'], full['STR']);
+    expect(stored['AGI'], full['AGI']);
+    expect(stored['END'], full['END']);
+    // No decay factor is ever written.
+    expect(prefs.getDouble('combat_decay_factor_v1'), isNull);
   });
 
-  test(
-    'decay drops the factor and lowers the board after unprotected misses',
-    () async {
-      final prefs = await SharedPreferences.getInstance();
-      await _seedSessions([
-        _session(date: DateTime(2026, 5, 8), logs: [_log('bench')]),
-      ]);
-
-      // The true (un-decayed) board.
-      final full = await StatEngine(
-        nowProvider: () => DateTime(2026, 5, 8, 12),
-        catalog: catalog,
-      ).calculateAllStats();
-
-      // Unprotected missed training days later → decay applies.
-      await StatEngine(
-        nowProvider: () => DateTime(2026, 5, 14, 9),
-        catalog: catalog,
-      ).applyDecayIfNeeded();
-
-      final decayed =
-          jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
-              as Map<String, dynamic>;
-      final factor = prefs.getDouble('combat_decay_factor_v1')!;
-
-      // Factor dropped (gentle), floored at half, and the board reflects it.
-      expect(factor, lessThan(1.0));
-      expect(factor, greaterThanOrEqualTo(0.5));
-      expect(decayed['STR'], (full['STR']! * factor).floor());
-      expect(decayed['STR'], lessThan(full['STR']!));
-    },
-  );
-
-  test('recovery shield protects one missed non-rest day from decay', () async {
+  test('processMissedTrainingDays still spends a shield on a missed day', () async {
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime(2026, 5, 14, 9);
     await _seedSessions([
@@ -521,17 +471,6 @@ void main() {
       jsonEncode({
         'STR': 800,
         'DEF': 500,
-        'VIT': 100,
-        'AGI': 0,
-        'END': 100,
-        'LCK': 40,
-      }),
-    );
-    await prefs.setString(
-      'combat_stat_peaks',
-      jsonEncode({
-        'STR': 1000,
-        'DEF': 1000,
         'VIT': 100,
         'AGI': 0,
         'END': 100,
@@ -554,7 +493,7 @@ void main() {
     await StatEngine(
       nowProvider: () => now,
       catalog: catalog,
-    ).applyDecayIfNeeded();
+    ).processMissedTrainingDays();
 
     final stored =
         jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
@@ -564,52 +503,14 @@ void main() {
           as Map<String, dynamic>,
     );
 
+    // Earned stats untouched (no decay); the shield was spent to protect the
+    // first missed scheduled day — the rest-protection side effect we preserved.
     expect(stored['STR'], 800);
     expect(restState.shieldCharges, 0);
     expect(restState.protectedMissDateKeys, contains('2026-05-11'));
   });
 
-  test('ongoing and abandoned sessions do not prevent decay', () async {
-    final prefs = await SharedPreferences.getInstance();
-    await _seedSessions([
-      _session(date: DateTime(2026, 5, 8), logs: [_log('bench')]),
-      _session(
-        date: DateTime(2026, 5, 11),
-        logs: [_log('bench')],
-        isPartial: true,
-      ),
-      _session(
-        date: DateTime(2026, 5, 13),
-        logs: [_log('bench')],
-        isPartial: true,
-        isAbandoned: true,
-      ),
-    ]);
-
-    // True board from the one *completed* session.
-    final full = await StatEngine(
-      nowProvider: () => DateTime(2026, 5, 8, 12),
-      catalog: catalog,
-    ).calculateAllStats();
-
-    await StatEngine(
-      nowProvider: () => DateTime(2026, 5, 14, 9),
-      catalog: catalog,
-    ).applyDecayIfNeeded();
-
-    final stored =
-        jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
-            as Map<String, dynamic>;
-    final factor = prefs.getDouble('combat_decay_factor_v1')!;
-
-    // Ongoing/abandoned sessions don't count as training, so decay still applied
-    // from the last completed session.
-    expect(factor, lessThan(1.0));
-    expect(stored['STR'], (full['STR']! * factor).floor());
-    expect(stored['STR'], lessThan(full['STR']!));
-  });
-
-  test('calculateAllStats applies the decay factor to capability stats only', () async {
+  test('calculateAllStats ignores a stale legacy decay factor', () async {
     final prefs = await SharedPreferences.getInstance();
     await _seedSessions([
       _session(date: DateTime(2026, 5, 8), logs: [_log('bench')]),
@@ -619,31 +520,16 @@ void main() {
       catalog: catalog,
     ).calculateAllStats();
 
+    // A leftover decay factor from the old system must have no effect now.
     await prefs.setDouble('combat_decay_factor_v1', 0.5);
-    final decayed = await StatEngine(
+    final recomputed = await StatEngine(
       nowProvider: () => DateTime(2026, 5, 8, 12),
       catalog: catalog,
     ).calculateAllStats();
 
-    // STR (capability) is halved; VIT (recovery meter) and LCK (streak) are not.
-    expect(decayed['STR'], (full['STR']! * 0.5).floor());
-    expect(decayed['STR'], lessThan(full['STR']!));
-    expect(decayed['VIT'], full['VIT']);
-    expect(decayed['LCK'], full['LCK']);
-  });
-
-  test('recoverFromWorkout climbs the decay factor toward full, capped at 1.0', () async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('combat_decay_factor_v1', 0.5);
-    final engine = StatEngine(catalog: catalog);
-
-    await engine.recoverFromWorkout();
-    expect(prefs.getDouble('combat_decay_factor_v1'), closeTo(0.65, 1e-9));
-
-    for (var i = 0; i < 10; i++) {
-      await engine.recoverFromWorkout();
-    }
-    expect(prefs.getDouble('combat_decay_factor_v1'), 1.0);
+    expect(recomputed['STR'], full['STR']);
+    expect(recomputed['AGI'], full['AGI']);
+    expect(recomputed['END'], full['END']);
   });
 
   test('last-session delta is the real change vs the previously-shown board', () async {
@@ -683,21 +569,19 @@ void main() {
     expect(delta['END'], stats['END']! - afterFirst['END']!);
   });
 
-  test('last-session delta surfaces a decay-recovery board jump (regression)', () async {
-    final d1 = DateTime(2026, 5, 10, 10);
-    final d2 = DateTime(2026, 5, 11, 10);
+  test('runDecayRemovalOnce un-decays the board and suppresses the delta', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final d = DateTime(2026, 5, 10, 10);
     await _seedSessions([
-      _session(date: d1, id: 'a', logs: [_log('bench')]),
-      _session(date: d2, id: 'b', logs: [_log('bench')]),
+      _session(date: d, id: 'a', logs: [_log('bench')]),
     ]);
     final full = await StatEngine(
-      nowProvider: () => d2,
+      nowProvider: () => d,
       catalog: catalog,
     ).calculateAllStats();
 
-    // A rest gap decayed the *cached* board value below the true recompute,
-    // without changing the logged session history.
-    final prefs = await SharedPreferences.getInstance();
+    // Simulate a legacy install: a stored decay factor and a cached board that
+    // the old system had decayed below the true recompute.
     final cache = Map<String, dynamic>.from(
       jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
           as Map<String, dynamic>,
@@ -705,17 +589,22 @@ void main() {
     final decayedStr = (full['STR']! * 0.6).floor();
     cache['STR'] = decayedStr;
     await prefs.setString(StatEngine.combatStatsKey, jsonEncode(cache));
+    await prefs.setDouble('combat_decay_factor_v1', 0.6);
 
-    // The next recompute (e.g. finishing a workout) snaps the board back up; the
-    // delta must reflect that recovery so the finish summary matches the board —
-    // the reported bug (board jumped, summary showed nothing).
-    final engine = StatEngine(nowProvider: () => d2, catalog: catalog);
-    final stats = await engine.calculateAllStats();
-    final delta = await engine.getLastSessionDelta();
+    await MigrationService.runDecayRemovalOnce(
+      statEngine: StatEngine(nowProvider: () => d, catalog: catalog),
+    );
 
-    expect(stats['STR'], full['STR']);
-    expect(delta['STR'], full['STR']! - decayedStr);
-    expect(delta['STR'], greaterThan(0));
+    final stored =
+        jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
+            as Map<String, dynamic>;
+    final delta = await StatEngine(catalog: catalog).getLastSessionDelta();
+
+    // Board snapped back up to the true (un-decayed) value, the legacy factor is
+    // cleared, and the one-time un-decay gain is NOT shown as a board jump.
+    expect(stored['STR'], full['STR']);
+    expect(prefs.getDouble('combat_decay_factor_v1'), isNull);
+    expect(delta['STR'], isNull);
   });
 
   test('returns rank letters and colors on the widening ladder', () {

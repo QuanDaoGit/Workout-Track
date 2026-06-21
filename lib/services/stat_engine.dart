@@ -26,10 +26,9 @@ class StatEngine {
   static const _peaksKey = 'combat_stat_peaks';
   static const _lastDeltaKey = 'combat_stat_last_delta';
   static const _lastSessionDateKey = 'combat_stats_last_session_date';
-  static const _lastDecayDateKey = 'combat_stats_last_decay_date';
 
   /// Bumped whenever the stat computation rules change (`_statsForSessions`
-  /// weights, the seed, or decay application). `MigrationService` recomputes a
+  /// weights or the seed). `MigrationService` recomputes a
   /// user's cached stats on boot when their stored version differs, so a re-tune
   /// lands quietly at app-update instead of as a surprise jump mid-workout.
   ///
@@ -43,26 +42,15 @@ class StatEngine {
   /// One-time per-stat floor captured at the v3 rules migration: the visible
   /// STR/AGI values a user had already earned under the tonnage rules. The
   /// recompute under the new currency is clamped to never display less, so the
-  /// rules change cannot read as lost progress. Decay also cannot take the
-  /// board below this floor — it preserves what the user saw at migration.
+  /// rules change cannot read as lost progress.
   static const grandfatherFloorKey = 'combat_stat_floor_v1';
-
-  /// Persistent inactivity decay applied as a *factor* on every recompute (not a
-  /// one-off stat mutation), so it survives recomputes until training recovers
-  /// it. Tunable: gentle per missed day, floored at half (you never lose more
-  /// than half your build), fast muscle-memory recovery per completed workout.
-  static const _decayFactorKey = 'combat_decay_factor_v1';
-  static const _decayFactorFloor = 0.5;
-  static const _decayPerDayFactor = 0.97;
-  static const _decayRecoveryStep = 0.15;
 
   static const outputStats = ['STR', 'DEF', 'VIT', 'AGI', 'END'];
   static const stats = ['STR', 'DEF', 'VIT', 'AGI', 'END', 'LCK'];
   static const volumeStats = outputStats;
-  // VIT is no longer volume-derived (it's the recovery meter), so it's out of
-  // the kg-volume set and the decay set. END decays; VIT/LCK do not.
+  // VIT is no longer volume-derived — it's the recovery meter, out of the
+  // kg-volume set.
   static const _kgVolumeStats = ['STR', 'DEF', 'AGI'];
-  static const _decayableStats = ['STR', 'DEF', 'AGI', 'END'];
   static const baseOutputStatValue = 10;
   static const _enduranceScale = 150.0;
 
@@ -92,7 +80,7 @@ class StatEngine {
   final Map<String, String>? _catalogOverride;
 
   /// Returns all 5 stats as a map.
-  Future<Map<String, int>> calculateAllStats() async {
+  Future<Map<String, int>> calculateAllStats({bool suppressDelta = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final sessions = await _loadCompletedSessions(prefs);
     final catalog = await _loadCatalog();
@@ -103,10 +91,9 @@ class StatEngine {
     final oldCached = _decodeStats(prefs.getString(combatStatsKey));
 
     final computed = _statsForSessions(sessions, catalog, seed);
-    // Apply the persistent inactivity debuff so the board reflects decay and
-    // stays reflected through every recompute (instead of being silently erased
-    // — the root of the summary/board mismatch).
-    _applyDecayFactor(computed, prefs.getDouble(_decayFactorKey) ?? 1.0);
+    // Inactivity no longer decays earned stats — they are immutable (a body-
+    // neutral, gain-framed model; loss-framing punished absence and overstated
+    // real detraining). See MigrationService.runDecayRemovalOnce.
     // Grandfather floor (v3 rules migration): never display less than the user
     // had already earned under the old rules — not from the recompute and not
     // from decay. Applied after decay so the floor wins.
@@ -140,11 +127,13 @@ class StatEngine {
     );
     await prefs.setString(combatStatsKey, jsonEncode(computed));
     await prefs.setString(_peaksKey, jsonEncode(peaks));
-    await prefs.setString(_lastDeltaKey, jsonEncode(delta));
+    await prefs.setString(
+      _lastDeltaKey,
+      jsonEncode(suppressDelta ? const <String, int>{} : delta),
+    );
     if (latestSession != null) {
       final day = _dateOnly(latestSession.date);
       await prefs.setString(_lastSessionDateKey, day.toIso8601String());
-      await prefs.setString(_lastDecayDateKey, day.toIso8601String());
     }
 
     return computed;
@@ -220,14 +209,15 @@ class StatEngine {
     return set.reps * multiplier;
   }
 
-  /// Updates the persistent decay factor for any new unprotected missed training
-  /// days, then recomputes so the board reflects it. Decay is a *factor* applied
-  /// on every recompute (see [_applyDecayFactor]) rather than a one-off stat
-  /// mutation, so it persists until training recovers it ([recoverFromWorkout]).
-  Future<void> applyDecayIfNeeded() async {
+  /// Boot pass: applies streak SHIELDS for unprotected missed scheduled-training
+  /// days since the last session, and refreshes the live LCK streak in the cache.
+  /// Inactivity no longer decays earned stats (they are immutable) — this exists
+  /// purely for the shield/streak-protection side effect (it is the only caller
+  /// of [RestService.applyShieldsForMissedTrainingDays]) plus the LCK refresh.
+  Future<void> processMissedTrainingDays() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // No cached stats yet → a full (factor-aware) recompute establishes them.
+    // No cached stats yet → a full recompute establishes them.
     if (prefs.getString(combatStatsKey) == null) {
       await calculateAllStats();
       return;
@@ -237,7 +227,7 @@ class StatEngine {
     final latestSession = sessions.isEmpty ? null : sessions.last;
     final lastSessionRaw = prefs.getString(_lastSessionDateKey);
     if (latestSession == null && lastSessionRaw == null) {
-      await _refreshLuckInCache(prefs); // no history → nothing to decay
+      await _refreshLuckInCache(prefs); // no history → nothing to protect
       return;
     }
 
@@ -245,36 +235,16 @@ class StatEngine {
     final lastSessionDate = _dateOnly(
       latestSession?.date ?? DateTime.parse(lastSessionRaw!),
     );
-    final restService = RestService(nowProvider: _nowProvider);
-    final protection = await restService.applyShieldsForMissedTrainingDays(
+    // Apply shields for missed scheduled days (streak protection). Idempotent:
+    // already-protected days are excluded and shields only ever decrement.
+    await RestService(
+      nowProvider: _nowProvider,
+    ).applyShieldsForMissedTrainingDays(
       sessions: sessions,
       since: lastSessionDate,
       now: today,
     );
-    final requiredDecayUnits = max(
-      0,
-      protection.unprotectedMissedDates.length - 1,
-    );
-    final chainKey = RestService.dateKey(lastSessionDate);
-    final appliedUnits = await restService.appliedDecayUnitsForChain(chainKey);
-    final daysToApply = requiredDecayUnits - appliedUnits;
-
-    if (daysToApply <= 0) {
-      await _refreshLuckInCache(prefs); // no new decay; don't touch the factor
-      return;
-    }
-
-    // New unprotected missed days → drop the factor (gentle, floored at half)
-    // and recompute so every capability stat reflects it.
-    final factor = prefs.getDouble(_decayFactorKey) ?? 1.0;
-    final decayed = max(
-      _decayFactorFloor,
-      factor * pow(_decayPerDayFactor, daysToApply).toDouble(),
-    );
-    await prefs.setDouble(_decayFactorKey, decayed);
-    await restService.recordAppliedDecayUnits(chainKey, requiredDecayUnits);
-    await prefs.setString(_lastDecayDateKey, today.toIso8601String());
-    await calculateAllStats();
+    await _refreshLuckInCache(prefs);
   }
 
   void _applyGrandfatherFloor(Map<String, int> stats, Map<String, int> floor) {
@@ -286,36 +256,10 @@ class StatEngine {
     }
   }
 
-  /// Multiplies the decayable capability stats by the current decay [factor]
-  /// (floored at the output baseline). VIT (recovery meter) and LCK (streak) are
-  /// already "current" values and are never decayed.
-  void _applyDecayFactor(Map<String, int> stats, double factor) {
-    if (factor >= 1.0) return;
-    for (final stat in _decayableStats) {
-      final base = stats[stat];
-      if (base != null) {
-        stats[stat] = max(baseOutputStatValue, (base * factor).floor());
-      }
-    }
-  }
-
   Future<void> _refreshLuckInCache(SharedPreferences prefs) async {
     final current = _decodeStats(prefs.getString(combatStatsKey));
     current['LCK'] = await calculateLuck();
     await prefs.setString(combatStatsKey, jsonEncode(current));
-  }
-
-  /// A completed workout restores the build (muscle-memory fast): nudge the
-  /// decay factor back toward full. Called on save before the recompute applies
-  /// it, so training visibly recovers what inactivity took.
-  Future<void> recoverFromWorkout() async {
-    final prefs = await SharedPreferences.getInstance();
-    final factor = prefs.getDouble(_decayFactorKey) ?? 1.0;
-    if (factor >= 1.0) return;
-    await prefs.setDouble(
-      _decayFactorKey,
-      min(1.0, factor + _decayRecoveryStep),
-    );
   }
 
   Future<List<WorkoutSession>> _loadCompletedSessions(

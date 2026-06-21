@@ -29,16 +29,13 @@ class XpProgress {
 }
 
 class XpService {
-  static const List<int> _xpThresholds = [
-    0,
-    50,
-    200,
-    500,
-    1500,
-    3000,
-    5000,
-    10000,
-  ];
+  /// XP→level curve: concave + contiguous. `level = 1 + floor(sqrt(totalXP/k))`,
+  /// so every integer level exists (no more 50–100-session gaps at the top) and
+  /// the cost per level grows linearly — fast early, gently slowing. k = 11 is
+  /// the largest scale that keeps every legacy threshold at or above its old
+  /// level (50→2, 200→3, 500→5, 1500→10, 3000→15, 5000→20, 10000→30), so a
+  /// re-derivation on update can never demote a user's level or rank.
+  static const double _levelCurveScale = 11.0;
 
   static int calculateSessionXP(WorkoutSession session) {
     if (session.isAbandoned) {
@@ -178,14 +175,8 @@ class XpService {
   }
 
   static int getLevel(int totalXP) {
-    if (totalXP >= 10000) return 30;
-    if (totalXP >= 5000) return 20;
-    if (totalXP >= 3000) return 15;
-    if (totalXP >= 1500) return 10;
-    if (totalXP >= 500) return 5;
-    if (totalXP >= 200) return 3;
-    if (totalXP >= 50) return 2;
-    return 1;
+    if (totalXP <= 0) return 1;
+    return 1 + sqrt(totalXP / _levelCurveScale).floor();
   }
 
   static String getRank(int level) {
@@ -196,27 +187,17 @@ class XpService {
     return 'Recruit';
   }
 
+  /// Total XP at which [currentLevel] advances to the next level — the inverse
+  /// of [getLevel] at the boundary (`k × level²`).
   static int xpForNextLevel(int currentLevel) {
-    const milestones = [
-      (2, 50),
-      (3, 200),
-      (5, 500),
-      (10, 1500),
-      (15, 3000),
-      (20, 5000),
-      (30, 10000),
-    ];
-    for (final (lvl, xp) in milestones) {
-      if (currentLevel < lvl) return xp;
-    }
-    return 99999;
+    final l = currentLevel < 1 ? 1 : currentLevel;
+    return (_levelCurveScale * l * l).round();
   }
 
+  /// Total XP at which [currentLevel] begins — the floor of its progress bar
+  /// (`k × (level − 1)²`).
   static int xpForCurrentLevel(int currentLevel) {
-    int result = 0;
-    for (final t in _xpThresholds) {
-      if (getLevel(t) <= currentLevel) result = t;
-    }
-    return result;
+    final l = currentLevel < 1 ? 1 : currentLevel;
+    return (_levelCurveScale * (l - 1) * (l - 1)).round();
   }
 }

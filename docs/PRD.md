@@ -66,7 +66,7 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
   - VIT is a 10-100 recovery/training-balance meter.
   - LCK equals the current training streak (capped at 100) and drives an award-time XP multiplier.
   - DEF is hidden legacy compatibility storage only, not a visible stat.
-- [x] Workout-output stats start at 10 (LCK at 0); daily decay only after consecutive inactivity, never on planned rest.
+- [x] Workout-output stats start at 10 (LCK at 0) and are immutable — once earned they never decrease (inactivity no longer decays them; the consistency streak is protected by shields).
 - [x] Stat card on Profile (radar + detail rows); stat delta shown after each completed session.
 - [x] Calibration quiz captures training context; workout-output stats start at 10 until real
       logged training changes them.

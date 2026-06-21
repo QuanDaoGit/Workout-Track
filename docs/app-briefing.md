@@ -187,13 +187,15 @@ XP multiplier = 1.0 + 0.5 × diamonds
 Each stat shows a letter rank: **D** (<100), **C** (≥100), **B** (≥300), **A** (≥600), **S** (≥900);
 all stats cap at 1000 (so S leaves headroom). New lifters promote fast; S is a long grind.
 
-### 4.7 Decay (anti-detraining, but forgiving)
+### 4.7 No decay — earned stats are immutable
 
-Inactivity erodes the workout-output stats (**STR, hidden legacy DEF, AGI, END**) — but only after
-**unprotected** missed training days pile up (the first missed day is grace; rest-day "shields"
-protect further). Each decay unit multiplies the stat by **0.9 (−10%)**, **floored at 50% of that
-stat's all-time peak**, so you never fall below half your best. **VIT and LCK do not decay this
-way** (VIT is already a live meter; LCK is the live streak). Planned rest never causes decay.
+Inactivity no longer erodes the workout-output stats (**STR, hidden legacy DEF, AGI, END**) — once
+earned they never decrease. The old loss-framed decay (×0.9 per unprotected missed day, floored at
+half your peak) was **retired**: it punished absence (against the anti-guilt mandate) and overstated
+real detraining, which is gradual. Boot still spends rest-day **shields** to protect the consistency
+**streak** for missed scheduled days — but it touches no stat. **VIT** (the live recovery/rest-balance
+meter) and **LCK** (the live streak) still move with training rhythm; that is their nature as live
+meters, not decay of earned progress.
 
 ### 4.8 Calibration — where starting stats come from
 
@@ -318,8 +320,9 @@ always opens to the main shell.
   delta, and stat peaks are cached snapshots but are *recomputed from history* when needed.
 - A session carries: date, target muscle group, duration (target + actual), the exercises logged
   (each with its sets of weight×reps), the **class at save time**, and the awarded XP snapshot.
-- On every app launch the boot sequence runs: data migrations → END backfill → **stat decay check**
-  → class auto-assignment for legacy users → onboarding gate (new user → onboarding, else → Home).
+- On every app launch the boot sequence runs: data migrations → END backfill → **missed-day shield
+  pass** (streak protection; no stat decay) → class auto-assignment for legacy users → onboarding gate
+  (new user → onboarding, else → Home).
 
 ---
 

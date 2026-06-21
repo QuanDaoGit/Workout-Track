@@ -143,7 +143,15 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     return normalizeTargetMuscleGroups([widget.muscleGroup]);
   }
 
-  late final int _estimatedCalories = CalorieService.estimateCaloriesForGroups(
+  /// The session's frozen bodyweight (calibration snapshot), resolved once in
+  /// the save path and reused for the stored `bodyweightKgAtSave` AND the calorie
+  /// estimate so the two never disagree. Null until resolved / if never entered.
+  double? _bodyweightKg;
+
+  /// Calorie estimate. Seeded at the MET reference bodyweight for the first
+  /// paint, then recomputed once `_bodyweightKg` resolves so the reveal matches
+  /// the value persisted on the session.
+  late int _estimatedCalories = CalorieService.estimateCaloriesForGroups(
     _targetMuscleGroups,
     widget.elapsedSeconds,
   );
@@ -282,10 +290,24 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       final currentClass = await ClassService().getCurrentClass();
       // Snapshot bodyweight alongside class: frozen on the session so the
       // stat engine's bodyweight-set credit never changes retroactively.
-      final bodyweightKg = await CalibrationService().bodyweightKg();
+      _bodyweightKg = await CalibrationService().bodyweightKg();
+      // Recompute calories with the real bodyweight snapshot (the constructor
+      // seeded a fixed 70 kg reference) and refresh the reveal so the shown
+      // estimate matches the one persisted on the session.
+      final realCalories = CalorieService.estimateCaloriesForGroups(
+        _targetMuscleGroups,
+        widget.elapsedSeconds,
+        bodyweightKg: _bodyweightKg ?? CalorieService.referenceBodyweightKg,
+      );
+      if (mounted && realCalories != _estimatedCalories) {
+        setState(() => _estimatedCalories = realCalories);
+      } else {
+        _estimatedCalories = realCalories;
+      }
       final sessionWithClass = _sessionWithAward(
         classAtSave: currentClass.name,
-        bodyweightKgAtSave: bodyweightKg,
+        bodyweightKgAtSave: _bodyweightKg,
+        estimatedCalories: _estimatedCalories,
       );
       final existingSessions = await WorkoutStorageService().getSessions();
       // LCK is the weekly consistency streak (rest-schedule aware). Load state
@@ -331,7 +353,8 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       await XpBoostService().recordBonusXp(_potionBonusXP);
       final awardedSession = _sessionWithAward(
         classAtSave: currentClass.name,
-        bodyweightKgAtSave: bodyweightKg,
+        bodyweightKgAtSave: _bodyweightKg,
+        estimatedCalories: _estimatedCalories,
         baseXP: _baseXP,
         lckMultiplier: _lckMultiplier,
         potionMultiplier: _potionMultiplier,
@@ -480,6 +503,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   WorkoutSession _sessionWithAward({
     String? classAtSave,
     double? bodyweightKgAtSave,
+    int? estimatedCalories,
     int? baseXP,
     double? lckMultiplier,
     double? potionMultiplier,
@@ -495,7 +519,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       targetDurationMinutes: _baseSession.targetDurationMinutes,
       actualDurationSeconds: _baseSession.actualDurationSeconds,
       exercises: _baseSession.exercises,
-      estimatedCalories: _baseSession.estimatedCalories,
+      estimatedCalories: estimatedCalories ?? _baseSession.estimatedCalories,
       isPartial: _baseSession.isPartial,
       isAbandoned: _baseSession.isAbandoned,
       selectedExerciseIds: _baseSession.selectedExerciseIds,

@@ -2,6 +2,11 @@ import '../data/muscle_groups.dart';
 import '../models/workout_models.dart';
 
 class CalorieService {
+  /// The MET model's reference-subject bodyweight (a ~70 kg adult). Used as the
+  /// fallback when a session carries no frozen bodyweight snapshot, so callers
+  /// that don't pass one keep the historical behaviour exactly.
+  static const double referenceBodyweightKg = 70.0;
+
   static const _metByMuscleGroup = {
     'Chest': 5.0,
     'Back': 5.0,
@@ -12,21 +17,35 @@ class CalorieService {
     'Full Body': 6.0,
   };
 
-  static int estimateCalories(String muscleGroup, int durationSeconds) {
-    return estimateCaloriesForGroups([muscleGroup], durationSeconds);
+  static int estimateCalories(
+    String muscleGroup,
+    int durationSeconds, {
+    double bodyweightKg = referenceBodyweightKg,
+  }) {
+    return estimateCaloriesForGroups(
+      [muscleGroup],
+      durationSeconds,
+      bodyweightKg: bodyweightKg,
+    );
   }
 
+  /// Kcal ≈ MET × bodyweight(kg) × hours. [bodyweightKg] should be the session's
+  /// frozen `bodyweightKgAtSave` so the estimate uses the user's real mass and
+  /// stays consistent with the stat engine; a non-positive value (or an omitted
+  /// one) falls back to [referenceBodyweightKg].
   static int estimateCaloriesForGroups(
     Iterable<String> muscleGroups,
-    int durationSeconds,
-  ) {
+    int durationSeconds, {
+    double bodyweightKg = referenceBodyweightKg,
+  }) {
     final groups = normalizeTargetMuscleGroups(muscleGroups);
     final mets = groups.isEmpty
         ? const [5.0]
         : [for (final group in groups) _metByMuscleGroup[group] ?? 5.0];
     final met = mets.fold<double>(0, (sum, value) => sum + value) / mets.length;
     final hours = durationSeconds / 3600;
-    return (met * 70 * hours).round();
+    final weight = bodyweightKg > 0 ? bodyweightKg : referenceBodyweightKg;
+    return (met * weight * hours).round();
   }
 
   static int exerciseCalories(

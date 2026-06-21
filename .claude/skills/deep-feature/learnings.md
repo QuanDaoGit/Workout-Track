@@ -31,10 +31,15 @@ behind **one pure resolver consumed by both** — never let each consumer recomp
 (precedence drifts apart), and never let a live re-projection re-classify a *past* period that drives
 economy (shields/streak/XP): read the **frozen per-period snapshot** so a schedule edit can't retroactively
 penalize. Retire the dead field by **freezing + migrating it once** (gated bool); landing the migration
-before its consumer leaves a stale reader. *Seen: zero-set idle reveal; selection clobbering a resumed
-loadout; a 280 ms select-hold reacted on the wrong question after a Back; the weekday-anchored schedule
-unified RestService×ProgramService via one `ScheduleResolver` + frozen `scheduleByWeekKey` + a
-workoutIndex migration (2026-06).*
+before its consumer leaves a stale reader. **Removing a derived *debuff/factor*** (decay) must
+**suppress the one-time recompute delta**, else the un-debuff reads as a fake earned "board jump" in any
+computed-vs-cached diff. **Re-curving a value DERIVED from a stored source** (level←totalXP) is a
+*silent* migration — nothing stored changes, yet every threshold reading (level, rank) + every
+display/test/golden pinning it shifts: prove **monotonicity at each legacy boundary** (new ≥ old, so no
+consumer demotes) and repoint every pinned reading. *Seen: zero-set idle reveal; a 280 ms select-hold
+reacted on the wrong question after a Back; the weekday-anchored schedule unified
+RestService×ProgramService via one `ScheduleResolver` + frozen `scheduleByWeekKey`; decay removed
+(factor frozen + un-decay delta suppressed) + XP re-curved to √ with a no-loss-boundary proof (2026-06).*
 
 ### Legacy-data cliffs
 **Rule:** A new nullable field used in a threshold/comparison must define the null (legacy) case

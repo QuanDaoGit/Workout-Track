@@ -44,7 +44,7 @@ void main() {
     expect(progress?.arcSessions, greaterThan(0));
   });
 
-  test('history reads as a committed-but-intermediate Knight', () async {
+  test('history reads as a committed, developed character', () async {
     await DemoSeedService.seedIntermediate(now: now);
     final sessions = await loadSessions();
 
@@ -54,9 +54,13 @@ void main() {
 
     final totalXp = XpService.calculateTotalXP(sessions);
     final level = XpService.getLevel(totalXp);
-    // Knight band is level 10–19; not yet Champion (20).
-    expect(level, inInclusiveRange(10, 19));
-    expect(XpService.getRank(level), 'Knight');
+    // A developed character: on the concave curve a populated ~28-session
+    // history sits comfortably in the mid/upper ranks (no longer a fixed band).
+    expect(level, greaterThanOrEqualTo(15));
+    expect(
+      const ['Knight', 'Champion', 'Legend'],
+      contains(XpService.getRank(level)),
+    );
   });
 
   test('streak earns at least one LCK diamond', () async {

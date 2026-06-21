@@ -789,18 +789,6 @@ class ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: kSpace2),
               // Rank — a quiet identity badge (neon is reserved for the meter).
               Center(child: _RankBadge(label: rank)),
-              if (_classState?.mostRecentFormerClass != null) ...[
-                const SizedBox(height: kSpace2),
-                Text(
-                  'Former path: '
-                  '${_classState!.mostRecentFormerClass!.clazz.displayName}',
-                  textAlign: TextAlign.center,
-                  style: AppFonts.shareTechMono(
-                    color: kMutedText,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
               const SizedBox(height: kSpace4),
               Row(
                 children: [
@@ -1055,7 +1043,7 @@ class ProfilePageState extends State<ProfilePage> {
         'STAT BONUS: +20% STR gain from chest, back, arms training.',
       CharacterClass.assassin =>
         'STAT BONUS: +20% AGI gain from shoulders, core training.',
-      CharacterClass.tank => 'STAT BONUS: +20% VIT gain from legs training.',
+      CharacterClass.tank => 'STAT BONUS: +20% END gain from legs training.',
     };
   }
 

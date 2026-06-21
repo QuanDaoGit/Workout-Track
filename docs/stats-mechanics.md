@@ -251,25 +251,21 @@ Delta rules:
 
 This delta drives finish-summary stat gains and recent-session tags.
 
-## Decay
+## Decay (removed — earned stats are immutable)
 
-Internal decay applies only to `STR`, hidden legacy `DEF`, `AGI`, and `END`.
+Inactivity no longer decays earned stats. `STR`, `AGI`, `END` (and hidden legacy `DEF`) never
+decrease once earned. The old loss-framed decay factor (`combat_decay_factor_v1`, ×0.97 per
+unprotected missed training day, floored at half) was **retired**: it punished absence (against the
+anti-guilt mandate) and overstated real detraining, which is gradual.
 
-VIT and LCK do not use this decay path. DEF remains in this internal decay path only as a hidden legacy stat.
+On app startup, `StatEngine.processMissedTrainingDays` still evaluates missed scheduled training days
+since the last completed session and **spends shields to protect the streak** (the rest/consistency
+mechanic) — but it no longer lowers any stat. `MigrationService.runDecayRemovalOnce` clears the legacy
+decay factor once and, if a board was currently decayed, recomputes it upward (un-decayed) with the
+one-time delta suppressed so the gain never surfaces as a fake board jump.
 
-On app startup, missed scheduled training days since the last completed session are evaluated. Shielded misses are protected. Decay starts after the first unprotected missed day in a chain:
-
-```text
-decayUnits = max(0, unprotectedMissedTrainingDays - 1)
-```
-
-For each decay unit:
-
-```text
-newValue = max(floor(peak * 0.5), floor(currentValue * 0.9))
-```
-
-The stat cannot decay below 50% of its historical peak.
+VIT (the live recovery/rest-balance meter) and LCK (the live streak) still move with training rhythm —
+that is their nature as live meters, not decay of earned progress.
 
 ## Adventure (rank consumption)
 
@@ -291,9 +287,9 @@ cached stats at app-update boot so a re-tune never lands mid-workout.
 
 At the v3 migration (tonnage → intensity currency), the visible STR/AGI a user
 had already earned under the old rules is captured once as a **grandfather
-floor** (`combat_stat_floor_v1`). The engine clamps every later recompute —
-including decay — to at least these values, so the rules change can never read
-as lost progress. Normal growth continues above the floor. The floor is only
+floor** (`combat_stat_floor_v1`). The engine clamps every later recompute to at
+least these values, so the rules change can never read as lost progress. Normal
+growth continues above the floor. The floor is only
 written when real completed sessions back the cached board; a cached value with
 no history behind it (corruption, cleared data) is recomputed away instead.
 
@@ -326,18 +322,27 @@ awarded XP = round(base XP * LCK multiplier * potion multiplier) + lootBonusXP
 
 Loot bonus XP is additive and is not multiplied.
 
-XP level gates:
+XP levels follow a **concave, contiguous** curve — every integer level exists,
+fast early, gently slowing, no late dead-end:
 
-| Level | Total XP |
+```text
+level(totalXP) = 1 + floor(sqrt(totalXP / 11))
+xpForLevel(L)  = 11 * (L - 1)^2     // total XP at which level L begins
+```
+
+`k = 11` is the largest scale that keeps every legacy threshold at or above its
+old level (50→2, 200→3, 500→5, 1500→10, 3000→15, 5000→20, 10000→30), so the
+re-derivation on update can never demote a user's level or rank. Representative
+points:
+
+| Total XP | Level |
 |---:|---:|
-| 1 | 0 |
-| 2 | 50 |
-| 3 | 200 |
-| 5 | 500 |
-| 10 | 1500 |
-| 15 | 3000 |
-| 20 | 5000 |
-| 30 | 10000 |
+| 11 | 2 |
+| 44 | 3 |
+| 176 | 5 |
+| 1,100 | 11 |
+| 5,000 | 22 |
+| 10,000 | 31 |
 
 Rank title by level:
 
@@ -393,10 +398,9 @@ Important stat-related local keys:
 | Key | Purpose |
 |---|---|
 | `combat_stats` | current persisted stat snapshot |
-| `combat_stat_peaks` | historical peaks for decay floors |
+| `combat_stat_peaks` | historical per-stat peaks |
 | `combat_stat_last_delta` | latest-session stat delta |
 | `combat_stats_last_session_date` | last completed stat-producing session date |
-| `combat_stats_last_decay_date` | last decay application date |
 | `combat_stat_floor_v1` | grandfather floor from the v3 rules migration |
 | `stats_rules_version_v1` | last stat-rules version the cache was computed under |
 | `calibration_seed_volumes_v1` | workout-derived calibration seed volume |

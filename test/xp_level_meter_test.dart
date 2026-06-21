@@ -17,7 +17,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       host(
-        const XpLevelMeter(oldTotalXP: 0, newTotalXP: 65), // level 1 -> 2
+        const XpLevelMeter(oldTotalXP: 0, newTotalXP: 20), // level 1 -> 2
         reducedMotion: true,
       ),
     );
@@ -35,7 +35,7 @@ void main() {
       host(
         XpLevelMeter(
           oldTotalXP: 0,
-          newTotalXP: 65,
+          newTotalXP: 20,
           onLevelUp: () => levelUps++,
         ),
       ),
@@ -52,8 +52,8 @@ void main() {
     await tester.pumpWidget(
       host(
         XpLevelMeter(
-          oldTotalXP: 60, // level 2
-          newTotalXP: 90, // still level 2
+          oldTotalXP: 15, // level 2
+          newTotalXP: 30, // still level 2
           onLevelUp: () => levelUps++,
         ),
       ),
@@ -70,7 +70,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      host(const XpLevelMeter(oldTotalXP: 0, newTotalXP: 65, prominent: false)),
+      host(const XpLevelMeter(oldTotalXP: 0, newTotalXP: 20, prominent: false)),
     );
     // Drive the climb to completion in steps. pumpAndSettle can't drain the
     // meter's bare 240ms post-level-up Future.delayed in non-prominent mode (no
@@ -87,7 +87,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       host(
-        const XpLevelMeter(oldTotalXP: 0, newTotalXP: 65, prominent: false),
+        const XpLevelMeter(oldTotalXP: 0, newTotalXP: 20, prominent: false),
         reducedMotion: true,
       ),
     );

@@ -72,6 +72,34 @@ void main() {
     );
   });
 
+  test('calories scale with the real bodyweight snapshot', () {
+    // Chest = 5.0 MET, 1h. kcal = MET x bodyweight x hours.
+    // Heavier user burns more, lighter user less than the 70 kg reference (350).
+    expect(
+      CalorieService.estimateCaloriesForGroups(
+        ['Chest'],
+        3600,
+        bodyweightKg: 100,
+      ),
+      500,
+    );
+    expect(
+      CalorieService.estimateCaloriesForGroups(
+        ['Chest'],
+        3600,
+        bodyweightKg: 50,
+      ),
+      250,
+    );
+    // Missing / non-positive bodyweight (legacy session) falls back to the
+    // 70 kg reference, preserving the historical estimate.
+    expect(
+      CalorieService.estimateCaloriesForGroups(['Chest'], 3600, bodyweightKg: 0),
+      350,
+    );
+    expect(CalorieService.estimateCaloriesForGroups(['Chest'], 3600), 350);
+  });
+
   test('quest group mechanics credit every selected target', () async {
     final now = DateTime(2026, 5, 13, 10);
     final sideSummary = await QuestService().getSummary([

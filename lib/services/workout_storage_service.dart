@@ -70,9 +70,6 @@ class WorkoutStorageService {
           session,
           completedSessionCount: completedCount,
         );
-        // Training recovers inactivity decay (muscle memory) before the
-        // recompute applies the restored factor.
-        await StatEngine().recoverFromWorkout();
       }
       await StatEngine().calculateAllStats();
       await RestService().refreshWeeklyShieldProgress(sessions);

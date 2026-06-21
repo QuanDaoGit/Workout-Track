@@ -46,8 +46,8 @@ void main() {
   test('level-up wins when no rank promotion, at Tier 3', () {
     final sel = selectHero(
       result(
-        oldTotalXP: 40, // level 1
-        newTotalXP: 60, // level 2
+        oldTotalXP: 0, // level 1
+        newTotalXP: 20, // level 2
         statDelta: {'STR': 3},
         afterStats: {'STR': 50},
       ),
@@ -200,11 +200,11 @@ void main() {
   });
 
   test('a real title cross adds a title chip to the secondary badges', () {
-    // Level 3 (Recruit) -> level 5 (Squire) crosses a title threshold.
+    // Level 4 (Recruit) -> level 5 (Squire) crosses the Squire title threshold.
     final sel = selectHero(
       result(
-        oldTotalXP: 200,
-        newTotalXP: 500,
+        oldTotalXP: 100,
+        newTotalXP: 200,
         statDelta: {'STR': 3},
         afterStats: {'STR': 50},
       ),

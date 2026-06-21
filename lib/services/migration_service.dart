@@ -34,6 +34,7 @@ class MigrationService {
   static const _shadowRemovalDoneKey = 'migration_v_shadow_removal_done';
   static const _weekdayAnchoredScheduleDoneKey =
       'migration_v_weekday_anchored_schedule_done';
+  static const _decayRemovalDoneKey = 'migration_v_decay_removal_done';
 
   static const _deadKeys = <String>[
     // Battle / dungeon / scrap
@@ -222,6 +223,25 @@ class MigrationService {
     } catch (_) {
       return false;
     }
+  }
+
+  /// One-shot: retires inactivity stat-decay. Earned capability stats are now
+  /// immutable, so the persisted decay factor is cleared. If the board was
+  /// currently decayed (factor < 1.0), it recomputes once — now un-decayed — and
+  /// SUPPRESSES the one-time upward delta so the gain never surfaces as a fake
+  /// "board jump" in the finish summary / home last-session tag. Idempotent.
+  static Future<void> runDecayRemovalOnce({StatEngine? statEngine}) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_decayRemovalDoneKey) == true) return;
+
+    final wasDecayed = (prefs.getDouble('combat_decay_factor_v1') ?? 1.0) < 1.0;
+    await prefs.remove('combat_decay_factor_v1');
+    await prefs.remove('combat_stats_last_decay_date');
+    if (wasDecayed && prefs.getString(StatEngine.combatStatsKey) != null) {
+      await (statEngine ?? StatEngine()).calculateAllStats(suppressDelta: true);
+    }
+
+    await prefs.setBool(_decayRemovalDoneKey, true);
   }
 
   static const _avatarSpecSeedDoneKey = 'migration_v_avatar_spec_seed_done';

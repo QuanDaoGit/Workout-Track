@@ -35,7 +35,8 @@ class BootService {
       await MigrationService.runShadowRemovalCleanupOnce();
       await MigrationService.runWeekdayAnchoredScheduleOnce();
       await MigrationService.runStatsRecomputeIfRulesChanged();
-      await StatEngine().applyDecayIfNeeded();
+      await MigrationService.runDecayRemovalOnce();
+      await StatEngine().processMissedTrainingDays();
       await ClassMigrationService().migrateIfNeeded();
       SfxService.enabled = await SoundSettingsService().isEnabled();
       HapticService.enabled = await HapticSettingsService().isEnabled();

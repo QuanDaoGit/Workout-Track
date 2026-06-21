@@ -13,10 +13,10 @@ class InventoryPage extends StatefulWidget {
   const InventoryPage({super.key});
 
   @override
-  State<InventoryPage> createState() => _InventoryPageState();
+  State<InventoryPage> createState() => InventoryPageState();
 }
 
-class _InventoryPageState extends State<InventoryPage> {
+class InventoryPageState extends State<InventoryPage> {
   final LootService _lootService = LootService();
   Set<String> _ownedIds = {};
   Map<LootCategory, LootItem> _equipped = {};
@@ -27,6 +27,10 @@ class _InventoryPageState extends State<InventoryPage> {
     super.initState();
     _load();
   }
+
+  /// Re-fetch owned + equipped loot. Called by [RootPage] on tab re-entry so a
+  /// kept-alive (IndexedStack) page shows loot earned after its first build.
+  Future<void> reload() => _load();
 
   Future<void> _load() async {
     final inventory = await _lootService.getInventory();

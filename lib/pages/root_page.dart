@@ -64,6 +64,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   StreamSubscription<void>? _storageSubscription;
 
   final _homeKey = GlobalKey<HomePageState>();
+  final _inventoryKey = GlobalKey<InventoryPageState>();
   final _guildKey = GlobalKey<GuildPageState>();
   final _profileKey = GlobalKey<ProfilePageState>();
 
@@ -205,7 +206,9 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       case AppDestination.home:
         _homeKey.currentState?.onReenter(); // re-entry → rotate BIT's advice
       case AppDestination.inventory:
-        break; // InventoryPage reloads itself on init.
+        // Kept alive in the IndexedStack, so initState runs once — re-fetch on
+        // re-entry to surface loot earned since the first build.
+        _inventoryKey.currentState?.reload();
       case AppDestination.guild:
         _guildKey.currentState?.reload();
       case AppDestination.labs:
@@ -506,7 +509,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       onViewWorkouts: _pushLogs,
       onOpenShop: _openShop,
     ),
-    const InventoryPage(),
+    InventoryPage(key: _inventoryKey),
     GuildPage(key: _guildKey),
     ProfilePage(key: _profileKey, onProfileChanged: _reloadQuestAwarePages),
   ];
