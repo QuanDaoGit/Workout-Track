@@ -7,7 +7,9 @@ import '../../data/muscle_groups.dart';
 import '../../models/program_models.dart';
 import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
+import '../../services/haptic_service.dart';
 import '../../services/idle_session_guard.dart';
+import '../../services/notification_service.dart';
 import '../../services/ongoing_program_swap_service.dart';
 import '../../services/program_service.dart';
 import '../../services/rest_timer_service.dart';
@@ -115,6 +117,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Contextual one-time permission ask for the rest-timer alert — a workout is
+    // starting, so a rest is imminent. Guarded + fire-and-forget; never re-nags.
+    NotificationService.instance.maybeAskRestPermission();
     _sessionId =
         widget.resumeFromSession?.id ??
         DateTime.now().microsecondsSinceEpoch.toString();
@@ -671,6 +676,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                 ),
                 FilledButton(
                   onPressed: () {
+                    HapticService.instance.warning();
                     Navigator.of(ctx).pop();
                     _abandonAndShowSummary();
                   },
@@ -961,6 +967,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                 PixelButton(
                   label: 'Finish Workout',
                   powerOn: true,
+                  haptic: HapticIntent.success,
                   onPressed: _allDone ? () => _goToSummary() : null,
                 ),
               ],

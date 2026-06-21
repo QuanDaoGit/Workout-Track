@@ -15,6 +15,7 @@ import '../../models/gem_ledger_entry.dart';
 import '../../services/adventure_service.dart';
 import '../../services/calibration_service.dart';
 import '../../services/gem_service.dart';
+import '../../services/haptic_service.dart';
 import '../../services/calorie_service.dart';
 import '../../services/class_service.dart';
 import '../../services/loot_drop_service.dart';
@@ -36,6 +37,7 @@ import '../../widgets/glitch_text.dart';
 import '../../widgets/level_up_burst.dart';
 import '../../widgets/motion/power_on.dart';
 import '../../widgets/pulse_color_text.dart';
+import '../../widgets/room/energy_cell.dart';
 import '../../widgets/screen_shake.dart';
 import '../../widgets/strobe_flash.dart';
 import '../../widgets/typewriter_text.dart';
@@ -110,6 +112,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   LootDrop? _cacheDrop;
   bool _chargeGranted = false;
   int _chargeBalance = 0;
+  bool _chargeOnExpedition = false;
   bool _warmupBonusGranted = false;
   int _warmupBonusAmount = 0;
   Map<String, int> _statDelta = {};
@@ -347,6 +350,10 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       final advState = await AdventureService().loadState();
       _chargeGranted = advState.charges > chargesBefore;
       _chargeBalance = advState.charges;
+      // BIT is "on expedition" while an unsettled pending run is out (returned
+      // ones were already settled inside saveSession) — gates the "ready to
+      // deploy" tail, since you can't dispatch while one is in flight.
+      _chargeOnExpedition = advState.pending != null;
       _warmupBonusAmount =
           _warmupGemTotal(await gemService.ledger()) - warmupGemsBefore;
       _warmupBonusGranted = _warmupBonusAmount > 0;
@@ -370,6 +377,9 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         stats: _combatStats,
         sessions: allSessions,
       );
+      // Earning loot is a reward beat — one tactile hit when this save unlocks
+      // anything (the per-level reward fires separately as the XP bar climbs).
+      if (newLoot.isNotEmpty) HapticService.instance.reward();
 
       // Build the finish-arc view model from a before-snapshot (stats/level/LCK
       // captured pre-save) + the recompute, then pick the single hero + tier.
@@ -579,7 +589,12 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   /// Fired by the XP meter each time the bar crosses a level — shakes and
   /// flashes the whole screen. No-op under reduced motion.
   void _fireLevelUpJuice() {
-    if (!mounted || _reducedMotion) return;
+    if (!mounted) return;
+    // Tactile level-up, fired per level crossed. Haptics aren't a vestibular
+    // trigger, so this lands even under reduced motion (which skips the
+    // shake/flash below); they carry their own opt-out instead.
+    HapticService.instance.reward();
+    if (_reducedMotion) return;
     setState(() {
       _summaryShakeTrigger++;
       _levelFlashTrigger++;
@@ -797,7 +812,10 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                           const SizedBox(height: kSpace3),
                           _RevealBeat(
                             delayMs: 140,
-                            child: _ChargeGrantedCard(balance: _chargeBalance),
+                            child: _ChargeGrantedCard(
+                              balance: _chargeBalance,
+                              onExpedition: _chargeOnExpedition,
+                            ),
                           ),
                         ],
                         if (_warmupBonusGranted) ...[
@@ -1379,12 +1397,17 @@ class _XpReceiptCard extends StatelessWidget {
 /// The instant Adventure payoff: a workout earned an expedition charge. The
 /// expedition (gems) is the optional second layer the user spends later.
 class _ChargeGrantedCard extends StatelessWidget {
-  const _ChargeGrantedCard({required this.balance});
+  const _ChargeGrantedCard({required this.balance, required this.onExpedition});
 
   final int balance;
 
+  /// True when BIT is currently out on a run — drops the "ready to deploy"
+  /// tail, since a new dispatch is blocked until that one settles.
+  final bool onExpedition;
+
   @override
   Widget build(BuildContext context) {
+    final charges = '$balance/${AdventureState.chargeCap} charges';
     return Container(
       padding: const EdgeInsets.all(kSpace3),
       decoration: BoxDecoration(
@@ -1397,7 +1420,7 @@ class _ChargeGrantedCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.explore_sharp, size: 16, color: kNeon),
+              const EnergyCell(scale: 1, glow: false),
               const SizedBox(width: kSpace2),
               Text(
                 '+1 EXPEDITION CHARGE',
@@ -1411,8 +1434,7 @@ class _ChargeGrantedCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Your party is rested — $balance/${AdventureState.chargeCap} ready '
-            'to send out on an adventure.',
+            onExpedition ? charges : '$charges • ready to deploy',
             textAlign: TextAlign.center,
             style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
           ),
