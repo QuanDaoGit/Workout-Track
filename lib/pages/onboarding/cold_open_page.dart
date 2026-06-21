@@ -311,8 +311,12 @@ class _PressStartPromptState extends State<_PressStartPrompt>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final disableMotion = MediaQuery.of(context).disableAnimations;
-    if (disableMotion) {
+    // Reduced presentation = OS reduce-motion OR an active screen reader / switch
+    // access (app-wide contract) — the looping PRESS START pulse freezes to its
+    // still, legible neon frame.
+    final media = MediaQuery.of(context);
+    final reduceMotion = media.disableAnimations || media.accessibleNavigation;
+    if (reduceMotion) {
       _controller.stop();
       _controller.value = 0;
     } else if (!_controller.isAnimating) {
@@ -328,11 +332,12 @@ class _PressStartPromptState extends State<_PressStartPrompt>
 
   @override
   Widget build(BuildContext context) {
-    final disableMotion = MediaQuery.of(context).disableAnimations;
+    final media = MediaQuery.of(context);
+    final reduceMotion = media.disableAnimations || media.accessibleNavigation;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
-        final dimmed = !disableMotion && _controller.value >= 0.5;
+        final dimmed = !reduceMotion && _controller.value >= 0.5;
         return Text(
           'PRESS START',
           textAlign: TextAlign.center,

@@ -19,6 +19,13 @@ class CharacterService {
     }
   }
 
+  /// Persists the character, then flags onboarding complete. SharedPreferences
+  /// has no multi-key transaction, so these are two awaits — and the order is
+  /// deliberate: write the character FIRST, set the completion flag SECOND. If
+  /// the app is killed in the (tiny) gap, the flag is still false, so the next
+  /// launch safely re-onboards and overwrites — rather than the inverse failure
+  /// (flag set but no character), which would route a characterless user to Home
+  /// and break it. The safe partial state is the one we leave behind.
   Future<void> createCharacterAndCompleteOnboarding(Character character) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(activeCharacterKey, jsonEncode(character.toJson()));

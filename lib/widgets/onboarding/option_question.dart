@@ -213,7 +213,11 @@ class _WipeInState extends State<_WipeIn> with SingleTickerProviderStateMixin {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final reduced = MediaQuery.of(context).disableAnimations;
+    // Reduced presentation = OS reduce-motion OR an active screen reader / switch
+    // access (app-wide contract) — the staggered wipe-in entrance settles to its
+    // final frame so an AT user reads the options immediately.
+    final media = MediaQuery.of(context);
+    final reduced = media.disableAnimations || media.accessibleNavigation;
     _reducedMotion = reduced;
     if (reduced) {
       _controller.value = 1;

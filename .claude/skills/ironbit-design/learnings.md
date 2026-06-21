@@ -107,7 +107,11 @@ caption TRAIN→START (2026-06).*
 ### Reduced-motion needs a non-motion fallback
 **Rule:** Freezing an animation under `disableAnimations` must leave a **still, legible signal** — a
 label, a static frame, a Semantics announcement — never a dead/ambiguous control. Design the
-no-motion state first, then add motion on top. A **perpetual** full-bleed scene (ambient ticker that
+no-motion state first, then add motion on top. **The reduced-presentation trigger is the *union*
+`disableAnimations || accessibleNavigation` — gate on it consistently across sibling surfaces; a
+screen that checks only `disableAnimations` strands a screen-reader/switch-access user in the full
+cinematic while its neighbours settle (prefer the shared `bool get _reduceMotion` idiom over an
+inline `disableAnimations` check so the gate can't drift).** A **perpetual** full-bleed scene (ambient ticker that
 never settles) must freeze for correctness *elsewhere* too: page-level `pumpAndSettle` tests hang if
 it never stops, and a hero sized by a raw width-ratio overflows short/odd viewports — **clamp the
 ratio**. **An overlay that masks a sprite's stale baked art must follow that sprite in *every* state** — hiding
@@ -128,7 +132,9 @@ single-pump files + poll until the loader clears, never a fixed delay (2026-06).
 supplies its own `Semantics(label:)` as the accessible name must set `excludeSemantics: true`** — else
 the child `Text` node merges in, doubling the screen-reader announcement *and* breaking
 `find.bySemanticsLabel` (exact-match) in tests. *Seen: weekday-picker chip's "MON training day, on"
-label found 0 until the inner "MON" `Text` was excluded (2026-06).*
+label found 0 until the inner "MON" `Text` was excluded (2026-06); the onboarding shell/solution/
+quiz/cold-open/option-list gated on `disableAnimations` only → a screen reader sat through the intro
+cinematics → unified to the `||accessibleNavigation` contract via shared `_reduceMotion` getters (2026-06).*
 
 ### Reach for the app's own primitive first (and port reference source verbatim)
 **Rule:** Before painting anything new, glob `lib/widgets/` + `widgets/motion/` and read the **nearest

@@ -92,12 +92,16 @@ class _SolutionViewState extends State<SolutionView>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final disableMotion = MediaQuery.of(context).disableAnimations;
-    if (disableMotion == _reducedMotion &&
+    // Reduced presentation = OS reduce-motion OR an active screen reader / switch
+    // access (app-wide contract) — a screen-reader user lands on the settled,
+    // revealed neutral state, not the power-up cinematic.
+    final media = MediaQuery.of(context);
+    final reduceMotion = media.disableAnimations || media.accessibleNavigation;
+    if (reduceMotion == _reducedMotion &&
         (_complete || _introController.isAnimating)) {
       return;
     }
-    _reducedMotion = disableMotion;
+    _reducedMotion = reduceMotion;
     if (_reducedMotion) {
       _introController.stop();
       _ctaPulseController.stop();

@@ -108,6 +108,14 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
   int get _progressCells => widget.progressBaseCells + _step + 1;
   bool get _isLast => _step == widget.questions.length - 1;
 
+  // Reduced presentation = OS reduce-motion OR an active screen reader / switch
+  // access (app-wide contract) — skips the intro beat and the select-hold so an
+  // AT user advances immediately instead of waiting out the cinematic.
+  bool get _reduceMotion {
+    final media = MediaQuery.of(context);
+    return media.disableAnimations || media.accessibleNavigation;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -121,7 +129,7 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
     super.didChangeDependencies();
     if (_showIntro && !_introScheduled) {
       _introScheduled = true;
-      if (MediaQuery.of(context).disableAnimations) {
+      if (_reduceMotion) {
         _showIntro = false; // no intro beat under reduced motion
       } else {
         // Time the intro to the typewriter: it types out, holds ~900 ms, then the
@@ -170,7 +178,7 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
       }
     }
 
-    if (MediaQuery.of(context).disableAnimations) {
+    if (_reduceMotion) {
       commit();
     } else {
       _selectHoldTimer = Timer(const Duration(milliseconds: 280), commit);
@@ -501,7 +509,8 @@ class _QuestionScaffoldState extends State<_QuestionScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    final reducedMotion = MediaQuery.of(context).disableAnimations;
+    final media = MediaQuery.of(context);
+    final reducedMotion = media.disableAnimations || media.accessibleNavigation;
     return GestureDetector(
       // Tap anywhere to continue — but only while reacting (asking taps belong to
       // the options). The back button is a child, so it wins its own taps.

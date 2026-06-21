@@ -75,6 +75,15 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   Set<TrainingWhy> _trainingWhy = {};
   Set<WinningVision> _winningVision = {};
 
+  // Reduced presentation = OS "remove animations" OR an active screen reader /
+  // switch access (the app-wide contract). A screen-reader user shouldn't have to
+  // sit through the intro cinematics, so the shell transitions settle instantly —
+  // matching the pushed onboarding screens (welcome / loaders / reveal / gate).
+  bool get _reduceMotion {
+    final media = MediaQuery.of(context);
+    return media.disableAnimations || media.accessibleNavigation;
+  }
+
   // ── Segment A — goal + weight/sex (before the class) ─────────────────────
   /// Push the pre-class quiz segment. Completion runs the calibration loader
   /// (which persists in the background) and then the class reveal.
@@ -236,7 +245,7 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   // scanline, a black hold (the cold open mounts here, dark), then a power-on
   // bloom that the cold open's own entrance rides in on (wordmark first).
   Future<void> _runWelcomeToColdOpen() async {
-    if (MediaQuery.of(context).disableAnimations) {
+    if (_reduceMotion) {
       setState(() => _step = _Step.coldOpen);
       return;
     }
@@ -256,7 +265,7 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   }
 
   Future<void> _runWelcomeToProblem() async {
-    if (MediaQuery.of(context).disableAnimations) {
+    if (_reduceMotion) {
       setState(() => _step = _Step.problem);
       return;
     }
@@ -281,7 +290,7 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   }
 
   Future<void> _runProblemToSolution(Offset origin) async {
-    if (MediaQuery.of(context).disableAnimations) {
+    if (_reduceMotion) {
       setState(() => _step = _Step.solution);
       return;
     }
@@ -308,7 +317,7 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   }
 
   Future<void> _runSolutionHandoff() async {
-    if (MediaQuery.of(context).disableAnimations) {
+    if (_reduceMotion) {
       await _runQuiz();
       return;
     }

@@ -130,12 +130,15 @@ class _NameScreenState extends State<NameScreen>
     await ProfileService().saveDisplayName(character.characterName);
     await ProfileService().saveAvatarSpec(avatarSpec);
     if (!mounted) return;
+    // Terminal push: the Start Gate blocks system-back and both its exits clear
+    // the whole stack (pushAndRemoveUntil), so this route never pops back to a
+    // mounted NameScreen — there is no _committing reset to do here. Keeping the
+    // guard latched also hardens against a double-commit if the push is slow.
     await Navigator.of(context).push(
       arcadeRoute(
         (_) => StartGateScreen(character: character, avatarSpec: avatarSpec),
       ),
     );
-    if (mounted) setState(() => _committing = false);
   }
 
   @override

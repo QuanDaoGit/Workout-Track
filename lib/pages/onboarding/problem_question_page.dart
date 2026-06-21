@@ -87,12 +87,16 @@ class _ProblemQuestionViewState extends State<ProblemQuestionView>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final disableMotion = MediaQuery.of(context).disableAnimations;
-    if (disableMotion == _reducedMotion &&
+    // Reduced presentation = OS reduce-motion OR an active screen reader / switch
+    // access (app-wide contract) — an AT user lands on the settled question, not
+    // the typed-in intro sequence.
+    final media = MediaQuery.of(context);
+    final reduceMotion = media.disableAnimations || media.accessibleNavigation;
+    if (reduceMotion == _reducedMotion &&
         (_complete || _introController.isAnimating)) {
       return;
     }
-    _reducedMotion = disableMotion;
+    _reducedMotion = reduceMotion;
     if (_reducedMotion) {
       _introController.stop();
       _footerPulseController.stop();
