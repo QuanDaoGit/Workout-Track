@@ -18,6 +18,7 @@ import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import '../services/adventure_service.dart';
 import '../services/calorie_service.dart';
+import '../services/haptic_service.dart';
 import '../services/class_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/gem_service.dart';
@@ -42,6 +43,9 @@ import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
 import '../widgets/active_session_found_dialog.dart';
 import '../widgets/last_session_tag.dart';
+import '../widgets/motion/crt_breathe.dart';
+import '../widgets/motion/crt_flicker.dart';
+import '../widgets/motion/crt_sweep.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/motion/phosphor_tap.dart';
 import '../widgets/pixel_button.dart';
@@ -66,6 +70,11 @@ class CompletedMissionCopy {
   final String detail;
 }
 
+/// The "TODAY'S MISSION" header's state register — drives its color + motion.
+/// Defaults to [calm]; only an explicit pending or rest state opts into the
+/// louder registers, so an unknown state never reads as active or recovery.
+enum MissionHeaderMode { active, recovery, calm }
+
 CompletedMissionCopy completedMissionCopy(WorkoutSession? session) {
   if (session == null) {
     return const CompletedMissionCopy(
@@ -88,32 +97,39 @@ CompletedMissionCopy completedMissionCopy(WorkoutSession? session) {
   );
 }
 
-/// What the new-user FIRST QUEST mission should do when tapped.
-class FirstQuestMissionPlan {
-  const FirstQuestMissionPlan({
-    required this.launchesProgramDay,
-    required this.detail,
-  });
+/// Whether a brand-new user's headline mission should be the program's **Day-1
+/// card** (a program was chosen in onboarding) rather than the manual FIRST QUEST
+/// free-pick card. Pure so the routing is unit-testable without pumping Home.
+///
+/// [firstSessionDay] is the program's weekday-agnostic active workout
+/// (`ProgramService.activeWorkoutDay`) — always Day 1 for a fresh program — so a
+/// seeded rest-day landing can no longer drop the user to a blank picker, and the
+/// first workout reads as the program beginning rather than a separate quest.
+bool newUserMissionShowsProgramDayOne(
+  ProgramProgress? progress,
+  ProgramDay? firstSessionDay,
+) =>
+    progress != null && firstSessionDay != null && firstSessionDay.isWorkout;
 
-  /// True → launch the pre-filled program Day 1; false → the blank manual
-  /// picker (manual-path users, or the defensive rest-day-first case).
-  final bool launchesProgramDay;
-  final String detail;
-}
-
-/// Decides the FIRST QUEST mission's behavior + copy. A user who chose a program
-/// in onboarding lands on Home as a new user, where FIRST QUEST is the headline;
-/// it must launch their program's pre-filled Day 1, not a blank picker. Pure so
-/// the routing decision is unit-testable without pumping Home.
-FirstQuestMissionPlan firstQuestMissionPlan(ProgramDay? programDay) {
-  final launchesProgramDay = programDay != null && programDay.isWorkout;
-  return FirstQuestMissionPlan(
-    launchesProgramDay: launchesProgramDay,
-    detail: launchesProgramDay
-        ? 'Begin Day 1 · ${programDay.label}.'
-        : 'Log your first workout to begin.',
-  );
-}
+/// Whether tapping a start-workout entry on a planned-recovery day should pause
+/// for the "TRAIN ANYWAY?" confirm. A brand-new user ([isNewUser] — no completed
+/// workouts) is **exempt**: their first-ever session must never be gated as
+/// recovery (there is no rest streak/build to protect yet), matching the
+/// weekday-agnostic first-session routing in `RootPage._openFirstSession`. The
+/// logged workout naturally takes no rest credit for the day
+/// (`RestService.dayInfoForState` zeroes `recoveryXP` once `hasCompletedWorkout`),
+/// so the bypass can't double-dip. Established users keep the gate. Pure so the
+/// rule is unit-testable without pumping Home.
+bool showsRestDayTrainPrompt({
+  required bool trainAnyway,
+  required bool isNewUser,
+  required RestDayInfo? restInfo,
+}) =>
+    !trainAnyway &&
+    !isNewUser &&
+    restInfo != null &&
+    restInfo.isPlannedRestDay &&
+    !restInfo.hasCompletedWorkout;
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -174,6 +190,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Map<LootCategory, LootItem> _equippedLoot = {};
   ProgramProgress? _programProgress;
   ProgramDay? _programDay;
+  // The program's weekday-agnostic Day-1 (active workout) — drives the new-user
+  // headline mission so the first workout is the program's, never a blank picker.
+  ProgramDay? _firstSessionDay;
   ProgramDaySnapshot? _programCompletedToday;
   // Training weekdays in effect this week — drives the program "NEXT ▸" teaser's
   // days-away under the weekday-anchored schedule.
@@ -289,6 +308,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final programService = ProgramService();
     final programProgress = await programService.getActiveProgress();
     final programDay = await programService.getTodayDay();
+    // Weekday-agnostic Day-1 for the new-user headline mission (the program's
+    // first workout regardless of which weekday onboarding finished on).
+    final firstSessionDay = await programService.activeWorkoutDay();
     final today = DateUtils.dateOnly(DateTime.now());
     // Under the weekday-anchored schedule the program no longer stamps today as
     // training/rest: a training weekday is a training day natively, and a
@@ -445,6 +467,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _equippedLoot = equippedLoot;
       _programProgress = programProgress;
       _programDay = programDay;
+      _firstSessionDay = firstSessionDay;
       _programCompletedToday = programCompletedToday;
       _trainingWeekdays = restService.trainingWeekdaysForDate(today, restState);
       _adventureState = adventureState;
@@ -754,26 +777,65 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget _missionHeader({required Color accent, Widget? trailing}) {
-    // Eyebrow label — kept muted so neon is reserved for the card border + the
-    // progress bar (the one interior focal element). The title carries identity;
-    // this row just names the card. `accent` still feeds the card border.
-    return Row(
-      children: [
-        const ImageIcon(
-          AssetImage('assets/icons/control/icon_play.png'),
-          size: 18,
-          color: kMutedText,
+  Widget _missionHeader({
+    required Color accent,
+    Widget? trailing,
+    MissionHeaderMode mode = MissionHeaderMode.calm,
+  }) {
+    // The "TODAY'S MISSION" header row has three registers — each pairs a color
+    // with a motion that *means* the card's state (defaults to calm; an unknown
+    // state never reads as active or recovery):
+    //  • active (a workout still to be done today) → neon-green + a live glint
+    //    sweep ("this is on, act now").
+    //  • recovery (a protected rest day) → cyan + a slow breathing glow ("rest,
+    //    you're protected") — the calm opposite of the sweep.
+    //  • calm (done / finished / arc-complete) → muted + a rare phosphor flicker;
+    //    neon stays reserved for the border + progress bar.
+    final (headerColor, label) = switch (mode) {
+      MissionHeaderMode.active => (
+        kNeon,
+        const CrtSweep(
+          text: 'TODAY\'S MISSION',
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: 10,
+            color: kNeon,
+          ),
         ),
-        const SizedBox(width: kSpace2),
-        const Text(
-          'TODAY\'S MISSION',
+      ),
+      MissionHeaderMode.recovery => (
+        kRecoveryAccent,
+        const CrtBreathe(
+          text: 'TODAY\'S MISSION',
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: 10,
+            color: kRecoveryAccent,
+          ),
+        ),
+      ),
+      MissionHeaderMode.calm => (
+        kMutedText,
+        const CrtFlicker(
+          text: 'TODAY\'S MISSION',
+          highlightColor: kText,
           style: TextStyle(
             fontFamily: 'PressStart2P',
             fontSize: 10,
             color: kMutedText,
           ),
         ),
+      ),
+    };
+    return Row(
+      children: [
+        ImageIcon(
+          const AssetImage('assets/icons/control/icon_play.png'),
+          size: 18,
+          color: headerColor,
+        ),
+        const SizedBox(width: kSpace2),
+        label,
         if (trailing != null) ...[const Spacer(), trailing],
       ],
     );
@@ -782,6 +844,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget _missionCard({
     required Color accent,
     Widget? trailing,
+    MissionHeaderMode headerMode = MissionHeaderMode.calm,
     String? meta,
     required String title,
     String? detail,
@@ -809,7 +872,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _missionHeader(accent: accent, trailing: trailing),
+          _missionHeader(accent: accent, trailing: trailing, mode: headerMode),
           if (meta != null && meta.isNotEmpty) ...[
             const SizedBox(height: kSpace5),
             Text(
@@ -942,6 +1005,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 PixelButton(
                   label: 'Delete',
                   color: kDanger,
+                  haptic: HapticIntent.warning,
                   onPressed: () async {
                     Navigator.of(ctx).pop();
                     await WorkoutStorageService().deleteSession(session.id);
@@ -1093,10 +1157,11 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     bool advanceProgramRestDayOnCompletion = false,
   }) {
     final restInfo = _todayRestInfo;
-    if (!trainAnyway &&
-        restInfo != null &&
-        restInfo.isPlannedRestDay &&
-        !restInfo.hasCompletedWorkout) {
+    if (showsRestDayTrainPrompt(
+      trainAnyway: trainAnyway,
+      isNewUser: _isNewUser,
+      restInfo: restInfo,
+    )) {
       _showTrainOnRestDialog(
         advanceProgramRestDayOnCompletion: advanceProgramRestDayOnCompletion,
       );
@@ -1114,6 +1179,19 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         motion: ArcadeRouteMotion.flow,
       ),
     ).then((_) => _onReturnFromWorkout());
+  }
+
+  /// First-ever workout launcher for the empty last-workout card. Mirrors the
+  /// hero mission so the two first-run entries can't diverge: a program user
+  /// gets the pre-filled Day-1 (weekday-agnostic, via [_startProgramWorkout]); a
+  /// manual (no-program) user gets the now-ungated blank start. Stops the empty
+  /// card from dropping a fresh program user into the manual exercise picker.
+  void _startFirstWorkout() {
+    if (newUserMissionShowsProgramDayOne(_programProgress, _firstSessionDay)) {
+      _startProgramWorkout(_firstSessionDay!);
+    } else {
+      _startWorkout();
+    }
   }
 
   // Program day start: route through the pre-filled review screen (today's
@@ -1356,7 +1434,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'VIEW ALL >',
+                  'VIEW >',
                   style: AppFonts.shareTechMono(
                     color: kNeon,
                     fontSize: 11,
@@ -1386,10 +1464,19 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return _buildEndedEarlyMissionPanel();
     }
 
-    // New user (onboarded, no completed workouts) → FIRST QUEST stays the
-    // featured mission until the first workout lands. An in-progress session
-    // still falls through to CONTINUE below.
+    // New user (onboarded, no completed workouts) → the headline mission until
+    // the first workout lands. An in-progress session still falls through to
+    // CONTINUE below. A program chosen in onboarding makes the first workout the
+    // program's Day 1 (weekday-agnostic) — one unified "your path begins" card,
+    // not a FIRST QUEST that reads as separate from the program. Manual-path
+    // users (no program) keep the FIRST QUEST free-pick card.
     if (session == null && _isNewUser) {
+      if (newUserMissionShowsProgramDayOne(_programProgress, _firstSessionDay)) {
+        return _buildProgramMissionPanel(
+          day: _firstSessionDay!,
+          progress: _programProgress!,
+        );
+      }
       return _buildFirstQuestMissionPanel();
     }
 
@@ -1487,6 +1574,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     final panel = _missionCard(
       accent: kNeon,
+      headerMode: MissionHeaderMode.active,
       trailing: rewardLabel == null
           ? null
           : _MissionRewardChip(label: rewardLabel),
@@ -1518,23 +1606,18 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget _buildFirstQuestMissionPanel() {
-    // Honor a program chosen in onboarding: when today is a program workout day,
-    // the first quest launches the pre-filled Day 1 (identical to every other
-    // Home program day) instead of a blank manual picker. Manual-path users (no
-    // active program) and the defensive rest-day-first case keep the blank
-    // picker — mirroring buildFirstSessionStarter's own `!day.isWorkout` guard.
-    final programDay = _programDay;
-    final plan = firstQuestMissionPlan(programDay);
-    final VoidCallback onTap = (programDay != null && programDay.isWorkout)
-        ? () => _startProgramWorkout(programDay)
-        : () => _startWorkout();
-
+    // Manual-path new user only (no program chosen in onboarding): the first
+    // workout is a free pick. Program users get the merged Day-1 program card
+    // upstream (see _buildMainMissionPanel / newUserMissionShowsProgramDayOne),
+    // so the first workout reads as their program beginning, not a separate quest.
+    const detail = 'Log your first workout to begin.';
     final card = _missionCard(
       accent: kNeon,
+      headerMode: MissionHeaderMode.active,
       trailing: const _MissionRewardChip(label: '+1 XP'),
       meta: 'WEEKLY QUEST',
       title: 'FIRST QUEST',
-      detail: plan.detail,
+      detail: detail,
       middle: Align(
         alignment: Alignment.centerLeft,
         child: Text(
@@ -1548,13 +1631,13 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       button: true,
       label:
           "Today's mission, First Quest, "
-          '${plan.detail} plus one XP, '
+          '$detail plus one XP, '
           'zero of one complete, tap to start workout',
       child: PhosphorTap(
-        onTap: onTap,
+        onTap: () => _startWorkout(),
         borderRadius: BorderRadius.circular(kCardRadius),
         child: HoldDepress(
-          onTap: onTap,
+          onTap: () => _startWorkout(),
           borderRadius: BorderRadius.circular(kCardRadius),
           child: card,
         ),
@@ -1571,6 +1654,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     return _missionCard(
       accent: kNeon,
+      headerMode: MissionHeaderMode.active,
       trailing: _MissionRewardChip(
         label: _suggestedMissionRewardGems == null
             ? '+5 gems'
@@ -1595,6 +1679,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     return _missionCard(
       accent: kNeon,
+      headerMode: MissionHeaderMode.active,
       trailing: rewardLabel == null
           ? null
           : _MissionRewardChip(label: rewardLabel),
@@ -1630,9 +1715,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       nextUp: _programProgress == null
           ? null
           : _programNextUp(_programProgress!, todayWorkoutPending: false),
-      supportText: 'Session logged.',
-      supportColor: kNeon,
-      supportIconPath: 'assets/icons/control/ui/icon_session_logged.png',
+      // No "Session logged." footnote — the CLEARED chip top-right already says it.
     );
   }
 
@@ -1642,9 +1725,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     required RestDayInfo restInfo,
   }) {
     return _missionCard(
-      accent: kNeon,
+      accent: kRecoveryAccent,
+      headerMode: MissionHeaderMode.recovery,
       trailing: _MissionRewardChip(label: '+${restInfo.recoveryXP} XP'),
-      meta: 'RECOVERY HOLDS THE PATH  \u2022  WEEK ${progress.currentWeek}',
+      // No eyebrow \u2014 like the training-day card. The title (RECOVERY DAY) and
+      // detail (the path is protected) already carry the framing; an eyebrow
+      // here only re-stated it and crowded the card's densest text stack.
       title: _programMissionTitle(day),
       detail: 'Rest day. The path is protected.',
       middle: Column(
@@ -1684,8 +1770,8 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   /// Goal-gradient meter for the active arc: a real progress bar + honest
-  /// `X / N • P%` count. At arc 0 it shows the endowed "PATH SET" framing with
-  /// decorative boot pips that are never counted as completed sessions.
+  /// `X / N • P%` count. At arc 0 it reads "CURRENT PATH" over an honest "0 / N"
+  /// (no fabricated bricks — the bar and count are the only truth).
   Widget _programArcMeter(ProgramProgress progress) {
     final program = programById(progress.programId);
     if (program == null) return const SizedBox.shrink();
@@ -1804,7 +1890,8 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final rewardLabel = '+${restInfo.recoveryXP} XP';
 
     return _missionCard(
-      accent: kCyan,
+      accent: kRecoveryAccent,
+      headerMode: MissionHeaderMode.recovery,
       trailing: _MissionRewardChip(label: rewardLabel),
       meta: 'RECOVERY DAY',
       title: 'RECOVERY DAY',
@@ -1972,10 +2059,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       backgroundAlpha: 0.78,
       borderColor: kBorder,
       borderAlpha: 0.72,
-      padding: const EdgeInsets.symmetric(
-        horizontal: kSpace4,
-        vertical: kSpace3,
-      ),
+      // 12px inset to match the sibling cards (Weekly Quests, Expedition) so the
+      // trailing "VIEW >" right-aligns with theirs.
+      padding: const EdgeInsets.all(kSpace3),
       child: Row(
         children: [
           const ImageIcon(
@@ -2015,9 +2101,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (isLogGate) ...[
             const SizedBox(width: kSpace2),
             Text(
-              'VIEW LOG →',
+              'VIEW >',
               style: AppFonts.shareTechMono(
-                color: kCyan,
+                color: kNeon,
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
               ),
@@ -2027,16 +2113,18 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
 
-    // No completed workouts yet → the whole card is a Start Workout entry.
+    // No completed workouts yet → the whole card is a first-workout entry. Route
+    // through _startFirstWorkout (pre-filled program Day-1 for program users),
+    // not the manual+rest-gated _startWorkout, so it matches the hero mission.
     if (session == null) {
       return Semantics(
         button: true,
         label: 'No completed workouts yet, tap to start your first workout',
         child: PhosphorTap(
-          onTap: _startWorkout,
+          onTap: _startFirstWorkout,
           borderRadius: BorderRadius.circular(kCardRadius),
           child: HoldDepress(
-            onTap: _startWorkout,
+            onTap: _startFirstWorkout,
             borderRadius: BorderRadius.circular(kCardRadius),
             child: card,
           ),
@@ -2156,7 +2244,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ),
                   ],
                   if (_adventureState != null) ...[
-                    const SizedBox(height: kSpace2),
+                    const SizedBox(height: kSectionGap),
                     AdventureCard(
                       state: _adventureState!,
                       onTap: _openAdventure,

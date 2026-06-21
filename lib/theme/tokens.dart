@@ -32,6 +32,12 @@ const kAmberDark = Color(0xFFFFA500);
 const kCyan = Color(0xFF00BFFF);
 const kDanger = Color(0xFFFF2D55);
 
+/// Recovery / rest-day accent — semantic alias of [kCyan] (cool = calm/recovery,
+/// per the validated color-psychology insight). Recovery mission cards reference
+/// this, NOT `kCyan` directly, so the rest theme stays decoupled from kCyan's
+/// other roles (Tank class, Legs muscle) and can diverge later if they collide.
+const kRecoveryAccent = kCyan;
+
 /// Gem / haul magenta — the currency colour (sampled from the gem-art ramp
 /// core). Use for UI text/accents that reference gems or a haul (e.g. BIT's
 /// "loots" prompt). Contrast on [kCard] ≈ 5.7:1 (passes 4.5:1). The dithered
