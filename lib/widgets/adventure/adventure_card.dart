@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../data/adventure_routes.dart';
 import '../../models/adventure_models.dart';
 import '../../services/guild_service.dart';
+import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 
 /// Compact Home callout for Adventure — deliberately static except for a
@@ -116,7 +117,17 @@ class AdventureCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: kSpace2),
-              const Icon(Icons.chevron_right_sharp, color: kMutedText),
+              // Green "VIEW >" text affordance matching Home's other trailing
+              // links (Weekly Quests, Last Workout) — the whole card stays
+              // tappable; the ">" is just the signifier.
+              Text(
+                'VIEW >',
+                style: AppFonts.shareTechMono(
+                  color: kNeon,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ],
           ),
         ),
