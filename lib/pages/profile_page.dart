@@ -24,11 +24,15 @@ import '../services/body_goal_service.dart';
 import '../services/body_metrics_service.dart';
 import '../services/calibration_service.dart';
 import '../services/class_service.dart';
+import '../services/notification_service.dart';
+import '../services/notification_settings_service.dart';
 import '../services/profile_service.dart';
 import '../services/program_service.dart';
 import '../services/progression_settings_service.dart';
 import '../services/quest_service.dart';
 import '../services/rest_service.dart';
+import '../services/haptic_service.dart';
+import '../services/haptic_settings_service.dart';
 import '../services/sfx_service.dart';
 import '../services/sound_settings_service.dart';
 import '../services/stat_engine.dart';
@@ -89,6 +93,8 @@ class ProfilePageState extends State<ProfilePage> {
   bool _bodyMetricsEnabled = false;
   bool _progressionEnabled = true;
   bool _soundEnabled = true;
+  bool _hapticsEnabled = true;
+  bool _restAlertEnabled = true;
   BodyGoalState? _bodyGoalState;
   WeightEntry? _lastWeightEntry;
   List<WeightEntry> _weightEntries = const [];
@@ -144,6 +150,9 @@ class ProfilePageState extends State<ProfilePage> {
     final bodyMetricsEnabled = await metricsService.isEnabled();
     final progressionEnabled = await ProgressionSettingsService().isEnabled();
     final soundEnabled = await SoundSettingsService().isEnabled();
+    final hapticsEnabled = await HapticSettingsService().isEnabled();
+    final restAlertEnabled = await NotificationSettingsService()
+        .isRestTimerAlertEnabled();
     final heightCm = await CalibrationService().heightCm();
     BodyGoalState? bodyGoalState;
     WeightEntry? lastWeightEntry;
@@ -181,6 +190,8 @@ class ProfilePageState extends State<ProfilePage> {
       _bodyMetricsEnabled = bodyMetricsEnabled;
       _progressionEnabled = progressionEnabled;
       _soundEnabled = soundEnabled;
+      _hapticsEnabled = hapticsEnabled;
+      _restAlertEnabled = restAlertEnabled;
       _bodyGoalState = bodyGoalState;
       _lastWeightEntry = lastWeightEntry;
       _weightEntries = weightEntries;
@@ -346,6 +357,30 @@ class ProfilePageState extends State<ProfilePage> {
     SfxService.enabled = value;
     if (!mounted) return;
     setState(() => _soundEnabled = value);
+  }
+
+  Future<void> _toggleHaptics(bool value) async {
+    await HapticSettingsService().setEnabled(value);
+    HapticService.enabled = value;
+    // Turning ON: the row's own selection() tick fired while haptics were still
+    // off (muted), so play a confirmation tick now that the flag is live.
+    if (value) HapticService.instance.selection();
+    if (!mounted) return;
+    setState(() => _hapticsEnabled = value);
+  }
+
+  Future<void> _toggleRestAlert(bool value) async {
+    await NotificationSettingsService().setRestTimerAlertEnabled(value);
+    // Enabling is the contextual moment to ask the OS for permission (never a
+    // cold launch-time ask). A denial is respected silently — the toggle still
+    // reflects the user's intent and is simply inert until permission is granted.
+    // Mark the one-time ask done so the first-workout prompt won't re-fire.
+    if (value) {
+      await NotificationSettingsService().setRestPermAsked(true);
+      await NotificationService.instance.requestPermissions();
+    }
+    if (!mounted) return;
+    setState(() => _restAlertEnabled = value);
   }
 
   Future<void> _openLogWeight() async {
@@ -1419,16 +1454,23 @@ class ProfilePageState extends State<ProfilePage> {
           value: _soundEnabled,
           onChanged: _toggleSound,
         ),
-        _SettingsRow(
+        _SettingsToggleRow(
+          iconPath: 'assets/icons/control/ui/sound-haptic-ring.png',
+          title: 'Haptics',
+          subtitle: _hapticsEnabled
+              ? 'Buttons and rewards give a tactile buzz.'
+              : 'Off — no vibration feedback.',
+          value: _hapticsEnabled,
+          onChanged: _toggleHaptics,
+        ),
+        _SettingsToggleRow(
           iconPath: 'assets/icons/control/icon_bell.png',
-          title: 'Notifications',
-          subtitle: 'Workout nudges and quest reminders.',
-          onTap: () => _showComingSoon(
-            title: 'Notifications',
-            description:
-                'Reminder controls will appear here when notification support exists.',
-            iconPath: 'assets/icons/control/icon_bell.png',
-          ),
+          title: 'Rest Timer Alert',
+          subtitle: _restAlertEnabled
+              ? 'Pings you when a rest ends, even in another app.'
+              : 'Off — no rest-end alert.',
+          value: _restAlertEnabled,
+          onChanged: _toggleRestAlert,
         ),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_lock.png',
@@ -2406,7 +2448,12 @@ class _SettingsToggleRow extends StatelessWidget {
             const SizedBox(width: 8),
             Switch(
               value: value,
-              onChanged: onChanged,
+              // Every settings toggle ticks on flip (the Haptics toggle's own
+              // enable-confirmation is handled in its setter).
+              onChanged: (v) {
+                HapticService.instance.selection();
+                onChanged(v);
+              },
               activeThumbColor: kNeon,
               activeTrackColor: kNeon.withValues(alpha: 0.3),
               inactiveThumbColor: kMutedText,
