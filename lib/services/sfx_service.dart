@@ -27,9 +27,14 @@ class SfxService {
 
   AudioPlayer? _current;
 
-  /// The quest-claim chime — the app's first sound. One ascending chiptune
-  /// arpeggio (`assets/audio/quest_claim.wav`).
-  Future<void> playQuestClaim() => _play('audio/quest_claim.wav', volume: 0.7);
+  /// The quest-claim burst sound — a soft "power blip" fired at the claim impact
+  /// (t0), synced with the card's flash/shard burst. Source: Juhani Junkala's
+  /// "512 Sound Effects (8-bit style)" pack (`sfx_sounds_powerup15`, low-passed),
+  /// released **CC0 / public domain** — ships without attribution. Replaces the
+  /// old ascending arpeggio (`quest_claim.wav`), which read too "rising/sparkle"
+  /// against the chunky pixel burst.
+  Future<void> playQuestClaim() =>
+      _play('audio/quest_claim_burst.wav', volume: 0.7);
 
   Future<void> _play(String assetPath, {double volume = 1.0}) async {
     if (!enabled) return;

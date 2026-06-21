@@ -37,9 +37,16 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
+    // The board is a deterministic-per-DATE rotation (an FNV hash of the period
+    // key seeds the daily/weekly pick), so the golden must pin the clock —
+    // otherwise it renders a different selection/state on any other day and
+    // mismatches with no code change. Pin both the page clock and the seeded
+    // session's date to one fixed day so the session counts as "today".
+    final fixedNow = DateTime(2026, 6, 21, 9, 0);
+
     final session = WorkoutSession(
       id: 'today',
-      date: DateTime.now(),
+      date: fixedNow,
       muscleGroup: 'Chest',
       targetMuscleGroups: const ['Chest'],
       targetDurationMinutes: 30,
@@ -64,7 +71,7 @@ void main() {
         home: Builder(
           builder: (context) => MediaQuery(
             data: MediaQuery.of(context).copyWith(disableAnimations: true),
-            child: const QuestsPage(),
+            child: QuestsPage(nowProvider: () => fixedNow),
           ),
         ),
       ),

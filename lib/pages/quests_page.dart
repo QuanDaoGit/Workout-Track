@@ -1,12 +1,13 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../data/bit_quest_copy.dart';
 import '../models/quest_models.dart';
 import '../models/workout_models.dart';
 import '../services/gem_service.dart';
+import '../services/haptic_service.dart';
 import '../services/quest_service.dart';
 import '../services/sfx_service.dart';
 import '../services/workout_storage_service.dart';
@@ -19,9 +20,15 @@ import '../widgets/pixel_loader.dart';
 import '../widgets/quest_claim_flight.dart';
 
 class QuestsPage extends StatefulWidget {
-  const QuestsPage({super.key, this.onQuestChanged});
+  const QuestsPage({super.key, this.onQuestChanged, this.nowProvider});
 
   final VoidCallback? onQuestChanged;
+
+  /// Injectable clock. The daily/weekly board is a deterministic-per-DATE
+  /// rotation (an FNV hash of the period key seeds the pick), so tests pin this
+  /// to keep the rendered board — and its golden — stable across runs. Defaults
+  /// to the wall clock in production.
+  final DateTime Function()? nowProvider;
 
   @override
   QuestsPageState createState() => QuestsPageState();
@@ -56,9 +63,13 @@ class QuestsPageState extends State<QuestsPage> {
     super.dispose();
   }
 
+  // The page's clock — injectable so the date-seeded quest rotation (and its
+  // golden) stay deterministic in tests. Production reads the wall clock.
+  DateTime get _now => (widget.nowProvider ?? DateTime.now)();
+
   Future<void> reload() async {
     final sessions = await WorkoutStorageService().getSessions();
-    final summary = await _questService.getSummary(sessions);
+    final summary = await _questService.getSummary(sessions, now: _now);
     final gemBalance = await GemService().balance();
     if (!mounted) return;
     setState(() {
@@ -89,11 +100,15 @@ class QuestsPageState extends State<QuestsPage> {
     final walletBox =
         _walletKey.currentContext?.findRenderObject() as RenderBox?;
 
+    // The claim "impact" lands at t0 — sound + haptic fire here (synced with the
+    // card's flash/shard burst), once per claim, not per gem-landing (a big
+    // payout would otherwise machine-gun the chime). BIT cheers as gems land.
+    SfxService.instance.playQuestClaim();
+    HapticService.instance.reward();
+
     if (MediaQuery.of(context).disableAnimations || walletBox == null) {
-      // No travel: the counter snaps, BIT shows a static cheer, audio still fires.
+      // No travel: the counter snaps, BIT shows a static cheer.
       wallet?.land(reward, snap: true, big: big);
-      SfxService.instance.playQuestClaim();
-      HapticFeedback.mediumImpact();
       _triggerBitCheer(big);
     } else {
       final walletRect = walletBox.localToGlobal(Offset.zero) & walletBox.size;
@@ -107,7 +122,7 @@ class QuestsPageState extends State<QuestsPage> {
     }
 
     try {
-      await _questService.claimReward(quest.claimKey, _sessions);
+      await _questService.claimReward(quest.claimKey, _sessions, now: _now);
       await reload();
       widget.onQuestChanged?.call();
     } finally {
@@ -115,15 +130,12 @@ class QuestsPageState extends State<QuestsPage> {
     }
   }
 
-  // Each gem arrival: raise the wallet, refresh BIT's cheer, and on the last gem
-  // fire the chime + haptic (one satisfying "landed" beat, not a machine-gun).
+  // Each gem arrival raises the wallet + refreshes BIT's cheer. The chime + haptic
+  // already fired once at the claim impact (t0), so landings stay purely visual
+  // (no per-gem audio — a big payout would otherwise machine-gun the chime).
   void _onGemLand(int amt, bool isLast, bool big) {
     _walletKey.currentState?.land(amt, big: big);
     _triggerBitCheer(big);
-    if (isLast) {
-      SfxService.instance.playQuestClaim();
-      HapticFeedback.mediumImpact();
-    }
   }
 
   void _triggerBitCheer(bool big) {
@@ -327,18 +339,36 @@ class _QuestCard extends StatefulWidget {
   State<_QuestCard> createState() => _QuestCardState();
 }
 
-class _QuestCardState extends State<_QuestCard> {
+class _QuestCardState extends State<_QuestCard>
+    with SingleTickerProviderStateMixin {
   bool _claimed = false;
   bool _dim = false;
   bool _squash = false;
   final List<Timer> _timers = [];
   final GlobalKey _claimKey = GlobalKey();
 
+  // The claim "loud-pixel" burst — a flash + chunky pixel shards + a small shake,
+  // fired once at t0 and scaled by whether the payout is a landmark (big). It is
+  // decorative (IgnorePointer, no Semantics): the legible state is the CLAIMED
+  // badge, so reduced motion just skips the burst and snaps to CLAIMED.
+  late final AnimationController _burst;
+  List<_BurstShard> _shards = const [];
+  bool _bursting = false;
+  bool _big = false;
+
   @override
   void initState() {
     super.initState();
     _claimed = widget.quest.claimed;
     _dim = widget.quest.claimed;
+    _burst = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..addStatusListener((status) {
+        if (status == AnimationStatus.completed && mounted) {
+          setState(() => _bursting = false);
+        }
+      });
   }
 
   @override
@@ -346,6 +376,7 @@ class _QuestCardState extends State<_QuestCard> {
     for (final timer in _timers) {
       timer.cancel();
     }
+    _burst.dispose();
     super.dispose();
   }
 
@@ -367,8 +398,16 @@ class _QuestCardState extends State<_QuestCard> {
       });
       return;
     }
-    // Beat 1 — anticipation: button squash, then flip + settle to dimmed CLAIMED.
-    setState(() => _squash = true);
+    // Beat 1 (t0) — anticipation squash + the loud-pixel burst (flash + chunky
+    // shards + a small shake), scaled by a landmark (big) payout. The burst is
+    // the launch impact the gems then fly from.
+    _big = widget.quest.rewardGems >= kBigRewardThreshold;
+    _shards = _BurstShard.spawn(big: _big);
+    setState(() {
+      _squash = true;
+      _bursting = true;
+    });
+    _burst.forward(from: 0);
     _timers.add(Timer(const Duration(milliseconds: 90), () {
       if (!mounted) return;
       setState(() {
@@ -385,7 +424,7 @@ class _QuestCardState extends State<_QuestCard> {
   @override
   Widget build(BuildContext context) {
     final quest = widget.quest;
-    return AnimatedOpacity(
+    final card = AnimatedOpacity(
       opacity: _dim ? 0.6 : 1.0,
       duration: const Duration(milliseconds: 300),
       child: Card(
@@ -440,6 +479,43 @@ class _QuestCardState extends State<_QuestCard> {
         ),
       ),
     );
+    return AnimatedBuilder(
+      animation: _burst,
+      builder: (context, child) {
+        final t = _burst.value;
+        return Transform.translate(
+          offset: _shakeOffset(t),
+          child: Stack(
+            fit: StackFit.passthrough,
+            clipBehavior: Clip.none,
+            children: [
+              child!,
+              if (_bursting)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: _ClaimBurstPainter(t: t, shards: _shards),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+      child: card,
+    );
+  }
+
+  // Horizontal shake, decaying over the first ~260ms of the burst (off otherwise).
+  Offset _shakeOffset(double t) {
+    if (!_bursting) return Offset.zero;
+    const window = 260 / 700;
+    if (t >= window) return Offset.zero;
+    final p = t / window;
+    final amp = (_big ? 8.0 : 3.0) * (1 - p);
+    return Offset(math.sin(p * math.pi * 6) * amp, 0);
   }
 
   Widget _actionControl() {
@@ -459,6 +535,9 @@ class _QuestCardState extends State<_QuestCard> {
           key: _claimKey,
           label: 'CLAIM',
           fullWidth: false,
+          // The claim handler fires reward() after its re-tap guard — opt the
+          // button out of the default tap() so the claim doesn't double-buzz.
+          haptic: HapticIntent.none,
           onPressed: _handleClaim,
         ),
       );
@@ -513,4 +592,78 @@ class _StatusBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+/// One chunky pixel shard in the claim burst — a square flung from the card
+/// centre, gravity-pulled, fading out. No rotation/trail (a trail reads as a
+/// smooth particle; these stay crisp pixels).
+class _BurstShard {
+  const _BurstShard({
+    required this.angle,
+    required this.speed,
+    required this.size,
+    required this.color,
+  });
+
+  final double angle;
+  final double speed;
+  final double size;
+  final Color color;
+
+  static List<_BurstShard> spawn({required bool big}) {
+    final rng = math.Random();
+    final count = big ? 20 : 14;
+    const palette = [kWhite, kNeon, kCyan];
+    return List<_BurstShard>.generate(count, (i) {
+      return _BurstShard(
+        angle: rng.nextDouble() * math.pi * 2,
+        speed: (big ? 130.0 : 95.0) + rng.nextDouble() * 90,
+        size: big ? 7.0 : 5.0,
+        color: palette[i % palette.length],
+      );
+    });
+  }
+}
+
+/// The claim burst painter: a hard white phosphor flash over the card (gone in
+/// ~110ms) then chunky pixel shards radiating out, gravity-pulled and fading.
+/// Tokens-only colour, `isAntiAlias = false` for crisp pixel edges. Reduced
+/// motion never instantiates this (the card snaps straight to CLAIMED).
+class _ClaimBurstPainter extends CustomPainter {
+  _ClaimBurstPainter({required this.t, required this.shards});
+
+  final double t;
+  final List<_BurstShard> shards;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const flashWindow = 110 / 700;
+    if (t < flashWindow) {
+      final fo = (1 - t / flashWindow) * 0.8;
+      canvas.drawRect(
+        Offset.zero & size,
+        Paint()..color = kWhite.withValues(alpha: fo.clamp(0.0, 1.0)),
+      );
+    }
+    final center = Offset(size.width / 2, size.height / 2);
+    final paint = Paint()..isAntiAlias = false;
+    for (final s in shards) {
+      final opacity = (1 - t).clamp(0.0, 1.0);
+      if (opacity <= 0) continue;
+      final dist = s.speed * t;
+      final drop = 60 * t * t;
+      final pos = center +
+          Offset(math.cos(s.angle) * dist, math.sin(s.angle) * dist + drop);
+      final sz = s.size * (1 - 0.35 * t);
+      paint.color = s.color.withValues(alpha: opacity);
+      canvas.drawRect(
+        Rect.fromCenter(center: pos, width: sz, height: sz),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ClaimBurstPainter old) =>
+      old.t != t || !identical(old.shards, shards);
 }
