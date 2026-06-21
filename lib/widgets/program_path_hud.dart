@@ -16,12 +16,18 @@ class ProgramPathHud extends StatelessWidget {
     required this.progress,
     this.compact = false,
     this.showReward = true,
+    this.showStateLabel = true,
   });
 
   final Program program;
   final ProgramProgress progress;
   final bool compact;
   final bool showReward;
+
+  /// The leading eyebrow ("CURRENT PATH" / "PATH PROGRESS" / "FINAL STRETCH" /
+  /// "PATH COMPLETE"). Hidden where a surface already supplies its own header
+  /// (the Program Detail page) so the title is never duplicated.
+  final bool showStateLabel;
 
   int get _target => program.targetSessions;
 
@@ -49,7 +55,7 @@ class ProgramPathHud extends StatelessWidget {
 
   String get _stateLabel {
     if (_complete) return 'PATH COMPLETE';
-    if (_done <= 0) return 'PATH SET';
+    if (_done <= 0) return 'CURRENT PATH';
     if (_finalStretch) return 'FINAL STRETCH';
     return 'PATH PROGRESS';
   }
@@ -57,7 +63,7 @@ class ProgramPathHud extends StatelessWidget {
   String get _countLabel {
     final target = _target;
     if (_complete) return 'PATH COMPLETE · $_done / $target';
-    if (_done <= 0) return 'PATH SET · 0 / $target';
+    if (_done <= 0) return '0 / $target';
     if (_finalStretch) return 'FINAL STRETCH · $_done / $target';
     return '$_done / $target';
   }
@@ -102,16 +108,18 @@ class ProgramPathHud extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              _stateLabel,
-              style: TextStyle(
-                fontFamily: 'PressStart2P',
-                fontSize: compact ? 7.5 : 9,
-                color: _labelColor,
-                height: 1.35,
+            if (showStateLabel) ...[
+              Text(
+                _stateLabel,
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: compact ? 7.5 : 9,
+                  color: _labelColor,
+                  height: 1.35,
+                ),
               ),
-            ),
-            const SizedBox(height: kSpace3),
+              const SizedBox(height: kSpace3),
+            ],
             Stack(
               clipBehavior: Clip.none,
               children: [
@@ -145,32 +153,20 @@ class ProgramPathHud extends StatelessWidget {
               ],
             ),
             const SizedBox(height: kSpace2),
-            Row(
-              children: [
-                if (_done <= 0) ...[
-                  const _BootPip(),
-                  const SizedBox(width: 4),
-                  const _BootPip(),
-                  const SizedBox(width: kSpace2),
-                ],
-                Expanded(
-                  child: Text(
-                    _countLabel,
-                    style: compact
-                        ? AppFonts.shareTechMono(
-                            color: kMutedText,
-                            fontSize: 11,
-                            height: 1.2,
-                          )
-                        : const TextStyle(
-                            fontFamily: 'PressStart2P',
-                            fontSize: 8,
-                            color: kMutedText,
-                            height: 1.35,
-                          ),
-                  ),
-                ),
-              ],
+            Text(
+              _countLabel,
+              style: compact
+                  ? AppFonts.shareTechMono(
+                      color: kMutedText,
+                      fontSize: 11,
+                      height: 1.2,
+                    )
+                  : const TextStyle(
+                      fontFamily: 'PressStart2P',
+                      fontSize: 8,
+                      color: kMutedText,
+                      height: 1.35,
+                    ),
             ),
             if (reward != null && showReward) ...[
               const SizedBox(height: kSpace3),
@@ -211,24 +207,6 @@ class ProgramPathHud extends StatelessWidget {
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _BootPip extends StatelessWidget {
-  const _BootPip();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      key: const ValueKey('program_path_boot_pip'),
-      width: 13,
-      height: 7,
-      decoration: BoxDecoration(
-        color: kBorderDark,
-        border: Border.all(color: kBorderVariant),
-        borderRadius: BorderRadius.circular(2),
       ),
     );
   }

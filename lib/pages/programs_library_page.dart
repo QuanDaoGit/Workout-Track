@@ -3,6 +3,7 @@ import '../theme/app_fonts.dart';
 
 import '../data/programs_library.dart';
 import '../models/program_models.dart';
+import '../services/haptic_service.dart';
 import '../services/program_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_bar.dart';
@@ -78,6 +79,7 @@ class _ProgramsLibraryBodyState extends State<ProgramsLibraryBody> {
             const SizedBox(height: kSpace4),
             PixelButton(
               label: 'CONFIRM',
+              haptic: HapticIntent.warning,
               onPressed: () => Navigator.of(ctx).pop(true),
             ),
             const SizedBox(height: kSpace2),

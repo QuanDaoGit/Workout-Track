@@ -94,8 +94,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      // The section header is the sole "CURRENT PATH" — the HUD suppresses its
+      // eyebrow here, showing a bare "0 / N" count for the just-started path.
       expect(find.text('CURRENT PATH'), findsOneWidget);
-      expect(find.textContaining('PATH SET'), findsWidgets);
+      expect(
+        find.textContaining('0 / ${program.targetSessions}'),
+        findsWidgets,
+      );
       expect(find.text('PATH REWARD'), findsNothing);
       expect(
         find.text('Missed days slow the path. They do not reset it.'),

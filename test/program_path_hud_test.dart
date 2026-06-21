@@ -14,7 +14,7 @@ void main() {
     );
   }
 
-  testWidgets('new path shows honest zero progress with boot pips', (
+  testWidgets('new path shows honest zero progress without fabricated pips', (
     tester,
   ) async {
     final program = programById('upper_lower')!;
@@ -30,15 +30,16 @@ void main() {
       harness(ProgramPathHud(program: program, progress: progress)),
     );
 
-    expect(find.text('PATH SET'), findsOneWidget);
-    expect(find.textContaining('PATH SET'), findsWidgets);
+    // Zero state is titled "CURRENT PATH" (eyebrow) over a bare "0 / N" count.
+    expect(find.text('CURRENT PATH'), findsOneWidget);
     expect(
       find.textContaining('0 / ${program.targetSessions}'),
       findsOneWidget,
     );
+    // The decorative "boot pips" were dropped — no fabricated bricks at arc 0.
     expect(
       find.byKey(const ValueKey('program_path_boot_pip')),
-      findsNWidgets(2),
+      findsNothing,
     );
   });
 

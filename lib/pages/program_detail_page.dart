@@ -7,6 +7,7 @@ import '../data/programs_library.dart';
 import '../models/loot_item.dart';
 import '../models/program_models.dart';
 import '../services/exercise_catalog_service.dart';
+import '../services/haptic_service.dart';
 import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
 import '../theme/tokens.dart';
@@ -173,7 +174,13 @@ class _ProgramDetailPageState extends State<ProgramDetailPage> {
                 ),
               ),
               const SizedBox(height: kSpace3),
-              ProgramPathHud(program: widget.program, progress: progress),
+              // The section already supplies the "CURRENT PATH" header, so the
+              // HUD suppresses its own eyebrow to avoid a duplicate title.
+              ProgramPathHud(
+                program: widget.program,
+                progress: progress,
+                showStateLabel: false,
+              ),
               const SizedBox(height: kSpace3),
               Text(
                 'Missed days slow the path. They do not reset it.',
@@ -251,6 +258,7 @@ class _ProgramDetailPageState extends State<ProgramDetailPage> {
             const SizedBox(height: kSpace4),
             PixelButton(
               label: 'CONFIRM',
+              haptic: HapticIntent.warning,
               onPressed: () => Navigator.of(ctx).pop(true),
             ),
             const SizedBox(height: kSpace2),
