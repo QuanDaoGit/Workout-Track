@@ -2,13 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../models/program_models.dart';
 import '../models/workout_models.dart';
 import '../services/exercise_catalog_service.dart';
+import '../services/haptic_service.dart';
 import '../services/idle_session_guard.dart';
 import '../services/loot_drop_service.dart';
+import '../services/notification_service.dart';
+import '../services/notification_settings_service.dart';
 import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
+import '../services/rest_notification_coordinator.dart';
+import '../services/rest_timer_service.dart';
 import '../services/workout_draft_controller.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
@@ -25,17 +29,6 @@ import 'profile_page.dart';
 import 'quests_page.dart';
 import 'shop_page.dart';
 import 'workout_page.dart';
-
-/// Builds the onboarding first-session starter from the program's current day.
-/// A program **workout** day → a pre-filled program-mode [StartWorkoutPage]
-/// (Day 1, lifts auto-selected); no program or a rest day → the generic picker.
-/// Pure and synchronous so the launch decision is unit-testable without the
-/// shell. Shares the program starter builder with the Home program-day start, so
-/// both routes pre-fill the same full Day 1 loadout.
-StartWorkoutPage buildFirstSessionStarter(ProgramDay? day) {
-  if (day == null || !day.isWorkout) return const StartWorkoutPage();
-  return programDayStarter(day);
-}
 
 /// The four browseable destinations in the restructured shell. Train is NOT a
 /// destination — it is the center *action* that launches (or resumes) a live
@@ -74,10 +67,22 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   final _guildKey = GlobalKey<GuildPageState>();
   final _profileKey = GlobalKey<ProfilePageState>();
 
+  // Schedules a "rest complete" local notification only while backgrounded.
+  late final RestNotificationCoordinator _restNotifCoordinator =
+      RestNotificationCoordinator(
+        scheduler: NotificationService.instance,
+        restAlertEnabled: NotificationSettingsService().isRestTimerAlertEnabled,
+        activeRestEndsAt: () {
+          final snap = RestTimerService.instance.current.value;
+          return (snap != null && snap.isActive) ? snap.endsAt : null;
+        },
+      );
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _restNotifCoordinator.attach();
     _draft.addListener(_onDraftChanged);
     _loadOngoingSession();
     _loadLootBadge();
@@ -99,16 +104,30 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     }
   }
 
-  /// Onboarding "START WORKOUT" finale. If the user chose a program, open a
-  /// **pre-filled Day 1** draft (the day's curated lifts pre-selected); manual or
-  /// rest-day users get a blank draft. Routes through the same in-shell
-  /// [openWorkoutDraft] entry as the center Train tap (Codex #3 — one entry API).
+  /// Onboarding "START WORKOUT" finale, and the center Train tap's "today's
+  /// mission" opener. If the user chose a program, open a **pre-filled** draft
+  /// (the day's curated lifts pre-selected); manual users get a blank draft.
+  /// Routes through the same in-shell [openWorkoutDraft] entry as the center
+  /// Train tap (Codex #3 — one entry API).
+  ///
+  /// First session of a fresh program (`completedSessions == 0`): resolve the
+  /// program's **Day 1** regardless of the calendar weekday, so the highest-intent
+  /// moment (just chose a program, tapped START WORKOUT) always *is* the program's
+  /// first workout — never a blank picker because today happens to land on a
+  /// seeded rest day. This is forgiveness training: a brand-new user has no rest
+  /// streak to protect, the logged workout excludes the day from rest credit (no
+  /// double-dip), and `isProgramWorkout` advances the program on save. Once the
+  /// first session lands, the normal weekday-anchored [getTodayDay] resumes.
   Future<void> _openFirstSession() async {
     if (!mounted) return;
-    final progress = await ProgramService().getActiveProgress();
-    final day = await ProgramService().getTodayDay();
+    final programService = ProgramService();
+    final progress = await programService.getActiveProgress();
+    final firstSession = progress != null && progress.completedSessions == 0;
+    final day = firstSession
+        ? await programService.activeWorkoutDay()
+        : await programService.getTodayDay();
     if (!mounted) return;
-    // Apply the program's permanent exercise swaps before pre-filling Day 1.
+    // Apply the program's permanent exercise swaps before pre-filling.
     final effective = (progress != null && day != null && day.isWorkout)
         ? await ProgramCustomizationService().effectiveDay(
             progress.programId,
@@ -126,6 +145,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _restNotifCoordinator.detach();
     _dockTimer?.cancel();
     _storageSubscription?.cancel();
     _draft.removeListener(_onDraftChanged);
@@ -725,7 +745,10 @@ class _NavItem extends StatelessWidget {
     final color = active ? kText : kMutedText;
     return Expanded(
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          HapticService.instance.selection(); // tactile tick on a nav choice
+          onTap();
+        },
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
