@@ -6,49 +6,51 @@ import 'package:workout_track/models/calibration_quiz_models.dart';
 import 'package:workout_track/models/character.dart';
 import 'package:workout_track/models/character_class.dart';
 import 'package:workout_track/models/user_profile_sex.dart';
+import 'package:workout_track/pages/Workout session/start_workout.dart';
 import 'package:workout_track/pages/onboarding/start_gate_screen.dart';
-import 'package:workout_track/pages/root_page.dart';
+import 'package:workout_track/services/workout_draft_controller.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  // A real workout / rest day from the recommended intermediate program.
+  // A real workout day from the recommended intermediate program.
   final workoutDay = programById(
     'upper_lower',
   )!.weekSchedule.firstWhere((d) => d.isWorkout);
-  final restDay = programById(
-    'upper_lower',
-  )!.weekSchedule.firstWhere((d) => !d.isWorkout);
 
-  group('buildFirstSessionStarter (program-aware launch decision)', () {
-    test('a program workout day → pre-filled program-mode starter', () {
-      final starter = buildFirstSessionStarter(workoutDay);
-      expect(starter.isProgramWorkout, isTrue);
-      expect(starter.initialMuscleGroups, isNotEmpty);
-      expect(starter.programCuratedExerciseIds, isNotNull);
-      expect(starter.programCuratedExerciseIds!, isNotEmpty);
+  // The live onboarding launch (`_RootPageState._openFirstSession`) no longer
+  // builds a StartWorkoutPage directly: for a program workout day it seeds the
+  // in-shell draft via `workoutDraftSeedForProgramDay(effective)`, and for a
+  // rest/null day it falls back to `WorkoutDraftSeed.manual()`. These tests pin
+  // that draft-seed shape — the program-day arm and the blank arm. The *routing*
+  // decision (whether a fresh user even sees the program Day-1 card) is
+  // `newUserMissionShowsProgramDayOne`, covered by home_first_quest_routing_test.
+  group('first-session draft seed (_openFirstSession seam)', () {
+    test('a program workout day → pre-filled program-mode draft seed', () {
+      final seed = workoutDraftSeedForProgramDay(workoutDay);
+      expect(seed.isProgramWorkout, isTrue);
+      expect(seed.initialMuscleGroups, isNotEmpty);
+      expect(seed.programCuratedExerciseIds, isNotNull);
+      expect(seed.programCuratedExerciseIds!, isNotEmpty);
     });
 
-    test('no program (null day) → generic blank picker', () {
-      final starter = buildFirstSessionStarter(null);
-      expect(starter.isProgramWorkout, isFalse);
-      expect(starter.programCuratedExerciseIds, isNull);
-      expect(starter.initialMuscleGroups, isNull);
+    test('the seed carries the full prescribed Day 1 loadout', () {
+      // START WORKOUT and the Home program-day start share this seed builder, so
+      // the first session is always the full prescribed Day 1 — curated lifts,
+      // prescriptions and label intact — trimmed later on the review screen.
+      final seed = workoutDraftSeedForProgramDay(workoutDay);
+      expect(seed.programCuratedExerciseIds, workoutDay.suggestedExerciseIds);
+      expect(seed.programPrescriptions, workoutDay.prescription);
+      expect(seed.programDayLabel, workoutDay.label);
     });
 
-    test('a rest day → generic picker (defensive; unreachable at onboarding)', () {
-      final starter = buildFirstSessionStarter(restDay);
-      expect(starter.isProgramWorkout, isFalse);
-      expect(starter.programCuratedExerciseIds, isNull);
-    });
-
-    test('a workout-day launch pre-fills the full Day 1 loadout', () {
-      // Express was removed: both START WORKOUT and the Home FIRST QUEST /
-      // EXPLORE-FIRST path route through programDayStarter, so the first session
-      // is always the full prescribed Day 1 (no trim, no onboarding-button split).
-      final starter = buildFirstSessionStarter(workoutDay);
-      expect(starter.programCuratedExerciseIds, workoutDay.suggestedExerciseIds);
-      expect(starter.programDayLabel, workoutDay.label);
+    test('the manual fallback arm → blank draft seed', () {
+      // `_openFirstSession` uses this seed when there is no program or the
+      // resolved day is a rest day, so the user lands on the free-pick picker.
+      const seed = WorkoutDraftSeed.manual();
+      expect(seed.isProgramWorkout, isFalse);
+      expect(seed.programCuratedExerciseIds, isNull);
+      expect(seed.initialMuscleGroups, isNull);
     });
   });
 
