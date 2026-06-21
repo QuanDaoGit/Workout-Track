@@ -20,6 +20,8 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // Required by flutter_local_notifications (java.time backport for scheduling).
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -43,6 +45,8 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Desugaring pulls in extra methods → enable multidex as a safety margin.
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -54,4 +58,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // java.time backport for flutter_local_notifications scheduling on minSdk < 26.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

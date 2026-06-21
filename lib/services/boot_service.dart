@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 import 'class_migration_service.dart';
+import 'haptic_service.dart';
+import 'haptic_settings_service.dart';
 import 'migration_service.dart';
+import 'notification_service.dart';
 import 'onboarding_service.dart';
 import 'sfx_service.dart';
 import 'sound_settings_service.dart';
@@ -35,7 +38,11 @@ class BootService {
       await StatEngine().applyDecayIfNeeded();
       await ClassMigrationService().migrateIfNeeded();
       SfxService.enabled = await SoundSettingsService().isEnabled();
+      HapticService.enabled = await HapticSettingsService().isEnabled();
       await Units.load();
+      // Local-notification plumbing (timezone DB + channel). No permission ask
+      // here — that happens contextually. Defensive: never blocks the splash.
+      await NotificationService.instance.init();
       return OnboardingService().isComplete();
     } catch (e) {
       // A boot step must never hang or crash the splash. Fall back to the

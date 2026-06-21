@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Local (on-device) notifications only — no internet/push. See docs/PRD.md. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- User-grantable exact-alarm (rest-timer precision); falls back to inexact if denied. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <application
         android:label="Ironbit"
         android:name="${applicationName}"
