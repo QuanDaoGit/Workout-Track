@@ -69,7 +69,7 @@ void main() {
     expect(state.recoveryClaims.containsKey('2026-05-10'), isFalse);
   });
 
-  test('planned rest auto-grants recovery once and caps reward', () async {
+  test('planned rest auto-grants recovery once', () async {
     final service = RestService(nowProvider: () => DateTime(2026, 5, 12));
 
     await service.ensureAutomaticRecoveryForToday(
@@ -81,9 +81,20 @@ void main() {
       baseXP: 10000,
     );
 
+    // Granted once per day (idempotent). Recovery XP = clamp(round(current
+    // level's XP span × 0.02), 1, 40); at 10000 XP (level 31, span 671) → 13.
     expect(second.recoveryClaims.length, 1);
-    expect(second.recoveryClaims['2026-05-12']?.xp, 40);
-    expect(await service.effectiveRecoveryXP(const []), 40);
+    expect(second.recoveryClaims['2026-05-12']?.xp, 13);
+    expect(await service.effectiveRecoveryXP(const []), 13);
+  });
+
+  test('recovery reward is clamped to [1, 40]', () {
+    expect(RestService.recoveryRewardXP(0), 1); // floor (tiny early span)
+    expect(RestService.recoveryRewardXP(10000), 13); // 2% of a mid-level span
+    expect(
+      RestService.recoveryRewardXP(1000000),
+      40,
+    ); // cap binds only at extreme XP
   });
 
   test('completed workout on rest day replaces recovery XP', () async {
