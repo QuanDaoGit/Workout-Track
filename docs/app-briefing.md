@@ -36,8 +36,10 @@ Five long-term hooks follow from that doctrine:
 
 **Retention boundaries** (do not dilute the core loop):
 accounts/login, cloud sync, social feed / friends / PvP / leaderboards, AI coaching, calorie or
-nutrition tracking as a feature, Apple Health / Google Fit integration, push notifications, ads,
-or IAP. These would shift attention away from the self-contained training-to-character loop.
+nutrition tracking as a feature, Apple Health / Google Fit integration, server/cloud push (FCM /
+remarketing), ads, or IAP. These would shift attention away from the self-contained
+training-to-character loop. (On-device *local* notifications — rest-timer, opt-in workout reminders —
+are in scope: no backend, no data leaves the device.)
 Platform is **Android-first** (iOS later).
 
 ---

@@ -2,6 +2,183 @@
 
 > Seed document. Tag every item `[validated]`, `[assumption]`, or `[risk]`. Pre-launch = mostly assumptions.
 
+### Haptics — a semantic `HapticService` mirroring `SfxService`; built-in API broad layer + `vibration` pkg for 1–2 landmarks (2026-06-21)
+Feeds a planned app-wide haptic-feedback feature ("Duolingo/Finch add vibration to buttons/actions/animations").
+Today haptics are **ad-hoc at 2 sites** (`HapticFeedback.mediumImpact()` in [quests_page.dart:107](../lib/pages/quests_page.dart:107)
+claim + [solution_page.dart:124](../lib/pages/onboarding/solution_page.dart:124)) with **no central service, no toggle, no
+VIBRATE permission** in the manifest. Decision target: root `CLAUDE.md` soul (ritual/reward juice, identity/competence
+beats) + anti-guilt mandate + the reduced-motion/juice doctrine already locked in the quest-claim entries below.
+**Codex evidence-review could not run** (local Codex broken on this Windows box — see [.claude/codex-local.md](../.claude/codex-local.md));
+adversarial pass done manually against a 7-item challenge list (folded into the tags/risks).
+- `[validated]` **Flutter's built-in `HapticFeedback` is the zero-cost broad layer and needs NO `VIBRATE` permission** for
+  `lightImpact/mediumImpact/heavyImpact/selectionClick` — they route through Android `View.performHapticFeedback()`
+  (the app already fires `mediumImpact` with no VIBRATE in the manifest → corroborates). Only `HapticFeedback.vibrate()`
+  and the `vibration` pkg hit the `Vibrator` service and **require** the permission ([haptic_feedback pkg](https://pub.dev/packages/haptic_feedback),
+  [flutter_vibration docs](https://context7.com/benjamindean/flutter_vibration/llms.txt)). **Tradeoff:** the built-in API
+  **respects the user's system touch-feedback setting** (correct a11y default) but is therefore **weak/absent when the user
+  disabled it**, and is **OEM-inconsistent** — e.g. `heavyImpact()` no-ops on some Samsung devices while `mediumImpact` works
+  ([flutter#73987](https://github.com/flutter/flutter/issues/73987)). → must on-device test on target hardware.
+- `[validated]` **The `vibration` pkg (`/benjamindean/flutter_vibration`, High rep) is the path for "designed" patterns** —
+  `hasVibrator()` / `hasAmplitudeControl()` (Android 8+/API26) / `hasCustomVibrationsSupport()`, custom `pattern:[wait,on,…]`
+  arrays, `amplitude` 1–255, `duration`. It **bypasses** the system touch-feedback gate (consistent, expressive) and **needs**
+  the auto-merged VIBRATE permission ([context7 docs](https://context7.com/benjamindean/flutter_vibration/llms.txt)). Reserve it
+  for **1–2 landmark "chunky" moments** (level-up, big quest claim) — matching the pixel "chunky impact, not soft" grammar from
+  the loud-pixel entries below — behind capability checks with `heavyImpact()` fallback. (`haptic_feedback` pkg is the
+  cross-platform-semantic alternative; we're Android-only so `vibration` fits better.)
+- `[validated]` **UX bar: sparing, consistent, peak-timed.** "If you can't say what a haptic communicates in one sentence,
+  it's unnecessary"; apply the SAME feedback to the SAME trigger class across the app (learnability); fire at the **exact
+  visual/audio peak** (delay feels unnatural); tier — subtle tick = success, sharper = warning/destructive, gentle bump =
+  boundary ([UX Pilot](https://uxpilot.ai/blogs/enhancing-haptic-feedback-user-interactions), [Boréas guidelines](https://pages.boreas.ca/blog/piezo-haptics/guidelines-of-haptic-ux-design),
+  [Android haptics UX](https://source.android.com/docs/core/interaction/haptics/haptics-ux-design)). Respect the existing
+  "≤3–5 feedback triggers/sec / once-per-claim not per-gem" rule.
+- `[validated]` **Competitor cut — borrow the craft, not the guilt.** Duolingo treats haptics as one **unified
+  micro-interaction language** synced with motion+sound: 3D button-depress buzz, correct/incorrect ticks, lesson-complete
+  celebration, streak-milestone hit — **landmark celebration reserved** to stay powerful ([Duolingo micro-interactions](https://medium.com/@Bundu/little-touches-big-impact-the-micro-interactions-on-duolingo-d8377876f682),
+  [925studios breakdown](https://www.925studios.co/blog/duolingo-design-breakdown)). Finch = **gentle, perfectly-timed
+  weight** on achievements + soft "petting" contact + breathing-rhythm guidance, **never startling, never punitive**
+  ([webisoft Finch](https://webisoft.com/articles/finch-self-care-app/), [Sophie Pilley](https://www.sophiepilley.com/post/the-magic-of-finch-where-self-care-meets-enchanted-design)).
+  We already reject Duolingo's **guilt notification engine** (entry below) — that rejection is about *application*, not the
+  haptic *craft*; the micro-interaction patterning is borrowable. **No "punishment buzz" for a missed day/streak** (anti-guilt).
+- `[validated, internal-doctrine]` **Haptics get their OWN opt-out, NOT auto-killed by reduced-motion.** WCAG 2.3.3 governs
+  *visual* motion (vestibular); haptics are tactile, not a vestibular trigger, and are an a11y **aid** for some users — so,
+  like `SfxService` (sound plays under reduced motion, has its own mute per the loud-pixel entry), haptics should fire under
+  reduced motion but ship a dedicated **Haptics** toggle. `[assumption]` some sensory-sensitive users still want them off →
+  the toggle covers it; the system setting also covers the built-in layer.
+- **Decision feed — proposed v1:** a `HapticService` mirroring `SfxService` (singleton, static `enabled` flag, **every call
+  guarded try/catch fail-open** per the "platform-plugin calls must fail open in tests" learning) + a `HapticSettingsService`
+  (`haptics_enabled_v1`, default on, read into the flag at boot) + a **"Haptics" `_SettingsToggleRow`** beside Sound in
+  [profile_page.dart](../lib/pages/profile_page.dart). Expose a **small semantic vocabulary** (`selection()`/`tap()`/`success()`/
+  `reward()`/`warning()`) so call sites name intent, not raw impacts, and tuning lives in one place; migrate the 2 existing
+  call sites onto it. **Start with the built-in `HapticFeedback`** for the broad layer (zero permission, respects user choice);
+  add the **`vibration` pkg only if** a designed landmark pattern earns its keep, gated by capability + `heavyImpact()` fallback.
+  **Key `[assumption]` that would flip the engine choice:** that the built-in impacts feel strong/consistent enough on the
+  user's target devices — settle by on-device test; if too weak, promote `vibration` to primary (accepting the permission +
+  loss of system-preference respect). → if pursued, `/deep-feature` (new service + settings toggle + boot wiring + call-site
+  migration); pixel/copy of the toggle → `ironbit-design`.
+- **[implemented 2026-06-21 — FOUNDATION only]** `HapticService` ([haptic_service.dart](../lib/services/haptic_service.dart),
+  semantic `selection/tap/success/reward/warning`, fail-open) + `HapticSettingsService` (`haptics_enabled_v1`, default on) +
+  boot wiring ([boot_service.dart](../lib/services/boot_service.dart)) + the 2 ad-hoc sites migrated to `reward()` (byte-identical
+  feel). Self-validating test (channel-arg assertions, mute, fail-open) — mutation-checked. **Deferred to the surface pass:**
+  the visible Settings "Haptics" toggle row (needs a pixel icon) and any *new* triggers; `reward()` is medium for now (the seam
+  for the `vibration`-pkg landmark upgrade).
+- **[surface pass implemented 2026-06-21 — 6 deep-feature processes, full suite 1062 pass / only the 5 pre-existing golden
+  drifts fail]** P1 `PixelButton` keystone (`HapticIntent` enum + `fire()`; default `tap`, per-button override, `none` opt-out →
+  all 74 buttons) · P2 Settings **Haptics** toggle (`sound-haptic-ring.png`) + `selection()` on nav/chips/toggles · P3
+  `reward()` at level-up / PR / loot-unlock · P4 `success()` on Finish Exercise/Workout + weight CONFIRM, light `selection()`
+  per non-PR set · P5 `warning()` on destructive *commit* buttons (delete / discard / reset / class-switch AGREE / idle
+  DISCARD) · P6 rest-timer-done `success()` from `RestTimerBar`'s dispose-managed ticker (overshoot-guarded, `cancel()`-deduped,
+  covers both rest surfaces). Each: manual adversarial pass (Codex unavailable per
+  [.claude/codex-local.md](../.claude/codex-local.md)) + analyze-clean + per-process regression; keystone & rest tests
+  mutation-proven. **Still open:** the `vibration`-pkg landmark upgrade for `reward()`; broad `FilledButton` coverage (P1
+  centralizes `PixelButton` only — `FilledButton`s like the summary "BACK TO HOME" stay silent).
+
+### Onboarding finishes off-schedule — activation grace for session 1, not an Explore-only gate (2026-06-21)
+Evaluates a proposed fix for the "two clocks" onboarding bug (the home last-workout card → `_startWorkout`
+→ "TRAIN ANYWAY? planned recovery" dialog on a non-training-weekday for a 0-workout user). The user's idea:
+warn at the weekday-picker if TODAY isn't selected, and on a rest-day finish replace the StartGate's
+"start workout today" with **Explore-only**. Decision target: builds on the [2026-06-20 "two clocks/anchor"
+decision] (below) + root `CLAUDE.md` soul (ritual/first-session) + anti-guilt mandate + the `[risk]` long
+onboarding. **Codex evidence-review could not run** (no-diff research review returns "no diff" per
+[.claude/codex-local.md](../.claude/codex-local.md); additionally the local Codex runtime is currently broken
+on this Windows box — every shell spawn exits −1); adversarial pass done manually against a 8-item challenge list.
+- `[validated, industry-benchmark]` **For a fitness app the first completed workout IS the activation event;
+  replacing it is the biggest negative lever.** "If onboarding doesn't end in a completed workout you failed
+  the job"; first-workout completers retain/monetize materially better; TTV target <5 min; early activation
+  ≈ 7-day→3-month retention (~69%) ([fitness onboarding](https://dev.to/paywallpro/fitness-app-onboarding-guide-data-motivation-completion-an0),
+  [Amplitude TTV](https://amplitude.com/blog/time-to-value-drives-user-retention), [digia](https://www.digia.tech/post/mobile-app-onboarding-metrics/)).
+  Caveat: vendor/industry benchmarks, not peer-reviewed; the "2–3× LTV" is single-source → directional.
+- `[validated, industry-benchmark]` **"Jump in" beats passive tours → "Explore first" is the *weakest*
+  activation substitute.** Action-first ≈ +50% activation vs passive; tour completion 3-step 72% → 7-step 16%
+  ([Product School](https://productschool.com/blog/product-strategy/user-onboarding), [Userpilot](https://userpilot.com/blog/interactive-walkthroughs-improve-onboarding/)).
+- `[validated]` **Stakes reframe — "finish on a rest day" is the MAJORITY path, not an edge case.** At 3
+  training days/wk, ~57% of users finish onboarding on a non-training day (~43% at 4/wk). So the rest-day
+  StartGate governs most first sessions → an Explore-only gate is a broad activation hit, not a corner fix.
+- `[validated, peer-reviewed]` **The schedule-purist steelman (implementation intentions) is real but MODEST
+  and forward-looking.** Specific when/where aids PA habit formation at small effect sizes (d≈.14–.31), via
+  recurring same-context repetition — argues for honoring the schedule **from session 2**, not gating session 1
+  ([PMC imagery+II](https://pmc.ncbi.nlm.nih.gov/articles/PMC11920387/), [PMC RCT](https://pmc.ncbi.nlm.nih.gov/articles/PMC6440859/)).
+- `[validated]` **Competitor precedent is split; the specific pattern is novel.** Weekday-gated apps exist
+  (Gymverse only enables chosen days; Sweat/Runna schedule-by-day) but activation-first leaders start now
+  (Ladder "press Start Workout"; Fitbod builds a ready workout) — matching the prior "weekday-lock isn't
+  dominant" finding. **No surveyed app warns "today isn't a training day" at pick-time or Explore-gates the
+  first session** ([Sweat](https://support.sweat.com/hc/en-us/articles/115006926987-How-do-I-use-the-Planner-to-schedule-and-track-my-workouts), [Ladder](https://www.joinladder.com/)).
+- `[validated, peer-reviewed]` **Autonomy (SDT) cuts both ways:** don't show a contradictory forced
+  "train today" when they chose today as rest, **but** don't remove the option either — autonomy = offering a
+  meaningful, skippable choice, not deciding for them ([SaaSUI](https://www.saasui.design/blog/saas-onboarding-ux-examples)).
+  Warning microcopy: intentional friction is only justified for high-stakes/irreversible acts; weekday-picking
+  is low-stakes + reversible → make it an **informational note, not a confirmation gate** (and never guilt-framed,
+  per anti-guilt doctrine).
+- **Decision feed — recommend "activation grace for session 1":** (1) first-ever workout available **today, any
+  weekday** (Day 1 "begins when you do it"); weekday schedule governs from session 2 — this *also* fixes the bug
+  (a 0-workout user's today isn't labeled recovery, so the dialog never fires). (2) StartGate **keeps a real
+  start path** (primary or obvious secondary), never Explore-only. (3) Pick-time line is **informational +
+  one-tap "Add today,"** not a warning/gate. **Key `[assumption]` that would flip it:** that the first *workout*
+  (not the identity/StartGate character beat) is Ironbit's aha — settle with funnel instrumentation post-launch.
+  → if pursued, `/deep-feature` (StartGate + `_startWorkout` rest-gate + onboarding picker); surface → `ironbit-design`.
+
+### Notification system foundation — LOCAL (not push), opt-in, anti-guilt (2026-06-21)
+Feeds a planned notification-system foundation. Decision target: reconcile [../docs/PRD.md](../docs/PRD.md)
+"Out of Scope: Push notifications" + the re-engagement [risk] below + root `CLAUDE.md` anti-guilt/offline
+doctrine. **Codex evidence-review could not run substantively** (this machine's Codex expects a branch diff;
+a no-diff research review returns "no diff" — see [.claude/codex-local.md](../.claude/codex-local.md)); the
+adversarial pass was done manually against a 6-item challenge list (sharpened the retail-push caveat + the
+measurement gap below).
+- `[validated]` **"Push" out-of-scope ≠ all notifications — the bar targets SERVER-DRIVEN push, local is open.**
+  PRD/roadmap/app-briefing list "push notifications" grouped with accounts/cloud-sync/social/AI/ads/IAP, reason
+  "shift attention away from the self-contained loop" / "retention boundaries" — all backend/external-party,
+  network-dependent things. On-device **local/scheduled** notifications need no backend/account/network → they
+  *preserve* the offline/private wedge and send **zero data off-device**. They are the direct answer to the
+  standing `[risk]` "Offline/no-account means no remarketing or re-engagement channel post-install." **Scope
+  reconciliation is a USER call** — keep server-push out, bring local in. `[risk]` falsifier: if "no push"
+  was meant as a *philosophy* ("we never ping you"), not a tech bar — confirm intent before building.
+- `[validated]` **Reminders raise exercise adherence — but the effect DECAYS and depends on prior commitment.**
+  Weekly gym reminder +13% frequency, held 3 months ([gym field RCT](https://www.cambridge.org/core/product/3A77551499C8CEF7738E64AB10DF8F35/core-reader));
+  HabitWalk micro-RCT: prompts+cues+commitment aid PA habit formation ([Wiley](https://iaap-journals.onlinelibrary.wiley.com/doi/10.1111/aphw.12605),
+  [PMC](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11635918/)); older-adult + cardiac-rehab RCTs positive
+  ([PMC reminders](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7318722/), [PMC cardiac](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8296287/)).
+  Contrary: effect decays; works only if the user already wants the behavior.
+- `[validated, contrary]` **Notification fatigue → opt-out/uninstall — BUT this evidence is mostly RETAIL/MARKETING
+  push.** 1 push/wk → ~10% disable, ~6% uninstall; non-personalized frequency ↑ uninstalls + ↓ open rate
+  ([retail freq study](https://www.researchgate.net/publication/351932011_Mobile_apps_in_retail_Effect_of_push_notification_frequency_on_app_user_behavior),
+  [Appbot 2026](https://appbot.co/blog/app-push-notifications-2026-best-practices/)); ~⅓ intend to mute sources,
+  ~½ adopt DND, 60% follow through 2yr ([arXiv 24h-no-push](https://arxiv.org/pdf/1612.02314)). `[assumption]`
+  the transfer to **user-configured, opted-in UTILITY notifications** (rest-timer-done, a reminder you set) is
+  weak — those are *wanted*, far less fatiguing. → treat fatigue stats as a CEILING for the re-engagement tier,
+  not a reason to skip utility notifications. **Pre-launch: no analytics yet → can't A/B copy/timing; ship
+  conservative defaults.**
+- `[validated]` **Anti-guilt is the correct stance; Finch is the model, Duolingo the foil.** Duolingo's notif
+  engine = loss-aversion/guilt ("missed practice" framed as moral failure), criticized as dark patterns
+  ([webdesignerdepot](https://webdesignerdepot.com/the-art-of-duolingo-notifications-the-subtle-manipulation-of-language-learners/));
+  Finch = gentle, **no penalty for missed days**, "just enough to help, never enough to overwhelm"
+  ([webisoft](https://webisoft.com/articles/finch-self-care-app/)). App doctrine forbids guilt/loss-punishment.
+  → reward the act, never punish absence; a skipped reminder is silent. (Guilt is empirically the *strongest*
+  hook — Duolingo 300M — but vendor-% + forbidden here; do not borrow it.)
+- `[validated]` **Competitor cut:** pure trackers (Hevy/Strong) use notifications for **in-session utility** —
+  rest-timer-done, live-activity, PR alerts ([Hevy rest timer](https://www.hevyapp.com/features/workout-rest-timer/),
+  [Hevy live activity](https://www.hevyapp.com/features/live-activity/)) — not guilt re-engagement. → borrow the
+  utility model + Finch's gentle reminder; reject the gamified-habit guilt loop.
+- `[validated]` **Permission is fragile post-Android-13 → prime before asking.** Android 13 (API33) requires the
+  `POST_NOTIFICATIONS` runtime grant; opt-in rates dropped (gaming lost ~⅓) ([MoEngage](https://www.moengage.com/blog/android-13-push-notification-opt-ins/),
+  [CleverTap](https://clevertap.com/blog/android-13-push-notification-opt-ins/)). → soft-ask/priming with value
+  context BEFORE the system prompt, asked at a contextual moment (after the user enables a reminder), never cold at launch.
+- `[validated]` **Technical foundation = `flutter_local_notifications` + `timezone`.** `zonedSchedule(TZDateTime,…)`
+  (old `schedule()` deprecated); set device tz at startup (DST safety). Android 14 (API34): `SCHEDULE_EXACT_ALARM`
+  not auto-granted, `exactAllowWhileIdle` without it **throws** → request it OR (preferred) default to **inexact**
+  and degrade gracefully; `USE_EXACT_ALARM` only if to-the-minute precision is essential (Play reviews it).
+  `RECEIVE_BOOT_COMPLETED` + boot receiver to reschedule after reboot; per-category channels.
+  ([pub.dev docs](https://pub.dev/packages/flutter_local_notifications), [issue #1995](https://github.com/MaikuB/flutter_local_notifications/issues/1995)).
+  `[risk]` OEM battery killers (Xiaomi/Huawei/Samsung) can drop scheduled alarms → **best-effort delivery, never
+  promise exactness**; reconcile/reschedule on app open as the safety net.
+- **Decision feed — proposed v1 foundation (tiered, all opt-in + capped + anti-guilt + offline):** a local
+  `NotificationService` mirroring the app's service pattern (own SharedPreferences key, `nowProvider`-injectable)
+  wrapping the plugin + timezone; per-category channels + per-category user toggles; pre-permission priming;
+  inexact-default + graceful fallback; boot reschedule; reconcile-on-open. **Tier A** in-session utility
+  (rest-timer-done — reuses `RestTimerService`; lowest doctrinal risk, ships first, justifies the
+  permission+channel plumbing). **Tier B** opt-in scheduled **workout-day reminder**, time personalized from the
+  user's own history (`RestService.trainingWeekdays` already exists) — the re-engagement answer. **Tier C**
+  (defer) state-ready nudges (expedition charge ready, quest claimable). → `/deep-feature` task (new subsystem +
+  PRD scope reconciliation + permission flow). Pixel/copy surfaces → `ironbit-design`.
+
 ### Quest-claim "loud pixel" burst — the SOUND (chunky-but-bright, self-generated, pre-rendered variants) (2026-06-20)
 The user locked the "loud pixel" burst (see entry below) and wants a NEW SFX fitting its fast/chunky nature.
 Current sound is `assets/audio/quest_claim.wav` — code-described as "one **ascending** chiptune arpeggio" @0.7
@@ -855,3 +1032,17 @@ the evidence). Perceptual mechanisms are literature-`[validated]`; the *dark-pal
   `_RoomShellPainter` + the two wall-fixture widgets; no animation, no interaction, geometry untouched.
   Much of the AO is already shipped (ceiling gradient, vignette, floor gradient, neon seam) — this
   deepens it. The window aerial veil is *optional* last polish, gated off under high-contrast.
+
+### Recovery-day card → cyan + breathing header register (2026-06-21)
+Applied the validated cool=calm/recovery color finding (above) to the Home mission card. Decision:
+the rest/recovery mission cards use **`kRecoveryAccent` (semantic alias of `kCyan`) + a slow ~4.5s
+"breathing" brightness on the TODAY'S MISSION header** (`CrtBreathe`) — the calm third register beside
+`active` (neon + glint sweep) and `calm` (muted + flicker). Fixes a defect where the *program* recovery
+card was themed `kNeon` (energetic "go-train" green incl. a green KEEP RESTING CTA — a mixed message),
+and unifies it with the already-cyan non-program recovery card.
+- `[validated]` Cool blue/green = calm/recovery; color signals **mood, not measurable recovery** (so
+  it's the right lever for *signaling* "this is rest"). Slow ~4–6s breath = resting-respiratory-rate
+  calm (Calm/Headspace/Apple Breathe). Codex-hardened: a **semantic token alias** (not `kCyan`
+  directly, so the rest theme can diverge from kCyan's Tank/Legs roles), header-only breath (no
+  card/border/glow pulse), and the header register **defaults to calm** so an unknown state never reads
+  active/recovery.

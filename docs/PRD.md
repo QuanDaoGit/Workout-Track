@@ -165,7 +165,9 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 - Apple Health / Google Fit integration.
 - Nutrition / calorie counting as a primary feature (calorie *estimate* on summary only).
 - Paid features or in-app purchases.
-- Push notifications.
+- **Server / cloud push notifications** (FCM, remarketing, any backend-driven message). On-device
+  **local notifications** (rest-timer alerts, opt-in workout reminders) ARE in scope — they need no
+  backend/account/network and send no data off-device, so they preserve the offline/private wedge.
 - Advanced periodization (RPE, autoregulation, block programming).
 
 ---

@@ -53,6 +53,19 @@ and fail **open** (re-derive on the next load, never a permanent strand). *Seen:
 expedition; the homecoming-coffer collect gated on a held report → re-based on a persisted
 `hasUncollectedHaul` (2026-06).*
 
+### Platform-plugin calls must fail open (test env has no native impl)
+**Rule:** A newly added platform plugin (notifications, share, camera…) has **no registered platform
+implementation in the unit-test env**, so the first touch of `resolvePlatformSpecificImplementation` /
+any MethodChannel throws (`LateInitializationError` on the platform `instance`, or
+`MissingPluginException`) — and a fire-and-forget call in a widget's `initState` surfaces it as an
+unhandled async error that fails *every* test mounting that page. Wrap **every** plugin access in
+try/catch that degrades to a no-op/false (fail-open): this both keeps the subsystem from ever crashing
+boot / a workout (best-effort delivery) **and** keeps the calling page's widget tests green without
+per-test channel mocks. Prove a new subsystem's *logic* with a tiny injected interface (a fake
+recording calls) so the coordinator/decision code is tested with zero plugin involvement. *Seen: Tier-A
+rest-timer local notifications — `NotificationService` guarded, `RestNotificationCoordinator` tested via
+a `RestAlertScheduler` fake (2026-06).*
+
 ### Asset-dependent core surfaces
 **Rule:** A surface newly depending on bundled images needs per-image errorBuilder fallbacks + a manifest
 test that loads every registry path; Flutter asset dirs are non-recursive — declare each subfolder. When
@@ -109,5 +122,18 @@ gets starved (re-arm pending reveals on pop). Back any removed always-visible af
 net. A **new pre-start/draft state** beside an existing entity must be gated by the authoritative
 machine (a live session wins and clears the draft), funnel all launchers through **one entry API**
 (pushed vs embedded must not diverge), and expose validity as the single synchronous commit gate.
+A **high-intent / first-run launcher must not inherit an *ambient* schedule gate**: a
+calendar/weekday "today" resolver degrades to rest/empty off-anchor, so reusing it behind an explicit
+START/first-session action drops the user to a generic fallback exactly when intent peaks — resolve
+such actions via the **weekday-agnostic next-up**, scope the override to the first occurrence (a
+`completedSessions == 0` guard, leaving established-user recovery doctrine untouched), funnel every
+first-run entry through that one resolver — **including secondary/empty-state surfaces (a
+last-workout / stat card) that are easy-to-miss launchers** — exempt **every** ambient gate on that
+path (a confirm *dialog* like "train anyway?", not only the day-resolver), and confirm the override
+can't double-credit the bypassed state (a logged artifact must *naturally* exclude the day from its
+passive reward).
 *Seen: 4-places+center-Train shell (index→AppDestination, reloads/reveals re-fired on pop); in-shell
-selection draft gated by the session machine via one openWorkoutDraft entry (2026-06).*
+selection draft gated by the session machine via one openWorkoutDraft entry; onboarding/first-Train
+opened a blank picker on a seeded rest day → first session routed to activeWorkoutDay; a follow-up
+caught the Home empty last-workout card + the planned-recovery confirm still un-funnelled →
+_startFirstWorkout routes to the pre-filled Day-1 + showsRestDayTrainPrompt exempts isNewUser (2026-06).*

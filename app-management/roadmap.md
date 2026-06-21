@@ -19,4 +19,5 @@
 - [ ] Prestige / stat-reset system (explicitly a future candidate, not v1).
 
 ## Explicitly out (see PRD "Out of Scope")
-Accounts, cloud sync, social/PvP, AI coaching, IAP, push notifications.
+Accounts, cloud sync, social/PvP, AI coaching, IAP, server/cloud push notifications (FCM/remarketing).
+(On-device *local* notifications — rest-timer, opt-in workout reminders — are in scope; see PRD.)

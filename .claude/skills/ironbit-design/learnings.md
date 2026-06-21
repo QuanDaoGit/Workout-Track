@@ -146,12 +146,21 @@ never just a new one. **An in-world speech balloon that can grow (wraps to 2 lin
 sibling wall object must be drawn *after* it in the Stack (paint order = z) — and a dead-centre down-tail
 reads stiff; the comic convention slides the tail slightly off-centre and *leans its apex back toward the
 speaker* (offset + apexFrac, both additive/defaulted), so it points at the character instead of straight
-down.** *Seen: keycap/motes/dioramas reused the motion + token vocabulary; the away
+down.** **A cross-cutting feedback channel (haptic/sound) wires the same way: give the shared primitive a
+semantic-*intent* param (`selection`/`tap`/`success`/`reward`/`warning`) defaulting to the light case, with
+a `none` opt-out for a button whose handler already owns its beat (avoids a double-fire), tiered by event
+meaning — and, being tactile/auditory not *vestibular*, do NOT gate it on reduced-motion; it carries its own
+toggle. A completion event detected by polling (no callback) fires its beat from the single dispose-managed
+observer (never a service-owned `Timer` — that leaks as a flutter_test "pending timer"), de-duped via the
+shared `cancel()`, with an overshoot guard so a stale post-background resume stays silent.** *Seen: keycap/motes/dioramas reused the motion + token vocabulary; the away
 hologram was first a hand-painted blob + the send-off a bare fly-up → re-ported from `holo-bit.js`/
 `playLaunch` to render BIT's real sprite + the full 5-phase launch; BIT's home-room voice extended
 `BitSpeechBubble` additively (`child`/`emphasisColor`, then `downTailDx`/`downApexFrac` for the leaning
 tail) — capped to ~85% width + re-stacked above the world window so a 2-line balloon paints over it,
-proven against the onboarding/quest goldens (2026-06).*
+proven against the onboarding/quest goldens (2026-06); `PixelButton` gained an optional `haptic` intent
+(default `tap`, `none` on the handler-owned CLAIM button) centralizing haptics across 74 buttons + a Settings
+toggle, and the rest-done haptic fired from `RestTimerBar`'s existing dispose-managed ticker, not a new
+service timer (2026-06).*
 
 ### Discoverability & the false bottom
 **Rule:** An **optional step or secondary control buried at the bottom of a scrolling list under a pinned

@@ -161,6 +161,23 @@ Programs Library ─► Program Detail ─► START PROGRAM (confirm if switchin
    rest slots. (The user *can* still "train anyway" on a rest day; that workout counts and advances
    `workoutIndex` like any other.)
 
+7. **First session is weekday-agnostic.** The highest-intent moment — just chose a program and
+   tapped **START WORKOUT** (the start-gate finale), the Home headline mission, or the Home
+   *"no completed workouts yet"* card as a brand-new user — always opens the program's **Day 1**,
+   *regardless of the calendar weekday*. While `completedSessions == 0` the resolver is the
+   weekday-agnostic `activeWorkoutDay()` (not the weekday-gated `getTodayDay()`), so a user who
+   finishes onboarding on a seeded rest day still *begins their program* instead of a blank manual
+   picker. **Every** first-run entry funnels through that one decision
+   (`newUserMissionShowsProgramDayOne`), and the planned-recovery **"TRAIN ANYWAY?" prompt is
+   suppressed before the first workout** (`showsRestDayTrainPrompt` is `false` while `isNewUser`), so
+   no first-run path contradicts the "begin now" headline by dropping into the manual picker or a
+   rest-day confirm. This is forgiveness training: a brand-new user has no rest streak to protect,
+   the logged workout naturally excludes the day from rest credit (no double-dip — recovery XP
+   requires `!hasCompletedWorkout`), and `isProgramWorkout` advances the schedule on save. New users with a program see the **Day-1 program mission card** on
+   Home (one unified "your path begins" card, not a separate *FIRST QUEST*); manual-path users (no
+   program) keep the free-pick first quest. Once the first session lands, the normal weekday-anchored
+   resolution (steps 2–6) resumes.
+
 See §5 for the full weekday-anchored model.
 
 ---
