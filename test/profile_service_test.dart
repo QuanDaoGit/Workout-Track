@@ -60,4 +60,25 @@ void main() {
 
     expect(profile.displayName, ProfileData.defaultName);
   });
+
+  test('display name is clamped to maxNameLength at the storage boundary', () async {
+    final service = ProfileService();
+
+    // 12 chars in, even though the editor caps typing — the service must not
+    // trust the UI and persist an over-long name.
+    await service.saveDisplayName('Overlongname');
+    final profile = await service.loadProfile();
+
+    expect(profile.displayName.length, ProfileData.maxNameLength);
+    expect(profile.displayName, 'Overlong'); // first 8
+  });
+
+  test('a name at exactly maxNameLength is kept whole', () async {
+    final service = ProfileService();
+
+    await service.saveDisplayName('EightCha'); // 8 chars
+    final profile = await service.loadProfile();
+
+    expect(profile.displayName, 'EightCha');
+  });
 }

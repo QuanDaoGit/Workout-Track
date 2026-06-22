@@ -94,10 +94,11 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
           questions: const [
             QuizQuestion.trainingWhy,
             QuizQuestion.goal,
+            QuizQuestion.trainingFocus,
             QuizQuestion.weightSex,
             QuizQuestion.winningVision,
           ],
-          progressBaseCells: 0, // first segment — the vow is question 1 of 7
+          progressBaseCells: 0, // first segment — the vow is question 1 of 8
           onExit: _onPreClassExit,
           onComplete: _onPreClassComplete,
         ),
@@ -115,6 +116,7 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   void _onPreClassComplete(QuizAnswers answers) {
     final pre = PreClassAnswers(
       goal: answers.goal!,
+      focus: answers.focus,
       bodyWeightKg: answers.bodyWeightKg,
       heightCm: answers.heightCm,
       sex: answers.sex,
@@ -155,6 +157,7 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
       heightCm: pre.heightCm,
       sex: pre.sex,
     );
+    await CalibrationService().saveTrainingFocus(pre.focus);
     await CalibrationService().markClassConfirmed(at: at);
   }
 
@@ -171,7 +174,7 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
             QuizQuestion.frequency,
             QuizQuestion.obstacle,
           ],
-          progressBaseCells: 4, // vow + goal + weight/sex + vision already done
+          progressBaseCells: 5, // vow + goal + focus + weight/sex + vision done
           onComplete: _onOtherQuestionsComplete,
           // No onExit — the calibration is the point of no return.
         ),

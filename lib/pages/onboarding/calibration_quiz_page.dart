@@ -7,6 +7,7 @@ import '../../data/bit_interview_copy.dart';
 import '../../models/body_goal_models.dart';
 import '../../models/calibration_quiz_models.dart';
 import '../../models/resolve_models.dart';
+import '../../models/training_focus.dart';
 import '../../models/unit_models.dart';
 import '../../models/user_profile_sex.dart';
 import '../../services/unit_settings_service.dart';
@@ -62,10 +63,10 @@ class CalibrationQuizPage extends StatefulWidget {
   /// (experience + frequency) is 2.
   final int progressBaseCells;
 
-  // Total cells across the onboarding question journey — the seven quiz
-  // questions: vow + goal + weight/sex + vision (segment A) and experience +
-  // frequency + obstacle (segment B). The cinematic intro shows no progress bar.
-  static const int totalProgressCells = 7;
+  // Total cells across the onboarding question journey — the eight quiz
+  // questions: vow + goal + training-focus + weight/sex + vision (segment A) and
+  // experience + frequency + obstacle (segment B). The intro shows no bar.
+  static const int totalProgressCells = 8;
 
   @override
   State<CalibrationQuizPage> createState() => _CalibrationQuizPageState();
@@ -159,6 +160,7 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
     _advancing = true;
     // Apply the answer immediately so back-navigation restores it.
     if (answer is BodyGoal) _answers.goal = answer;
+    if (answer is TrainingFocus) _answers.focus = answer;
     if (answer is TrainingFreq) _answers.freq = answer;
     if (answer is Experience) _answers.exp = answer;
     if (answer is Obstacle) _answers.obstacle = answer;
@@ -229,7 +231,9 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
     QuizQuestion.experience ||
     QuizQuestion.frequency ||
     QuizQuestion.obstacle => true,
-    QuizQuestion.goal || QuizQuestion.weightSex => false,
+    QuizQuestion.goal ||
+    QuizQuestion.trainingFocus ||
+    QuizQuestion.weightSex => false,
   };
 
   String _reactionTextFor(QuizQuestion q) => switch (q) {
@@ -247,7 +251,9 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
       _answers.obstacle!,
       freq: _answers.freq,
     ),
-    QuizQuestion.goal || QuizQuestion.weightSex => '',
+    QuizQuestion.goal ||
+    QuizQuestion.trainingFocus ||
+    QuizQuestion.weightSex => '',
   };
 
   void _enterReaction(QuizQuestion q) {
@@ -340,6 +346,15 @@ class _CalibrationQuizPageState extends State<CalibrationQuizPage> {
         onBack: onBack,
         onSelect: _select,
         bitAsk: BitInterviewCopy.ask(QuizQuestion.goal),
+      ),
+      QuizQuestion.trainingFocus => _FocusQuestion(
+        key: const ValueKey('quiz-trainingFocus'),
+        progressCells: _progressCells,
+        selected: _answers.focus,
+        animate: firstView,
+        onBack: onBack,
+        onSelect: _select,
+        bitAsk: BitInterviewCopy.ask(QuizQuestion.trainingFocus),
       ),
       QuizQuestion.frequency => _FreqQuestion(
         key: const ValueKey('quiz-frequency'),
@@ -738,6 +753,59 @@ class _GoalQuestion extends StatelessWidget {
             isSelected: selected == BodyGoal.bulk,
             onTap: () => onSelect(BodyGoal.bulk),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Q1b — TRAINING FOCUS (seeds the cold-start rep target)
+// ---------------------------------------------------------------------------
+
+/// The rep-range goal (Strength / Muscle / Endurance) asked right after the
+/// body goal. Single-select, ask-only (no BIT reaction) — mirrors the goal
+/// question, with pixel-art leading icons. Its only mechanical effect is seeding
+/// the suggested reps before an exercise has history (see [TrainingFocus]).
+class _FocusQuestion extends StatelessWidget {
+  const _FocusQuestion({
+    super.key,
+    required this.progressCells,
+    required this.selected,
+    required this.animate,
+    required this.onBack,
+    required this.onSelect,
+    this.bitAsk,
+  });
+
+  final int progressCells;
+  final TrainingFocus? selected;
+  final bool animate;
+  final VoidCallback? onBack;
+  final ValueChanged<TrainingFocus> onSelect;
+  final String? bitAsk;
+
+  @override
+  Widget build(BuildContext context) {
+    return _QuestionScaffold(
+      progressCells: progressCells,
+      prompt: 'HOW TO TRAIN?',
+      bitAsk: bitAsk,
+      animatePrompt: animate,
+      onBack: onBack,
+      body: OptionList(
+        hasAnySelection: selected != null,
+        animate: animate,
+        mainAxisAlignment: MainAxisAlignment.start,
+        options: [
+          for (final focus in TrainingFocus.values)
+            OptionDef(
+              title: focus.title,
+              subtext: focus.subtext,
+              assetIcon: focus.assetIcon,
+              isSelected: selected == focus,
+              onTap: () => onSelect(focus),
+            ),
         ],
       ),
     );

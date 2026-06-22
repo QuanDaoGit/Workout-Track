@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/strength_standards.dart';
 import '../models/calibration_quiz_models.dart';
+import '../models/training_focus.dart';
 import '../models/user_profile_sex.dart';
 import '../models/workout_models.dart';
 import 'stat_engine.dart';
@@ -35,6 +36,7 @@ class CalibrationService {
   static const _sexKey = 'calibration_sex_v1';
   static const _freqKey = 'calibration_freq_v1';
   static const _experienceKey = 'calibration_experience_v1';
+  static const _focusKey = 'training_focus_v1';
   static const _classConfirmedAtKey = 'class_confirmed_at_v1';
 
   static const calibrationSessionTarget = 3;
@@ -106,6 +108,22 @@ class CalibrationService {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_experienceKey);
     return raw == null ? null : Experience.fromName(raw);
+  }
+
+  /// Onboarding training-goal pick. Seeds the cold-start rep target for the
+  /// progressive-overload engine (see [TrainingFocus]). Null = unset/legacy.
+  Future<void> saveTrainingFocus(TrainingFocus? focus) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (focus == null) {
+      await prefs.remove(_focusKey);
+    } else {
+      await prefs.setString(_focusKey, focus.name);
+    }
+  }
+
+  Future<TrainingFocus?> trainingFocus() async {
+    final prefs = await SharedPreferences.getInstance();
+    return TrainingFocus.fromName(prefs.getString(_focusKey));
   }
 
   Future<void> markClassConfirmed({DateTime? at}) async {

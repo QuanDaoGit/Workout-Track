@@ -26,6 +26,7 @@ import '../widgets/arcade_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/calendar_day_marker.dart';
 import '../widgets/exercise_card.dart';
+import '../widgets/rank_badge.dart';
 import '../widgets/motion/arcade_text_field.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/motion/phosphor_tap.dart';
@@ -681,7 +682,7 @@ class _LogsTabState extends State<_LogsTab> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _RankBadge(rank: _rank),
+                      RankBadge(rank: _rank),
                       Text(
                         'LV. ${_xpProgress.level}',
                         style: const TextStyle(
@@ -1723,53 +1724,6 @@ class _ExerciseTrendCard extends StatelessWidget {
       onTap: onTap!,
       borderRadius: BorderRadius.circular(kCardRadius),
       child: card,
-    );
-  }
-}
-
-class _RankBadge extends StatelessWidget {
-  const _RankBadge({required this.rank});
-  final String rank;
-
-  Color _borderColor() {
-    switch (rank) {
-      case 'Legend':
-        return kDanger;
-      case 'Champion':
-        return kDanger;
-      case 'Knight':
-        return kAmber;
-      case 'Squire':
-        return kNeon;
-      default:
-        return kMutedText;
-    }
-  }
-
-  Color? _bgColor() {
-    if (rank == 'Legend') {
-      return kDanger.withValues(alpha: 0.15);
-    }
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: _bgColor(),
-        border: Border.all(color: _borderColor()),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        rank.toUpperCase(),
-        style: TextStyle(
-          fontFamily: 'PressStart2P',
-          fontSize: 9,
-          color: _borderColor(),
-        ),
-      ),
     );
   }
 }

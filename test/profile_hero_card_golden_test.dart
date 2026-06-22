@@ -5,8 +5,9 @@ import 'package:workout_track/pages/profile_page.dart';
 import 'package:workout_track/widgets/pixel_loader.dart';
 
 /// Rendered-artifact lock for the redesigned Profile hero identity card
-/// (character-as-hero: a large centred framed pixel-face avatar, an amber level
-/// nameplate, the centred name + title, a muted rank, and the neon XP meter).
+/// (character-as-hero: a large centred framed pixel-face avatar, the centred
+/// name + title epithet, one typographic competence stamp line — rank headline
+/// + muted level — and the neon XP meter).
 ///
 /// Deterministic by construction: a default profile (empty SharedPreferences),
 /// animations disabled (the ArcadeBar snaps; IronbitAvatar is a static paint),

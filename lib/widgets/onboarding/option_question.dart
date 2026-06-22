@@ -18,6 +18,7 @@ class OptionDef {
     required this.title,
     this.subtext,
     this.icon,
+    this.assetIcon,
     required this.isSelected,
     required this.onTap,
   });
@@ -29,6 +30,11 @@ class OptionDef {
   /// Optional decorative leading glyph (e.g. a goal-direction trend icon).
   /// Purely visual — excluded from semantics so the a11y label stays the text.
   final IconData? icon;
+
+  /// Optional pixel-art leading glyph (asset path), rendered full-color (no
+  /// tint) so 2-tone pixel icons keep their palette. Takes precedence over
+  /// [icon]. Also decorative — excluded from semantics.
+  final String? assetIcon;
   final bool isSelected;
   final VoidCallback onTap;
 }
@@ -59,6 +65,7 @@ class OptionList extends StatelessWidget {
         title: options[i].title,
         subtext: options[i].subtext,
         icon: options[i].icon,
+        assetIcon: options[i].assetIcon,
         isSelected: options[i].isSelected,
         hasAnySelection: hasAnySelection,
         onTap: options[i].onTap,
@@ -94,6 +101,7 @@ class _OptionCard extends StatelessWidget {
     required this.title,
     required this.subtext,
     required this.icon,
+    required this.assetIcon,
     required this.isSelected,
     required this.hasAnySelection,
     required this.onTap,
@@ -102,6 +110,7 @@ class _OptionCard extends StatelessWidget {
   final String title;
   final String? subtext;
   final IconData? icon;
+  final String? assetIcon;
   final bool isSelected;
   final bool hasAnySelection;
   final VoidCallback onTap;
@@ -175,16 +184,25 @@ class _OptionCard extends StatelessWidget {
         ],
       ],
     );
-    if (icon == null) return text;
+    // Pixel-art asset glyph takes precedence (full-color, crisp); else the
+    // optional Material glyph (tinted to selection); else no leading glyph.
+    final Widget? glyph = assetIcon != null
+        ? Image.asset(
+            assetIcon!,
+            width: 26,
+            height: 26,
+            filterQuality: FilterQuality.none,
+            // Core onboarding surface — degrade to a blank slot if the asset is
+            // ever missing/renamed rather than showing a broken-image glyph.
+            errorBuilder: (_, _, _) => const SizedBox(width: 26, height: 26),
+          )
+        : icon != null
+        ? Icon(icon, size: 22, color: isSelected ? kNeon : kMutedText)
+        : null;
+    if (glyph == null) return text;
     return Row(
       children: [
-        ExcludeSemantics(
-          child: Icon(
-            icon,
-            size: 22,
-            color: isSelected ? kNeon : kMutedText,
-          ),
-        ),
+        ExcludeSemantics(child: glyph),
         const SizedBox(width: 14),
         Expanded(child: text),
       ],

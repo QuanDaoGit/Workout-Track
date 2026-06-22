@@ -5,6 +5,12 @@ class ProfileData {
 
   static const defaultName = 'Player';
 
+  /// App-wide bounds for the user's character / display name — the single source
+  /// of truth shared by the onboarding name field, the profile name editor, and
+  /// the persistence backstop. Keep every name input + validator pinned to these.
+  static const int maxNameLength = 8;
+  static const int minNameLength = 2;
+
   final String displayName;
   final AvatarSpec avatarSpec;
 

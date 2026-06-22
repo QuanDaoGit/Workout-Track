@@ -46,6 +46,7 @@ import '../services/xp_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_bar.dart';
 import '../widgets/arcade_badge.dart';
+import '../widgets/identity_stamp_line.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/lck_buff_badge.dart';
 import '../widgets/loot_avatar_frame.dart';
@@ -769,26 +770,17 @@ class ProfilePageState extends State<ProfilePage> {
               // the single focal element — hierarchy by size + position, not
               // colour (neon stays the action/meter, never the identity frame).
               Center(child: _buildAvatarEntry(size: 150)),
-              const SizedBox(height: kSpace2),
-              // Level — the competence stamp seated under the hero. Amber is the
-              // token's reserved level-up colour; it reads as achievement, kept
-              // distinct from the neon XP meter below.
-              Center(
-                child: ArcadeBadge(
-                  label: 'LV. $level',
-                  color: kAmber,
-                  filled: true,
-                  fontSize: 10,
-                ),
-              ),
               const SizedBox(height: kSpace3),
-              // Name (white identity) + equipped title, centred under the hero.
+              // Name (white identity hero) + equipped title epithet directly
+              // beneath it, centred under the avatar.
               _editingName
                   ? _buildNameEditor()
                   : _buildNameBlock(centered: true),
               const SizedBox(height: kSpace2),
-              // Rank — a quiet identity badge (neon is reserved for the meter).
-              Center(child: _RankBadge(label: rank)),
+              // One typographic competence line: the earned RANK as the colour-
+              // laddered headline + the quieter muted LEVEL detail — replaces the
+              // two stacked filled chips so rank stays the single identity cue.
+              Center(child: IdentityStampLine(level: level, rank: rank)),
               const SizedBox(height: kSpace4),
               Row(
                 children: [
@@ -1298,7 +1290,7 @@ class ProfilePageState extends State<ProfilePage> {
           overflow: TextOverflow.ellipsis,
           textAlign: align,
           style: AppFonts.shareTechMono(
-            fontSize: 22,
+            fontSize: 24,
             fontWeight: FontWeight.w700,
             color: kText,
           ),
@@ -1321,7 +1313,7 @@ class ProfilePageState extends State<ProfilePage> {
         Expanded(
           child: ArcadeTextField(
             controller: _nameController,
-            maxLength: 20,
+            maxLength: ProfileData.maxNameLength,
             onSubmitted: (_) => _saveDisplayName(),
             style: AppFonts.shareTechMono(
               fontSize: 18,
@@ -2090,18 +2082,6 @@ class _SectionHeader extends StatelessWidget {
       style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: 10),
     );
   }
-}
-
-class _RankBadge extends StatelessWidget {
-  const _RankBadge({required this.label});
-
-  final String label;
-
-  // Quiet identity accent: rank is a competence signal, but neon is reserved
-  // for the one action / the XP meter, so the rank pill stays muted.
-  @override
-  Widget build(BuildContext context) =>
-      ArcadeBadge(label: label, color: kMutedText);
 }
 
 class _StatusBadge extends StatelessWidget {

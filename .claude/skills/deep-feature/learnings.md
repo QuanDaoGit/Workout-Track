@@ -100,7 +100,21 @@ id), it collides once decoupled and a ledger keyed on it swallows the dup — re
 **Rule:** A number shown to the user must (a) be validated against its anchor and suppressed when the
 relationship inverts (a warm-up ≥ the work set isn't one), and (b) be quantized to a real settable value
 in the display unit — never a raw % or kg round-trip; don't assume one context's constant (bar weight,
-plate size) fits all. *Seen: warm-up suggestion (2026-06).*
+plate size) fits all. (c) A target **derived from the same recent history the user is trying to beat** is
+self-referential: anchor it with a robust central tendency over a **multi-session window + fixed offsets**
+(not one moving point) so it can't oscillate/ratchet; **gate any *judgment*** (deload / "you're short") on
+**confidence** — enough clean, low-variance sessions — and **suppress it for sparse or high-variance
+history** (no baseline ⇒ don't judge; respect a deliberate low-rep or undulating style); prove no drift
+across cycles with a **multi-cycle simulation test**, not just per-session fixtures. Keep the old fixed
+default as the sparse fallback, never the universal target. (d) A user's explicit **preference** (a goal
+pick) layered on a learned/adaptive signal is the same — it **seeds the cold start** (where history is
+empty), it must **not hard-override** the learned signal once that has data: an override re-creates the
+exact failure the signal fixed (a clamp manufactures success → runaway load; a sticky once-set global
+pick can't represent a goal change and isn't editable; suggestions ignore what the user actually does).
+Make the preference the smarter sparse-fallback; let history win at confidence. *Seen: warm-up
+suggestion; history-anchored rep target #5 (top-set-rep median, aim=M+1/floor=M−2, deload gated on ≥2
+consistent sessions, simulation-proven); onboarding training-goal seeds the sparse rep target (5/8/15),
+Codex flipped a clamp→seed because the clamp ran load away (2026-06).*
 
 ### Entity-keyed side-state lifecycle
 **Rule:** Ephemeral state in a sibling store keyed by an entity id leaks/mis-applies unless cleared

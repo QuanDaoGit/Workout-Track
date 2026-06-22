@@ -7,6 +7,7 @@ import '../../models/overload_models.dart';
 import '../../models/program_models.dart';
 import '../../models/unit_models.dart';
 import '../../models/workout_models.dart';
+import '../../services/calibration_service.dart';
 import '../../services/haptic_service.dart';
 import '../../services/plate_calculator.dart';
 import '../../services/progression_settings_service.dart';
@@ -63,6 +64,25 @@ class _SetRow {
 String _suggestedLoadText(double kg) =>
     fmtNum(roundToStep(kgToDisplay(kg, Units.weight), 2.5));
 
+/// Resolves the warm-up's working-weight anchor (canonical kg): prefer the
+/// *shown* overload suggestion's load, else the heaviest set of the last
+/// completed session. A non-positive (bodyweight) weight is never an anchor.
+/// Callers pass a null [suggestion] when progression display is off, so a hidden
+/// deload/bump never drives the warm-up.
+@visibleForTesting
+double? resolveWarmupAnchor(
+  OverloadSuggestion? suggestion,
+  List<SetEntry>? previous,
+) {
+  final suggested = suggestion?.weight;
+  if (suggested != null && suggested > 0) return suggested;
+  if (previous != null && previous.isNotEmpty) {
+    final top = previous.fold<double>(0, (m, s) => s.weight > m ? s.weight : m);
+    if (top > 0) return top;
+  }
+  return null;
+}
+
 class ExerciseSessionPage extends StatefulWidget {
   const ExerciseSessionPage({
     super.key,
@@ -70,6 +90,7 @@ class ExerciseSessionPage extends StatefulWidget {
     this.initialSets = const [],
     this.restSeconds = 90,
     this.prescription,
+    this.onSetsCommitted,
   });
 
   final Exercise exercise;
@@ -78,6 +99,14 @@ class ExerciseSessionPage extends StatefulWidget {
 
   /// Program sets × reps target for this exercise, or null for free logging.
   final SetRepScheme? prescription;
+
+  /// Fired on every commit gesture (a set locked via the save icon, or a warm-up
+  /// row added/removed) with a **full authoritative snapshot** of the committed
+  /// sets — every locked working row recombined with every warm-up row, as the
+  /// single `isWarmup`-flagged list the parent round-trips. Never a delta, so a
+  /// warm-up change can never drop already-committed working sets. Lets the
+  /// parent persist in-progress work so a back-out or force-kill keeps it.
+  final void Function(List<SetEntry> committed)? onSetsCommitted;
 
   @override
   State<ExerciseSessionPage> createState() => _ExerciseSessionPageState();
@@ -126,6 +155,9 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
         } else {
           _rows.add(row);
           _rowKeys.add(GlobalKey());
+          // Re-entered working sets are already committed — show them locked
+          // (saved ✓), tap-to-edit to unlock, rather than as blank-looking inputs.
+          _lockedSets.add(_rows.length - 1);
         }
       }
       // A re-entered exercise that had only warm-up sets still needs one working
@@ -145,60 +177,58 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     }
     _loadOverloadService();
     _loadPlateCalcFlag();
-    _loadProgressionSetting();
   }
 
   Future<void> _loadOverloadService() async {
     final service = ProgressiveOverloadService();
     await service.load();
     final prescription = widget.prescription;
+    // The onboarding training-goal seed: only shapes the cold-start (sparse
+    // history) rep target; once history exists the engine ignores it.
+    final focus = await CalibrationService().trainingFocus();
     final suggestion = await service.suggestNext(
       widget.exercise,
       targetRepMin: prescription?.repMin,
       targetRepMax: prescription?.repMax,
+      focus: focus,
     );
+    // Resolved here (not in a separate racing method) so the anchor gate below
+    // always sees the real flag.
+    final progressionEnabled = await ProgressionSettingsService().isEnabled();
     if (!mounted) return;
     final previous = service.getLastSessionSets(widget.exercise.id);
     setState(() {
       _overloadService = service;
       _previousSets = previous;
+      _progressionEnabled = progressionEnabled;
       _set1Suggestion = suggestion;
-      _warmupAnchorKg = _resolveWarmupAnchor(suggestion, previous);
+      // When suggestions are OFF the warm-up anchors to the real last working
+      // set — never a deloaded/bumped *suggested* load the user can't even see.
+      _warmupAnchorKg = resolveWarmupAnchor(
+        progressionEnabled ? suggestion : null,
+        previous,
+      );
     });
   }
 
-  /// Prefer the overload suggestion's load; fall back to the heaviest set of the
-  /// last completed session. A non-positive (bodyweight) weight is not an anchor.
-  static double? _resolveWarmupAnchor(
-    OverloadSuggestion? suggestion,
-    List<SetEntry>? previous,
-  ) {
-    final suggested = suggestion?.weight;
-    if (suggested != null && suggested > 0) return suggested;
-    if (previous != null && previous.isNotEmpty) {
-      final top = previous.fold<double>(
-        0,
-        (m, s) => s.weight > m ? s.weight : m,
-      );
-      if (top > 0) return top;
+  /// First working row not yet saved — where the TRY chip sits, so it walks down
+  /// to the next unfilled set as each one is logged. -1 when all rows are locked.
+  int _firstUnlockedIndex() {
+    for (var i = 0; i < _rows.length; i++) {
+      if (!_lockedSets.contains(i)) return i;
     }
-    return null;
+    return -1;
   }
 
-  Future<void> _loadProgressionSetting() async {
-    final enabled = await ProgressionSettingsService().isEnabled();
-    if (!mounted) return;
-    setState(() => _progressionEnabled = enabled);
-  }
-
-  /// Applies the suggested weight + reps only after an explicit TRY tap.
-  void _applySuggestionToSet1() {
+  /// Applies the suggested weight + reps to [index] only after an explicit TRY
+  /// tap (the chip is shown above the first unlocked row).
+  void _applySuggestion(int index) {
     if (!_progressionEnabled) return;
     final suggestion = _set1Suggestion;
     if (suggestion == null) return;
-    if (_rows.isEmpty) return;
-    if (_lockedSets.contains(0)) return;
-    final row = _rows[0];
+    if (index < 0 || index >= _rows.length) return;
+    if (_lockedSets.contains(index)) return;
+    final row = _rows[index];
     final weight = suggestion.weight;
     final reps = suggestion.reps;
     if (weight == null || reps == null) return;
@@ -206,7 +236,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     row.weight.text = _suggestedLoadText(weight);
     row.reps.text = reps.toString();
     if (!mounted) return;
-    setState(() => _prefilledRows.add(0));
+    setState(() => _prefilledRows.add(index));
   }
 
   @override
@@ -261,6 +291,33 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   void _startRest() {
     RestTimerService.instance.start(widget.restSeconds);
   }
+
+  /// A full authoritative snapshot of committed work for the parent: every valid
+  /// warm-up row followed by every locked working row, in the `[...warmups,
+  /// ...working]` order the resume path expects. Typed-but-unlocked working rows
+  /// are excluded — the save icon is the commit gesture.
+  List<SetEntry> _committedSnapshot() {
+    final out = <SetEntry>[];
+    for (final row in _warmupRows) {
+      final w = parseWeightToKg(row.weight.text, Units.weight);
+      final r = int.tryParse(row.reps.text);
+      if (w != null && w >= 0 && r != null && r > 0) {
+        out.add(SetEntry(weight: w, reps: r, isWarmup: true));
+      }
+    }
+    for (var i = 0; i < _rows.length; i++) {
+      if (!_lockedSets.contains(i)) continue;
+      final row = _rows[i];
+      final w = parseWeightToKg(row.weight.text, Units.weight);
+      final r = int.tryParse(row.reps.text);
+      if (w != null && w >= 0 && r != null && r > 0) {
+        out.add(SetEntry(weight: w, reps: r));
+      }
+    }
+    return out;
+  }
+
+  void _emitCommitted() => widget.onSetsCommitted?.call(_committedSnapshot());
 
   void _logSet(int index) {
     final row = _rows[index];
@@ -318,10 +375,56 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     // Every logged set ticks; a PR already fired the stronger reward() above.
     if (!isPR) HapticService.instance.selection();
     _startRest();
+    // Persist the now-committed snapshot to the parent (durable checkpoint).
+    _emitCommitted();
   }
 
   void _unlockSet(int index) {
     setState(() => _lockedSets.remove(index));
+  }
+
+  /// Removes an **unlocked** working row at [index] (Set 1 stays — it anchors
+  /// progression + auto-copy). Every per-index collection is reindexed so the
+  /// surviving rows keep their state. Restricting to unlocked rows means the
+  /// removed index carries no delta/PR/lock entry to lose.
+  void _removeSet(int index) {
+    if (index <= 0 || index >= _rows.length) return;
+    if (_lockedSets.contains(index)) return;
+    setState(() {
+      _rows[index].dispose();
+      _rows.removeAt(index);
+      _rowKeys.removeAt(index);
+      _reindexSet(_lockedSets, index);
+      _reindexSet(_prefilledRows, index);
+      _reindexSet(_interactedRows, index);
+      _reindexSet(_prSets, index);
+      _reindexMap(_deltas, index);
+      _reindexMap(_rowFlashTriggers, index);
+      _reindexMap(_prFlashTriggers, index);
+    });
+  }
+
+  /// Drops [removed] from a set of row indices and shifts every higher index
+  /// down by one (mutates in place so the `final` field stays final).
+  void _reindexSet(Set<int> indices, int removed) {
+    final shifted = <int>{
+      for (final i in indices)
+        if (i != removed) (i > removed ? i - 1 : i),
+    };
+    indices
+      ..clear()
+      ..addAll(shifted);
+  }
+
+  /// Map twin of [_reindexSet].
+  void _reindexMap<T>(Map<int, T> byIndex, int removed) {
+    final shifted = <int, T>{
+      for (final e in byIndex.entries)
+        if (e.key != removed) (e.key > removed ? e.key - 1 : e.key): e.value,
+    };
+    byIndex
+      ..clear()
+      ..addAll(shifted);
   }
 
   void _addSet() {
@@ -357,11 +460,13 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
           ..reps.text = repsText,
       );
     });
+    _emitCommitted();
   }
 
   void _removeWarmupRow(_SetRow row) {
     setState(() => _warmupRows.remove(row));
     row.dispose();
+    _emitCommitted();
   }
 
   /// One-tap log of the advisory warm-up: drops a pre-filled warm-up row using
@@ -627,7 +732,8 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
-                        const SizedBox(width: 56),
+                        // Aligns with the trailing save (48) + remove (32) slots.
+                        const SizedBox(width: 88),
                       ],
                     ),
 
@@ -707,15 +813,14 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (index == 0 &&
+                if (index == _firstUnlockedIndex() &&
                     _progressionEnabled &&
-                    _set1Suggestion != null &&
-                    !isLocked)
+                    _set1Suggestion != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 32, bottom: 4),
                     child: _TryLine(
                       suggestion: _set1Suggestion!,
-                      onTap: _applySuggestionToSet1,
+                      onTap: () => _applySuggestion(index),
                     ),
                   ),
                 Row(
@@ -862,6 +967,25 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                               ),
                               onPressed: () => _logSet(index),
                             ),
+                    ),
+                    // Remove slot — reserved on every row so columns stay aligned;
+                    // the × shows only on an unlocked extra row (Set 1 has none).
+                    SizedBox(
+                      width: 32,
+                      height: 48,
+                      child: (!isLocked && index >= 1)
+                          ? IconButton(
+                              tooltip: 'Remove set',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(
+                                Icons.close_sharp,
+                                color: kMutedText,
+                                size: 18,
+                              ),
+                              onPressed: () => _removeSet(index),
+                            )
+                          : null,
                     ),
                   ],
                 ),

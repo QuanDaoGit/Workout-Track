@@ -323,10 +323,18 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         state: restState,
         now: sessionWithClass.date,
       );
+      // Potion spend is deferred: peek the multiplier + survivor list now (no
+      // write), then commit the spend only AFTER saveSession succeeds, so a crash
+      // mid-save can never lose a charge (Codex F4). Multiplier and survivors come
+      // from one read, so the stored value can't disagree with the charges spent.
+      final xpBoost = XpBoostService();
+      Future<void> Function()? commitPotionSpend;
       _rewardEligibility = XpService.rewardEligibility(sessionWithClass);
       if (_rewardEligibility!.eligible) {
         _lckMultiplier = XpService.lckXpMultiplier(lck);
-        _potionMultiplier = await XpBoostService().consumeActivePotions();
+        final potionPreview = await xpBoost.previewConsume();
+        _potionMultiplier = potionPreview.multiplier;
+        commitPotionSpend = () => xpBoost.commitConsume(potionPreview.survivors);
         _cacheDrop = await LootDropService().rollForSession(
           session: sessionWithClass,
           lck: lck,
@@ -348,9 +356,6 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       _baseXP = _xpBreakdown!.baseXP;
       _earnedXP = _xpBreakdown!.finalXP;
       _potionBonusXP = _xpBreakdown!.potionBonusXP;
-      // The potions' charges were already spent above; record the realized
-      // bonus into the lifetime running total so getTotalBonusXP stays accurate.
-      await XpBoostService().recordBonusXp(_potionBonusXP);
       final awardedSession = _sessionWithAward(
         classAtSave: currentClass.name,
         bodyweightKgAtSave: _bodyweightKg,
@@ -370,6 +375,10 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       final gemService = GemService();
       final warmupGemsBefore = _warmupGemTotal(await gemService.ledger());
       await WorkoutStorageService().saveSession(awardedSession);
+      // Session is durably saved — now spend the potion charge(s) and record the
+      // realized bonus (both deferred so a crash mid-save can't lose a charge).
+      if (commitPotionSpend != null) await commitPotionSpend();
+      await xpBoost.recordBonusXp(_potionBonusXP);
       final advState = await AdventureService().loadState();
       _chargeGranted = advState.charges > chargesBefore;
       _chargeBalance = advState.charges;

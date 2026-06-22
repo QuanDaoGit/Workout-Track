@@ -1,6 +1,7 @@
 import 'body_goal_models.dart';
 import 'character_class.dart';
 import 'resolve_models.dart';
+import 'training_focus.dart';
 import 'user_profile_sex.dart';
 
 /// Training cadence captured by the calibration quiz's Q2. Feeds future quest
@@ -88,6 +89,7 @@ CharacterClass deriveClass(BodyGoal goal) => switch (goal) {
 /// here for narrative pacing and persisted on the Character.
 enum QuizQuestion {
   goal,
+  trainingFocus,
   frequency,
   experience,
   weightSex,
@@ -101,6 +103,7 @@ enum QuizQuestion {
 class QuizAnswers {
   QuizAnswers({
     this.goal,
+    this.focus,
     this.freq,
     this.exp,
     this.bodyWeightKg,
@@ -112,6 +115,7 @@ class QuizAnswers {
   });
 
   BodyGoal? goal;
+  TrainingFocus? focus;
   TrainingFreq? freq;
   Experience? exp;
   double? bodyWeightKg;
@@ -126,6 +130,7 @@ class QuizAnswers {
 
   QuizAnswers copy() => QuizAnswers(
     goal: goal,
+    focus: focus,
     freq: freq,
     exp: exp,
     bodyWeightKg: bodyWeightKg,
@@ -143,12 +148,17 @@ class QuizAnswers {
 class PreClassAnswers {
   const PreClassAnswers({
     required this.goal,
+    this.focus,
     required this.bodyWeightKg,
     this.heightCm,
     required this.sex,
   });
 
   final BodyGoal goal;
+
+  /// The training-goal pick (seeds the cold-start rep target). Optional —
+  /// null = unset/legacy.
+  final TrainingFocus? focus;
   final double? bodyWeightKg;
   final double? heightCm;
   final UserProfileSex sex;

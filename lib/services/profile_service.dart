@@ -23,9 +23,15 @@ class ProfileService {
   Future<void> saveDisplayName(String displayName) async {
     final profile = await loadProfile();
     final cleanName = displayName.trim();
+    // Persistence backstop — the editor caps typing, but never trust the UI:
+    // clamp to the shared bound so a stored name can't exceed it. Runes (not
+    // code units) so a multi-byte char is never split mid-surrogate.
+    final capped = String.fromCharCodes(
+      cleanName.runes.take(ProfileData.maxNameLength),
+    );
     await _save(
       profile.copyWith(
-        displayName: cleanName.isEmpty ? ProfileData.defaultName : cleanName,
+        displayName: capped.isEmpty ? ProfileData.defaultName : capped,
       ),
     );
   }

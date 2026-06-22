@@ -115,9 +115,9 @@ void main() {
       expect(find.text('GET LEANER'), findsOneWidget);
       expect(find.text('STAY + STRENGTHEN'), findsOneWidget);
       expect(find.text('GET BIGGER'), findsOneWidget);
-      // The bar measures the seven quiz questions; this segment's goal is 1 of 7.
-      expect(find.text('1/7'), findsOneWidget);
-      expect(find.text('0/7'), findsNothing);
+      // The bar measures the eight quiz questions; this segment's goal is 1 of 8.
+      expect(find.text('1/8'), findsOneWidget);
+      expect(find.text('0/8'), findsNothing);
     });
 
     testWidgets('Q1 goal cards keep derived classes hidden', (tester) async {
@@ -137,7 +137,7 @@ void main() {
       // Goal is ask-only, so it advances straight to Q2 (frequency, BIT-asked).
       expect(find.text(BitInterviewCopy.ask(QuizQuestion.frequency)),
           findsOneWidget);
-      expect(find.text('2/7'), findsOneWidget);
+      expect(find.text('2/8'), findsOneWidget);
     });
 
     testWidgets('Full happy path returns populated answers', (tester) async {

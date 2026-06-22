@@ -47,6 +47,9 @@ class ExerciseProgressionSnapshot {
     required this.targetReps,
     required this.isBodyweight,
     required this.estimatedOneRepMax,
+    this.derivedRepMin,
+    this.derivedRepMax,
+    this.repAnchorConfident,
   });
 
   final String exerciseId;
@@ -54,9 +57,22 @@ class ExerciseProgressionSnapshot {
   final DateTime lastSessionAt;
   final List<SetEntry> lastSets;
   final SetEntry topSet;
+
+  /// Kind-default rep target (ACSM novice 8/12/15) — the sparse-history fallback
+  /// aim when [derivedRepMax] is null.
   final int targetReps;
   final bool isBodyweight;
   final double estimatedOneRepMax;
+
+  /// History-anchored target rep range for free logging (double progression:
+  /// aim for [derivedRepMax], reset to [derivedRepMin]). Null when history is too
+  /// sparse to anchor — callers fall back to [targetReps] and suppress deload.
+  final int? derivedRepMin;
+  final int? derivedRepMax;
+
+  /// True only when the recent rep pattern is consistent enough to make a deload
+  /// (floor) judgment. Null/false → suppress the deload branch.
+  final bool? repAnchorConfident;
 }
 
 class OverloadDelta {

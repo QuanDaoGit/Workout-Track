@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/avatar_spec.dart';
 import '../../models/character.dart';
 import '../../models/character_draft.dart';
+import '../../models/profile_models.dart';
 import '../../services/character_service.dart';
 import '../../services/profile_service.dart';
 import '../../services/program_service.dart';
@@ -84,7 +85,8 @@ class _NameScreenState extends State<NameScreen>
 
   bool _isValid(String value) {
     final trimmed = value.trim();
-    return trimmed.length >= 2 && trimmed.length <= 16;
+    return trimmed.length >= ProfileData.minNameLength &&
+        trimmed.length <= ProfileData.maxNameLength;
   }
 
   Future<void> _submit() async {

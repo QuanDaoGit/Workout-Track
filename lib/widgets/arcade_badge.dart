@@ -24,7 +24,10 @@ class ArcadeBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      // PressStart2P caps are tall + the optical-centre nudge below shifts the
+      // ink down, so a tight box reads cramped (the glyphs hug the border).
+      // Give it real breathing room — comparable to the LCK buff chip beside it.
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: filled ? color.withValues(alpha: 0.15) : Colors.transparent,
         border: Border.all(color: color, width: 1),

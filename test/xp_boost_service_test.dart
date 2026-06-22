@@ -134,6 +134,34 @@ void main() {
     });
   });
 
+  group('previewConsume / commitConsume (#11 save ordering)', () {
+    test('previewConsume returns the multiplier but does NOT write', () async {
+      final service = XpBoostService(
+        nowProvider: () => DateTime(2026, 5, 16, 10, 0),
+      );
+      await service.grantPotion(); // 3 charges
+
+      final preview = await service.previewConsume();
+      expect(preview.multiplier, 2.0);
+      // Peek only — a re-read still shows all 3 charges (nothing spent yet), so
+      // the session can be saved durably before the charge is committed.
+      expect((await service.getActivePotions()).first.chargesRemaining, 3);
+    });
+
+    test('commitConsume persists exactly the previewed spend', () async {
+      final service = XpBoostService(
+        nowProvider: () => DateTime(2026, 5, 16, 10, 0),
+      );
+      await service.grantPotion();
+
+      final preview = await service.previewConsume();
+      await service.commitConsume(preview.survivors);
+      // One charge spent — and the multiplier we stored matches the spend.
+      expect(preview.multiplier, 2.0);
+      expect((await service.getActivePotions()).first.chargesRemaining, 2);
+    });
+  });
+
   group('getTotalBonusXP', () {
     test('starts at 0', () async {
       final service = XpBoostService(nowProvider: () => DateTime(2026, 5, 16));

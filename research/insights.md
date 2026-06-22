@@ -2,6 +2,43 @@
 
 > Seed document. Tag every item `[validated]`, `[assumption]`, or `[risk]`. Pre-launch = mostly assumptions.
 
+### Profile hero CARD — role-legible identity composition (2026-06-22)
+Tactical follow-up to the 2026-06-18 profile audit (which set the STRATEGY: private mirror / coherence /
+hierarchy-by-size). New question: the hero **card's internal composition** — user critique that LV / NAME /
+title / CHAMPION rank / LCK all read at the **same hierarchy** and "cheaply recycle the same chip frame," title
+gets "nothing but a color." Decision target: [profile_page.dart](../lib/pages/profile_page.dart) `_buildHeroCard`
++ root `CLAUDE.md` identity-attachment doctrine. **Codex-reviewed evidence** (verdict *needs-attention* → 3
+findings folded in). Pixel execution → `ironbit-design`.
+- `[validated]` **"Everything is a chip/filled badge" is the literal documented anti-pattern** — reserve SOLID/filled
+  badges for the SINGLE most important status; use outline/plain for lesser; map style to ROLE consistently, never
+  arbitrarily ([Smart Interface Design Patterns](https://smart-interface-design-patterns.com/articles/badges-chips-tags-pills/),
+  [Setproduct](https://www.setproduct.com/blog/badge-ui-design), [Mobbin](https://mobbin.com/glossary/badge)). → today's
+  LV (amber filled) + RANK (red filled) + LCK (filled) are three peer chips = the anti-pattern; the fix is role-mapped
+  styling, not a 4th chip.
+- `[validated]` **Card hierarchy comes from ZONING + type-scale + framing-the-art, secondary info small & corner-anchored**
+  ([Anatomy of a Card / Chen](https://fantastic-factories.medium.com/anatomy-of-a-card-840cdc2404c1),
+  [Mangini](https://medium.com/@dylanmangini/4-layout-tips-for-designing-card-games-17cc98b89b96)). → name/title is the
+  largest; level/rank become small stamps; XP a corner readout.
+- `[validated, CONTRARY — load-bearing]` **Whitespace + typographic weight are the PRIMARY hierarchy tools; borders/
+  frames/backgrounds are a LAST resort — "use sparingly, they create clutter"** ([NN/g](https://www.nngroup.com/articles/visual-hierarchy-ux-definition/),
+  [Sessions College](https://www.sessions.edu/notes-on-design/visual-hierarchy-key-ux-principles-that-drive-results/),
+  [IxDF](https://ixdf.org/literature/topics/visual-hierarchy)). → **the user's instinct to "add frames/sections" can
+  BACKFIRE on a compact scroll-feed card**; fix hierarchy with type+spacing+zoning FIRST, add chrome only where whitespace
+  fails. Codex concurred: evidence supports hierarchy *repair*, not a denser framed/namecard object.
+- `[validated, layout-hypothesis]` **Title-as-epithet directly UNDER the name** (name primary, title smaller line beneath,
+  level/rank compact stamps) is the cross-game nameplate convention ([GW2 wiki](https://wiki.guildwars2.com/wiki/Graphical_user_interface),
+  Game UI Database "Rank & Position"). **Caveat (Codex):** that convention is MULTIPLAYER-signaling (others read your
+  nameplate) — for our SOLO private mirror it's a sound *layout* hypothesis, not proof; bind title to name regardless.
+- `[risk]` **An "earned namecard banner" (Genshin/Honkai) is context-mismatched + risks a redundant 2nd cosmetic axis** —
+  those are collection-heavy FULL-SCREEN identity systems, not a compact offline feed card; we already have earned avatar
+  frames + titles, and avatar-as-hero is only a hypothesis. A new earnable banner = scope creep + collection pressure vs
+  the body-neutral/private mandate. → if ever explored, prototype as a STATIC skin, not a new earnable asset class.
+- `[risk]` **Candidates must clear accessibility + overflow before build** — rank/title differentiated by COLOR only
+  (title = purple text) fails color-vision users; add non-color cues (position/weight/icon/label). Acceptance-test long
+  names, long titles, dynamic type, and **320dp × 1.3** narrow-width before any denser nameplate ships.
+- **Direction:** best-supported = **typography-first nameplate** (Solution A) or the minimal defect-fix; defer the framed-
+  plate (B) pending a 320dp low-fi test; treat the namecard (C) as a deferred horizon, static-skin-first.
+
 ### Stat-engine accuracy — per-exercise NORMALIZED strength, not raw kg (math-system research #1, 2026-06-21)
 Feeds the planned stat-engine redesign (the user wants stats that are accurate AND hooking; today STR sums Epley e1RM credit in raw kg, so a dumbbell curl and a barbell bench are conflated). Decision target: root `CLAUDE.md` soul (competence growth / visible deltas) + body-neutral & anti-guilt mandates + the v3 intensity-credit engine in [stat_engine.dart](../lib/services/stat_engine.dart). **Codex-reviewed** (verdict *needs-attention* → its 3 findings folded in below; one extra search loop resolved the data-licensing gap).
 - `[validated]` **Per-exercise, bodyweight- and sex-indexed strength standards are the right normalization basis** — map each logged lift to its position within ITS OWN population standard so a curl and a bench become comparable, instead of summing raw kg. Strength Level = 153M+ lifts across 40+ exercises incl. isolation/dumbbell/bodyweight (curl, lateral raise, hammer curl, pull-ups, dips), tiered beginner ~5th..elite ~95th pct ([Strength Level](https://strengthlevel.com/strength-standards), [Legion](https://legionathletics.com/strength-standards/), [MecaStrong](https://www.mecastrong.com/weightlifting-strength-standards/)). Strongest single accuracy lever AND the most hookable. Confidence high.
@@ -1139,3 +1176,73 @@ and unifies it with the already-cyan non-program recovery card.
   directly, so the rest theme can diverge from kCyan's Tank/Legs roles), header-only breath (no
   card/border/glow pulse), and the header register **defaults to calm** so an unknown state never reads
   active/recovery.
+
+### Rest-time suggestion — drive it by EXERCISE TYPE (+ optional training-style), NEVER body-composition goal (2026-06-22)
+Evaluates the user's ask "add rest-time suggestion depending on weight goal — different training has
+different rest time." Decision target: [rest_preference_service.dart](../lib/services/rest_preference_service.dart)
+(single global `last_rest_seconds`, **class-seeded** Tank 180 / Bruiser 90 / Assassin 60) +
+[workout_defaults_service.dart](../lib/services/workout_defaults_service.dart) (`getRestSeconds`,
+clamp 30–300) + [rest_timer_service.dart](../lib/services/rest_timer_service.dart) + the
+`BodyGoal{cut,recomp,bulk}` model + body-neutral & anti-guilt mandates + competence/recovery-protection
+doctrine. **Codex-reviewed** (verdict *needs-attention* → all 5 findings folded in; one extra search
+loop on self-selected rest resolved the biggest gap).
+- `[validated, strong]` **Rest by TRAINING goal is the textbook axis** (ACSM 2009 position stand
+  [PubMed 19204579](https://pubmed.ncbi.nlm.nih.gov/19204579/) / [PDF](https://tourniquets.org/wp-content/uploads/PDFs/ACSM-Progression-models-in-resistance-training-for-healthy-adults-2009.pdf);
+  de Salles 2009 review [PubMed 19691365](https://pubmed.ncbi.nlm.nih.gov/19691365/); NSCA): **strength**
+  (heavy 1–6RM) **3–5 min**, **hypertrophy** (6–12RM) **1–2 min**, **power 3–5 min**, **muscular
+  endurance** (20–30 rep) **≤30 s**. ACSM released a **2026 update** (first in 17 yrs,
+  [ACSM](https://acsm.org/resistance-training-guidelines-update-2026/)) — could NOT confirm it changed
+  the rest ranges; 2009 stands as the cited authority.
+- `[validated, exercise-type]` **Fatigue (muscle mass / load / CNS demand) drives rest more than goal**
+  — heavy **compound 2–3 min**, **isolation 60–120 s** ([Barbell Medicine](https://www.barbellmedicine.com/blog/rest-periods-during-training/)).
+  This is the app's cheapest accurate lever: the exercise DB **already carries compound/isolation
+  (`mechanic`) metadata**. **But it's a WEAK starting point, not "accurate"** (per Codex): the same
+  exercise's rest also shifts with load, rep-range, proximity-to-failure, supersets, and conditioning.
+- `[validated, SMALL/equivocal — hedge hard]` The old "**30–60 s short rest for hypertrophy via growth
+  hormone**" is **debunked**; longer rest (>60 s) **modestly** favors hypertrophy and plateaus ~90 s,
+  whole-body marginally favored *shorter*, effect sizes tiny (SMD ~0.1–0.17, CrIs cross zero), samples
+  **predominantly young untrained males** ([Give it a rest, Bayesian meta 2024, PMC11349676](https://pmc.ncbi.nlm.nih.gov/articles/PMC11349676/);
+  Grgic & Schoenfeld 2021). → never label any band "optimal for muscle growth"; frame as
+  performance-recovery convenience.
+- `[validated, THE CRUX — reframed per Codex]` **Body-composition goal is NOT a reliable rest driver.**
+  Not the absolute "short rest doesn't burn fat," but: rest should **preserve performance and fit the
+  set being trained**; in a deficit you keep resting adequately to hold strength + muscle ([Men's
+  Journal](https://www.mensjournal.com/fitness/rest-between-sets-muscle-strength-longevity),
+  [Healthline](https://www.healthline.com/health/fitness/rest-between-sets), [Coach Mark Carroll](https://coachmarkcarroll.com/keys-to-maintaining-muscle-in-a-deficit/)).
+  **The app already quietly encodes the myth**: rest seeds from class, and class derives from `BodyGoal`
+  → **cut→Assassin→60 s, bulk→Tank→180 s**. So "a cut goal gives you shorter rest" already ships — the
+  exact body-neutral / leanness-chasing failure to avoid.
+- `[validated, resolves the anti-guilt gap]` **Self-selected / autoregulated rest ≈ fixed rest** for
+  both strength AND hypertrophy, and is more **time-efficient**; the literature does **not** support that
+  hypertrophy needs shorter rest than strength ([fixed vs self-selected, PMC11503322](https://pmc.ncbi.nlm.nih.gov/articles/PMC11503322/),
+  [Biolayne](https://biolayne.com/reps/issue-28/which-between-set-rest-interval-is-best-for-muscle-growth/)).
+  → strongest evidence for a **gentle suggestion + "rest when you're ready" escape hatch**, not a rigid timer.
+- `[validated, competitor]` Per-exercise rest is the **standard pattern**; **none** drive it by body-comp
+  goal. **Hevy** = user-set default rest per exercise (5 s–5 min), **disable-able for intuitive rest**
+  ([Hevy](https://www.hevyapp.com/features/workout-rest-timer/)); **Fitbod** = **auto rest by the
+  difficulty of the lift**, varies per exercise/session ([Fitbod](https://fitbod.zendesk.com/hc/en-us/articles/360006340194-Rest-Timer)).
+  → exercise-type-aware default + per-exercise sticky + disable matches precedent (Fitbod's "auto by
+  difficulty" ≈ our compound/isolation lever).
+- **Decision feed:** (1) **Decouple the first-run rest seed from `BodyGoal`/class** (or at minimum
+  neutralize the cut→60 s link); migrate existing goal-seeded values neutrally — don't silently keep
+  60 s because a user once picked "cut" [Codex high]. (2) Default driver = **exercise-type (compound
+  ~2–3 min / isolation ~60–120 s) as a weak starting suggestion**, using the existing `mechanic`
+  metadata — labelled recovery convenience, never "optimal." (3) Keep it a **suggestion**: overrideable,
+  per-exercise sticky, first-class **skip / "ready when you are"**, easy disable for supersets/circuits,
+  **no penalty/streak/judgment** for resting long or short; audit class seeds/labels/copy for implied
+  moral judgment about rest. (4) **Optional, heavier:** if a goal axis is still wanted, capture an
+  explicit **TRAINING goal (strength/hypertrophy/endurance)** — NOT body-comp goal — as an optional
+  style that shifts the bands (new model + onboarding question; defer). **Caveat:** RCTs skew
+  young-untrained-male, hypertrophy effect small → all bands are gentle defaults. → if pursued,
+  `/deep-feature` (rest-seed decouple + per-exercise sticky + exercise-type default + migration); surface
+  copy → `ironbit-design`. Links [[research-7-streaks-recovery]], the rest-timer-done notification entry.
+
+### Rep target — the fixed kind-constant is the NOVICE default, not a universal target; let it FOLLOW demonstrated range (2026-06-22)
+Feeds the `/deep-feature` #5 rep-target redesign in [progressive_overload_service.dart](../lib/services/progressive_overload_service.dart) (`_repTargetByKind` compound 8 / isolation 12 / bodyweight 15). Problem: the fixed target makes a 5-rep strength trainee perpetually "miss" 8 → a phantom deload every session (test `:455`/`:136`). Decision target: competence doctrine + anti-guilt/body-neutral + safety overlay. Builds on [[research-10-overload]] (experience-tiered, conservative, suggest-not-prescribe) + [[research-6-calibration]] (early reps = technique-learning) + [[research-12-quests]] (GST difficulty-to-skill). **Codex-reviewed (evidence)** — verdict *needs-attention*, 5 findings folded in below.
+- `[validated, peer-reviewed]` **Evidence kills the *universal* fixed target, but does NOT by itself prove median-anchoring** [Codex F1]. Schoenfeld 2021 repetition-continuum re-exam ([PMC7927075](https://pmc.ncbi.nlm.nih.gov/articles/PMC7927075/)): hypertrophy is ~load-agnostic 5–30 reps near failure (volume-equated), but **strength (1RM) and local endurance keep rep-range specificity** → imposing 8 on a demonstrated low-rep trainee is specificity-wrong for their goal; there is no single canonical rep target. The *choice* of replacement (history-anchored range) rests on competitor precedent + product fit, not this paper.
+- `[validated]` **The fixed 8–12 IS the evidence-based NOVICE default** ([ACSM Progression Models position stand 2009/2026](https://pubmed.ncbi.nlm.nih.gov/19204579/)): novices → 8–12 RM @ 60–70% 1RM, +2–10% load when 1–2 reps over target; 2026 update = train **near** failure (~2–3 RIR), not to failure. → Keep the kind-constant as the **novice default + sparse-data fallback**; the redesign only stops *imposing* it once the user demonstrates a different range. This is also the safety-conservative path [Codex F5].
+- `[validated, double-progression]` Honoring the user's own range = **double progression** (work a range; add reps to the top across sets; then add load, reset to the bottom) — the standard guesswork-free intermediate method ([Legion](https://legionathletics.com/double-progression/), [Hevy Coach](https://hevycoach.com/glossary/double-progression/)) and **exactly Ironbit's existing `targetRepMin/Max` machinery** → reuse it; don't build new progression logic.
+- `[validated, competitor-docs; NOT hands-on — narrowed per Codex F2]` Market leaders **don't auto-derive a rep target**: Strong/Hevy auto-fill **previous** weight+reps and let the user drive ([Strong review](https://repreturn.com/strong-app-review/)); Hevy's *target* = user/template "routine values", **distinct** from the "previous" column ([Hevy Help](https://help.hevyapp.com/hc/en-us/articles/34105442929943-Previous-Workout-Values-Vs-Routine-Values-How-to-Adjust-in-Settings)). Auto-suggestion is a niche (Stronglifts linear; RepXP/Dr. Muscle adaptive). → Two viable patterns: **(a) light auto-anchor from history** (the competence-hook, suggest-not-prescribe) or **(b) explicit user-set rep-range/goal** (the actual market pattern). Ironbit already shows "last: w×r", matching the "previous" convention.
+- `[risk, per Codex F3]` **Sparse/novice data needs an explicit exclusion model**, not just a 5-set count: working sets only (warm-ups already separated in `ExerciseLog.warmupSets`), ignore partial/failed/outlier sets and stale old logs, anchor over **multiple sessions** (robust median, clamp per kind), else a few bad early logs become a durable wrong target.
+- `[risk, per Codex F4]` **Audit the deload branch for the goal-shift / return / injury transition window** — a self-anchored target compared against *stale* history can still mark a user "short" (e.g. just switched 12s→5s; history still 12s). Mitigate by weighting recent sessions / short window so the target follows quickly, and keep miss copy descriptive + neutral (no "failure"), composing with the shipped #8 deload-threshold scaling.
+- **Decision feed:** (1) Keep `_repTargetByKind` as the **novice default + sparse-data fallback**; (2) once **≥N sessions** of clean working-set history exist, derive a **target rep RANGE from a robust central tendency, clamped to a per-kind band** (kind sets the band; user's demonstrated reps set the point), feed into the **existing double-progression** path; (3) exclusion model (working-only, drop partial/outlier/stale, recency-weighted); (4) neutral, near-failure-not-failure copy; deload stays optional + descriptive. **Open product fork for the user:** light auto-anchor (default, suggest-not-prescribe) vs an explicit rep-range/goal pick (market pattern, heavier UI). → `/deep-feature` Stage 3+. Links [[research-10-overload]], [[research-6-calibration]].

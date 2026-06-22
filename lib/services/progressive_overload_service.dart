@@ -1,4 +1,5 @@
 import '../models/overload_models.dart';
+import '../models/training_focus.dart';
 import '../models/workout_models.dart';
 import 'exercise_kind_cache.dart';
 import 'workout_storage_service.dart';
@@ -13,11 +14,54 @@ class ProgressiveOverloadService {
   static const int _minimumSetsForSuggestion = 5;
   static const int _returnFromBreakDays = 14;
 
+  /// ACSM novice default rep target — used as the **sparse-history fallback**
+  /// aim, no longer imposed as a universal target (see [_deriveRepRange]).
   static const Map<ExerciseKind, int> _repTargetByKind = {
     ExerciseKind.compound: 8,
     ExerciseKind.isolation: 12,
     ExerciseKind.bodyweight: 15,
   };
+
+  // History-anchored rep target (#5). The kind sets the clamp BAND; the user's
+  // demonstrated reps set the point within it.
+  static const int _repWindowSessions = 5;
+  static const int _repAnchorMinSessions = 2;
+  static const int _repConsistencyMaxSpread = 5;
+  static const Map<ExerciseKind, (int, int)> _repBandByKind = {
+    ExerciseKind.compound: (3, 12),
+    ExerciseKind.isolation: (6, 20),
+    ExerciseKind.bodyweight: (5, 30),
+  };
+
+  /// History-anchored target rep range from recent per-session **top-set** reps
+  /// (heaviest set → robust to backoff days; warm-ups already excluded). Returns
+  /// null when fewer than [_repAnchorMinSessions] clean sessions exist (caller
+  /// falls back to the kind default AND suppresses deload — no baseline to judge
+  /// against). `confident` is false for high-variance histories (undulating /
+  /// AMRAP / goal-shift / mixed prescription) → suppress the deload judgment.
+  /// `aim = M+1` (≤1 rep headroom, never pushes the user up); `floor = M-2` (sits
+  /// below demonstrated reps so a post-`+load` reset never trips the floor).
+  static ({int min, int max, bool confident})? _deriveRepRange(
+    List<int> topReps,
+    ExerciseKind kind,
+  ) {
+    if (topReps.length < _repAnchorMinSessions) return null;
+    final band = _repBandByKind[kind] ?? const (3, 20);
+    final lo = band.$1;
+    final hi = band.$2;
+    final sorted = [...topReps]..sort();
+    final mid = sorted.length ~/ 2;
+    final median = sorted.length.isOdd
+        ? sorted[mid]
+        : ((sorted[mid - 1] + sorted[mid]) / 2).round();
+    final m = median.clamp(lo, hi).toInt();
+    final spread = sorted.last - sorted.first;
+    final confident = spread <= _repConsistencyMaxSpread;
+    final aim = (m + 1).clamp(lo, hi).toInt();
+    var floor = (m - 2).clamp(lo, aim).toInt();
+    if (floor >= aim) floor = aim > lo ? aim - 1 : aim; // never degenerate
+    return (min: floor, max: aim, confident: confident);
+  }
 
   List<WorkoutSession> _sessions = [];
 
@@ -38,7 +82,10 @@ class ProgressiveOverloadService {
     return null;
   }
 
-  Future<ExerciseProgressionSnapshot?> snapshotFor(Exercise exercise) async {
+  Future<ExerciseProgressionSnapshot?> snapshotFor(
+    Exercise exercise, {
+    TrainingFocus? focus,
+  }) async {
     final matches = <({WorkoutSession session, ExerciseLog log})>[];
     var totalSets = 0;
     for (final session in _sessions) {
@@ -62,7 +109,23 @@ class ProgressiveOverloadService {
       equipment: exercise.equipment,
       observedSets: lastSets,
     );
-    final targetReps = _repTargetByKind[kind] ?? 8;
+    // The sparse-history fallback aim: the onboarding training-goal seed when set
+    // (Strength 5 / Muscle 8 / Endurance 15), else the ACSM kind default. Only
+    // used while history is too thin to anchor (<2 sessions) — once history
+    // exists, the kind-banded derivation below takes over (the focus never
+    // clamps real history).
+    final targetReps = focus?.defaultReps ?? (_repTargetByKind[kind] ?? 8);
+
+    // History-anchored rep target: the most-recent sessions' top-set reps
+    // (matches are session-desc, so this is newest-first). Capped to the window.
+    final windowTopReps = <int>[];
+    for (final match in matches) {
+      if (windowTopReps.length >= _repWindowSessions) break;
+      final t = _topSet(match.log.sets);
+      if (t != null && t.reps > 0) windowTopReps.add(t.reps);
+    }
+    final derived = _deriveRepRange(windowTopReps, kind);
+
     return ExerciseProgressionSnapshot(
       exerciseId: exercise.id,
       totalSetsLogged: totalSets,
@@ -72,6 +135,9 @@ class ProgressiveOverloadService {
       targetReps: targetReps,
       isBodyweight: kind == ExerciseKind.bodyweight,
       estimatedOneRepMax: getPersonalBest(exercise.id),
+      derivedRepMin: derived?.min,
+      derivedRepMax: derived?.max,
+      repAnchorConfident: derived?.confident,
     );
   }
 
@@ -86,24 +152,39 @@ class ProgressiveOverloadService {
     Exercise exercise, {
     int? targetRepMin,
     int? targetRepMax,
+    TrainingFocus? focus,
     DateTime? now,
   }) async {
-    final snapshot = await snapshotFor(exercise);
+    final snapshot = await snapshotFor(exercise, focus: focus);
     if (snapshot == null ||
         snapshot.totalSetsLogged < _minimumSetsForSuggestion) {
       return null;
     }
 
-    // Reps to aim for this session, and the reps to reset to after a load bump.
-    // A range (max > min) progresses like double progression; a fixed target
-    // (or no prescription) aims for a single number.
-    final bool prescribed = targetRepMin != null;
-    final int aimReps = prescribed
-        ? (targetRepMax != null && targetRepMax > targetRepMin
-              ? targetRepMax
-              : targetRepMin)
-        : snapshot.targetReps;
-    final int resetReps = prescribed ? targetRepMin : aimReps;
+    // Reps to aim for this session, the reps to reset to after a load bump, and
+    // whether a deload (floor) judgment is allowed. Precedence: a program
+    // prescription wins; else the history-anchored range; else the kind default
+    // with deload suppressed (sparse history has no baseline to call "short").
+    final int aimReps;
+    final int resetReps;
+    final bool deloadAllowed;
+    if (targetRepMin != null) {
+      aimReps = (targetRepMax != null && targetRepMax > targetRepMin)
+          ? targetRepMax
+          : targetRepMin;
+      resetReps = targetRepMin;
+      deloadAllowed = true;
+    } else if (snapshot.derivedRepMax != null) {
+      // Double progression within the user's demonstrated range.
+      aimReps = snapshot.derivedRepMax!;
+      resetReps = snapshot.derivedRepMin!;
+      // Only judge a deload when the recent pattern is consistent enough.
+      deloadAllowed = snapshot.repAnchorConfident == true;
+    } else {
+      aimReps = snapshot.targetReps;
+      resetReps = snapshot.targetReps;
+      deloadAllowed = false;
+    }
 
     if (snapshot.isBodyweight) {
       if (_metTargetReps(snapshot, aimReps)) {
@@ -147,7 +228,11 @@ class ProgressiveOverloadService {
     final topShortfall = aimReps * setCount - actualTotal;
     final floorShortfall = resetReps * setCount - actualTotal;
 
-    if (floorShortfall > (aimReps * 0.25).ceil()) {
+    // The shortfall is a cross-set total, so the deload threshold must scale with
+    // set count too (≈25% under the floor *on average*) — otherwise more sets
+    // makes a deload spuriously more likely for the same per-set quality.
+    final deloadThreshold = (resetReps * setCount * 0.25).ceil();
+    if (deloadAllowed && floorShortfall > deloadThreshold) {
       final next = _capAtOneRepMax(
         _roundToNearestHalf(snapshot.topSet.weight * 0.95),
         snapshot.estimatedOneRepMax,

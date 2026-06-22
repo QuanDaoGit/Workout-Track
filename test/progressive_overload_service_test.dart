@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:workout_track/models/overload_models.dart';
+import 'package:workout_track/models/training_focus.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/services/exercise_kind_cache.dart';
 import 'package:workout_track/services/progressive_overload_service.dart';
@@ -133,7 +134,8 @@ void main() {
       expect(s.reason, OverloadReason.repTarget);
     });
 
-    test('missed by 4+ → −2.5 kg / deload', () async {
+    test('a single low-rep session no longer deloads — sparse history has no '
+        'baseline to judge (#5)', () async {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
@@ -146,9 +148,10 @@ void main() {
         _exercise('bench', mechanic: 'compound'),
         now: DateTime(2025, 1, 5),
       );
-      expect(s!.weight, 76);
-      expect(s.reps, 8);
-      expect(s.reason, OverloadReason.deload);
+      // One session can't anchor a target → fall back to the kind aim and NEVER
+      // deload (matches Strong/Hevy: show previous, let the user decide).
+      expect(s!.reason, OverloadReason.repTarget);
+      expect(s.weight, 80);
     });
 
     test('22+ days gap → repeat weight / detrained', () async {
@@ -169,6 +172,36 @@ void main() {
       expect(s.reason, OverloadReason.detrained);
     });
 
+    test('multi-set near-miss holds (deload threshold scales with set count, #8)',
+        () async {
+      // Latest session = 3×7 (target 8): a small per-set miss. An earlier 2-set
+      // session lifts total logged sets over the 5-set suggestion gate.
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', _sets(80, [8, 8])),
+          ],
+        ),
+        _session(
+          date: DateTime(2025, 1, 8),
+          exercises: [
+            _log('bench', _sets(80, [7, 7, 7])),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 12),
+      );
+      // Two sessions → history-anchored target (top-set reps [7,8] → median 8 →
+      // aim 9, floor 6). The user's 7s sit above floor 6, so no deload — a
+      // repeat-the-load hold aiming at 9.
+      expect(s!.reason, OverloadReason.repTarget);
+      expect(s.weight, 80);
+      expect(s.reps, 9);
+    });
+
     test('picks top set across multiple sets in last session', () async {
       // 80×8 first, then 80×6 fatigue drop. Top set is 80×8 → met target → +2.5.
       final svc = ProgressiveOverloadService.fromSessions([
@@ -184,6 +217,215 @@ void main() {
         now: DateTime(2025, 1, 5),
       );
       expect(s!.weight, 82.5);
+      expect(s.reason, OverloadReason.weightIncrease);
+    });
+  });
+
+  group('suggestNext — history-anchored rep target (#5)', () {
+    test('a consistent 5-rep trainee is NEVER deloaded (the headline)', () async {
+      // 3 sessions of 5×5 compound, no prescription → demonstrated reps = 5.
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', _sets(80, [5, 5, 5, 5, 5])),
+          ],
+        ),
+        _session(
+          date: DateTime(2025, 1, 3),
+          exercises: [
+            _log('bench', _sets(80, [5, 5, 5, 5, 5])),
+          ],
+        ),
+        _session(
+          date: DateTime(2025, 1, 5),
+          exercises: [
+            _log('bench', _sets(80, [5, 5, 5, 5, 5])),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 8),
+      );
+      // Old engine deloads (5 < the fixed 8 target every session); the
+      // history-anchored target follows the user → no false deload.
+      expect(s, isNotNull);
+      expect(s!.reason, isNot(OverloadReason.deload));
+    });
+
+    test('INV1: a post-+load reset session (fewer reps, heavier) does not '
+        'false-deload', () async {
+      // 3 sessions of 8s @50, then a +load reset to 5s @52.5. The old engine
+      // deloads (5 < fixed 8); the derived floor (6, below the demonstrated 8s)
+      // accommodates the heavier reset → no false deload.
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(date: DateTime(2025, 1, 1), exercises: [_log('bench', _sets(50, [8, 8, 8]))]),
+        _session(date: DateTime(2025, 1, 3), exercises: [_log('bench', _sets(50, [8, 8, 8]))]),
+        _session(date: DateTime(2025, 1, 5), exercises: [_log('bench', _sets(50, [8, 8, 8]))]),
+        _session(date: DateTime(2025, 1, 7), exercises: [_log('bench', _sets(52.5, [5, 5, 5]))]),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 9),
+      );
+      expect(s!.reason, isNot(OverloadReason.deload));
+    });
+
+    test('INV4: a clear dip below an established floor still deloads — not '
+        'over-suppressed', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        for (final d in [1, 3, 5, 7])
+          _session(date: DateTime(2025, 1, d), exercises: [_log('bench', _sets(60, [8, 8, 8]))]),
+        _session(date: DateTime(2025, 1, 9), exercises: [_log('bench', _sets(60, [4, 4, 4]))]),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 11),
+      );
+      // 4 prior 8-rep sessions establish a floor of 6; a 4-rep session is a
+      // genuine collapse → deload (spread 4 stays inside the consistency gate).
+      expect(s!.reason, OverloadReason.deload);
+    });
+
+    test('an undulating (high-variance) history suppresses the deload judgment',
+        () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(date: DateTime(2025, 1, 1), exercises: [_log('bench', _sets(60, [12, 12, 12]))]),
+        _session(date: DateTime(2025, 1, 3), exercises: [_log('bench', _sets(80, [5, 5, 5]))]),
+        _session(date: DateTime(2025, 1, 5), exercises: [_log('bench', _sets(60, [12, 12, 12]))]),
+        _session(date: DateTime(2025, 1, 7), exercises: [_log('bench', _sets(80, [5, 5, 5]))]),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 9),
+      );
+      expect(s!.reason, isNot(OverloadReason.deload));
+    });
+
+    test('bodyweight target follows demonstrated reps, not the 15 kind default',
+        () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        for (final d in [1, 3, 5])
+          _session(date: DateTime(2025, 1, d), exercises: [_log('pullup', _sets(0, [10, 10, 10]))]),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('pullup', mechanic: 'compound', equipment: 'body only'),
+        now: DateTime(2025, 1, 8),
+      );
+      expect(s!.weight, 0);
+      expect(s.reps, 11); // aim = median(10) + 1, NOT the old kind default 15
+      expect(s.reason, OverloadReason.repTarget);
+    });
+
+    test('F4/INV5: a consistent 3-rep strength trainee is aimed at ~4, never '
+        'pushed up to 6+', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        for (final d in [1, 3, 5])
+          _session(date: DateTime(2025, 1, d), exercises: [_log('squat', _sets(140, [3, 3, 3]))]),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('squat', mechanic: 'compound'),
+        now: DateTime(2025, 1, 8),
+      );
+      expect(s!.reason, isNot(OverloadReason.deload));
+      expect(s.reps, lessThanOrEqualTo(4));
+    });
+
+    test('INV3: a double-progression cycle does not ratchet the band downward',
+        () async {
+      const reps = [6, 7, 8, 9, 6, 7]; // climb to the top, +load, reset, climb
+      final sessions = <WorkoutSession>[
+        for (var i = 0; i < reps.length; i++)
+          _session(
+            date: DateTime(2025, 1, 1 + i * 2),
+            exercises: [_log('bench', _sets(60, [reps[i], reps[i], reps[i]]))],
+          ),
+      ];
+      final svc = ProgressiveOverloadService.fromSessions(sessions);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 13),
+      );
+      // The aim stays anchored near the top of the user's range (>=7), never
+      // collapsed toward the band floor (3) despite recent reset-low sessions.
+      expect(s!.reps, greaterThanOrEqualTo(7));
+    });
+  });
+
+  group('suggestNext — onboarding training-focus seed', () {
+    test('a Strength focus seeds the cold-start rep target (sparse history)',
+        () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', _sets(80, [5, 5, 5, 5, 5])),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        focus: TrainingFocus.strength,
+        now: DateTime(2025, 1, 5),
+      );
+      // 1 session = sparse → the Strength seed (5), not the kind default (8):
+      // the user hit 5 across the work, so +load at 5 reps.
+      expect(s!.reps, 5);
+      expect(s.reason, OverloadReason.weightIncrease);
+    });
+
+    test('null focus keeps the legacy kind default (sparse)', () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('bench', _sets(80, [5, 5, 5, 5, 5])),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        now: DateTime(2025, 1, 5),
+      );
+      // No focus → the kind default aim 8 (the pre-feature behavior).
+      expect(s!.reps, 8);
+      expect(s.reason, OverloadReason.repTarget);
+    });
+
+    test('once history exists the focus does NOT override it (seed, not clamp)',
+        () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        for (final d in [1, 3, 5])
+          _session(date: DateTime(2025, 1, d), exercises: [_log('bench', _sets(80, [8, 8, 8]))]),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('bench', mechanic: 'compound'),
+        focus: TrainingFocus.strength,
+        now: DateTime(2025, 1, 8),
+      );
+      // 3 sessions of 8s → history-anchored (median 8 → aim 9), kind-banded. The
+      // Strength seed (5) is ignored — history wins once it exists.
+      expect(s!.reps, 9);
+    });
+
+    test('an Endurance focus seeds high reps for a bodyweight cold-start',
+        () async {
+      final svc = ProgressiveOverloadService.fromSessions([
+        _session(
+          date: DateTime(2025, 1, 1),
+          exercises: [
+            _log('pullup', _sets(0, [15, 15, 15, 15, 15])),
+          ],
+        ),
+      ]);
+      final s = await svc.suggestNext(
+        _exercise('pullup', mechanic: 'compound', equipment: 'body only'),
+        focus: TrainingFocus.endurance,
+        now: DateTime(2025, 1, 5),
+      );
+      // Sparse bodyweight + Endurance → aim 15, met across the work → +1 rep.
+      expect(s!.reps, 16);
       expect(s.reason, OverloadReason.weightIncrease);
     });
   });
@@ -452,7 +694,8 @@ void main() {
       expect(s.reps, 5);
     });
 
-    test('without a prescription the same work deloads on the kind default', () async {
+    test('without a prescription a single low-rep session does NOT deload '
+        '(sparse → no judgment; #5)', () async {
       final svc = ProgressiveOverloadService.fromSessions([
         _session(
           date: DateTime(2025, 1, 1),
@@ -465,7 +708,9 @@ void main() {
         _exercise('bench', mechanic: 'compound'),
         now: DateTime(2025, 1, 5),
       );
-      expect(s!.reason, OverloadReason.deload);
+      // Contrast with the prescribed sibling above (which linear-bumps): with no
+      // prescription and only one session, the engine encourages, never deloads.
+      expect(s!.reason, OverloadReason.repTarget);
     });
 
     test('double progression: hit the top → +load, reps reset to the floor', () async {

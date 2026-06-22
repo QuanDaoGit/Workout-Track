@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../models/profile_models.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import 'focus_frame.dart';
@@ -151,12 +152,12 @@ class _ArcadeNameFieldState extends State<ArcadeNameField> {
             cursorColor: kNeon,
             cursorOpacityAnimates: !reduceMotion,
             maxLines: 1,
-            maxLength: 16,
+            maxLength: ProfileData.maxNameLength,
             inputFormatters: [
               FilteringTextInputFormatter.allow(
                 ArcadeNameField.allowedCharacters,
               ),
-              LengthLimitingTextInputFormatter(16),
+              LengthLimitingTextInputFormatter(ProfileData.maxNameLength),
             ],
             style: AppFonts.shareTechMono(
               color: kText,
@@ -181,9 +182,9 @@ class _ArcadeNameFieldState extends State<ArcadeNameField> {
             bottom: 0,
             child: Center(
               child: Semantics(
-                label: '$count of 16 characters',
+                label: '$count of ${ProfileData.maxNameLength} characters',
                 child: Text(
-                  '$count/16',
+                  '$count/${ProfileData.maxNameLength}',
                   style: const TextStyle(
                     fontFamily: 'PressStart2P',
                     fontSize: 10,

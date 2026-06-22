@@ -23,6 +23,7 @@ class BitInterviewCopy {
   static String ask(QuizQuestion q) => switch (q) {
     QuizQuestion.trainingWhy => "Before anything, why do you train?",
     QuizQuestion.goal => "So, what are we striving for?",
+    QuizQuestion.trainingFocus => "And how do you want to train for it?",
     QuizQuestion.weightSex => "Now the numbers. Crucial for my analysis.",
     QuizQuestion.winningVision => "How do you see yourself in 3 months?",
     QuizQuestion.experience => "How far down this road are you?",

@@ -280,10 +280,16 @@ type-to-confirm.
 - **Programs.** Optional structured plans (e.g. PPL, Full Body 3×, Upper/Lower) that schedule a
   muscle group per day and track progress, replacing manual muscle-group selection.
 - **Progressive overload.** Suggests the next session's weight/reps per exercise using
-  linear-progression rules: **+2.5 kg** when the top set hit its rep target, **repeat** if missed by
-  1–3 reps, **−2.5 kg** if missed by 4+ (deload), **repeat** if 21+ days since last (detrained),
-  **+1 rep** for bodyweight. Rep targets by exercise kind: compound 8, isolation 12, bodyweight 15.
-  The suggestion pre-fills set 1 in a muted color ("the app's guess"); it never auto-commits.
+  double-progression: **+2.5 kg** when the top set hit the top of its rep range, **repeat** while
+  climbing within range, **−2.5 kg** only when a *confident* history shows a real drop below the
+  user's own floor (sparse/inconsistent history never deloads — no baseline to judge), **repeat** if
+  21+ days since last (detrained), **+1 rep** for bodyweight. The rep target is **history-anchored** —
+  it follows the user's demonstrated reps (median of recent top sets, clamped per kind); compound 8 /
+  isolation 12 / bodyweight 15 are the novice-default fallback. An onboarding **training-goal**
+  (Strength / Muscle / Endurance, asked after the body goal) **seeds** that fallback (5 / 8 / 15) for new
+  users until ≥2 sessions of history exist — a cold-start seed, never a clamp on real history. The
+  suggestion pre-fills in a muted
+  color ("the app's guess") above the first un-logged set; it never auto-commits.
 - **Body metrics (opt-in, body-neutral).** Off by default. Log bodyweight **any time**; a
   time-aware EWMA **trend line** (shown once there's enough data) smooths daily noise — the raw
   number is never the headline and there are no red/green arrows. A single **XP-boost potion**

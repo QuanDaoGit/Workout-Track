@@ -25,12 +25,12 @@ void main() {
 
       expect(find.text('NAME YOUR CHARACTER'), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
-      expect(find.text('0/16'), findsOneWidget);
+      expect(find.text('0/8'), findsOneWidget);
       expect(find.text('ENTER A NAME'), findsOneWidget);
     },
   );
 
-  testWidgets('invalid characters are stripped and paste caps at 16', (
+  testWidgets('invalid characters are stripped and paste caps at 8', (
     tester,
   ) async {
     await _pumpNameScreen(tester);
@@ -45,7 +45,7 @@ void main() {
       find.byKey(const ValueKey('name_input_field')),
     );
     final text = field.controller!.text;
-    expect(text.length, 16);
+    expect(text.length, 8);
     expect(RegExp(r"^[A-Za-z0-9 '\-]+$").hasMatch(text), isTrue);
   });
 

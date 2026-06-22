@@ -72,29 +72,27 @@ class XpBoostService {
     await prefs.setInt(_bonusTotalKey, current + bonusXP);
   }
 
-  /// Spend one charge from each active potion for a workout session.
-  ///
-  /// Returns the effective multiplier applied to this session. Each active
-  /// potion loses one charge; potions that reach 0 charges (or have expired)
-  /// are dropped. New workout sessions persist their final awarded XP on the
-  /// session itself, so this does not touch the legacy `_bonusTotalKey`.
-  Future<double> consumeActivePotions() async {
+  /// Peek the multiplier this session would apply **and** the surviving potion
+  /// list after spending one charge — *without writing*. Pair with
+  /// [commitConsume] to persist the spend only **after** the session is durably
+  /// saved, so a crash in between can never lose a charge. Because the multiplier
+  /// and the survivor set come from the same read, the value stored on the
+  /// session can never disagree with the charges actually spent.
+  Future<({double multiplier, List<XpBoostPotion> survivors})>
+  previewConsume() async {
     final all = await _loadPotions();
     final now = _now();
     final active = all
         .where((p) => now.isBefore(p.expiresAt) && p.chargesRemaining > 0)
         .toList();
     if (active.isEmpty) {
-      // Opportunistically prune any expired/spent potions.
-      if (active.length != all.length) await _savePotions(active);
-      return 1.0;
+      // No boost; survivors == the pruned (expired/spent dropped) list.
+      return (multiplier: 1.0, survivors: active);
     }
-
     final multiplier = min(
       1.0 + active.fold(0.0, (s, p) => s + (p.multiplier - 1.0)),
       _maxMultiplier,
     );
-
     // Survivors = active potions with one charge spent, keeping only those that
     // still have charges left. Expired/spent potions are dropped.
     final survivors = <XpBoostPotion>[
@@ -102,8 +100,23 @@ class XpBoostService {
         if (p.chargesRemaining - 1 > 0)
           p.copyWith(chargesRemaining: p.chargesRemaining - 1),
     ];
-    await _savePotions(survivors);
-    return multiplier;
+    return (multiplier: multiplier, survivors: survivors);
+  }
+
+  /// Persist the survivor list from [previewConsume] — the durable spend. Call
+  /// only after the session has been saved.
+  Future<void> commitConsume(List<XpBoostPotion> survivors) =>
+      _savePotions(survivors);
+
+  /// Spend one charge from each active potion for a workout session, returning
+  /// the effective multiplier. Convenience wrapper over [previewConsume] +
+  /// [commitConsume] for callers that do not need the save-ordering guarantee.
+  /// New workout sessions persist their final awarded XP on the session itself,
+  /// so this does not touch the legacy `_bonusTotalKey`.
+  Future<double> consumeActivePotions() async {
+    final preview = await previewConsume();
+    await commitConsume(preview.survivors);
+    return preview.multiplier;
   }
 
   /// Running total of all potion-boosted XP ever granted.

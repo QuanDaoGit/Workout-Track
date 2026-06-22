@@ -96,7 +96,11 @@ beside framed ones reads as *accidental*; weight differs *across* tiers (a hero 
 unframed), never *within* one. *Seen: Home muted brand vs neon CTA (2026-06); the mission card then
 over-corrected to one flat grey → re-tiered to a white hero + framed PATH panel + neon action; a bare
 NEXT row beside the framed PATH read orphaned → gave NEXT a lighter common-region panel via the same
-`ArcadeCard` primitive, weighted under PATH (2026-06).*
+`ArcadeCard` primitive, weighted under PATH (2026-06). **De-chroming a prestige cue can silently sink
+it below the noise:** collapsing the profile's two stacked LV/RANK chips into one typographic stamp
+line nearly demoted CHAMPION into level-metadata — fix is to keep the *meaning-bearing* cue (rank) the
+**sole accent + a size/weight lead** and mute the detail (level), not average both peers to equal-grey
+(2026-06).*
 
 ### No redundant chrome bands
 **Rule:** Don't add a label/hint strip that restates what an adjacent surface already shows — it
@@ -145,7 +149,10 @@ engine source for an effect, port it *verbatim* — reuse the REAL asset (the ac
 a derived effect (a hologram = the real BIT post-processed, not a hand-redrawn lookalike) and replay
 the real timeline beat-for-beat; a hand-rolled approximation reads as generic/off and the user will
 catch it.** Extract shared sprite art behind one entry point (verify the original golden stays
-byte-identical first). **Extending a shared primitive used across many flows** (e.g. `BitSpeechBubble`
+byte-identical first). **Two private widgets with the same role/name in different files silently
+drift** — render the *one* concept through *one* shared widget + one mapping fn, never a per-screen
+copy (a copy gets restyled on one surface and not the other, and the user catches the mismatch).
+**Extending a shared primitive used across many flows** (e.g. `BitSpeechBubble`
 in onboarding/quest/loader): keep its public path **byte-stable** — add only *optional* params that
 default to the current behaviour — and gate on **every existing caller's** golden staying identical,
 never just a new one. **An in-world speech balloon that can grow (wraps to 2 lines) and overlap a

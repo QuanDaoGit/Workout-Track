@@ -259,6 +259,19 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           initialSets: _loggedSets[exercise.id] ?? const [],
           restSeconds: widget.restSeconds,
           prescription: widget.prescriptions[exercise.id],
+          // Each in-exercise commit (a saved set / warm-up change) is persisted
+          // immediately so a back-out or force-kill mid-exercise never loses it.
+          onSetsCommitted: (committed) {
+            if (!mounted) return;
+            setState(() {
+              if (committed.isEmpty) {
+                _loggedSets.remove(exercise.id);
+              } else {
+                _loggedSets[exercise.id] = committed;
+              }
+            });
+            _registerActivity();
+          },
         ),
         motion: ArcadeRouteMotion.flow,
       ),
@@ -272,7 +285,16 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       });
       _registerActivity();
     } else {
-      setState(() => _status[exercise.id] = previousStatus);
+      // Back-out (no Finish): keep any committed sets (already persisted via the
+      // callback) but do NOT mark the exercise complete — completion is explicit
+      // via Finish Exercise. Show in-progress if real work exists, else revert.
+      final hasCommittedWork =
+          _loggedSets[exercise.id]?.any((s) => !s.isWarmup) ?? false;
+      setState(() {
+        _status[exercise.id] = hasCommittedWork
+            ? _ExerciseStatus.inProgress
+            : previousStatus;
+      });
     }
   }
 
@@ -471,6 +493,18 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   /// a new set while this page is on top. Offers save / keep training / discard.
   Future<void> _onIdleTimeout() async {
     if (!mounted || _leaving || _idleHandling) return;
+    // Only the active page *while it is actually on top* owns the reveal. If a
+    // pushed surface (e.g. ExerciseSessionPage) covers it, stand down — never pop
+    // the reveal over another route — and re-poll in a minute so it catches up
+    // once we're current again. Stored in _idleTimer so dispose/activity cancels
+    // it; a 1-min delay (not _armIdleTimer) avoids an immediate refire loop since
+    // _lastActivityAt is already in the past.
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) {
+      if (!_leaving) {
+        _idleTimer = Timer(const Duration(minutes: 1), _onIdleTimeout);
+      }
+      return;
+    }
     // The page that's on top owns the reveal; if one is already in flight (e.g.
     // RootPage on a near-simultaneous resume), stand down.
     if (!IdleSessionGuard.instance.claim(_sessionId)) return;
