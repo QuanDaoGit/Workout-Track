@@ -34,11 +34,13 @@ authoritative clinical source required, demographic + recency captured, and a ha
 no-prescriptive-medical-advice** boundary. Never let a blog carry a safety claim. *Seeded 2026-06.*
 
 ### Mechanism (or reuse precedent) transferred without its precondition
-**Rule:** A cited mechanism — **or a same-app precedent you reuse** — only transfers if its
-**precondition / context holds in the target**. Check the boundary before importing: competence-feedback
-presupposes a prior *act* (invalid pre-action); "verbal/human reward" ≠ a *fictional agent*; a lab effect
-≠ a 2-second beat; **a precedent from one UI context (a chat/header, avatar-beside-bubble) is the wrong
-authority for another (an in-world character in a scene → balloon ABOVE, tail down)**. State the
-precondition + whether it holds, or downgrade to analogical. *Seen: CET/CHI findings on a pre-action
-onboarding screen; the onboarding chat-bubble layout reused for BIT's in-world room bubble until the
-user's instinct + comics/game convention corrected it to above-with-down-tail (2026-06).*
+**Rule:** A cited mechanism — **or a same-app / *competitor* precedent you reuse** — only transfers if
+its **precondition / context holds in the target**. Check the boundary before importing: competence-
+feedback presupposes a prior *act* (invalid pre-action); "verbal/human reward" ≠ a *fictional agent*; a
+lab effect ≠ a 2-second beat; a precedent from one UI context is the wrong authority for another (chat
+bubble → in-world balloon ABOVE, tail down); **a competitor *having* a feature ≠ it belongs at *our*
+surface/moment — its placement + framing are part of the precondition** (a recovery-framed map in a tab
+≠ a trophy on a single-peak finish screen). State the precondition + whether it holds, or downgrade to
+analogical. *Seen: CET/CHI findings on a pre-action onboarding screen; BIT's chat-bubble layout reused
+in-world; Fitbod/Hevy muscle-map precedent over-read into finish-screen placement until Codex split
+"feature exists" from "belongs here" (2026-06).*

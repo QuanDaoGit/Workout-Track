@@ -436,7 +436,9 @@ class _BodyFrame extends StatelessWidget {
                       errorBuilder: (_, _, _) => const SizedBox.shrink(),
                     ),
                     Positioned.fill(
-                      child: ColoredBox(color: kBg.withValues(alpha: 0.42)),
+                      child: ColoredBox(
+                        color: kCoverageScrim.withValues(alpha: 0.50),
+                      ),
                     ),
                     for (final entry in _maskMuscle.entries)
                       _maskLayer(entry.key, entry.value, reveal),
@@ -472,13 +474,19 @@ class _BodyFrame extends StatelessWidget {
     final target = maskOpacityFor(values[muscleId] ?? 0, m.mev, m.mav);
     final op = target * reveal;
     if (op <= 0) return const SizedBox.shrink();
+    // `srcIn` repaints the region with `kCoverageLit` using the PNG's alpha as the
+    // mask — the baked per-muscle hue is discarded, so every region reads one
+    // uniform color. The tint and the layer opacity compose: final α = op × alpha.
     return Positioned.fill(
-      child: Image.asset(
-        'assets/body_diagram/render/$_dir/$maskStem.png',
-        fit: BoxFit.contain,
-        filterQuality: FilterQuality.medium,
-        opacity: AlwaysStoppedAnimation(op),
-        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      child: ColorFiltered(
+        colorFilter: const ColorFilter.mode(kCoverageLit, BlendMode.srcIn),
+        child: Image.asset(
+          'assets/body_diagram/render/$_dir/$maskStem.png',
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.medium,
+          opacity: AlwaysStoppedAnimation(op),
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        ),
       ),
     );
   }

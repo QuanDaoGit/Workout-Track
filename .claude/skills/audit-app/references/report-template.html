@@ -1,0 +1,131 @@
+<!doctype html>
+<!--
+  IRONBIT app-wide-audit REPORT TEMPLATE.
+  The audit-app skill's step 5 generates audit-runs/<run-id>/report.html FROM THIS FILE.
+  Keep the <style> block verbatim (it IS the app's pixel-arcade design language). Fill the body:
+    {RUN_ID}            -> e.g. 2026-06-26
+    verdict line        -> PASS (with notes) / NOT-LAUNCH-READY / INCOMPLETE  + counts
+    .chips              -> units audited · screens rendered · blockers · majors · minors · nits
+    "Findings to review"-> one <details data-sev="minor|nit|proc"> per UNCERTAIN.md item (collapsed)
+    "Verified clean"    -> one <details data-sev="pass"> per cleared category
+    "Coverage" table    -> done / acked / unaccounted from the ledger
+  Severity colour = the left border + the tag: minor=cyan, nit=muted, major=amber, blocker=danger,
+  proc(process)=violet, pass=neon. Details are collapsed by default (no `open` attribute).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IRONBIT — App-Wide Audit · {RUN_ID}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#11111F; --card:#1C1C34; --border:#36365E; --neon:#00FF9C; --text:#E8E8FF;
+    --muted:#9494B8; --amber:#FFD700; --cyan:#00BFFF; --danger:#FF2D55; --violet:#B14DFF;
+    --radius:4px; --mono:'Share Tech Mono',ui-monospace,Menlo,Consolas,monospace;
+    --pixel:'Press Start 2P',var(--mono);
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:var(--mono); font-size:15px;
+    line-height:1.55; padding:32px 16px 96px;
+    background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px);}
+  .wrap{max-width:920px;margin:0 auto}
+  h1{font-family:var(--pixel); font-size:20px; color:var(--neon); line-height:1.5; margin:0 0 6px; text-shadow:0 0 12px rgba(0,255,156,.45)}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 22px}
+  .verdict{display:inline-block; font-family:var(--pixel); font-size:11px; padding:9px 13px; border:1.4px solid var(--neon); color:var(--neon); border-radius:var(--radius); margin-bottom:8px; text-shadow:0 0 8px rgba(0,255,156,.4); line-height:1.6}
+  .verdict.q{border-color:var(--amber); color:var(--amber); text-shadow:0 0 8px rgba(255,215,0,.4)}
+  .verdict.bad{border-color:var(--danger); color:var(--danger); text-shadow:0 0 8px rgba(255,45,85,.4)}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 28px}
+  .chip{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; min-width:86px}
+  .chip .n{font-family:var(--pixel); font-size:18px; display:block; margin-bottom:4px}
+  .chip .l{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px}
+  .n.ok{color:var(--neon)} .n.danger{color:var(--danger)} .n.amber{color:var(--amber)}
+  .n.cyan{color:var(--cyan)} .n.muted{color:var(--muted)}
+  h2{font-family:var(--pixel); font-size:13px; color:var(--text); margin:34px 0 14px; border-bottom:1px solid var(--border); padding-bottom:10px}
+  h2::before{content:"-- "; color:var(--neon)} h2::after{content:" --"; color:var(--neon)}
+  details{background:var(--card); border:1px solid var(--border); border-left-width:4px; border-radius:var(--radius); margin:10px 0; overflow:hidden}
+  details[data-sev="minor"]{border-left-color:var(--cyan)}
+  details[data-sev="nit"]{border-left-color:var(--muted)}
+  details[data-sev="major"]{border-left-color:var(--amber)}
+  details[data-sev="blocker"]{border-left-color:var(--danger)}
+  details[data-sev="proc"]{border-left-color:var(--violet)}
+  details[data-sev="pass"]{border-left-color:var(--neon)}
+  summary{cursor:pointer; padding:13px 16px; list-style:none; display:flex; align-items:center; gap:10px; font-size:14px; user-select:none}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"▸"; color:var(--muted); font-size:12px; transition:transform .15s}
+  details[open] summary::before{transform:rotate(90deg); color:var(--neon)}
+  summary:hover{background:rgba(255,255,255,.03)}
+  .tag{font-family:var(--pixel); font-size:8px; padding:3px 6px; border-radius:3px; border:1px solid currentColor; text-transform:uppercase; letter-spacing:.5px; flex:none}
+  .tag.minor{color:var(--cyan)} .tag.nit{color:var(--muted)} .tag.major{color:var(--amber)}
+  .tag.blocker{color:var(--danger)} .tag.proc{color:var(--violet)} .tag.pass{color:var(--neon)}
+  .stitle{flex:1}
+  .body{padding:2px 16px 16px 16px; border-top:1px solid var(--border)}
+  .body p{margin:10px 0}
+  .body .k{color:var(--muted); text-transform:uppercase; font-size:11px; letter-spacing:.5px}
+  code,.path{font-family:var(--mono); background:rgba(0,191,255,.08); color:var(--cyan); padding:1px 5px; border-radius:3px; font-size:13px}
+  .note{color:var(--muted); font-size:13px; margin:8px 0 0}
+  table{width:100%; border-collapse:collapse; margin:6px 0; font-size:13px}
+  th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--border)}
+  th{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px}
+  .ok{color:var(--neon)}
+  .lead{color:var(--muted); margin:0 0 18px; max-width:700px}
+  footer{color:var(--muted); font-size:12px; margin-top:40px; border-top:1px solid var(--border); padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>IRONBIT · APP-WIDE AUDIT</h1>
+  <p class="sub">run {RUN_ID} · every page, system, data set, flow &amp; sweep · nothing skipped</p>
+
+  <!-- Verdict: add class "q" (amber, qualified/incomplete) or "bad" (danger) if not a clean PASS. -->
+  <div class="verdict">VERDICT: {PASS/…} — {N} BLOCKERS · {N} MAJORS · {N} MINORS<br>{N}/{N} units · {N} screens render-audited</div>
+
+  <p class="lead">{One-paragraph plain-English summary: what was audited, the headline state, the caveat.}</p>
+
+  <div class="chips">
+    <div class="chip"><span class="n ok">{N}</span><span class="l">units audited</span></div>
+    <div class="chip"><span class="n ok">{N}</span><span class="l">screens rendered</span></div>
+    <div class="chip"><span class="n danger">{N}</span><span class="l">blockers</span></div>
+    <div class="chip"><span class="n amber">{N}</span><span class="l">majors</span></div>
+    <div class="chip"><span class="n cyan">{N}</span><span class="l">minors</span></div>
+    <div class="chip"><span class="n muted">{N}</span><span class="l">nits</span></div>
+  </div>
+
+  <h2>Findings to review</h2>
+  <p class="note">Nothing auto-fixed — all touch scoring, doctrine, or taste. One row per UNCERTAIN.md item.</p>
+
+  <!-- EXAMPLE finding row — repeat per finding; sev = minor|nit|proc|major|blocker -->
+  <details data-sev="minor">
+    <summary><span class="tag minor">minor</span><span class="stitle">{U#} · {one-line headline}</span></summary>
+    <div class="body">
+      <p><span class="k">Where</span> <span class="path">{unit · file:line}</span></p>
+      <p><span class="k">What</span> {what + evidence}</p>
+      <p><span class="k">Fix</span> {suggestion · why not auto-fixed}</p>
+    </div>
+  </details>
+
+  <h2>Verified clean</h2>
+  <!-- EXAMPLE pass row — one per cleared category (scoring, training math, persistence, data, sweeps, screens) -->
+  <details data-sev="pass">
+    <summary><span class="tag pass">pass</span><span class="stitle">{category} — {one-line result}</span></summary>
+    <div class="body"><p>{what was checked + the oracle/sweep that cleared it}</p></div>
+  </details>
+
+  <h2>Coverage</h2>
+  <table>
+    <tr><th>Dimension</th><th>Status</th></tr>
+    <tr><td>{dimension}</td><td class="ok">{done / total}</td></tr>
+    <tr><td>Unaccounted</td><td class="ok">0</td></tr>
+  </table>
+
+  <footer>
+    Ledger: <code>audit-runs/{RUN_ID}/ledger.md</code> · findings: <code>UNCERTAIN.md</code> ·
+    evidence: <code>units/_batch-*.md</code> + rendered PNGs <code>test/audit/_shots/*.png</code>.
+  </footer>
+
+</div>
+</body>
+</html>

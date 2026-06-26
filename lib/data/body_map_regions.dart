@@ -249,3 +249,36 @@ Map<String, List<StrengthTrend>> strengthByMuscle(
   }
   return out;
 }
+
+/// Raw free-exercise-db [token] for [exerciseId] → its owning body-map muscle id
+/// (via the curated split's dominant sub-region), or null if it maps to no
+/// rendered muscle. The single token→muscle hop shared by the helpers below.
+String? bodyMuscleForToken(String exerciseId, String token) =>
+    _detailedToBodyMuscle[splitDetailedMuscle(exerciseId, token).first];
+
+/// The body-map muscles a set of (about-to-be-trained) [exercises] will target,
+/// split into **primary** (each lift's main muscle) and **secondary** (its
+/// synergists), for the selection-screen "today's targets" preview. Reuses the
+/// SAME primary(+secondary)→detailed→body path as the coverage analyzer + the
+/// strength roster ([bodyMuscleForToken]), so the preview can never disagree with
+/// the history map. **Primary wins on overlap** — a muscle some lift trains
+/// primarily is never demoted to secondary by another lift that only assists it.
+({Set<String> primary, Set<String> secondary}) targetedBodyMuscles(
+  Iterable<Exercise> exercises,
+) {
+  final primary = <String>{};
+  final secondary = <String>{};
+  for (final exercise in exercises) {
+    final primaryToken = exercise.primaryMuscle;
+    final p = primaryToken == null
+        ? null
+        : bodyMuscleForToken(exercise.id, primaryToken);
+    if (p != null) primary.add(p);
+    for (final token in exercise.secondaryMuscles) {
+      final m = bodyMuscleForToken(exercise.id, token);
+      if (m != null) secondary.add(m);
+    }
+  }
+  secondary.removeAll(primary);
+  return (primary: primary, secondary: secondary);
+}

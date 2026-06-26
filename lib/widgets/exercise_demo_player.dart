@@ -119,12 +119,6 @@ class _ExerciseDemoPlayerState extends State<ExerciseDemoPlayer>
   void _toggle() {
     final controller = _controller;
     final v = controller.value;
-    debugPrint(
-      'ExerciseDemoPlayer: tap — initialized=${v.isInitialized} '
-      'playing=${v.isPlaying} completed=${v.isCompleted} '
-      'looping=${v.isLooping} pos=${v.position}/${v.duration} '
-      'error=${v.errorDescription}',
-    );
     if (!v.isInitialized) return;
     // Coalesced so rapid play/pause taps can't machine-gun the motor.
     HapticService.instance.fireCoalesced(HapticIntent.selection);

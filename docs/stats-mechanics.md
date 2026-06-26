@@ -386,7 +386,9 @@ Bodyweight progression:
 Estimated 1RM uses Epley:
 
 ```text
-estimated 1RM = weight * (1 + reps / 30)
+estimated 1RM = weight * (1 + reps / 30)   (reps > 1)
+estimated 1RM = weight                      (reps == 1 — a single IS the max;
+                                             Epley overshoots ~3.3% at 1 rep)
 ```
 
 For bodyweight sets, the same `40kg` bodyweight proxy is used.

@@ -55,6 +55,33 @@ void main() {
     ExerciseKindCache.instance.resetForTest();
   });
 
+  group('epley1RM', () {
+    test('reps == 1 returns the weight itself — a single IS the max', () {
+      // Pre-fix this returned 100 * 1.0333 = 103.3 (overshoot). A single must
+      // read as exactly the weight lifted, never higher.
+      expect(ProgressiveOverloadService.epley1RM(100, 1, false), 100);
+      expect(ProgressiveOverloadService.epley1RM(60, 1, false), 60);
+    });
+    test('multi-rep keeps standard Epley (unchanged)', () {
+      expect(ProgressiveOverloadService.epley1RM(100, 5, false), closeTo(116.67, 0.01));
+      expect(ProgressiveOverloadService.epley1RM(80, 8, false), closeTo(101.33, 0.01));
+    });
+    test('e1RM is never below the actual weight (the invariant)', () {
+      for (final reps in [1, 2, 5, 8, 12]) {
+        expect(ProgressiveOverloadService.epley1RM(100, reps, false),
+            greaterThanOrEqualTo(100));
+      }
+    });
+    test('bodyweight uses the 40kg base; a single returns 40', () {
+      expect(ProgressiveOverloadService.epley1RM(0, 1, true), 40);
+      expect(ProgressiveOverloadService.epley1RM(0, 10, true), closeTo(53.33, 0.01));
+    });
+    test('non-positive reps/weight → 0', () {
+      expect(ProgressiveOverloadService.epley1RM(100, 0, false), 0);
+      expect(ProgressiveOverloadService.epley1RM(0, 5, false), 0);
+    });
+  });
+
   group('getLastSessionSets', () {
     test('returns most recent session sets', () {
       final svc = ProgressiveOverloadService.fromSessions([

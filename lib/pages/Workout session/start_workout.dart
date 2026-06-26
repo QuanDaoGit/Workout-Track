@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/body_map_regions.dart';
 import '../../data/curated_exercises.dart';
 import '../../data/exercise_alternatives.dart';
 import '../../data/exercise_demos.dart';
@@ -27,6 +28,7 @@ import '../../widgets/motion/arcade_text_field.dart';
 import '../../widgets/motion/phosphor_tap.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/pixel_loader.dart';
+import '../../widgets/target_body_preview.dart';
 import '../../widgets/warmup_sheet.dart';
 import 'active_workout.dart';
 
@@ -822,6 +824,10 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
         label: widget.programDayLabel ?? targetLabel,
         summary: widget.programFocusSummary ?? 'Program workout selected.',
       ),
+      if (_targetPreview() case final preview?) ...[
+        const SizedBox(height: kSpace4),
+        preview,
+      ],
       const SizedBox(height: kSpace5),
       const _StepHeader(label: '2. YOUR LOADOUT'),
       const SizedBox(height: kSpace2),
@@ -876,6 +882,10 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
             ),
         ],
       ),
+      if (_targetPreview() case final preview?) ...[
+        const SizedBox(height: kSpace4),
+        preview,
+      ],
       const SizedBox(height: kSpace5),
       _StepHeader(label: hasLoadout ? '2. YOUR LOADOUT' : '2. PICK EXERCISES'),
       const SizedBox(height: kSpace2),
@@ -908,6 +918,27 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
         _buildExerciseList(),
       ],
     ];
+  }
+
+  /// The "today's targets" body preview for the current loadout, or null when
+  /// there's nothing to show yet (catalog still loading, or no lifts picked).
+  /// Reuses the shared exercise→body-muscle mapping so it agrees with the
+  /// history coverage map.
+  Widget? _targetPreview() {
+    final catalog = _catalog;
+    if (catalog == null || _slots.isEmpty) return null;
+    final byId = {for (final exercise in catalog) exercise.id: exercise};
+    final selected = [
+      for (final slot in _slots)
+        if (byId[slot.id] != null) byId[slot.id]!,
+    ];
+    if (selected.isEmpty) return null;
+    final targets = targetedBodyMuscles(selected);
+    if (targets.primary.isEmpty && targets.secondary.isEmpty) return null;
+    return TargetBodyPreview(
+      primaryMuscles: targets.primary,
+      secondaryMuscles: targets.secondary,
+    );
   }
 
   List<Widget> _buildLoadoutCards() {

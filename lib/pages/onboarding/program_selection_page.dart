@@ -4,11 +4,13 @@ import '../../data/programs_library.dart';
 import '../../models/calibration_quiz_models.dart';
 import '../../models/character_draft.dart';
 import '../../models/program_models.dart';
+import '../../services/exercise_catalog_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/motion/hold_depress.dart';
 import '../../widgets/pixel_button.dart';
+import '../../widgets/program_day_card.dart';
 import '../../widgets/session_projection.dart';
 import '../../widgets/weekday_picker.dart';
 import 'name_screen.dart';
@@ -51,8 +53,16 @@ class _ProgramSelectionPageState extends State<ProgramSelectionPage> {
 
   bool _committing = false;
 
+  // The selected card can expand to a read-only exercise preview (opt-in, info
+  // only — adjustment lives in Programs post-onboarding). Collapses when the
+  // user switches program. Exercise names load lazily on the first expand so the
+  // default (collapsed) flow never touches the catalog.
+  bool _detailsExpanded = false;
+  Future<Map<String, String>>? _namesFuture;
+
   void _selectProgram(String id) {
     setState(() {
+      if (id != _selectedProgramId) _detailsExpanded = false;
       _selectedProgramId = id;
       if (!_weekdaysTouched) {
         _trainingWeekdays = seedTrainingWeekdays(
@@ -60,6 +70,23 @@ class _ProgramSelectionPageState extends State<ProgramSelectionPage> {
         );
       }
     });
+  }
+
+  void _toggleDetails() {
+    setState(() {
+      _detailsExpanded = !_detailsExpanded;
+      _namesFuture ??= _loadExerciseNames();
+    });
+  }
+
+  Future<Map<String, String>> _loadExerciseNames() async {
+    try {
+      final exercises = await ExerciseCatalogService().getFullCatalog();
+      return {for (final e in exercises) e.id: e.name};
+    } catch (_) {
+      // Names are a nicety; the preview falls back to humanized ids without them.
+      return const {};
+    }
   }
 
   /// Recommended program first (seen on load, no scroll), then the rest in
@@ -161,6 +188,11 @@ class _ProgramSelectionPageState extends State<ProgramSelectionPage> {
                         selected: program.id == _selectedProgramId,
                         recommended: program.id == recommendedId,
                         onTap: () => _selectProgram(program.id),
+                        expanded:
+                            program.id == _selectedProgramId &&
+                            _detailsExpanded,
+                        onToggleDetails: _toggleDetails,
+                        exerciseNamesFuture: _namesFuture,
                       ),
                       const SizedBox(height: kSpace3),
                     ],
@@ -234,12 +266,24 @@ class _ProgramSelectionCard extends StatelessWidget {
     required this.selected,
     required this.recommended,
     required this.onTap,
+    required this.expanded,
+    required this.onToggleDetails,
+    required this.exerciseNamesFuture,
   });
 
   final Program program;
   final bool selected;
   final bool recommended;
   final VoidCallback onTap;
+
+  /// Whether the read-only exercise preview is showing (only meaningful when
+  /// [selected]).
+  final bool expanded;
+  final VoidCallback onToggleDetails;
+
+  /// Resolves once the catalog loads (lazily, on first expand). Null before the
+  /// first expand; the preview falls back to humanized ids until it resolves.
+  final Future<Map<String, String>>? exerciseNamesFuture;
 
   @override
   Widget build(BuildContext context) {
@@ -307,8 +351,123 @@ class _ProgramSelectionCard extends StatelessWidget {
                   height: 1.3,
                 ),
               ),
+              // The exercise preview is an opt-in, info-only reveal on the
+              // SELECTED card (separating "select" from "see details" — a second
+              // affordance, not an overloaded second tap).
+              if (selected) ...[
+                _detailsAffordance(context),
+                _detailsSection(context),
+              ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailsAffordance(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: kSpace3),
+      child: Semantics(
+        button: true,
+        excludeSemantics: true,
+        label: expanded ? 'Hide exercises' : 'View exercises',
+        child: GestureDetector(
+          onTap: onToggleDetails,
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                expanded ? 'HIDE EXERCISES' : 'VIEW EXERCISES',
+                style: const TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 9,
+                  color: kNeon,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(width: kSpace2),
+              Icon(
+                expanded ? Icons.expand_less_sharp : Icons.expand_more_sharp,
+                size: 16,
+                color: kNeon,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailsSection(BuildContext context) {
+    // Reduced motion shows/hides without the size tween (an AnimatedSize with a
+    // zero duration re-dirties itself in layout — branch it out, don't zero it).
+    if (MediaQuery.of(context).disableAnimations) {
+      return expanded ? _expandedTray(context) : const SizedBox.shrink();
+    }
+    return AnimatedSize(
+      duration: kMotionPop,
+      curve: kMotionCurve,
+      alignment: Alignment.topCenter,
+      child: expanded
+          ? _expandedTray(context)
+          : const SizedBox(width: double.infinity, height: 0),
+    );
+  }
+
+  Widget _expandedTray(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: kSpace3),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(kSpace3),
+        // A recessed kBg tray so the kCard day cards keep their figure-ground
+        // (card-on-card of the same fill would muddy).
+        decoration: BoxDecoration(
+          color: kBg,
+          border: Border.all(color: kBorderDark),
+          borderRadius: BorderRadius.circular(kCardRadius),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'WEEK PLAN',
+              style: TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 8,
+                letterSpacing: 1,
+                color: kMutedText,
+              ),
+            ),
+            const SizedBox(height: kSpace2),
+            FutureBuilder<Map<String, String>>(
+              future: exerciseNamesFuture,
+              builder: (context, snapshot) {
+                final names = snapshot.data ?? const <String, String>{};
+                final workouts = program.workouts;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < workouts.length; i++) ...[
+                      ProgramDayCard(
+                        day: workouts[i],
+                        exerciseNames: names,
+                      ),
+                      if (i < workouts.length - 1)
+                        const SizedBox(height: kSpace2),
+                    ],
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: kSpace3),
+            Text(
+              'Customize exercises anytime in Programs.',
+              style: AppFonts.shareTechMono(color: kDim, fontSize: 11, height: 1.3),
+            ),
+          ],
         ),
       ),
     );

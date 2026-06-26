@@ -340,9 +340,13 @@ class ProgressiveOverloadService {
 
   /// Epley formula: weight * (1 + reps / 30.0).
   /// For bodyweight sets, uses 40.0 as the base weight.
+  /// A single (reps == 1) returns the weight itself: Epley's term overshoots
+  /// ~3.3% at 1 rep, so a true max would otherwise read *higher* than what was
+  /// actually lifted. A single IS the max — special-casing it is standard.
   static double epley1RM(double weight, int reps, bool isBodyweight) {
     final w = isBodyweight ? 40.0 : weight;
     if (reps <= 0 || w <= 0) return 0.0;
+    if (reps == 1) return w;
     return w * (1 + reps / 30.0);
   }
 }

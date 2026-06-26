@@ -236,6 +236,7 @@ flutter:
     - assets/icons/control/ui/
     - assets/icons/economy/
     - assets/icons/radar/
+    - assets/icons/lift-icons/
     - assets/unlocks/avatar_frames/iron/
     - assets/unlocks/avatar_frames/stone/
     - assets/unlocks/avatar_frames/bronze/

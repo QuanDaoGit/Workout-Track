@@ -134,7 +134,14 @@ clamp ran load away; body-map averaging-window divisor capped to firstSessionEve
 **Rule:** Ephemeral state in a sibling store keyed by an entity id leaks/mis-applies unless cleared
 wherever the entity row is removed/finalized in the storage layer — every terminal path, never at UI
 buttons. Bonus: make a heavily-mutated field a read-only projection so stray writers fail `analyze`.
-*Seen: program-swap store; `_selectedExerciseIds` getter (selection v2, 2026-06).*
+**When the entity is a DERIVED set, not a stored row you delete** (a strength trend computed from
+sessions), there's no removal hook to clear the side-state — so **reconcile/self-heal on load**: prune
+the side-state to the live set. This is load-bearing when the side-state is **capped** (max-N
+pins/favorites): a stale entry silently **consumes a slot with no UI to clear it** (the unpin/remove
+affordance renders only for *live* entries), so the cap **deadlocks** — prune before the capacity
+check, and test the ghost-entry case. *Seen: program-swap store; `_selectedExerciseIds` getter
+(selection v2); pinned lifts `pruneTo` the live trends on load so a ghost pin can't deadlock the 3-pin
+cap, Codex F1 (2026-06).*
 
 ### Deferred completion signals gate input
 **Rule:** When a control becomes actionable the moment an animation/typewriter "completes", flip its

@@ -22,11 +22,20 @@ buffer) — **never the `Opacity` widget** (a `saveLayer` per layer → jank) no
 blur (`saveLayer` again); wrap the whole stack in a **`RepaintBoundary`** so it composites once and
 doesn't repaint with the surrounding scroll; skip a layer at opacity 0. Pre-coloured PNG art is the
 documented tokens-only exception (like the BIT sprites) — keep meter/label/bar colours token-driven.
+**A single-colour (white-on-transparent) pixel icon recolours to a token via `Image.asset(color:
+…, colorBlendMode: BlendMode.srcIn)`** — author one silhouette, tint per-context (keep the *meaningful*
+colour, e.g. a verdict glyph, the only one that fires); render at an **integer fraction of the source**
+(author 20px → export 80px → render 40/60/80, never 36). **A coloured "accent bar" on one edge can't be
+a non-uniform `Border` if the box has a `borderRadius`** — Flutter throws *"borderRadius can only be
+given on borders with uniform colors"* at paint; use a **uniform border** (or a separate full-height bar
+child / a `Stack`), never mixed per-side colours+widths with a radius.
 *Seen: round Train button → pixel keycap (2026-06); a 108→150 (1.39×) pad sprite showed ✕ artifacts
 → repainted as a `CustomPainter` (2026-06); the faceless BIT's plate corners showed black nubs from
 an 8-connected outline → 4-connected, matching the already-correct room companion (2026-06); the muscle
 body map's region masks → `Image.opacity` + baked glow + `RepaintBoundary`, Codex flagged `modulate`
-distortion pre-build (2026-06).*
+distortion pre-build (2026-06); the strength-roster lift icons recolour white→slate via `srcIn` at a
+40px (80px÷2) integer scale, and a new-best "accent bar" via a non-uniform `Border`+radius crashed paint
+→ uniform amber border instead (2026-06).*
 
 ### Raw color & alpha literals
 **Rule:** Raw color belongs only in `tokens.dart`. Everywhere else, import a token and express tints as
@@ -146,6 +155,20 @@ it works in the test env where fonts are boxes), not a golden, and mutation-chec
 weight field's plate-calc `suffixIcon` pushed "55" ~3px above the reps "15" → 0-width 28px spacer on
 the reps field (2026-06).*
 
+### Inserting content above a focused field (keyboard occlusion)
+**Rule:** Adding a tall block **above** a text field on a screen with `resizeToAvoidBottomInset:
+false` (the pattern when a bottom CTA floats above the keyboard via manual `viewInsets` padding)
+pushes the field below the keyboard line — it gets typed-into but unseen. Don't flip the whole
+screen to `resize: true` (it double-pads a manual-viewInsets button). Instead make the upper content
+a `SingleChildScrollView` and, on focus gain, `Scrollable.ensureVisible(fieldContext, alignment:
+0.1)` (reduced-motion → `Duration.zero`) so the field lifts above the keyboard while the inserted
+context scrolls away; keep a bottom scroll pad ≥ the floating CTA's height so the field never hides
+behind it. Existing field/counter/CTA tests keep passing (they render in the scroll); a live
+companion ticker added above means **non-reduced page-pumps must avoid `pumpAndSettle`** (test the
+panel in isolation under reduced motion). *Seen: the onboarding Name screen gained a BIT "starter
+readout" panel above the prompt → field slid under the keyboard until scroll + ensureVisible-on-focus
+(2026-06).*
+
 ### Reduced-motion needs a non-motion fallback
 **Rule:** Freezing an animation under `disableAnimations` must leave a **still, legible signal** — a
 label, a static frame, a Semantics announcement — never a dead/ambiguous control. Design the
@@ -177,10 +200,22 @@ raced the ~10-service async load (the 2nd intermittently showed only the loader)
 single-pump files + poll until the loader clears, never a fixed delay (2026-06).* **A custom chip that
 supplies its own `Semantics(label:)` as the accessible name must set `excludeSemantics: true`** — else
 the child `Text` node merges in, doubling the screen-reader announcement *and* breaking
-`find.bySemanticsLabel` (exact-match) in tests. *Seen: weekday-picker chip's "MON training day, on"
+`find.bySemanticsLabel` (exact-match) in tests. **A gesture-only affordance (long-press / swipe) is
+both hidden AND inaccessible** — switch-access / keyboard users can't long-press — so pair it with a
+**`customSemanticsActions` entry** on the same node (a labelled "Pin to top" action the a11y layer
+exposes without the gesture) **and a persistent visible hint** (a "PINNED N/3 · hold a lift to add"
+status line), not a hint that vanishes after first use (stranding someone who forgot the gesture).
+**A gesture is a two-way contract: if a hold/swipe performs an action on one surface (hold a row to
+PIN), the *inverse* surface must accept the SAME gesture for the inverse action (hold the pinned card
+to UNPIN)** — once a user learns "hold to pin", their instinct is "hold to unpin"; don't make one
+direction a gesture and the other an icon-only tap. Keep the explicit affordance (the pin icon) too —
+the gesture is the discovered shortcut, not the only path. *Seen: weekday-picker chip's "MON training day, on"
 label found 0 until the inner "MON" `Text` was excluded (2026-06); the onboarding shell/solution/
 quiz/cold-open/option-list gated on `disableAnimations` only → a screen reader sat through the intro
-cinematics → unified to the `||accessibleNavigation` contract via shared `_reduceMotion` getters (2026-06).*
+cinematics → unified to the `||accessibleNavigation` contract via shared `_reduceMotion` getters (2026-06);
+strength-roster pin-via-long-press got a `CustomSemanticsAction('Pin to top')` + a persistent "PINNED N/3"
+hint so switch/SR users + forgetful users keep a path, Codex F2; then the user caught that hold-to-pin
+implies hold-to-unpin → the pinned card took the same long-press to unpin (2026-06).*
 
 ### Reach for the app's own primitive first (and port reference source verbatim)
 **Rule:** Before painting anything new, glob `lib/widgets/` + `widgets/motion/` and read the **nearest

@@ -82,11 +82,17 @@ const Map<String, Color> kMuscleGroupColors = {
 
 // Body-map coverage zones (the BUILDING band needs a distinct desaturated teal so
 // it reads clearly below OPTIMAL's `kNeon`; OPTIMAL/HIGH use `kNeon`, REST is
-// `kMutedText`). These are meter-bar/label colors — the body sprites bake their
-// own glow as art.
+// `kMutedText`). These are meter-bar/label colors.
 const kZoneBuilding = Color(0xFF5FD0A8); // label text
 const kZoneBuildingFill = Color(0xFF2F8F6E); // bar fill
 const kMeterTrack = Color(0xFF191934); // meter bar track
+
+// Body-map sprite layer. The region masks are alpha-only shapes; the lit color is
+// applied in code (`ColorFilter.srcIn`) so the whole body paints one uniform hue
+// and any future recolor — incl. per-class accents — is this single token edit.
+// `kCoverageScrim` dims the untrained base @ 0.50 alpha so lit muscles read clearly.
+const kCoverageLit = Color(0xFF00FF9C); // unified lit color (== kNeon today)
+const kCoverageScrim = Color(0xFF080C22); // base-dim scrim, painted @ 0.50 alpha
 
 // Spacing scale (4/8/12/16/24).
 const kSpace1 = 4.0;

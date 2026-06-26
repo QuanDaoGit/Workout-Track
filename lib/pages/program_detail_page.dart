@@ -12,6 +12,7 @@ import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/pixel_button.dart';
+import '../widgets/program_day_card.dart';
 import '../widgets/program_path_hud.dart';
 
 class ProgramDetailPage extends StatefulWidget {
@@ -348,7 +349,7 @@ class _ProgramDetailPageState extends State<ProgramDetailPage> {
                 for (final day in widget.program.weekSchedule)
                   Padding(
                     padding: const EdgeInsets.only(bottom: kSpace2),
-                    child: _ProgramDayCard(
+                    child: ProgramDayCard(
                       day: day,
                       exerciseNames: names,
                       swaps: _swaps,
@@ -373,134 +374,6 @@ class _ProgramDetailPageState extends State<ProgramDetailPage> {
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _ProgramDayCard extends StatelessWidget {
-  const _ProgramDayCard({
-    required this.day,
-    required this.exerciseNames,
-    required this.swaps,
-    required this.onSwapRequested,
-    required this.onRevert,
-  });
-
-  final ProgramDay day;
-  final Map<String, String> exerciseNames;
-
-  /// originalId → replacementId for this program. A row whose id is a key shows
-  /// the replacement and a revert affordance.
-  final Map<String, String> swaps;
-  final ValueChanged<String> onSwapRequested;
-  final ValueChanged<String> onRevert;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = day.isWorkout ? kNeon : kMutedText;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(kSpace3),
-      decoration: BoxDecoration(
-        color: kCard,
-        border: Border.all(color: day.isWorkout ? kBorder : kBorderDark),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'DAY ${day.dayNumber}',
-                style: const TextStyle(
-                  fontFamily: 'PressStart2P',
-                  fontSize: 8,
-                  color: kMutedText,
-                ),
-              ),
-              const SizedBox(width: kSpace2),
-              Expanded(
-                child: Text(
-                  day.label,
-                  style: TextStyle(
-                    fontFamily: 'PressStart2P',
-                    fontSize: 10,
-                    color: color,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: kSpace2),
-          Text(
-            programDayFocusSummary(day),
-            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
-          ),
-          if (day.suggestedExerciseIds.isNotEmpty) ...[
-            const SizedBox(height: kSpace2),
-            for (final id in day.suggestedExerciseIds.take(6)) _exerciseRow(id),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _exerciseRow(String id) {
-    final effectiveId = swaps[id] ?? id;
-    final swapped = swaps.containsKey(id);
-    final name = exerciseNames[effectiveId] ?? effectiveId.replaceAll('_', ' ');
-    final scheme = day.prescription[id];
-    return InkWell(
-      onTap: () => onSwapRequested(id),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '- $name',
-                    style: AppFonts.shareTechMono(color: kText, fontSize: 12),
-                  ),
-                  if (swapped)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 1),
-                      child: Text(
-                        'SWAPPED · was '
-                        '${exerciseNames[id] ?? id.replaceAll('_', ' ')}',
-                        style: AppFonts.shareTechMono(color: kNeon, fontSize: 10),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (scheme != null) ...[
-              const SizedBox(width: kSpace2),
-              Text(
-                scheme.label(),
-                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
-              ),
-            ],
-            const SizedBox(width: kSpace2),
-            if (swapped)
-              GestureDetector(
-                onTap: () => onRevert(id),
-                behavior: HitTestBehavior.opaque,
-                child: const Icon(
-                  Icons.undo_sharp,
-                  size: 15,
-                  color: kMutedText,
-                ),
-              )
-            else
-              const Icon(Icons.swap_horiz_sharp, size: 15, color: kMutedText),
-          ],
-        ),
       ),
     );
   }

@@ -117,6 +117,10 @@ void main() {
     await _settle(tester);
 
     expect(find.text('DB Press'), findsNothing); // not in loadout yet
+    // The targets-preview section sits above the loadout, so scroll the first
+    // card's Replace control into the scroll viewport before tapping it.
+    await tester.ensureVisible(find.byTooltip('Replace').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Replace').first); // first card = Bench
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));

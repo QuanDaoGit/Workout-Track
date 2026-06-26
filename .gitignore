@@ -60,6 +60,15 @@ android/key.properties
 desktop.ini
 .claude/worktrees/
 
+# /audit skill — throwaway rendered screenshots (regenerated per run)
+test/audit/_shots/
+
+# /audit-app skill — campaign run artifacts (ledger, per-unit findings, report)
+audit-runs/
+
+# Marketing video assets — large binaries belong in external storage, not git history
+marketing/assets/promo-videos/
+
 # Large binaries that don't belong in the repo (e.g. stray installers in screenshots)
 *.exe
 design/screenshots/*.exe

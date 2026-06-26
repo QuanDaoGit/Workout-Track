@@ -243,6 +243,14 @@ description, then a **WEEK SCHEDULE** list. Each day renders a card:
 - up to **6 suggested exercises** by name (workout days only).
 - At the bottom: **START PROGRAM** (or **QUIT PROGRAM** in red if this one is active).
 
+The per-day card is the shared `ProgramDayCard` widget (`lib/widgets/program_day_card.dart`):
+**swap-enabled** here (tap a lift to replace it), but **read-only** when reused in the **onboarding
+program-selection preview**. There, a second **`VIEW EXERCISES`** affordance on the *selected* card
+expands the same read-only week plan (info-first, low-friction); exercise *adjustment* is
+deliberately **deferred to this Program Detail page** post-onboarding, so a not-yet-committed
+program can't accumulate stale swaps (research: defer customization to avoid choice paralysis + a
+pre-commit stale-state bug).
+
 **Home** — when a program is active, today's scheduled day becomes the headline mission (start the
 workout, or "recovery scheduled" on a rest day).
 
