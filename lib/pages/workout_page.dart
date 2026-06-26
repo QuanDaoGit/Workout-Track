@@ -6,27 +6,26 @@ import '../theme/app_fonts.dart';
 
 import '../data/curated_exercises.dart';
 import '../data/muscle_groups.dart';
+import '../data/body_map_regions.dart';
+import '../services/muscle_coverage_service.dart';
+import '../services/strength_trend_service.dart';
+import '../widgets/muscle_body_map.dart';
 import '../models/rest_models.dart';
 import '../models/unit_models.dart';
 import '../models/workout_models.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/favorite_service.dart';
 import '../services/progressive_overload_service.dart';
-import '../services/quest_service.dart';
 import '../services/rest_service.dart';
 import '../services/unit_settings_service.dart';
 import '../services/weekly_goal_service.dart';
 import '../services/workout_metric_service.dart';
 import '../services/workout_storage_service.dart';
-import '../services/xp_boost_service.dart';
-import '../services/xp_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_chip.dart';
-import '../widgets/arcade_bar.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/calendar_day_marker.dart';
 import '../widgets/exercise_card.dart';
-import '../widgets/rank_badge.dart';
 import '../widgets/motion/arcade_text_field.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/motion/phosphor_tap.dart';
@@ -133,7 +132,7 @@ class WorkoutLibraryPage extends StatelessWidget {
 }
 
 // ── Logs Tab — single scroll ─────────────────────────────────────────────────
-// One surface, no sub-tabs: streak hero + week strip → stat trio → XP card →
+// One surface, no sub-tabs: streak hero + week strip → stat trio →
 // session list (PR badges) → analytics. Replaces the old HISTORY/TRENDS split
 // so nothing the user logged hides behind a toggle.
 
@@ -151,21 +150,20 @@ class _LogsTabState extends State<_LogsTab> {
   List<WorkoutSession> _sessions = [];
   RestState _restState = RestState.defaults();
   Map<String, String> _primaryBucketByExerciseId = {};
-  int _questXP = 0;
-  int _recoveryXP = 0;
-  int _potionBonusXP = 0;
   int _goalDays = WeeklyGoalService.defaultGoalDays;
   bool _loading = true;
 
   // ── UI state ──
-  bool _showAllSessions = false;
+  // Sessions list: start at the 3 most recent; SHOW MORE reveals 5 more each,
+  // SHOW LESS (only once expanded) collapses back to 3.
+  static const int _sessionsInitial = 3;
+  int _sessionsShown = _sessionsInitial;
   bool _showRecords = false;
   DateTime? _selectedStripDay;
 
   // ── Analytics, memoized once per load (never derived in build) ──
   List<WorkoutSession> _browsable = [];
   Map<DateTime, List<WorkoutSession>> _sessionsByDay = {};
-  DateTime? _firstActivityDay;
   int _completedCount = 0;
   double _totalVolume = 0;
   int _streak = 0;
@@ -176,24 +174,16 @@ class _LogsTabState extends State<_LogsTab> {
   double _thisWeekVol = 0;
   int _lastWeekCount = 0;
   double _lastWeekVol = 0;
-  List<_MuscleData> _muscleData = const [];
-  int _suggestedIdx = 0;
+  Map<String, List<MuscleContributor>> _contributors = const {};
+  CoverageWindow _coverageWindow = CoverageWindow.week;
+  double _coverageWeeks = 1;
+  Map<String, List<StrengthTrend>> _strengthByMuscle = const {};
+  Map<String, Exercise> _exercisesById = const {};
   List<MapEntry<String, _PBRecord>> _pbs = const [];
   int _recordCount = 0;
   List<_ExerciseTrend> _trends = const [];
   Map<String, int> _prCounts = const {};
-  XpProgress _xpProgress = XpService.progressForTotalXP(0);
-  String _rank = 'Recruit';
 
-  static const List<String> _muscles = [
-    'Chest',
-    'Back',
-    'Shoulders',
-    'Arms',
-    'Legs',
-    'Core',
-    'Full Body',
-  ];
 
   @override
   void initState() {
@@ -213,11 +203,6 @@ class _LogsTabState extends State<_LogsTab> {
     final all = await WorkoutStorageService().getSessions();
     final restState = await RestService().loadState();
     final catalog = await ExerciseCatalogService().getFullCatalog();
-    final questXP = await QuestService().claimedRewardXP();
-    final potionBonusXP = await XpBoostService().getTotalBonusXP();
-    // Pure read: today's automatic recovery grant is ensured on the Home tab
-    // load and inside QuestService.getSummary — never from a log view.
-    final recoveryXP = await RestService().effectiveRecoveryXP(all);
     final goalDays = await WeeklyGoalService().getGoalDays();
     if (!mounted) return;
     setState(() {
@@ -228,9 +213,7 @@ class _LogsTabState extends State<_LogsTab> {
           if (exercise.primaryMuscle != null)
             exercise.id: muscleGroupForDetailed(exercise.primaryMuscle!) ?? '',
       }..removeWhere((_, bucket) => bucket.isEmpty);
-      _questXP = questXP;
-      _recoveryXP = recoveryXP;
-      _potionBonusXP = potionBonusXP;
+      _exercisesById = {for (final exercise in catalog) exercise.id: exercise};
       _goalDays = goalDays;
       _recomputeAnalytics();
       _loading = false;
@@ -238,6 +221,19 @@ class _LogsTabState extends State<_LogsTab> {
   }
 
   // ── Analytics computation ──────────────────────────────────────────────────
+
+  /// Recompute just the body-map coverage for the selected window (the single
+  /// calculation boundary lives in the service). Cheap in-memory fold — called
+  /// on load and on each range-chip tap, never every build.
+  void _recomputeCoverage() {
+    final coverage = MuscleCoverageService.averagedContributors(
+      sessions: _sessions,
+      exercisesById: _exercisesById,
+      window: _coverageWindow.window,
+    );
+    _contributors = coverage.contributors;
+    _coverageWeeks = coverage.effectiveWeeks;
+  }
 
   void _recomputeAnalytics() {
     final completed = _sessions.where((s) => !s.isPartial).toList();
@@ -258,14 +254,11 @@ class _LogsTabState extends State<_LogsTab> {
     _prCounts = WorkoutMetricService.prCountsBySession(_sessions);
 
     final byDay = <DateTime, List<WorkoutSession>>{};
-    DateTime? first;
     for (final session in _browsable) {
       final day = DateUtils.dateOnly(session.date);
       byDay.putIfAbsent(day, () => []).add(session);
-      if (first == null || day.isBefore(first)) first = day;
     }
     _sessionsByDay = byDay;
-    _firstActivityDay = first;
 
     final now = DateTime.now();
     final thisMonday = DateTime(
@@ -286,8 +279,12 @@ class _LogsTabState extends State<_LogsTab> {
     _lastWeekCount = lastWeekCount;
     _lastWeekVol = lastWeekVol;
 
-    _muscleData = _buildMuscleBalance();
-    _suggestedIdx = _suggestedMuscleIdx(_muscleData);
+    _recomputeCoverage();
+    // Strength roster is all-time (window-independent) → computed once here.
+    _strengthByMuscle = strengthByMuscle(
+      StrengthTrendService.trendsFor(_sessions),
+      _exercisesById,
+    );
 
     final bests = _buildBests();
     _recordCount = bests.length;
@@ -296,14 +293,6 @@ class _LogsTabState extends State<_LogsTab> {
     _pbs = sortedBests.take(5).toList();
 
     _trends = _buildExerciseTrends();
-
-    final totalXP =
-        XpService.calculateTotalXP(_sessions) +
-        _questXP +
-        _recoveryXP +
-        _potionBonusXP;
-    _xpProgress = XpService.progressForTotalXP(totalXP);
-    _rank = XpService.getRank(_xpProgress.level);
   }
 
   Map<String, double> _sessionVolumeByMuscle(WorkoutSession session) {
@@ -371,57 +360,6 @@ class _LogsTabState extends State<_LogsTab> {
       }
     }
     return (count, vol);
-  }
-
-  List<_MuscleData> _buildMuscleBalance() {
-    final cutoff = DateTime.now().subtract(const Duration(days: 30));
-    return _muscles.map((muscle) {
-      double vol = 0;
-      DateTime? lastTrained;
-      for (final s in _sessions.where((s) => !s.isPartial)) {
-        final muscleVolumes = _sessionVolumeByMuscle(s);
-        final muscleVolume = muscleVolumes[muscle] ?? 0;
-        if (muscleVolume <= 0 && !s.targetMuscleGroups.contains(muscle)) {
-          continue;
-        }
-        if (s.date.isAfter(cutoff)) {
-          vol += muscleVolume;
-        }
-        if (lastTrained == null || s.date.isAfter(lastTrained)) {
-          lastTrained = s.date;
-        }
-      }
-      return _MuscleData(muscle, vol, lastTrained);
-    }).toList();
-  }
-
-  int _suggestedMuscleIdx(List<_MuscleData> data) {
-    int idx = 0;
-    for (int i = 1; i < data.length; i++) {
-      final curr = data[idx];
-      final cand = data[i];
-      if (cand.volume < curr.volume) {
-        idx = i;
-      } else if (cand.volume == curr.volume) {
-        // Least recently trained wins
-        final currDate = curr.lastTrained;
-        final candDate = cand.lastTrained;
-        if (currDate == null && candDate == null) {
-          // both never trained → alphabetical
-          if (cand.muscle.compareTo(curr.muscle) < 0) idx = i;
-        } else if (currDate == null) {
-          // curr never trained → keep curr (null = older)
-        } else if (candDate == null) {
-          // cand never trained → pick cand
-          idx = i;
-        } else if (candDate.isBefore(currDate)) {
-          idx = i;
-        } else if (candDate.isAtSameMomentAs(currDate)) {
-          if (cand.muscle.compareTo(curr.muscle) < 0) idx = i;
-        }
-      }
-    }
-    return idx;
   }
 
   /// Per-exercise records: heaviest set by estimated 1RM (weighted sets only).
@@ -617,14 +555,31 @@ class _LogsTabState extends State<_LogsTab> {
     }
 
     final bottomPadding = 120 + MediaQuery.of(context).padding.bottom;
-    final visibleSessions = _showAllSessions
-        ? _browsable
-        : _browsable.take(10).toList();
+    final visibleSessions = _browsable.take(_sessionsShown).toList();
+    final reduceMotion = MediaQuery.of(context).disableAnimations ||
+        MediaQuery.of(context).accessibleNavigation;
+    final sessionTiles = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final session in visibleSessions)
+          Padding(
+            padding: const EdgeInsets.only(bottom: kSpace2),
+            child: _SessionListTile(
+              session: session,
+              volume: session.exercises.fold<double>(
+                0.0,
+                (sum, e) => sum + e.totalVolume,
+              ),
+              prCount: _prCounts[session.id] ?? 0,
+              onTap: () => _openSession(session),
+            ),
+          ),
+      ],
+    );
     final maxBarY = max(
       _weekData.fold(0.0, (m, d) => max(m, d.$1)),
       _lastWeekVolumes.fold(0.0, max),
     );
-    final maxMuscleVol = _muscleData.fold(0.0, (m, d) => max(m, d.volume));
     final pct = _lastWeekVol > 0
         ? ((_thisWeekVol - _lastWeekVol) / _lastWeekVol * 100).round()
         : (_thisWeekVol > 0 ? 100 : 0);
@@ -670,75 +625,60 @@ class _LogsTabState extends State<_LogsTab> {
               ),
             ),
           ),
-          const SizedBox(height: kSpace4),
-
-          // ── Level / XP ─────────────────────────────────────────────────
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      RankBadge(rank: _rank),
-                      Text(
-                        'LV. ${_xpProgress.level}',
-                        style: const TextStyle(
-                          fontFamily: 'PressStart2P',
-                          fontSize: 11,
-                          color: kText,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: kSpace3),
-                  ArcadeBar(value: _xpProgress.fraction),
-                  const SizedBox(height: 6),
-                  Text(
-                    _xpProgress.label,
-                    style: AppFonts.shareTechMono(
-                      color: kMutedText,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
           const SizedBox(height: kSpace5),
 
           // ── Sessions ───────────────────────────────────────────────────
           Text('SESSIONS', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: kSpace3),
-          for (final session in visibleSessions)
-            Padding(
-              padding: const EdgeInsets.only(bottom: kSpace2),
-              child: _SessionListTile(
-                session: session,
-                volume: session.exercises.fold<double>(
-                  0.0,
-                  (sum, e) => sum + e.totalVolume,
-                ),
-                prCount: _prCounts[session.id] ?? 0,
-                onTap: () => _openSession(session),
-              ),
+          // Animate the height as SHOW MORE/LESS adds/removes tiles — a
+          // user-triggered content change should respond, not snap. (Omit the
+          // animator under reduced motion; zeroing AnimatedSize asserts.)
+          if (reduceMotion)
+            sessionTiles
+          else
+            AnimatedSize(
+              duration: kMotionPop,
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: sessionTiles,
             ),
-          if (_browsable.length > 10)
-            PhosphorTap(
-              onTap: () =>
-                  setState(() => _showAllSessions = !_showAllSessions),
-              borderRadius: BorderRadius.circular(4),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: kSpace2),
-                child: Text(
-                  _showAllSessions
-                      ? '[ SHOW RECENT ]'
-                      : '[ SHOW ALL ${_browsable.length} ]',
-                  style: AppFonts.shareTechMono(color: kNeon, fontSize: 13),
-                ),
-              ),
+          if (_browsable.length > _sessionsInitial)
+            Row(
+              children: [
+                if (_sessionsShown < _browsable.length)
+                  PhosphorTap(
+                    onTap: () => setState(
+                      () => _sessionsShown =
+                          min(_sessionsShown + 5, _browsable.length),
+                    ),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: kSpace2),
+                      child: Text(
+                        '[ SHOW MORE ]',
+                        style: AppFonts.shareTechMono(color: kNeon, fontSize: 13),
+                      ),
+                    ),
+                  ),
+                if (_sessionsShown > _sessionsInitial) ...[
+                  const SizedBox(width: kSpace4),
+                  PhosphorTap(
+                    onTap: () =>
+                        setState(() => _sessionsShown = _sessionsInitial),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: kSpace2),
+                      child: Text(
+                        '[ SHOW LESS ]',
+                        style: AppFonts.shareTechMono(
+                          color: kMutedText,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
 
           const SizedBox(height: kSpace4),
@@ -851,37 +791,30 @@ class _LogsTabState extends State<_LogsTab> {
           const Divider(color: kBorder),
           const SizedBox(height: kSpace4),
 
-          // ── Muscle balance ─────────────────────────────────────────────
+          // ── Muscle coverage body map ───────────────────────────────────
           Text(
-            'MUSCLE BALANCE',
+            'MUSCLE COVERAGE',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: kSpace1),
           Text(
-            'Last 30 days',
+            'Weekly sets · last 7 days',
             style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
           ),
           const SizedBox(height: kSpace4),
-          for (int i = 0; i < _muscleData.length; i++) ...[
-            _MuscleBalanceRow(
-              data: _muscleData[i],
-              color: kMuscleGroupColors[_muscleData[i].muscle] ?? kNeon,
-              maxVol: maxMuscleVol,
-              fmtVol: fmtVol,
-            ),
-            if (i == _suggestedIdx)
-              Padding(
-                padding: const EdgeInsets.only(left: 88, bottom: kSpace1),
-                child: Text(
-                  'Suggested next',
-                  style: AppFonts.shareTechMono(
-                    color: kMutedText,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            const SizedBox(height: kSpace2),
-          ],
+          MuscleBodyMap(
+            contributors: _contributors,
+            strengthByMuscle: _strengthByMuscle,
+            window: _coverageWindow,
+            effectiveWeeks: _coverageWeeks,
+            onWindowChanged: (w) {
+              if (w == _coverageWindow) return;
+              setState(() {
+                _coverageWindow = w;
+                _recomputeCoverage();
+              });
+            },
+          ),
 
           const SizedBox(height: kSpace4),
           const Divider(color: kBorder),
@@ -1064,7 +997,6 @@ class _LogsTabState extends State<_LogsTab> {
               sessionsByDay: _sessionsByDay,
               restState: _restState,
               selectedDay: _selectedStripDay,
-              firstActivityDay: _firstActivityDay,
               onSelectDay: (day) => setState(
                 () => _selectedStripDay = _selectedStripDay == day
                     ? null
@@ -1088,11 +1020,6 @@ class _LogsTabState extends State<_LogsTab> {
                           kind: CalendarMarkerKind.protected,
                           label: 'Protected',
                         ),
-                        SizedBox(width: 14),
-                        CalendarLegendMarker(
-                          kind: CalendarMarkerKind.missed,
-                          label: 'Missed',
-                        ),
                       ],
                     ),
                   ),
@@ -1108,7 +1035,7 @@ class _LogsTabState extends State<_LogsTab> {
                     child: Text(
                       'FULL MONTH →',
                       style: AppFonts.shareTechMono(
-                        color: kCyan,
+                        color: kNeon,
                         fontSize: 11,
                       ),
                     ),
@@ -1169,14 +1096,12 @@ class _WeekStrip extends StatelessWidget {
     required this.restState,
     required this.selectedDay,
     required this.onSelectDay,
-    this.firstActivityDay,
   });
 
   final Map<DateTime, List<WorkoutSession>> sessionsByDay;
   final RestState restState;
   final DateTime? selectedDay;
   final ValueChanged<DateTime> onSelectDay;
-  final DateTime? firstActivityDay;
 
   static const _letters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -1223,8 +1148,6 @@ class _WeekStrip extends StatelessWidget {
       abandonedOnly: abandonedOnly,
       isToday: isToday,
       isSelected: isSelected,
-      suppressMissed:
-          firstActivityDay == null || day.isBefore(firstActivityDay!),
     );
     final workoutColor = hasWorkout
         ? kMuscleGroupColors[sessions.first.muscleGroup] ?? kNeon
@@ -1628,13 +1551,6 @@ class _PBRecord {
   final DateTime date;
 }
 
-class _MuscleData {
-  const _MuscleData(this.muscle, this.volume, this.lastTrained);
-  final String muscle;
-  final double volume;
-  final DateTime? lastTrained;
-}
-
 class _ExerciseTrend {
   const _ExerciseTrend({
     required this.id,
@@ -1759,56 +1675,6 @@ class _StatPip extends StatelessWidget {
         ),
         const SizedBox(height: 2),
         Text(label, style: const TextStyle(color: kMutedText, fontSize: 9)),
-      ],
-    );
-  }
-}
-
-class _MuscleBalanceRow extends StatelessWidget {
-  const _MuscleBalanceRow({
-    required this.data,
-    required this.color,
-    required this.maxVol,
-    required this.fmtVol,
-  });
-  final _MuscleData data;
-  final Color color;
-  final double maxVol;
-  final String Function(double) fmtVol;
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = maxVol > 0
-        ? (data.volume / maxVol).clamp(0.0, 1.0).toDouble()
-        : 0.0;
-
-    return Row(
-      children: [
-        SizedBox(
-          width: 80,
-          child: Text(
-            data.muscle,
-            maxLines: 1,
-            style: const TextStyle(color: kMutedText, fontSize: 12),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: ArcadeBar(
-            value: progress,
-            height: 8,
-            accent: color,
-          ),
-        ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 72,
-          child: Text(
-            '${fmtVol(kgToDisplay(data.volume, Units.weight))} ${Units.weight.label}',
-            style: const TextStyle(color: kMutedText, fontSize: 12),
-            textAlign: TextAlign.right,
-          ),
-        ),
       ],
     );
   }

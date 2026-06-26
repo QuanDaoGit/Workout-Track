@@ -250,6 +250,9 @@ flutter:
     - assets/branding/
     - assets/mascot/bit-sprites/
     - assets/room/
+    - assets/body_diagram/render/
+    - assets/body_diagram/render/front/
+    - assets/body_diagram/render/back/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

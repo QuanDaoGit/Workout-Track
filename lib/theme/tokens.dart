@@ -80,6 +80,14 @@ const Map<String, Color> kMuscleGroupColors = {
   'Full Body': kText,
 };
 
+// Body-map coverage zones (the BUILDING band needs a distinct desaturated teal so
+// it reads clearly below OPTIMAL's `kNeon`; OPTIMAL/HIGH use `kNeon`, REST is
+// `kMutedText`). These are meter-bar/label colors — the body sprites bake their
+// own glow as art.
+const kZoneBuilding = Color(0xFF5FD0A8); // label text
+const kZoneBuildingFill = Color(0xFF2F8F6E); // bar fill
+const kMeterTrack = Color(0xFF191934); // meter bar track
+
 // Spacing scale (4/8/12/16/24).
 const kSpace1 = 4.0;
 const kSpace2 = 8.0;

@@ -13,6 +13,7 @@ class Exercise {
     this.muscleGroup,
     this.exerciseType,
     this.primaryMuscle,
+    this.secondaryMuscles = const [],
     this.mechanic,
     this.equipment,
   });
@@ -28,6 +29,13 @@ class Exercise {
   final String? muscleGroup;
   final String? exerciseType;
   final String? primaryMuscle;
+
+  /// Detailed muscles meaningfully worked but not the primary mover (synergists)
+  /// — e.g. triceps + front delts for a bench press. From the bundled
+  /// free-exercise-db `secondaryMuscles`; custom exercises have none. Display /
+  /// coverage-analysis only — feeds no volume/stat/XP/overload path. Default/
+  /// legacy empty (no cliff).
+  final List<String> secondaryMuscles;
   final String? mechanic;
   final String? equipment;
 
@@ -60,6 +68,7 @@ class Exercise {
     String? muscleGroup,
     String? exerciseType,
     String? primaryMuscle,
+    List<String>? secondaryMuscles,
     String? mechanic,
     String? equipment,
   }) => Exercise(
@@ -74,6 +83,7 @@ class Exercise {
     muscleGroup: muscleGroup ?? this.muscleGroup,
     exerciseType: exerciseType ?? this.exerciseType,
     primaryMuscle: primaryMuscle ?? this.primaryMuscle,
+    secondaryMuscles: secondaryMuscles ?? this.secondaryMuscles,
     mechanic: mechanic ?? this.mechanic,
     equipment: equipment ?? this.equipment,
   );
@@ -90,6 +100,7 @@ class Exercise {
     if (muscleGroup != null) 'muscleGroup': muscleGroup,
     if (exerciseType != null) 'exerciseType': exerciseType,
     if (primaryMuscle != null) 'primaryMuscle': primaryMuscle,
+    if (secondaryMuscles.isNotEmpty) 'secondaryMuscles': secondaryMuscles,
     if (mechanic != null) 'mechanic': mechanic,
     if (equipment != null) 'equipment': equipment,
   };
@@ -116,6 +127,10 @@ class Exercise {
     primaryMuscle:
         json['primaryMuscle'] as String? ??
         _firstString(json['primaryMuscles']),
+    secondaryMuscles: [
+      for (final m in json['secondaryMuscles'] as List<dynamic>? ?? const [])
+        if (m is String) m,
+    ],
     mechanic: json['mechanic'] as String?,
     equipment: json['equipment'] as String?,
   );
