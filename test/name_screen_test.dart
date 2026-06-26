@@ -8,6 +8,7 @@ import 'package:workout_track/models/character_draft.dart';
 import 'package:workout_track/models/avatar_spec.dart';
 import 'package:workout_track/models/user_profile_sex.dart';
 import 'package:workout_track/pages/onboarding/name_screen.dart';
+import 'package:workout_track/pages/onboarding/reminders_primer_page.dart';
 import 'package:workout_track/pages/onboarding/start_gate_screen.dart';
 import 'package:workout_track/services/character_service.dart';
 import 'package:workout_track/services/profile_service.dart';
@@ -81,7 +82,7 @@ void main() {
     },
   );
 
-  testWidgets('keyboard done commits and advances to the start gate', (
+  testWidgets('keyboard done commits, lands on the primer, then the gate', (
     tester,
   ) async {
     await _pumpNameScreen(tester);
@@ -90,10 +91,14 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
+    // The one-time reminders primer is the first stop after the name commit.
+    expect(find.byType(RemindersPrimerPage), findsOneWidget);
+    await tester.tap(find.text('NOT NOW'));
+    await tester.pumpAndSettle();
     expect(find.byType(StartGateScreen), findsOneWidget);
   });
 
-  testWidgets('button tap commits and advances to the start gate', (
+  testWidgets('button tap commits, lands on the primer, then the gate', (
     tester,
   ) async {
     await _pumpNameScreen(tester);
@@ -103,6 +108,9 @@ void main() {
     await tester.tap(find.text('I AM KAI'));
     await tester.pumpAndSettle();
 
+    expect(find.byType(RemindersPrimerPage), findsOneWidget);
+    await tester.tap(find.text('NOT NOW'));
+    await tester.pumpAndSettle();
     expect(find.byType(StartGateScreen), findsOneWidget);
   });
 
@@ -116,7 +124,8 @@ void main() {
     await tester.tap(find.text('I AM NOVA'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(StartGateScreen), findsOneWidget);
+    // The character is created at name-commit, before the primer.
+    expect(find.byType(RemindersPrimerPage), findsOneWidget);
     expect((await CharacterService().loadActiveCharacter())?.name, 'Nova');
     // The gender-seeded starter face is mirrored into the profile store.
     final profile = await ProfileService().loadProfile();
@@ -124,6 +133,10 @@ void main() {
       profile.avatarSpec,
       AvatarDefaults.forSex(UserProfileSex.preferNotToSay),
     );
+    // Continue past the primer to the gate, where the name renders.
+    await tester.tap(find.text('NOT NOW'));
+    await tester.pumpAndSettle();
+    expect(find.byType(StartGateScreen), findsOneWidget);
     expect(find.text('Nova'), findsOneWidget);
   });
 }

@@ -41,9 +41,13 @@ class BootService {
       SfxService.enabled = await SoundSettingsService().isEnabled();
       HapticService.enabled = await HapticSettingsService().isEnabled();
       await Units.load();
-      // Local-notification plumbing (timezone DB + channel). No permission ask
+      // Local-notification plumbing (timezone DB + channels). No permission ask
       // here — that happens contextually. Defensive: never blocks the splash.
       await NotificationService.instance.init();
+      // Reconcile Tier B training reminders every launch — re-arms them after a
+      // reboot and picks up any schedule/time/toggle change made while away.
+      // No-ops cheaply unless the user has opted in AND granted permission.
+      await NotificationService.instance.syncTrainingReminders();
       return OnboardingService().isComplete();
     } catch (e) {
       // A boot step must never hang or crash the splash. Fall back to the

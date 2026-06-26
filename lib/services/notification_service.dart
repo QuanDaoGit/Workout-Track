@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'notification_settings_service.dart';
 import 'rest_notification_coordinator.dart' show RestAlertScheduler;
+import 'rest_service.dart';
+import 'training_reminder_planner.dart';
 
 /// Local (on-device) notifications — no backend, no network, no data leaves the
 /// device. Tier A ships one notification: a "rest complete" alert fired when a
@@ -30,18 +33,35 @@ class NotificationService implements RestAlertScheduler {
   static const String _restChannelDesc =
       'Alerts you when a rest period is over.';
 
-  /// One-time init: timezone DB + the Android channel. Called from
+  // Tier B — training-day reminder. A calmer channel than the alarm-category
+  // rest alert: default importance, no full-screen takeover (anti-guilt nudge).
+  static const String _trainingChannelId = 'training_reminder';
+  static const String _trainingChannelName = 'Training reminders';
+  static const String _trainingChannelDesc =
+      'A gentle nudge on your training days.';
+
+  /// One-time init: timezone DB + the Android channels. Called from
   /// [BootService]. Does NOT request permission (cold-ask is an anti-pattern —
   /// permission is asked contextually).
   Future<void> init() async {
     if (_initialized) return;
     tz.initializeTimeZones();
-    // Tier A only schedules short *relative* delays, so the zone label is
-    // irrelevant to the firing instant (DST can't shift within a ≤5 min rest).
-    // tz.local is left at its default; Tier B (absolute daily times) will set it.
+    // Tier B fires at absolute local wall-clock times, so the device zone must
+    // be the real one (the default is UTC → an 08:00 reminder would drift). Tier
+    // A is relative (≤5 min) so it never cared; setting the real zone only makes
+    // it more correct. Best-effort: fall back to the default zone on failure.
+    try {
+      final zone = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(zone.identifier));
+    } catch (e) {
+      debugPrint('NotificationService: could not resolve local timezone: $e');
+    }
     try {
       const settings = InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        // White-silhouette status-bar icon (the launcher mipmap renders as a
+        // flat white square — Android masks small-icons by alpha). Default for
+        // both the rest alert and the training reminder.
+        android: AndroidInitializationSettings('@drawable/ic_stat_ironbit'),
       );
       await _plugin.initialize(settings: settings);
       await _android?.createNotificationChannel(
@@ -50,6 +70,14 @@ class NotificationService implements RestAlertScheduler {
           _restChannelName,
           description: _restChannelDesc,
           importance: Importance.high,
+        ),
+      );
+      await _android?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _trainingChannelId,
+          _trainingChannelName,
+          description: _trainingChannelDesc,
+          importance: Importance.defaultImportance,
         ),
       );
       // Only latch as initialized once the plugin genuinely came up — otherwise a
@@ -156,5 +184,101 @@ class NotificationService implements RestAlertScheduler {
     } catch (e) {
       debugPrint('NotificationService.cancelRestDone failed: $e');
     }
+  }
+
+  // ── Tier B — training-day reminders ─────────────────────────────────────
+
+  /// Reconcile the scheduled training-day reminders against the current opt-in,
+  /// OS permission, schedule and time. **Always clears the whole id range first**
+  /// so a removed weekday can't leave a stale weekly alarm firing (Codex review
+  /// finding #3), then (re)schedules only when the user has opted in AND the OS
+  /// permission is held. Idempotent — safe to call on boot, on a schedule edit,
+  /// on a settings change, and right after the opt-in is granted.
+  Future<void> syncTrainingReminders() async {
+    if (!_initialized) await init();
+    await cancelAllTrainingReminders();
+
+    final settings = NotificationSettingsService();
+    // Opt-in (explicit) AND the OS grant are both required — a default-off
+    // consent flag means granting permission for the rest alert can never
+    // silently start firing reminders (Codex review finding #1).
+    if (!await settings.isTrainingReminderEnabled()) return;
+    if (!await hasPermission()) return;
+
+    final minutes = await settings.trainingReminderMinutes();
+    final restState = await RestService().loadState();
+    final slots = trainingReminderSlots(
+      weekdays: restState.trainingWeekdays,
+      minutes: minutes,
+    );
+    for (final slot in slots) {
+      await _scheduleTrainingReminder(slot);
+    }
+  }
+
+  Future<void> _scheduleTrainingReminder(TrainingReminderSlot slot) async {
+    try {
+      final canExact = await _android?.canScheduleExactNotifications() ?? false;
+      final mode = canExact
+          ? AndroidScheduleMode.exactAllowWhileIdle
+          : AndroidScheduleMode.inexactAllowWhileIdle;
+
+      await _plugin.zonedSchedule(
+        id: slot.id,
+        scheduledDate: _nextInstanceOfWeekdayTime(
+          slot.weekday,
+          slot.hour,
+          slot.minute,
+        ),
+        title: 'Training day',
+        body: 'Time to train. Your move.',
+        androidScheduleMode: mode,
+        // Weekly repeat at the same weekday + time.
+        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _trainingChannelId,
+            _trainingChannelName,
+            channelDescription: _trainingChannelDesc,
+            // Gentler than the rest alert: a reminder, not an alarm takeover.
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('NotificationService.scheduleTrainingReminder failed: $e');
+    }
+  }
+
+  /// Cancel every training-reminder slot (the full 2001..2007 range).
+  Future<void> cancelAllTrainingReminders() async {
+    if (!_initialized) await init();
+    for (final id in allTrainingReminderIds) {
+      try {
+        await _plugin.cancel(id: id);
+      } catch (e) {
+        debugPrint('NotificationService.cancelTrainingReminder($id) failed: $e');
+      }
+    }
+  }
+
+  /// The next future instant matching [weekday] (1=Mon..7=Sun) at [hour]:[minute]
+  /// in the device's local zone — the anchor the weekly `dayOfWeekAndTime` match
+  /// repeats from.
+  tz.TZDateTime _nextInstanceOfWeekdayTime(int weekday, int hour, int minute) {
+    final now = tz.TZDateTime.now(tz.local);
+    var scheduled = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
+    );
+    while (scheduled.weekday != weekday || !scheduled.isAfter(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+    return scheduled;
   }
 }

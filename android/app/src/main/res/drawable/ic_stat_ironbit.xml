@@ -1,0 +1,16 @@
+<!--
+  Notification status-bar icon. MUST be a white silhouette on a transparent
+  background: Android masks notification small-icons by alpha and tints them, so
+  a full-colour @mipmap/ic_launcher would render as a flat white square. This is
+  the Ironbit barbell mark (matches the boot emblem): two outer collars, two
+  inner plates, and the connecting bar.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M2,11 h20 v2 h-20 z M6,5 h3 v14 h-3 z M2.5,8 h2.5 v8 h-2.5 z M15,5 h3 v14 h-3 z M19,8 h2.5 v8 h-2.5 z" />
+</vector>

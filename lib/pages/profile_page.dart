@@ -96,6 +96,9 @@ class ProfilePageState extends State<ProfilePage> {
   bool _soundEnabled = true;
   bool _hapticsEnabled = true;
   bool _restAlertEnabled = true;
+  bool _trainingReminderEnabled = false;
+  int _trainingReminderMinutes =
+      NotificationSettingsService.defaultTrainingReminderMinutes;
   BodyGoalState? _bodyGoalState;
   WeightEntry? _lastWeightEntry;
   List<WeightEntry> _weightEntries = const [];
@@ -154,6 +157,10 @@ class ProfilePageState extends State<ProfilePage> {
     final hapticsEnabled = await HapticSettingsService().isEnabled();
     final restAlertEnabled = await NotificationSettingsService()
         .isRestTimerAlertEnabled();
+    final trainingReminderEnabled = await NotificationSettingsService()
+        .isTrainingReminderEnabled();
+    final trainingReminderMinutes = await NotificationSettingsService()
+        .trainingReminderMinutes();
     final heightCm = await CalibrationService().heightCm();
     BodyGoalState? bodyGoalState;
     WeightEntry? lastWeightEntry;
@@ -193,6 +200,8 @@ class ProfilePageState extends State<ProfilePage> {
       _soundEnabled = soundEnabled;
       _hapticsEnabled = hapticsEnabled;
       _restAlertEnabled = restAlertEnabled;
+      _trainingReminderEnabled = trainingReminderEnabled;
+      _trainingReminderMinutes = trainingReminderMinutes;
       _bodyGoalState = bodyGoalState;
       _lastWeightEntry = lastWeightEntry;
       _weightEntries = weightEntries;
@@ -383,6 +392,44 @@ class ProfilePageState extends State<ProfilePage> {
     }
     if (!mounted) return;
     setState(() => _restAlertEnabled = value);
+  }
+
+  Future<void> _toggleTrainingReminder(bool value) async {
+    await NotificationSettingsService().setTrainingReminderEnabled(value);
+    // Enabling is the contextual moment to ask the OS for permission. The
+    // reconcile then schedules (or, if denied / turned off, clears) the weekly
+    // reminders to match the new state.
+    if (value) {
+      await NotificationService.instance.requestPermissions();
+    }
+    await NotificationService.instance.syncTrainingReminders();
+    if (!mounted) return;
+    setState(() => _trainingReminderEnabled = value);
+  }
+
+  Future<void> _pickReminderTime() async {
+    final current = TimeOfDay(
+      hour: _trainingReminderMinutes ~/ 60,
+      minute: _trainingReminderMinutes % 60,
+    );
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: current,
+    );
+    if (picked == null) return;
+    final minutes = picked.hour * 60 + picked.minute;
+    await NotificationSettingsService().setTrainingReminderMinutes(minutes);
+    await NotificationService.instance.syncTrainingReminders();
+    if (!mounted) return;
+    setState(() => _trainingReminderMinutes = minutes);
+  }
+
+  String _formatReminderTime(int minutes) {
+    final h24 = minutes ~/ 60;
+    final m = minutes % 60;
+    final period = h24 < 12 ? 'AM' : 'PM';
+    final h12 = h24 % 12 == 0 ? 12 : h24 % 12;
+    return '$h12:${m.toString().padLeft(2, '0')} $period';
   }
 
   Future<void> _openLogWeight() async {
@@ -611,6 +658,10 @@ class ProfilePageState extends State<ProfilePage> {
                     onPressed: valid
                         ? () async {
                             await _restService.saveTrainingWeekdays(selected);
+                            // Re-arm training reminders against the new schedule
+                            // (reconcile clears stale weekdays first).
+                            await NotificationService.instance
+                                .syncTrainingReminders();
                             if (!context.mounted) return;
                             Navigator.of(context).pop();
                             await reload();
@@ -1464,6 +1515,22 @@ class ProfilePageState extends State<ProfilePage> {
           value: _restAlertEnabled,
           onChanged: _toggleRestAlert,
         ),
+        _SettingsToggleRow(
+          iconPath: 'assets/icons/control/icon_bell.png',
+          title: 'Training Reminders',
+          subtitle: _trainingReminderEnabled
+              ? 'A gentle nudge on your training days.'
+              : 'Off — no training-day reminders.',
+          value: _trainingReminderEnabled,
+          onChanged: _toggleTrainingReminder,
+        ),
+        if (_trainingReminderEnabled)
+          _SettingsRow(
+            iconPath: 'assets/icons/control/icon_time.png',
+            title: 'Reminder Time',
+            subtitle: _formatReminderTime(_trainingReminderMinutes),
+            onTap: _pickReminderTime,
+          ),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_lock.png',
           title: 'Privacy',

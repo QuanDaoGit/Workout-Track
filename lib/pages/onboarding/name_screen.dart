@@ -13,9 +13,10 @@ import '../../widgets/arcade_route.dart';
 import '../../widgets/motion/arcade_name_field.dart';
 import '../../widgets/motion/phosphor_tap.dart';
 import '../../widgets/motion/power_on.dart';
+import '../../widgets/onboarding/starter_readout_panel.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/screen_shake.dart';
-import 'start_gate_screen.dart';
+import 'reminders_primer_page.dart';
 
 class NameScreen extends StatefulWidget {
   const NameScreen({super.key, required this.draft});
@@ -39,6 +40,10 @@ class _NameScreenState extends State<NameScreen>
   late final ArcadeNameEditingController _nameController =
       ArcadeNameEditingController();
   late final FocusNode _focusNode = FocusNode();
+  // The upper content scrolls now (the readout panel pushes the field down past
+  // the keyboard line); on focus we lift the field above the keyboard.
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _fieldKey = GlobalKey();
 
   bool _started = false;
   bool _committing = false;
@@ -52,6 +57,29 @@ class _NameScreenState extends State<NameScreen>
   }
 
   String get _trimmedName => _nameController.text.trim();
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  // When the field gains focus, scroll it near the top of the viewport so it
+  // clears the keyboard (the readout panel above would otherwise leave it
+  // hidden). Reduced motion jumps without animating.
+  void _onFocusChange() {
+    if (!_focusNode.hasFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _fieldKey.currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.1,
+        duration: _reduceMotion ? Duration.zero : kMotionBase,
+        curve: kMotionCurve,
+      );
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -71,7 +99,9 @@ class _NameScreenState extends State<NameScreen>
   void dispose() {
     _controller.dispose();
     _nameController.dispose();
+    _focusNode.removeListener(_onFocusChange);
     _focusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -132,13 +162,19 @@ class _NameScreenState extends State<NameScreen>
     await ProfileService().saveDisplayName(character.characterName);
     await ProfileService().saveAvatarSpec(avatarSpec);
     if (!mounted) return;
-    // Terminal push: the Start Gate blocks system-back and both its exits clear
-    // the whole stack (pushAndRemoveUntil), so this route never pops back to a
-    // mounted NameScreen — there is no _committing reset to do here. Keeping the
-    // guard latched also hardens against a double-commit if the push is slow.
+    // Terminal push: the reminders primer (one-time training-reminder opt-in)
+    // then forwards to the Start Gate, which blocks system-back and clears the
+    // whole stack on exit — so this route never pops back to a mounted
+    // NameScreen. The latched guard also hardens against a double-commit if the
+    // push is slow. The schedule was just committed above, so the primer can
+    // name the user's real training days.
     await Navigator.of(context).push(
       arcadeRoute(
-        (_) => StartGateScreen(character: character, avatarSpec: avatarSpec),
+        (_) => RemindersPrimerPage(
+          character: character,
+          avatarSpec: avatarSpec,
+          trainingWeekdays: widget.draft.trainingWeekdays ?? const <int>{},
+        ),
       ),
     );
   }
@@ -157,6 +193,9 @@ class _NameScreenState extends State<NameScreen>
             final prompt = _typedPrompt(ms);
             final fieldOpacity = _progress(ms, promptDone + 200, 200);
             final buttonOpacity = _progress(ms, promptDone + 400, 200);
+            // The readout panel reads as context — it fades in first, ahead of
+            // the typed prompt, so the plan is present while naming begins.
+            final panelOpacity = _progress(ms, 0, 250);
 
             return Stack(
               children: [
@@ -164,46 +203,62 @@ class _NameScreenState extends State<NameScreen>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _NameTopBar(onBack: () => Navigator.of(context).pop()),
-                    const SizedBox(height: 48),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: kSpace4),
-                      child: Semantics(
-                        header: true,
-                        child: Text(
-                          prompt,
-                          style: const TextStyle(
-                            fontFamily: 'PressStart2P',
-                            fontSize: 16,
-                            color: kNeon,
-                            height: 1.45,
-                          ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(
+                          kSpace4,
+                          kSpace3,
+                          kSpace4,
+                          120,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Opacity(
+                              opacity: panelOpacity,
+                              child: StarterReadoutPanel(
+                                draft: widget.draft,
+                                onEdit: () => Navigator.of(context).pop(),
+                              ),
+                            ),
+                            const SizedBox(height: kSpace5),
+                            Semantics(
+                              header: true,
+                              child: Text(
+                                prompt,
+                                style: const TextStyle(
+                                  fontFamily: 'PressStart2P',
+                                  fontSize: 16,
+                                  color: kNeon,
+                                  height: 1.45,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: kSpace4),
+                            KeyedSubtree(
+                              key: _fieldKey,
+                              child: Opacity(
+                                opacity: fieldOpacity,
+                                child: _buildField(),
+                              ),
+                            ),
+                            if (_showError)
+                              const Padding(
+                                padding: EdgeInsets.only(top: kSpace2),
+                                child: Text(
+                                  'INVALID NAME',
+                                  style: TextStyle(
+                                    fontFamily: 'PressStart2P',
+                                    fontSize: 12,
+                                    color: kDanger,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 32),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: kSpace4),
-                      child: Opacity(
-                        opacity: fieldOpacity,
-                        child: _buildField(),
-                      ),
-                    ),
-                    if (_showError)
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          left: kSpace4,
-                          right: kSpace4,
-                          top: kSpace2,
-                        ),
-                        child: Text(
-                          'INVALID NAME',
-                          style: const TextStyle(
-                            fontFamily: 'PressStart2P',
-                            fontSize: 12,
-                            color: kDanger,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
                 Align(
