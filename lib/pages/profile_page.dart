@@ -241,6 +241,7 @@ class ProfilePageState extends State<ProfilePage> {
       label: 'Edit avatar',
       child: HoldDepress(
         onTap: _openAvatarCustomizer,
+        haptic: HapticIntent.selection,
         borderRadius: BorderRadius.circular(4),
         child: Stack(
           children: [
@@ -678,7 +679,10 @@ class ProfilePageState extends State<ProfilePage> {
         actions: [
           IconButton(
             tooltip: _editingName ? 'Stop editing' : 'Edit guild card',
-            onPressed: _toggleEditMode,
+            onPressed: () {
+              HapticService.instance.selection();
+              _toggleEditMode();
+            },
             icon: ImageIcon(
               const AssetImage('assets/icons/control/icon_hammer.png'),
               color: _editingName
@@ -937,7 +941,12 @@ class ProfilePageState extends State<ProfilePage> {
       RespecAvailability.available => ('CHANGE CLASS', true),
     };
     return TextButton(
-      onPressed: enabled ? _openRespec : null,
+      onPressed: enabled
+          ? () {
+              HapticService.instance.selection();
+              _openRespec();
+            }
+          : null,
       style: TextButton.styleFrom(
         foregroundColor: kNeon,
         disabledForegroundColor: kMutedText,
@@ -1044,6 +1053,7 @@ class ProfilePageState extends State<ProfilePage> {
       borderRadius: BorderRadius.circular(4),
       child: HoldDepress(
         onTap: _openInventory,
+        haptic: HapticIntent.selection,
         borderRadius: BorderRadius.circular(4),
         child: Container(
           width: double.infinity,
@@ -1106,6 +1116,7 @@ class ProfilePageState extends State<ProfilePage> {
       borderRadius: BorderRadius.circular(4),
       child: HoldDepress(
         onTap: _openShop,
+        haptic: HapticIntent.selection,
         borderRadius: BorderRadius.circular(4),
         child: Container(
           width: double.infinity,
@@ -1223,6 +1234,7 @@ class ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: 8),
           HoldDepress(
             onTap: _changeGoal,
+            haptic: HapticIntent.selection,
             borderRadius: BorderRadius.circular(4),
             child: Row(
               children: [
@@ -2045,6 +2057,7 @@ class _ProfileTabs extends StatelessWidget {
                       Expanded(
                         child: PhosphorTap(
                           onTap: () => onSelect(i),
+                          haptic: HapticIntent.selection,
                           borderRadius: BorderRadius.circular(4),
                           child: Center(
                             child: Text(
@@ -2313,6 +2326,7 @@ class _SettingsRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: HoldDepress(
         onTap: onTap,
+        haptic: HapticIntent.selection,
         borderRadius: BorderRadius.circular(4),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -2452,7 +2466,10 @@ class _SmallIconButton extends StatelessWidget {
       height: 34,
       child: IconButton(
         padding: EdgeInsets.zero,
-        onPressed: onPressed,
+        onPressed: () {
+          HapticService.instance.selection();
+          onPressed();
+        },
         icon: ImageIcon(AssetImage(iconPath), color: color, size: 18),
       ),
     );
@@ -2505,6 +2522,7 @@ class _RespecOption extends StatelessWidget {
     final color = cls.themeColor;
     return HoldDepress(
       onTap: () => Navigator.of(context).pop(cls),
+      haptic: HapticIntent.selection,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         key: ValueKey('profile_respec_option_${cls.name}'),

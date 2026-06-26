@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../services/haptic_service.dart';
 import '../theme/tokens.dart';
 import 'motion/hold_depress.dart';
 
@@ -16,6 +17,7 @@ class ArcadeChip extends StatefulWidget {
     required this.onTap,
     this.selectedColor = kNeon,
     this.unselectedTextColor = kMutedText,
+    this.haptic = HapticIntent.selection,
   });
 
   final String label;
@@ -23,6 +25,11 @@ class ArcadeChip extends StatefulWidget {
   final VoidCallback onTap;
   final Color selectedColor;
   final Color unselectedTextColor;
+
+  /// A chip is always a committing selection, so it ticks by default — the
+  /// subtlest `selectionClick`, rate-limited. Pass [HapticIntent.none] where a
+  /// handler already fires its own (avoids a double-tick).
+  final HapticIntent haptic;
   @override
   State<ArcadeChip> createState() => _ArcadeChipState();
 }
@@ -78,6 +85,7 @@ class _ArcadeChipState extends State<ArcadeChip> {
 
     return HoldDepress(
       onTap: widget.onTap,
+      haptic: widget.haptic,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),

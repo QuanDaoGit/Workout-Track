@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/exercise_demos.dart';
 import '../models/workout_models.dart';
+import '../services/haptic_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
 import 'arcade_image_filter.dart';
@@ -50,6 +51,7 @@ class ExerciseCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: ArcadeTap(
         onTap: onTap,
+        haptic: HapticIntent.selection,
         onLongPress: onInfoPressed,
         borderRadius: BorderRadius.circular(4),
         child: AnimatedContainer(
@@ -324,6 +326,8 @@ class _BouncingHeartIconState extends State<_BouncingHeartIcon>
       constraints: const BoxConstraints(),
       padding: const EdgeInsets.symmetric(horizontal: 8),
       onPressed: () {
+        // Coalesced so rapid favorite-toggling can't machine-gun the motor.
+        HapticService.instance.fireCoalesced(HapticIntent.selection);
         _controller.forward(from: 0);
         widget.onToggle?.call();
       },

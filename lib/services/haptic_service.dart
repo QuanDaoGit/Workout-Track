@@ -75,6 +75,38 @@ class HapticService {
     }
   }
 
+  /// Minimum gap between two *coalesced* haptics — the broad, low-priority
+  /// wrapper layer (chips, rows, card taps). A repeat inside this window is
+  /// dropped so rapid tapping / scroll-tapping can't machine-gun the motor
+  /// (Android's haptics principles: overuse → users disable *all* haptics).
+  ///
+  /// Only [fireCoalesced] honors this. The direct semantic calls
+  /// (`fire`/`selection`/`success`/`reward`/`warning`) are **never** coalesced —
+  /// a confirm, a reward, or a destructive buzz must always land on time.
+  static Duration coalesceWindow = const Duration(milliseconds: 30);
+
+  /// Injectable clock for the coalesce gate so tests can advance time
+  /// deterministically (mirrors the app's `nowProvider` pattern).
+  static DateTime Function() nowProvider = DateTime.now;
+
+  DateTime? _lastCoalescedAt;
+
+  /// Fire [intent], but drop it if another *coalesced* haptic fired less than
+  /// [coalesceWindow] ago. The shared tap wrappers
+  /// (`PhosphorTap`/`HoldDepress`/`ArcadeTap`/`ArcadeChip`) route their broad
+  /// opt-in layer through here so the generous coverage stays a *tick*, never a
+  /// buzz. [HapticIntent.none] is a no-op (the default = silent wrapper).
+  Future<void> fireCoalesced(HapticIntent intent) {
+    if (intent == HapticIntent.none) return Future<void>.value();
+    final now = nowProvider();
+    final last = _lastCoalescedAt;
+    if (last != null && now.difference(last) < coalesceWindow) {
+      return Future<void>.value();
+    }
+    _lastCoalescedAt = now;
+    return fire(intent);
+  }
+
   Future<void> _fire(Future<void> Function() effect) async {
     if (!enabled) return;
     try {

@@ -862,7 +862,12 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                         _RevealBeat(
                           delayMs: 80,
                           child: FilledButton(
-                            onPressed: _saved ? _goHome : null,
+                            onPressed: _saved
+                                ? () {
+                                    HapticService.instance.selection();
+                                    _goHome();
+                                  }
+                                : null,
                             child: Text(_saving ? 'SAVING...' : 'BACK TO HOME'),
                           ),
                         ),
@@ -877,7 +882,10 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                   child: GestureDetector(
                     key: const ValueKey('finish_skip_overlay'),
                     behavior: HitTestBehavior.opaque,
-                    onTap: _skipReveal,
+                    onTap: () {
+                      HapticService.instance.selection();
+                      _skipReveal();
+                    },
                   ),
                 ),
               // The app's native level-up celebration — rising "+1 LV", amber
@@ -1148,6 +1156,11 @@ class _BreakdownReveal extends StatefulWidget {
 
 class _BreakdownRevealState extends State<_BreakdownReveal> {
   int _revealed = 0;
+  // A capped handful of subtle ticks as the breakdown rows pop in — the
+  // celebratory "stats landing" texture, not one buzz per row (Codex haptics
+  // review: aggregate, don't machine-gun an automatic reveal).
+  int _revealTicks = 0;
+  static const _kMaxRevealTicks = 3;
   Timer? _timer;
   bool _started = false;
 
@@ -1165,6 +1178,10 @@ class _BreakdownRevealState extends State<_BreakdownReveal> {
       if (!mounted || _revealed >= widget.rows.length) {
         t.cancel();
         return;
+      }
+      if (_revealTicks < _kMaxRevealTicks) {
+        _revealTicks++;
+        HapticService.instance.selection();
       }
       setState(() => _revealed++);
     });

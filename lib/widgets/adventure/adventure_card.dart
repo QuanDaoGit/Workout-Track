@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../data/adventure_routes.dart';
 import '../../models/adventure_models.dart';
 import '../../services/guild_service.dart';
-import '../../theme/app_fonts.dart';
+import '../../services/haptic_service.dart';
 import '../../theme/tokens.dart';
 
 /// Compact Home callout for Adventure — deliberately static except for a
@@ -85,7 +85,12 @@ class AdventureCard extends StatelessWidget {
       color: kCard,
       borderRadius: BorderRadius.circular(kCardRadius),
       child: InkWell(
-        onTap: onTap,
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticService.instance.selection();
+                onTap!();
+              },
         borderRadius: BorderRadius.circular(kCardRadius),
         child: Container(
           padding: const EdgeInsets.all(kSpace3),
@@ -114,18 +119,6 @@ class AdventureCard extends StatelessWidget {
                       ).textTheme.bodySmall?.copyWith(color: kMutedText),
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(width: kSpace2),
-              // Green "VIEW >" text affordance matching Home's other trailing
-              // links (Weekly Quests, Last Workout) — the whole card stays
-              // tappable; the ">" is just the signifier.
-              Text(
-                'VIEW >',
-                style: AppFonts.shareTechMono(
-                  color: kNeon,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],

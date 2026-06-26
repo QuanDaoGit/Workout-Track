@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../services/haptic_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
 
@@ -140,7 +141,11 @@ class _TrainNavButtonState extends State<TrainNavButton>
       button: true,
       label: _semanticsLabel,
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: () {
+          // The hero action gets a light press tap (the keystone bar's lone CTA).
+          HapticService.instance.tap();
+          widget.onTap();
+        },
         onTapDown: (_) => setState(() => _pressed = true),
         onTapUp: (_) => setState(() => _pressed = false),
         onTapCancel: () => setState(() => _pressed = false),

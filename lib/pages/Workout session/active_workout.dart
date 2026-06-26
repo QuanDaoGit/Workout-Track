@@ -22,7 +22,7 @@ import '../../widgets/arcade_route.dart';
 import '../../widgets/arcade_tap.dart';
 import '../../widgets/blinking_colon.dart';
 import '../../widgets/pixel_button.dart';
-import '../../widgets/rest_timer_bar.dart';
+import '../../widgets/rest_break_panel.dart';
 import '../../widgets/strobe_flash.dart';
 import 'exercise_session.dart';
 import 'workout_summary.dart';
@@ -87,7 +87,14 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   final Map<String, GlobalKey> _exerciseKeys = {};
   final Map<String, int> _flashTriggers = {};
   bool _leaving = false;
-  bool _restPromptOpen = false;
+  // True only between *finishing an exercise* and the next exercise / skip — so
+  // the rest takeover fires for a genuine between-exercise rest, never for a
+  // between-set rest still counting when the user backs out mid-exercise (both
+  // share the one RestTimerService).
+  bool _restAfterFinish = false;
+  // Collapsed by default during a rest takeover so the rest countdown is the one
+  // live timer; the user can expand it to a dimmed (still-running) ELAPSED.
+  bool _headerExpanded = false;
 
   // Idle auto-save: the wall-clock of the last logged set (drives the 30-min
   // timeout) and the elapsed seconds captured at that moment (the credited
@@ -225,6 +232,15 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       widget.exercises.isNotEmpty &&
       widget.exercises.every((e) => _status[e.id] == _ExerciseStatus.done);
 
+  /// The next exercise not yet cleared (list order) — shown on the rest panel so
+  /// the user can eye the next movement during the break. Null when all cleared.
+  String? get _nextUndoneExerciseName {
+    for (final e in widget.exercises) {
+      if (_status[e.id] != _ExerciseStatus.done) return e.name;
+    }
+    return null;
+  }
+
   int get _completedExerciseCount => widget.exercises
       .where((e) => _status[e.id] == _ExerciseStatus.done)
       .length;
@@ -250,6 +266,11 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
 
   Future<void> _openExercise(Exercise exercise) async {
     final previousStatus = _status[exercise.id] ?? _ExerciseStatus.notStarted;
+    // Entering any exercise clears the prior finish flag (a fresh context). An
+    // active rest is a global singleton that simply carries into the exercise
+    // screen (shown by its own rest bar) — opening an exercise is unambiguous
+    // intent, so there is no skip prompt and no silent cancel.
+    _restAfterFinish = false;
     setState(() => _status[exercise.id] = _ExerciseStatus.inProgress);
     final sets = await Navigator.push<List<SetEntry>>(
       context,
@@ -284,6 +305,14 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         _flashTriggers[exercise.id] = (_flashTriggers[exercise.id] ?? 0) + 1;
       });
       _registerActivity();
+      // A genuine between-exercise rest — the takeover may now show; the session
+      // header starts collapsed for it.
+      _restAfterFinish = true;
+      _headerExpanded = false;
+      // Suppress-on-last: finishing the final exercise leaves nothing to rest
+      // for — cancel the rest the session page just started so the rest panel
+      // never shows and Finish Workout is immediately reachable.
+      if (_allDone) RestTimerService.instance.cancel();
     } else {
       // Back-out (no Finish): keep any committed sets (already persisted via the
       // callback) but do NOT mark the exercise complete — completion is explicit
@@ -298,62 +327,6 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     }
   }
 
-  Future<void> _openExerciseWithRestGuard(Exercise exercise) async {
-    final snap = RestTimerService.instance.current.value;
-    if (snap == null || !snap.isActive) {
-      if (snap != null && !snap.isActive) {
-        RestTimerService.instance.cancel();
-      }
-      await _openExercise(exercise);
-      return;
-    }
-
-    if (_restPromptOpen) return;
-    _restPromptOpen = true;
-    final skipRest = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: kCard,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-          side: const BorderSide(color: kBorder),
-        ),
-        title: const Text('SKIP REST?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('Do you want to skip rest and start this exercise now?'),
-            const SizedBox(height: 16),
-            ArcadeDialogButtonColumn(
-              children: [
-                FilledButton(
-                  onPressed: () => Navigator.of(ctx).pop(false),
-                  child: const Text('CONTINUE REST'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(ctx).pop(true),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: kBorderVariant,
-                    foregroundColor: kText,
-                    side: const BorderSide(color: kBorder),
-                  ),
-                  child: const Text('SKIP REST'),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: const [],
-      ),
-    );
-    _restPromptOpen = false;
-
-    if (!mounted || skipRest != true) return;
-    RestTimerService.instance.cancel();
-    await _openExercise(exercise);
-  }
-
   // Splits the session page's single flagged set list into working vs. warm-up
   // sets — the one boundary where warm-up sets are partitioned out so every
   // stat/XP/overload consumer reading [ExerciseLog.sets] stays working-only.
@@ -363,8 +336,14 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         ExerciseLog(
           exerciseId: e.id,
           exerciseName: e.name,
-          sets: [for (final s in _loggedSets[e.id]!) if (!s.isWarmup) s],
-          warmupSets: [for (final s in _loggedSets[e.id]!) if (s.isWarmup) s],
+          sets: [
+            for (final s in _loggedSets[e.id]!)
+              if (!s.isWarmup) s,
+          ],
+          warmupSets: [
+            for (final s in _loggedSets[e.id]!)
+              if (s.isWarmup) s,
+          ],
         ),
   ];
 
@@ -382,6 +361,8 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _leaving = true;
     _timer?.cancel();
     _idleTimer?.cancel();
+    // No rest carries into the summary or the next workout.
+    RestTimerService.instance.cancel();
     await _drainCheckpoint();
     if (!mounted) return;
     // Idle auto-save credits time only up to the last logged set; a normal
@@ -459,8 +440,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   /// least one set is logged — an empty session has nothing to recover).
   Future<void> _checkpoint() async {
     if (_leaving || _loggedSets.isEmpty) return;
-    if ((widget.isProgramWorkout ||
-            widget.advanceProgramRestDayOnCompletion) &&
+    if ((widget.isProgramWorkout || widget.advanceProgramRestDayOnCompletion) &&
         !_programMarked) {
       _programMarked = true;
       await ProgramService().markOngoingProgramSession(
@@ -762,9 +742,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                   backgroundColor: const WidgetStatePropertyAll(
                     Colors.transparent,
                   ),
-                  foregroundColor: const WidgetStatePropertyAll(
-                    kDanger,
-                  ),
+                  foregroundColor: const WidgetStatePropertyAll(kDanger),
                   shadowColor: const WidgetStatePropertyAll(Colors.transparent),
                   overlayColor: WidgetStatePropertyAll(
                     kDanger.withValues(alpha: 0.12),
@@ -822,6 +800,136 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     }
   }
 
+  /// True exactly when the between-exercise rest panel is on screen (matches the
+  /// body's panel gate) — used to collapse the session header in step.
+  bool _restPanelActive(RestSnapshot? snap) =>
+      _restAfterFinish && (snap?.isActive ?? false) && !_allDone;
+
+  /// The full session header. [dim] mutes the live ELAPSED (still ticking) while
+  /// resting-and-expanded; [onToggle] (non-null only during rest) makes the card
+  /// tap-to-collapse and shows the collapse chevron.
+  Widget _sessionHeader(
+    BuildContext context, {
+    required bool dim,
+    VoidCallback? onToggle,
+  }) {
+    final card = Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(_targetLabel, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('ELAPSED', style: Theme.of(context).textTheme.bodySmall),
+                if (onToggle != null) ...[
+                  const SizedBox(width: 6),
+                  const Icon(
+                    Icons.expand_less_sharp,
+                    color: kMutedText,
+                    size: 16,
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            _ElapsedDisplay(
+              minutes: _elapsedMinutes,
+              seconds: _elapsedSecondsPart,
+              color: dim ? kMutedText : kNeon,
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Target: ${widget.durationMinutes} min',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: kMutedText),
+                  ),
+                ),
+                Text(
+                  '$_completedExerciseCount/${widget.exercises.length} cleared',
+                  style: AppFonts.shareTechMono(
+                    color: kText,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ArcadeBar(value: _exerciseProgress, height: 8),
+          ],
+        ),
+      ),
+    );
+    if (onToggle == null) return card;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onToggle,
+      child: card,
+    );
+  }
+
+  /// The slim, ELAPSED-less header shown by default during a rest takeover —
+  /// keeps orientation (muscle group · cleared · progress) and a chevron to
+  /// expand to the dimmed full header.
+  Widget _collapsedHeader(
+    BuildContext context, {
+    required VoidCallback onToggle,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onToggle,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _targetLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: kText,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '$_completedExerciseCount/${widget.exercises.length} cleared',
+                    style: AppFonts.shareTechMono(
+                      color: kMutedText,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.expand_more_sharp,
+                    color: kMutedText,
+                    size: 18,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ArcadeBar(value: _exerciseProgress, height: 6),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -877,132 +985,137 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const RestTimerBar(),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          _targetLabel,
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'ELAPSED',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 6),
-                        _ElapsedDisplay(
-                          minutes: _elapsedMinutes,
-                          seconds: _elapsedSecondsPart,
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Target: ${widget.durationMinutes} min',
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(color: kMutedText),
-                              ),
-                            ),
-                            Text(
-                              '$_completedExerciseCount/${widget.exercises.length} cleared',
-                              style: AppFonts.shareTechMono(
-                                color: kText,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ArcadeBar(value: _exerciseProgress, height: 8),
-                      ],
-                    ),
-                  ),
+                ValueListenableBuilder<RestSnapshot?>(
+                  valueListenable: RestTimerService.instance.current,
+                  builder: (context, snap, _) {
+                    // During the rest takeover the rest countdown is the one hero
+                    // timer — collapse the session header by default; tapping it
+                    // reveals a dimmed (still-live) ELAPSED. It auto-restores to
+                    // the full bright header the moment the rest ends.
+                    final resting = _restPanelActive(snap);
+                    if (resting && !_headerExpanded) {
+                      return _collapsedHeader(
+                        context,
+                        onToggle: () => setState(() => _headerExpanded = true),
+                      );
+                    }
+                    return _sessionHeader(
+                      context,
+                      dim: resting && _headerExpanded,
+                      onToggle: resting
+                          ? () => setState(
+                              () => _headerExpanded = !_headerExpanded,
+                            )
+                          : null,
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 24),
 
-                Text(
-                  'EXERCISES',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-
-                const SizedBox(height: 12),
-
-                for (final exercise in widget.exercises) ...[
-                  Padding(
-                    key: _exerciseKeys[exercise.id],
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: StrobeFlash(
-                      trigger: _flashTriggers[exercise.id],
-                      borderRadius: BorderRadius.circular(4),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: kCard,
-                          border: Border.all(color: kBorder),
-                          borderRadius: BorderRadius.circular(4),
+                ValueListenableBuilder<RestSnapshot?>(
+                  valueListenable: RestTimerService.instance.current,
+                  builder: (context, snap, _) {
+                    // Between-exercise rest takeover: while a rest counts down
+                    // and the workout is not yet complete, BIT's rest panel
+                    // replaces the list (SKIP REST returns to logging). Once
+                    // every exercise is cleared there is nothing to rest for, so
+                    // the panel is suppressed and Finish Workout is reachable.
+                    if (_restPanelActive(snap)) {
+                      return RestBreakPanel(
+                        onSkip: () {
+                          RestTimerService.instance.cancel();
+                          _restAfterFinish = false;
+                          if (mounted) setState(() {});
+                        },
+                        nextExerciseName: _nextUndoneExerciseName,
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'EXERCISES',
+                          style: Theme.of(context).textTheme.headlineSmall,
                         ),
-                        child: ArcadeTap(
-                          onTap: () => _openExerciseWithRestGuard(exercise),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        exercise.name,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyLarge
-                                            ?.copyWith(
-                                              color: kWhite,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        exercise.levelLabel,
-                                        style: const TextStyle(
-                                          color: kMutedText,
-                                          fontSize: 12,
+
+                        const SizedBox(height: 12),
+
+                        for (final exercise in widget.exercises) ...[
+                          Padding(
+                            key: _exerciseKeys[exercise.id],
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: StrobeFlash(
+                              trigger: _flashTriggers[exercise.id],
+                              borderRadius: BorderRadius.circular(4),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: kCard,
+                                  border: Border.all(color: kBorder),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: ArcadeTap(
+                                  onTap: () => _openExercise(exercise),
+                                  haptic: HapticIntent.selection,
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                exercise.name,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyLarge
+                                                    ?.copyWith(
+                                                      color: kWhite,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                exercise.levelLabel,
+                                                style: const TextStyle(
+                                                  color: kMutedText,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(width: 12),
+                                        _statusWidget(_status[exercise.id]!),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                _statusWidget(_status[exercise.id]!),
-                              ],
+                              ),
                             ),
                           ),
+                        ],
+
+                        const SizedBox(height: 16),
+
+                        PixelButton(
+                          label: 'Finish Workout',
+                          powerOn: true,
+                          haptic: HapticIntent.success,
+                          onPressed: _allDone ? () => _goToSummary() : null,
                         ),
-                      ),
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 16),
-
-                PixelButton(
-                  label: 'Finish Workout',
-                  powerOn: true,
-                  haptic: HapticIntent.success,
-                  onPressed: _allDone ? () => _goToSummary() : null,
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -1014,23 +1127,28 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
 }
 
 class _ElapsedDisplay extends StatelessWidget {
-  const _ElapsedDisplay({required this.minutes, required this.seconds});
+  const _ElapsedDisplay({
+    required this.minutes,
+    required this.seconds,
+    this.color = kNeon,
+  });
 
   final String minutes;
   final String seconds;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    const style = TextStyle(
+    final style = TextStyle(
       fontFamily: 'PressStart2P',
       fontSize: 20,
-      color: kNeon,
+      color: color,
     );
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(minutes, style: style),
-        const BlinkingColon(child: Text(':', style: style)),
+        BlinkingColon(child: Text(':', style: style)),
         Text(seconds, style: style),
       ],
     );

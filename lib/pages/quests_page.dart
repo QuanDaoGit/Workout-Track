@@ -111,6 +111,7 @@ class QuestsPageState extends State<QuestsPage> {
       wallet?.land(reward, snap: true, big: big);
       _triggerBitCheer(big);
     } else {
+      _gemFlightTicks = 0; // fresh streaming-tick budget for this burst
       final walletRect = walletBox.localToGlobal(Offset.zero) & walletBox.size;
       wallet?.showDelta(reward); // the single per-claim "+N" reveal
       _flightKey.currentState?.fly(
@@ -130,11 +131,21 @@ class QuestsPageState extends State<QuestsPage> {
     }
   }
 
-  // Each gem arrival raises the wallet + refreshes BIT's cheer. The chime + haptic
-  // already fired once at the claim impact (t0), so landings stay purely visual
-  // (no per-gem audio — a big payout would otherwise machine-gun the chime).
+  // Budget for the soft "gems streaming in" ticks (the claim reward already fired
+  // at t0). Capped so a big multi-gem payout can't machine-gun the motor — a
+  // couple of subtle ticks as they land, not one per gem (Codex haptics review).
+  static const _kMaxGemFlightTicks = 2;
+  int _gemFlightTicks = 0;
+
+  // Each gem arrival raises the wallet + refreshes BIT's cheer. The chime + the
+  // reward haptic fired once at the claim impact (t0); here a *capped* couple of
+  // subtle selection ticks ride the stream so the gems feel like they land.
   void _onGemLand(int amt, bool isLast, bool big) {
     _walletKey.currentState?.land(amt, big: big);
+    if (_gemFlightTicks < _kMaxGemFlightTicks) {
+      _gemFlightTicks++;
+      HapticService.instance.selection();
+    }
     _triggerBitCheer(big);
   }
 

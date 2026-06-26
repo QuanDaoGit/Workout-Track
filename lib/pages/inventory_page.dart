@@ -3,6 +3,7 @@ import '../theme/app_fonts.dart';
 
 import '../data/loot_registry.dart';
 import '../models/loot_item.dart';
+import '../services/haptic_service.dart';
 import '../services/loot_service.dart';
 import '../services/unit_settings_service.dart';
 import '../theme/tokens.dart';
@@ -88,11 +89,13 @@ class InventoryPageState extends State<InventoryPage> {
 
     if (confirmed != true) return;
     await _lootService.equipItem(item.id);
+    HapticService.instance.success(); // the "equipped" payoff
     await _load();
   }
 
   Future<void> _clearTitle() async {
     await _lootService.unequipCategory(LootCategory.titleBadge);
+    HapticService.instance.selection();
     await _load();
   }
 
@@ -263,6 +266,7 @@ class _NoTitleRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: HoldDepress(
         onTap: onTap,
+        haptic: HapticIntent.selection,
         borderRadius: BorderRadius.circular(4),
         child: Container(
           padding: const EdgeInsets.all(kSpace3),
@@ -323,6 +327,7 @@ class _LootGridTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return HoldDepress(
       onTap: onTap,
+      haptic: HapticIntent.selection,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.all(6),
@@ -417,6 +422,7 @@ class _TitleLootRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: HoldDepress(
         onTap: onTap,
+        haptic: HapticIntent.selection,
         borderRadius: BorderRadius.circular(4),
         child: Container(
           padding: const EdgeInsets.all(kSpace3),

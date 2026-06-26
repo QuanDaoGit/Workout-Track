@@ -52,12 +52,16 @@ class NotificationService implements RestAlertScheduler {
           importance: Importance.high,
         ),
       );
+      // Only latch as initialized once the plugin genuinely came up — otherwise a
+      // transient failure would permanently mark us "ready" while the plugin is
+      // dead, and every later schedule/cancel would throw "must be initialized".
+      _initialized = true;
     } catch (e) {
       // Best-effort: a notification subsystem must never crash boot / a workout
       // (also covers the unit-test env where no platform plugin is registered).
+      // _initialized stays false so the next call retries init().
       debugPrint('NotificationService.init failed: $e');
     }
-    _initialized = true;
   }
 
   AndroidFlutterLocalNotificationsPlugin? get _android {
@@ -143,6 +147,10 @@ class NotificationService implements RestAlertScheduler {
 
   @override
   Future<void> cancelRestDone() async {
+    // Mirror scheduleRestDone's guard: the coordinator cancels on every app
+    // resume, which can run before init() has completed — and the plugin throws
+    // "must be initialized before use" if cancel() is called first.
+    if (!_initialized) await init();
     try {
       await _plugin.cancel(id: _restNotifId);
     } catch (e) {

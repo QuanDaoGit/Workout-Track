@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../data/exercise_demos.dart';
+import '../services/haptic_service.dart';
 import '../theme/tokens.dart';
 
 /// Plays an exercise's form-demo clip: muted, looping, tap toggles pause/play.
@@ -125,6 +126,8 @@ class _ExerciseDemoPlayerState extends State<ExerciseDemoPlayer>
       'error=${v.errorDescription}',
     );
     if (!v.isInitialized) return;
+    // Coalesced so rapid play/pause taps can't machine-gun the motor.
+    HapticService.instance.fireCoalesced(HapticIntent.selection);
     if (v.isPlaying) {
       controller.pause();
     } else {

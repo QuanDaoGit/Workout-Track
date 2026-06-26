@@ -8,6 +8,19 @@ research each and weight effort by how load-bearing it is to the decision. **Saf
 overlay**: when its signals appear, it fires *in addition to* whatever else matched and **forces the
 Deep tier**.
 
+**Two ways this file is used:** (a) ad-hoc single-field research, and (b) the **candidate field MENU**
+for `deep-feature` Stage 2's *field audit*, which prunes this list to the load-bearing few for a feature
+(a rich menu + a ruthless prune — big features get coverage, small ones stay cheap). For (b): **tag each
+selected field INTERNAL** (answered by reading our own code in the Stage-1 audit — *never* web-searched;
+forcing a web query at an internal-codebase question invents false precedent) **or EXTERNAL**
+(web-researchable), and **phrase every question through the app's soul + current architecture**, never
+generically — the question is "how does X fit *our* pixel-arcade / body-neutral / offline app and its
+current structure", not "what is X in the abstract". A **MIXED** field (engineering-quality,
+data/analytics, frictionless) emits **two sub-questions — one INTERNAL, one EXTERNAL — each kept or
+skipped explicitly**, so it can't silently collapse to one side. **When `deep-feature` 2.5 grows this
+file, add structure only** (fields, routing rules, question templates) — **dated sources / stale-flags
+go to `insights.md`**, never here.
+
 ## The fields
 
 ### 1. Exercise science
@@ -69,6 +82,55 @@ Deep tier**.
 - **Evidence bar:** **authoritative clinical source required** — no blogs for a safety claim. Extract
   **demographic validity + recency**. **Hard boundary: no diagnosis, no prescriptive medical advice** —
   the app educates and defers users to professionals; research output must respect that line.
+
+### 7. Placement / information architecture — usually INTERNAL
+- **Signals:** where does it live, which screen/tab/route, what it replaces, nav depth, does the
+  surrounding structure need reorganizing so the feature fits without debt.
+- **Sources:** **the Stage-1 code audit first** (root nav / IndexedStack, the target page, routing,
+  what currently occupies the slot); EXTERNAL nav/IA precedent (NN/g IA, competitor placement) only for
+  the *pattern*.
+- **Bar/idioms:** answer from our own structure; cite competitor placement as precedent, not proof.
+
+### 8. Aesthetic / graphic precedent — EXTERNAL (pixels defer to `ironbit-design`)
+- **Signals:** what it should look like / evoke, the genre's visual language, art approach (sprite vs
+  procedural paint), what competitors' visuals actually do, "user taste / aspiration".
+- **Sources:** the genre + competitor product visuals, Game UI Database, Mobbin, art-direction
+  references. **Evidence/precedent only.**
+- **Bar:** gather direction + precedent; **hand the actual pixels to `ironbit-design`** — never specify
+  hex/widgets/layout here (that boundary keeps the locked pixel-arcade language coherent).
+
+### 9. Frictionless / interaction cost — EXTERNAL UX + INTERNAL flow
+- **Signals:** cognitive load, taps-to-value, defaults, empty/edge states, can a step be removed, does
+  it interrupt the core loop.
+- **Sources:** NN/g (interaction cost, defaults, recognition-over-recall), Laws of UX (Hick/Fitts),
+  competitor flows; **+ our own flow** (Stage-1) for where the friction actually is.
+- **Bar:** count the taps; prefer removing a step over styling it; respect the offline/anti-guilt loop.
+
+### 10. Engineering quality & architecture-fit — MIXED (internal fit + external patterns)
+- **Signals:** maintainability / readability / scalability, bug-surface, tangle risk, refactor need,
+  tech-debt, long-term growth, **where it fits our architecture**, what to reorganize so it scales.
+- **Sources:** **INTERNAL = the Stage-1 code audit** (owning services/models, the patterns, the seams,
+  the persistence keys) — do **not** web-search our own code; **EXTERNAL = scalable Flutter/Dart
+  patterns + known anti-patterns** for this kind of feature (context7, docs.flutter.dev, maintained
+  packages).
+- **Bar:** internal fit is *read from our code*; the external part is version-correct for our pinned
+  Flutter/Dart. This **composes with** the Stage-1 audit (the internal questions *are* the audit) — do
+  not duplicate it.
+
+### 11. Data / analytics — MIXED
+- **Signals:** what to measure, what the feature reads/writes, data-model / persistence implications,
+  derived-metric honesty, what a future surface will need.
+- **Sources:** **INTERNAL = our models / SharedPreferences keys / services** (Stage-1); **EXTERNAL =
+  metric validity + what leading apps surface** and why.
+- **Bar:** a number shown to the user must be honest + validated against its anchor (see the
+  Advisory/derived-numbers discipline); body-neutral framing holds.
+
+### 12. Idea / handoff market-fit critique — EXTERNAL
+- **Signals:** "does the user's concept / the handoff fit the market", what to drop or adapt, what is
+  off-trend, what competitors *tried and abandoned*.
+- **Sources:** competitor teardowns + reviews + the product itself; recency/trend checks.
+- **Bar:** name what does **not** fit + the recommended adaptation, and **tie it to the app's wedge** —
+  never chase a trend that fights the soul (earned attachment + offline/private + arcade identity).
 
 ## Lenses (apply to every finding — do NOT restate doctrine here)
 Judge findings against the app's non-negotiables. The **canonical sources** are:

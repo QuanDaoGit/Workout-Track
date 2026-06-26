@@ -60,26 +60,110 @@ concrete problems with `file:line` evidence. Separate **defects** from **deliber
 intent** (e.g. Tank=END radar identity is intent) — intent questions go to the user, not into a
 "fix". *Artifact: numbered problem list.*
 
-## Stage 2 — Research (evidence standard)
+## Stage 2 — Research program (multi-field, audited, app-grounded, self-growing)
 
-**Run the `research` skill** — it owns field detection (incl. the Safety/clinical overlay), source
-routing, evidence grading, the contrary-evidence guardrail, and the tier-gated
-Codex-review-of-the-evidence. Its brief is the **sole** Stage-2 research artifact; **don't redefine
-its evidence bar here**. This stage only adds product **acceptance criteria** the research must cover:
+The `research` skill is the **per-field engine** (it owns field detection, tiering, SIFT, the
+contrary-evidence guardrail, the Codex-review-of-the-evidence, and persistence — **don't redefine its
+evidence bar here**). This stage **orchestrates a research *program* across the fields a feature
+touches**, sized by an **objective trigger, not a vibe** (so a small change can't be rationalized into a
+big research bill, and a flagship still gets full coverage):
+- A change is **major** if **any** of these hold: it adds a new screen / bespoke surface, a new
+  persistence key or scoring/XP/stats path, it changes the **core loop**, or it is **cross-cutting**
+  (≥3 files/systems). The body-map is major on three of these.
+- **No trigger → it is small:** cap at **≤3 kept fields** (often 1–2). The carve-out skips Stage 2
+  entirely.
+- **Major → the broad sweep is appropriate** — but it is still a **prune, not a checklist**: every
+  *kept* field carries a one-line decision-relevance reason and every *dropped* field a one-line
+  why-not. Running all 12 reflexively is the failure mode; "this field changes a decision" is the bar.
 
-1. **Domain accuracy** — exercise-science literature for anything touching mechanics
-   (volume-vs-intensity, e1RM validity, strength standards, detraining). Physiological claims
-   require primary or authoritative sources, not blog consensus.
-2. **User + gamer psychology** — SDT/competence, loss aversion + forgiveness (Duolingo streak
-   research), sunk-cost/identity investment, "players will optimize the fun out of a game".
-3. **Leading apps** — Strong/Hevy for tracking mechanics, Duolingo-class for habit mechanics —
-   only where real market precedent exists.
+- **Evidence-sensitive even when "small":** some user-facing **behavior/policy** changes are easy to
+  get wrong from stale priors even though they trip no structural trigger — defaults, validation,
+  onboarding/friction, accessibility, notifications/reminders, monetization, privacy/consent, and
+  irreversible/destructive flows. These **must research their relevant field(s) and run 2.3 regardless
+  of the ≤3 cap**, and they are **not** carve-out material.
 
-Purely internal engineering defects (cache bugs, refactors, test gaps) may skip external research
-with a one-line justification. Remember: accuracy and the hook usually point the same way — a
-farmable stat undermines the competence signal that makes the number satisfying. (The Stage-2
-evidence review inside `research` does **not** replace Stage 4's review of the opinion/plan below.)
-*Artifact: the `research` brief — findings grouped per problem, with links.*
+The menu is rich on purpose; the audit is what makes a body-diagram-scale feature get full coverage
+while a one-liner stays cheap.
+
+**Worked routing — sanity-check yourself against these:**
+- *Soften onboarding copy to cut friction* → structurally small, but **evidence-sensitive**
+  (friction/onboarding/behavioral) → research those fields, **2.3 runs** (external evidence used); it is
+  **not** carve-out.
+- *Rename a private field / extract a helper* → purely internal, no external evidence → one
+  engineering-fit (INTERNAL) question or carve-out; **2.3 collapses into Stage 4**.
+- *Add the body-diagram surface* → **major** (new screen + new data read + cross-cutting) → broad sweep
+  across placement / UI-UX / aesthetic / frictionless / competitor / data / engineering-fit /
+  behavioral, **each kept field justified, each dropped one noted**; **2.3 runs**.
+
+**2.0 — Field audit (scope the research).** Before searching, enumerate which fields THIS feature needs
+from the **candidate menu in `research/references/field-map.md`** (placement/IA · UI-UX-motion ·
+aesthetic/graphic precedent · frictionless/interaction-cost · competitor/market · user-taste · domain
+accuracy · data/analytics · engineering-quality & architecture-fit · behavioral/gamification ·
+safety/accessibility overlay · idea/handoff market-fit critique). **Prune to the load-bearing few** —
+one-line keep/drop reason each (decision-relevance, not completeness — the same prune that bounds the
+research decomposition). For each kept field write **one app-contextual question** — phrased through the
+app's soul + *current architecture*, never generic (e.g. "given our pixel-arcade, body-neutral, offline
+app and its IndexedStack / SharedPreferences / Logs structure, where does X live and what must
+reorganize so it scales without tech debt?"). **Tag each field INTERNAL or EXTERNAL** (next step).
+
+**2.1 — Run the batches.**
+- **EXTERNAL** fields (competitor, domain science, general UX/architecture patterns, aesthetic
+  precedent, market-fit) → the `research` engine, **web-grounded** (current sources, not pretrained),
+  parallelized.
+- **INTERNAL** fields (where it fits *our* code, what to reorganize, our tech-debt/tangle/scalability
+  risk, placement in our IA) are answered by **extending the Stage-1 code audit — NOT** forced through
+  web search; pushing a web query at an internal-codebase question is a category error that wastes
+  budget and invents false precedent.
+- A **MIXED** field must emit **two sub-questions — one INTERNAL, one EXTERNAL — each with an explicit
+  keep/skip decision**, so it can't silently collapse to one side. For engineering-quality: the
+  INTERNAL fit (does it belong here, what reorganizes) is **mandatory whenever code is affected**; the
+  EXTERNAL pattern search is **optional — run it only when the architecture question is novel or
+  contested**, else skip it with a note (don't fetch generic advice about our own repo).
+
+**2.2 — Cross-field synthesis.** Merge the briefs and surface the **cross-field tensions** explicitly —
+the recurring accuracy-vs-hook axis plus taste-vs-frictionless, aspiration-vs-maintainability, and
+idea-vs-market. Aesthetic findings are **evidence/precedent only — the pixels defer to `ironbit-design`**.
+
+**2.3 — Codex adversarial review of the EVIDENCE (conditional).** Run it (prompt-carried — see
+`.claude/codex-local.md`; the prompt-only review *works*, do **not** assume Codex is unavailable) whenever
+**any kept field used EXTERNAL evidence**, or the change is **high-impact / safety / analytics /
+cross-field** — i.e. wherever coverage can actually be wrong. **Collapse it into the Stage-4 plan
+review** (with a one-line note that 2.3 was intentionally skipped) **only when the change is purely
+internal** — zero external evidence *and* no high-impact/safety/analytics/cross-field claim;
+manufacturing a Codex pass over one internal finding is theater, not rigor. When it runs, challenge **coverage**: a
+missing field, a weak/biased source, **app-soul or architecture drift**, overgeneralization, stale
+recency, and **confirmation bias introduced by the app-grounding** (did we only find what flatters the
+app?). This reviews the **evidence**; it is **not** Stage 4 (which reviews the opinion/plan) — different
+objects, neither substitutes for the other.
+
+**2.4 — Evaluate Codex + wrap-up.** Do **not** blind-accept — for each point: agree / partial / reject,
+with a reason (receiving-review discipline). Then run **one** wrap-up research loop to close the real
+gaps. Output the consolidated **research brief**.
+
+**2.5 — Reflect → self-growth (gated; this is what compounds).** Make each use leave research better —
+but only when something durable actually surfaced (no mandatory churn):
+- Persist durable findings → `research/insights.md` (tied to a decision + doctrine). **Reuse-first**
+  next time is the compounding — later features start from accumulated knowledge, not zero.
+- Distill a *generalizable* method/source failure → `research/learnings.md` (update-over-append,
+  respect the cap, prune the least-recently-fired when full).
+- **Grow the field-map *structurally only*** — a genuinely new field, a routing rule, or a question
+  template; **never** dated sources or stale-flags (a reusable menu must not decay into a time-sensitive
+  source registry — those belong in `insights.md` with dates + a review cadence). Most runs add nothing,
+  and that is correct.
+- **Self-score** the run (coverage · recency · app-grounding · contrary-evidence · Codex-resolution ·
+  decision-tied), name the **single weakest dimension + one concrete fix** as next time's focus —
+  anchored to the Codex 2.3 findings, not a vacuum self-grade.
+- State **"no growth this run"** when nothing qualifies — the visible gate that keeps the stores from
+  rotting.
+
+The product **acceptance criteria** the brief must still cover where they apply: domain accuracy
+(primary sources for mechanics), user/gamer psychology (SDT / loss-aversion / identity), and
+leading-app precedent. Accuracy and the hook usually point the same way — a farmable stat undermines the
+competence signal that makes the number satisfying.
+
+*Artifacts: the field-audit (kept/dropped fields + INTERNAL/EXTERNAL tags + per-field app-contextual
+question) · per-field briefs · cross-field synthesis · the Codex evidence verdict + your evaluation ·
+the consolidated research brief · the reflect note (growth, or "no growth this run").*
 
 ## Stage 3 — Opinion
 

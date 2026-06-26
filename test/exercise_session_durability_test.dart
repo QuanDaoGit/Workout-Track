@@ -33,7 +33,7 @@ Future<void> _logOneSetInA(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.enterText(find.byType(TextField).at(0), '100');
   await tester.enterText(find.byType(TextField).at(1), '5');
-  await tester.tap(find.byIcon(Icons.save_sharp));
+  await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 200));
 }
@@ -103,7 +103,7 @@ void main() {
     // Commit a working set.
     await tester.enterText(find.byType(TextField).at(0), '100');
     await tester.enterText(find.byType(TextField).at(1), '5');
-    await tester.tap(find.byIcon(Icons.save_sharp));
+    await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp));
     await tester.pump();
 
     // Then a warm-up-only commit (LOG IT on the advisory card).
@@ -124,20 +124,25 @@ void main() {
       MaterialApp(home: ExerciseSessionPage(exercise: _exercise('a'))),
     );
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.save_sharp), findsOneWidget); // 1 row
+    expect(find.byIcon(Icons.radio_button_unchecked_sharp), findsOneWidget); // 1 row
 
     await tester.tap(find.text('+ ADD SET'));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.save_sharp), findsNWidgets(2)); // 2 rows
+    expect(find.byIcon(Icons.radio_button_unchecked_sharp), findsNWidgets(2)); // 2 rows
     expect(find.byIcon(Icons.close_sharp), findsOneWidget); // only row 2 removable
 
     await tester.tap(find.byIcon(Icons.close_sharp));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.save_sharp), findsOneWidget); // back to 1 row
+    expect(find.byIcon(Icons.radio_button_unchecked_sharp), findsOneWidget); // back to 1 row
   });
 
   testWidgets('removing a middle row preserves the locked first row '
       '(#4 reindex)', (tester) async {
+    // A tall surface so + ADD SET stays above the floating rest-start snackbar.
+    tester.view.physicalSize = const Size(1080, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MaterialApp(home: ExerciseSessionPage(exercise: _exercise('a'))),
     );
@@ -146,7 +151,7 @@ void main() {
     // Lock Set 1, then add two more rows.
     await tester.enterText(find.byType(TextField).at(0), '100');
     await tester.enterText(find.byType(TextField).at(1), '5');
-    await tester.tap(find.byIcon(Icons.save_sharp));
+    await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp));
     await tester.pump();
     await tester.tap(find.text('+ ADD SET'));
     await tester.pumpAndSettle();
@@ -213,7 +218,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), '60');
     await tester.enterText(find.byType(TextField).at(1), '8');
-    await tester.tap(find.byIcon(Icons.save_sharp).first);
+    await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp).first);
     await tester.pumpAndSettle();
 
     // The chip did not vanish — it followed down to the now-first-unlogged Set 2.
@@ -238,6 +243,6 @@ void main() {
 
     // Two locked rows → two saved-check icons, no save icons.
     expect(find.byIcon(Icons.check_circle_sharp), findsNWidgets(2));
-    expect(find.byIcon(Icons.save_sharp), findsNothing);
+    expect(find.byIcon(Icons.radio_button_unchecked_sharp), findsNothing);
   });
 }

@@ -125,6 +125,23 @@ stands alone. Then persist per the resolved default:
 - **`ironbit-design`** owns in-app visual/UX *look*. Hand it anything about how a surface should look
   or feel; this skill researches UX *evidence/precedent*, not the pixels.
 
-## Reflect
-If the work surfaced a **generalizable** research failure mode (not a one-off fact), distill it into
-`learnings.md` — update an existing category over a near-duplicate, respect the cap, generalize don't transcribe.
+## Reflect — the self-growth engine (gated; this is what makes each use better)
+The skill compounds the way effective agents do — verbal self-critique persisted across runs
+(Reflexion) + an ever-growing reusable store (Voyager's skill library) — **without churning noise**.
+Growth is **conditional**: most runs add little, and stating that is itself the gate that stops the
+stores from rotting.
+- **Persist durable findings →** `research/insights.md` (tagged, tied to a decision + doctrine).
+  **Reuse-first** at Stage 0 next time is the actual compounding — later questions start from
+  accumulated knowledge, not zero.
+- **Distill a *generalizable* failure mode →** `learnings.md` — update an existing category over a
+  near-duplicate, respect the cap, prune the least-recently-fired when full; generalize, don't
+  transcribe.
+- **Grow the field map** (`references/field-map.md`) **structurally only** — a genuinely new field, a
+  routing rule, or a question template; the auditing brain gets richer over time, but **never** add
+  dated sources or stale-flags here (that decays the reusable menu into a time-sensitive registry —
+  dated evidence lives in `insights.md`). Most runs touch nothing here, and that is correct.
+- **Self-score the run** — coverage · recency · app-grounding · contrary-evidence · Codex-resolution ·
+  decision-tied — and name the **single weakest dimension + one concrete fix** as next time's focus.
+  Anchor the score to the **Codex 2.3 / Stage-6 findings** (an external signal), not a vanity
+  self-grade — the rubric's only job is to surface the weakest link to improve, never to congratulate.
+- End with **"no growth this run"** when nothing qualified — the visible gate is the point.

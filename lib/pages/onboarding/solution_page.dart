@@ -77,7 +77,13 @@ class _SolutionViewState extends State<SolutionView>
   bool _reducedMotion = false;
   bool _handed = false;
 
-  // One haptic at the cheer-burst peak.
+  // A short STRONG burst at the cheer apex — 3 medium pulses ~200ms apart
+  // (~400ms total: the reward-feel sweet spot, at/under the 5/sec ceiling),
+  // ridden off the intro ticker so the felt power-up tracks the seen surge.
+  // Reduced motion fires a single reward on the settled arrival instead (no
+  // surge to ride, but the screen the user navigated to is a visible payoff).
+  static const _bloomBurstMs = <double>[1340, 1540, 1740];
+  int _bloomPulses = 0;
   bool _bloomFired = false;
 
   @override
@@ -105,8 +111,13 @@ class _SolutionViewState extends State<SolutionView>
     if (_reducedMotion) {
       _introController.stop();
       _ctaPulseController.stop();
+      // A single reward on the settled arrival (the burst can't ride a frozen
+      // surge). Guarded by `_bloomFired` (a true one-shot) so a re-run of
+      // didChangeDependencies (a MediaQuery/theme change) can never replay it.
+      if (!_bloomFired) HapticService.instance.reward();
       _complete = true;
       _bloomFired = true;
+      _bloomPulses = _bloomBurstMs.length;
       _introController.value = 1;
     } else if (!_complete && !_introController.isAnimating) {
       _introController.forward(from: 0);
@@ -122,11 +133,14 @@ class _SolutionViewState extends State<SolutionView>
 
   void _maybeFireBloom() {
     if (_bloomFired || _reducedMotion) return;
-    if (_introController.value * SolutionView._totalMs >=
-        SolutionView._bloomAtMs) {
-      _bloomFired = true;
+    final ms = _introController.value * SolutionView._totalMs;
+    // Fire every burst beat the frame crossed (while-loop: a stuttered frame
+    // still lands all three), then mark the burst spent.
+    while (_bloomPulses < _bloomBurstMs.length && ms >= _bloomBurstMs[_bloomPulses]) {
+      _bloomPulses++;
       HapticService.instance.reward();
     }
+    if (_bloomPulses >= _bloomBurstMs.length) _bloomFired = true;
   }
 
   void _finishIntro() {

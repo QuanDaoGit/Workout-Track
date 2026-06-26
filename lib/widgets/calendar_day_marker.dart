@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/rest_models.dart';
 import '../theme/tokens.dart';
 
-enum CalendarMarkerKind { workout, abandoned, protected, missed, rest }
+enum CalendarMarkerKind { workout, abandoned, protected, rest }
 
 const Color calendarMarkerMuted = kSlate;
 const Color calendarMarkerNeon = kNeon;
@@ -17,7 +17,6 @@ CalendarMarkerKind? calendarMarkerKindFor({
   required bool abandonedOnly,
   required bool isToday,
   required bool isSelected,
-  bool suppressMissed = false,
 }) {
   if (hasWorkout) {
     return abandonedOnly
@@ -27,11 +26,9 @@ CalendarMarkerKind? calendarMarkerKindFor({
 
   return switch (restInfo.kind) {
     RestDayKind.protectedMiss => CalendarMarkerKind.protected,
-    // Days before the user's first-ever session aren't "missed" — there was
-    // no habit to miss yet. Callers suppress to keep a new user's calendar
-    // from opening as a wall of failures.
-    RestDayKind.unplannedMiss when suppressMissed => null,
-    RestDayKind.unplannedMiss => CalendarMarkerKind.missed,
+    // A missed training day carries no marker — absence is just an unfilled
+    // cell, never a flagged failure. (The tap-detail still names it in text.)
+    RestDayKind.unplannedMiss => null,
     RestDayKind.abandonedOnly => CalendarMarkerKind.abandoned,
     RestDayKind.plannedRest when isToday || isSelected =>
       CalendarMarkerKind.rest,
@@ -42,12 +39,10 @@ CalendarMarkerKind? calendarMarkerKindFor({
 Color calendarMarkerColor(CalendarMarkerKind? kind, {Color? workoutColor}) {
   return switch (kind) {
     CalendarMarkerKind.workout => workoutColor ?? calendarMarkerNeon,
+    // Red stays reserved for abandoned sessions (a deliberate end, not an
+    // absence) — it also collided with the Arms muscle color on workouts.
     CalendarMarkerKind.abandoned => calendarMarkerRed,
     CalendarMarkerKind.protected => calendarMarkerNeon,
-    // Muted, not red: a missed day is information, not an alarm. Red also
-    // collided with the Arms muscle color on workout markers. Red stays
-    // reserved for abandoned sessions (a deliberate end, not an absence).
-    CalendarMarkerKind.missed => calendarMarkerMuted,
     CalendarMarkerKind.rest => calendarMarkerCyan,
     null => calendarMarkerMuted,
   };
@@ -134,14 +129,6 @@ class CalendarDayMarker extends StatelessWidget {
         height: compact ? 9 : 11,
         decoration: BoxDecoration(
           border: Border.all(color: markerColor, width: 1.5),
-        ),
-      ),
-      CalendarMarkerKind.missed => Transform.rotate(
-        angle: -0.7,
-        child: Container(
-          width: compact ? 15 : 18,
-          height: compact ? 3 : 4,
-          color: markerColor,
         ),
       ),
       CalendarMarkerKind.rest => Container(

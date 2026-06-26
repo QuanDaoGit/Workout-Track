@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../services/haptic_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/companion/bit_boot.dart';
 import '../../widgets/companion/bit_core_engine.dart' show bitGlow;
+import '../../widgets/motion/haptic_pulse_track.dart';
 import '../../widgets/motion/power_on.dart';
 import '../../widgets/typewriter_text.dart';
 
@@ -57,6 +59,12 @@ class _ColdOpenViewState extends State<ColdOpenView>
     duration: const Duration(milliseconds: 1400),
   );
 
+  // A gentle "continuous weak" haptic that rides BIT's boot rise — a few soft
+  // selection ticks coupled to the `_boot` ticker (no free timer, no drift),
+  // so the wake *feels* alive. Attached on the wake tap; suppressed under
+  // reduced motion (the boot is instant — there's no rise to ride).
+  HapticPulseTrack? _bootHaptics;
+
   bool get _reduceMotion {
     final media = MediaQuery.of(context);
     return media.disableAnimations || media.accessibleNavigation;
@@ -75,12 +83,19 @@ class _ColdOpenViewState extends State<ColdOpenView>
   void _handleTap() {
     if (_boot.isDismissed) {
       _standby.stop();
+      // Power-on is a deliberate, satisfying action → a light press ack.
+      HapticService.instance.tap();
       if (_reduceMotion) {
-        _boot.value = 1; // instant power-on
+        _boot.value = 1; // instant power-on (no rise to ride → no train)
       } else {
+        // Weak, slow ticks rising with the boot (the "BIT waking" feel) — kept
+        // sparse (2 ticks over the rise + the wake ack) so the ambient cue
+        // stays gentle, not chatty.
+        _bootHaptics ??= HapticPulseTrack(animation: _boot, pulses: 2);
         _boot.forward();
       }
     } else if (_boot.isCompleted) {
+      HapticService.instance.selection(); // advancing past the cold open
       widget.onContinue();
     }
     // Mid-boot taps are ignored — the user just triggered the brief power-on.
@@ -88,6 +103,7 @@ class _ColdOpenViewState extends State<ColdOpenView>
 
   @override
   void dispose() {
+    _bootHaptics?.dispose();
     _boot.dispose();
     _standby.dispose();
     super.dispose();

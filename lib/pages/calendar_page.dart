@@ -152,17 +152,12 @@ class _CalendarPageState extends State<CalendarPage> {
       sessions: sessions ?? const [],
       state: _restState,
     );
-    final firstActivityDay = _sessionsByDay.keys.isEmpty
-        ? null
-        : _sessionsByDay.keys.reduce((a, b) => a.isBefore(b) ? a : b);
     final markerKind = calendarMarkerKindFor(
       restInfo: restInfo,
       hasWorkout: hasWorkout,
       abandonedOnly: abandonedOnly,
       isToday: isToday,
       isSelected: isSelected,
-      suppressMissed:
-          firstActivityDay == null || day.isBefore(firstActivityDay),
     );
     final workoutColor = hasWorkout
         ? kMuscleGroupColors[sessions.first.muscleGroup] ?? kNeon
@@ -338,11 +333,6 @@ class _CalendarPageState extends State<CalendarPage> {
                             CalendarLegendMarker(
                               kind: CalendarMarkerKind.protected,
                               label: 'Protected',
-                            ),
-                            SizedBox(width: 14),
-                            CalendarLegendMarker(
-                              kind: CalendarMarkerKind.missed,
-                              label: 'Missed',
                             ),
                           ],
                         ),

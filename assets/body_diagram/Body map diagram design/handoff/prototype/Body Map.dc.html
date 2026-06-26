@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/motion.css">
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/base.css">
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/styles.css">
+  <script src="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/_ds_bundle.js"></script>
+  <style>
+    *{box-sizing:border-box;}
+    html,body{margin:0;padding:0;background:#0E0E1B;}
+    @keyframes bodymap-pulse{0%,100%{filter:brightness(1) saturate(1) drop-shadow(0 0 6px rgba(0,255,156,.4));}50%{filter:brightness(1.22) saturate(1.1) drop-shadow(0 0 10px rgba(0,255,156,.55));}}
+    @keyframes bodymap-sweep{0%{transform:translateY(-12%);opacity:0;}14%{opacity:.5;}86%{opacity:.5;}100%{transform:translateY(112%);opacity:0;}}
+    @media (prefers-reduced-motion: reduce){*{animation:none !important;}}
+    .bm-scroll::-webkit-scrollbar{width:6px;}
+    .bm-scroll::-webkit-scrollbar-thumb{background:#36365E;border-radius:3px;}
+    .bm-scroll::-webkit-scrollbar-track{background:transparent;}
+  </style>
+</helmet>
+<div style="height:100vh; display:flex; gap:24px; padding:24px; background:linear-gradient(180deg,#15152C 0%,#0E0E1B 100%); font-family:var(--font-body); color:var(--text); overflow:hidden;">
+
+  <div style="flex:1 1 auto; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div style="font-family:var(--font-display); font-size:9px; letter-spacing:2px; color:var(--text-dim);">VIEW</div>
+      <x-import component-from-global-scope="IronbitDesignSystem_e9840b.ArcadeChip" label="FRONT" selected="{{ isFront }}" on-click="{{ setFront }}" hint-size="80px,33px"></x-import>
+      <x-import component-from-global-scope="IronbitDesignSystem_e9840b.ArcadeChip" label="BACK" selected="{{ isBack }}" on-click="{{ setBack }}" hint-size="80px,33px"></x-import>
+    </div>
+
+    <div ref="{{ frameRef }}" style="position:relative; height:min(84vh,840px); max-width:100%; aspect-ratio:1024/1536; background:#0A0F29; border:1px solid var(--border); border-radius:4px; box-shadow:inset 0 0 80px rgba(0,255,156,.05); overflow:hidden;">
+      <div data-viewwrap="front" style="position:absolute; inset:0;">
+        <img alt="" src="assets/base_front.png" style="position:absolute; inset:0; width:100%; height:100%; display:block;" />
+        <div data-dim style="position:absolute; inset:0; pointer-events:none; background:rgba(8,12,34,0.5);"></div>
+        <img alt="" data-glow="delt_caps" src="assets/glow_delt_caps.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="chest" src="assets/glow_chest.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="biceps" src="assets/glow_biceps.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="forearms" src="assets/glow_forearms.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="abs" src="assets/glow_abs.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="obliques" src="assets/glow_obliques.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="quads" src="assets/glow_quads.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="abductors" src="assets/glow_abductors.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="shin_calf" src="assets/glow_shin_calf.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+      </div>
+      <div data-viewwrap="back" style="position:absolute; inset:0; display:none;">
+        <img alt="" src="assets/base_back.png" style="position:absolute; inset:0; width:100%; height:100%; display:block;" />
+        <div data-dim style="position:absolute; inset:0; pointer-events:none; background:rgba(8,12,34,0.5);"></div>
+        <img alt="" data-glow="traps" src="assets/glow_back_traps.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="lats" src="assets/glow_back_lats.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="rear_delts" src="assets/glow_back_rear_delts.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="triceps" src="assets/glow_back_triceps.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="forearms" src="assets/glow_back_forearms.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="lower_back" src="assets/glow_back_lower_back.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="glutes" src="assets/glow_back_glutes.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="hamstrings" src="assets/glow_back_hamstrings.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+        <img alt="" data-glow="calves" src="assets/glow_back_calves.png" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; opacity:0; transition:opacity 260ms cubic-bezier(0.33,1,0.68,1);" />
+      </div>
+
+      <sc-if value="{{ scanlines }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0px, rgba(0,0,0,.22) 1px, rgba(0,0,0,0) 1px, rgba(0,0,0,0) 3px); opacity:.5;"></div>
+        <div style="position:absolute; left:0; right:0; height:2px; background:linear-gradient(90deg, transparent, rgba(0,255,156,.5), transparent); animation:bodymap-sweep 6.5s linear infinite; pointer-events:none;"></div>
+      </sc-if>
+
+      <div style="position:absolute; top:8px; left:8px; width:15px; height:15px; border-left:2px solid var(--neon); border-top:2px solid var(--neon); opacity:.65; pointer-events:none;"></div>
+      <div style="position:absolute; top:8px; right:8px; width:15px; height:15px; border-right:2px solid var(--neon); border-top:2px solid var(--neon); opacity:.65; pointer-events:none;"></div>
+      <div style="position:absolute; bottom:8px; left:8px; width:15px; height:15px; border-left:2px solid var(--neon); border-bottom:2px solid var(--neon); opacity:.65; pointer-events:none;"></div>
+      <div style="position:absolute; bottom:8px; right:8px; width:15px; height:15px; border-right:2px solid var(--neon); border-bottom:2px solid var(--neon); opacity:.65; pointer-events:none;"></div>
+    </div>
+  </div>
+
+  <div style="width:392px; flex:0 0 392px; display:flex; flex-direction:column; gap:16px; background:var(--card); border:1px solid var(--border); border-radius:4px; padding:22px; min-height:0;">
+    <div>
+      <div style="font-family:var(--font-display); font-size:8px; letter-spacing:2px; color:var(--neon);">IRONBIT // COVERAGE</div>
+      <div style="font-family:var(--font-display); font-size:18px; color:var(--text); margin-top:12px; line-height:1;">BODY MAP</div>
+      <div style="font-family:var(--font-body); font-size:13px; color:var(--text-muted); margin-top:12px; line-height:1.45;">set your weekly volume per region. the body brightens as you move from building into the optimal range.</div>
+    </div>
+
+    <div style="border-top:1px solid var(--border); padding-top:16px; display:flex; align-items:center; gap:14px;">
+      <div style="font-family:var(--font-display); font-size:24px; color:var(--neon); line-height:1;">{{ totalSets }}</div>
+      <div style="font-family:var(--font-display); font-size:8px; letter-spacing:1.5px; color:var(--text-muted); line-height:1.5;">WEEKLY<br/>SETS</div>
+      <div style="flex:1; font-family:var(--font-body); font-size:11px; color:var(--text-muted); line-height:1.5; text-align:right;">{{ tally }}</div>
+    </div>
+
+    <div class="bm-scroll" style="flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:18px; padding-right:6px;">
+      <sc-for list="{{ groups }}" as="group" hint-placeholder-count="3">
+        <div>
+          <div style="font-family:var(--font-display); font-size:8px; letter-spacing:1.5px; color:var(--text-dim); margin-bottom:12px;">{{ group.title }}</div>
+          <div style="display:flex; flex-direction:column; gap:15px;">
+            <sc-for list="{{ group.muscles }}" as="m" hint-placeholder-count="3">
+              <div style="display:flex; flex-direction:column; gap:7px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                  <div style="font-family:var(--font-display); font-size:9px; letter-spacing:0.5px; color:var(--text);">{{ m.label }}</div>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <button type="button" onClick="{{ m.dec }}" style="appearance:none; width:30px; height:30px; flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; background:var(--surface-2); border:1px solid var(--border-variant); border-radius:4px; color:var(--neon); font-family:var(--font-display); font-size:13px; line-height:1; cursor:pointer; padding:0;" style-active="transform:translateY(1px); background:var(--surface-3);">&#8722;</button>
+                    <div style="font-family:var(--font-body); font-size:15px; color:var(--text); min-width:22px; text-align:center;">{{ m.sets }}</div>
+                    <button type="button" onClick="{{ m.inc }}" style="appearance:none; width:30px; height:30px; flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; background:var(--surface-2); border:1px solid var(--border-variant); border-radius:4px; color:var(--neon); font-family:var(--font-display); font-size:13px; line-height:1; cursor:pointer; padding:0;" style-active="transform:translateY(1px); background:var(--surface-3);">+</button>
+                  </div>
+                </div>
+                <div style="position:relative;">
+                  <div style="position:relative; height:9px; background:#191934; border:1px solid var(--border); border-radius:2px; overflow:hidden;">
+                    <div style="{{ m.bandStyle }}"></div>
+                    <div style="{{ m.fillStyle }}"></div>
+                    <div style="{{ m.mevTickStyle }}"></div>
+                  </div>
+                  <div style="{{ m.capStyle }}">&#9650;</div>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                  <div style="{{ m.zoneStyle }}">{{ m.zoneLabel }}</div>
+                  <div style="font-family:var(--font-body); font-size:11px; color:var(--text-dim);">{{ m.landmark }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="border-top:1px solid var(--border); padding-top:16px; display:flex; gap:10px;">
+      <div style="flex:1;"><x-import component-from-global-scope="IronbitDesignSystem_e9840b.PixelButton" label="FILL OPTIMAL" on-click="{{ fillOptimal }}" min-height="{{ 44 }}" hint-size="100%,44px"></x-import></div>
+      <div style="flex:1;"><x-import component-from-global-scope="IronbitDesignSystem_e9840b.PixelButton" label="RESET" secondary="{{ true }}" on-click="{{ resetAll }}" min-height="{{ 44 }}" hint-size="100%,44px"></x-import></div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 1280, &quot;height&quot;: 860 },
+  &quot;glowIntensity&quot;: { &quot;editor&quot;: &quot;float&quot;, &quot;default&quot;: 1, &quot;min&quot;: 0.3, &quot;max&quot;: 1, &quot;step&quot;: 0.05, &quot;tsType&quot;: &quot;number&quot; },
+  &quot;restDim&quot;: { &quot;editor&quot;: &quot;float&quot;, &quot;default&quot;: 0.5, &quot;min&quot;: 0, &quot;max&quot;: 0.75, &quot;step&quot;: 0.05, &quot;tsType&quot;: &quot;number&quot; },
+  &quot;scanlines&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot; },
+  &quot;pulse&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot; }
+}">
+class Component extends DCLogic {
+  state = {
+    view: 'front',
+    setsFront: { delt_caps:12, chest:14, biceps:6, forearms:3, abs:9, obliques:0, quads:16, abductors:0, shin_calf:20 },
+    setsBack: { traps:8, lats:15, rear_delts:6, triceps:12, forearms:4, lower_back:10, glutes:16, hamstrings:22, calves:0 },
+  };
+  frontKeys = ['delt_caps','chest','biceps','forearms','abs','obliques','quads','abductors','shin_calf'];
+  backKeys = ['traps','lats','rear_delts','triceps','forearms','lower_back','glutes','hamstrings','calves'];
+  // [MEV, MAV] weekly sets, by region
+  region = {
+    chest:[10,20], delt_caps:[8,18], biceps:[8,18], forearms:[8,18], abs:[6,16], obliques:[6,16], quads:[8,18], abductors:[8,18], shin_calf:[8,18],
+    traps:[10,20], lats:[10,20], lower_back:[10,20], rear_delts:[8,18], triceps:[8,18], glutes:[8,18], hamstrings:[8,18], calves:[8,18],
+  };
+  maxSets = 30;
+  LABEL = { delt_caps:'SHOULDERS', biceps:'BICEPS', forearms:'FOREARMS', chest:'CHEST', abs:'ABS', obliques:'OBLIQUES', quads:'QUADS', abductors:'ABDUCTORS', shin_calf:'CALVES', traps:'TRAPS', lats:'LATS', rear_delts:'REAR DELTS', triceps:'TRICEPS', lower_back:'LOWER BACK', glutes:'GLUTES', hamstrings:'HAMSTRINGS', calves:'CALVES' };
+
+  whichKey(){ return this.state.view === 'front' ? 'setsFront' : 'setsBack'; }
+  curKeys(){ return this.state.view === 'front' ? this.frontKeys : this.backKeys; }
+  curSets(){ return this.state.view === 'front' ? this.state.setsFront : this.state.setsBack; }
+
+  setView(v){ this.setState({ view: v }); }
+  setVal(k, v){ this.setState(s => { const w = s.view === 'front' ? 'setsFront' : 'setsBack'; const m = {...s[w]}; m[k] = Math.max(0, Math.min(this.maxSets, v)); return { [w]: m }; }); }
+  inc(k){ this.setVal(k, (this.curSets()[k] || 0) + 1); }
+  dec(k){ this.setVal(k, (this.curSets()[k] || 0) - 1); }
+  fillOptimal(){ this.setState(s => { const w = s.view === 'front' ? 'setsFront' : 'setsBack'; const keys = s.view === 'front' ? this.frontKeys : this.backKeys; const m = {}; keys.forEach(k => { const r = this.region[k]; m[k] = Math.round((r[0] + r[1]) / 2); }); return { [w]: m }; }); }
+  resetAll(){ this.setState(s => { const w = s.view === 'front' ? 'setsFront' : 'setsBack'; const keys = s.view === 'front' ? this.frontKeys : this.backKeys; const m = {}; keys.forEach(k => m[k] = 0); return { [w]: m }; }); }
+
+  zoneOf(sets, mev, mav){
+    if(sets <= 0) return 'rest';
+    if(sets < mev) return 'building';
+    if(sets <= mav) return 'optimal';
+    return 'high';
+  }
+  opacityOf(sets, mev, mav){
+    if(sets <= 0) return 0;
+    if(sets < mev){ const t = sets / mev; return 0.18 + 0.26 * t; }            // dim building band (clearly below optimal)
+    if(sets <= mav){ const t = (sets - mev) / Math.max(1, mav - mev); return 0.78 + 0.22 * t; } // rise to full + bloom
+    return 1.0;                                                                // capped at MAV (no brighter for over-volume)
+  }
+
+  frameRef = (el) => { this._frame = el; if(el) this.applyGlows(); };
+  componentDidMount(){ this.applyGlows(); }
+  componentDidUpdate(){ this.applyGlows(); }
+  applyGlows(){
+    if(!this._frame) return;
+    const master = this.props.glowIntensity ?? 1;
+    const pulse = this.props.pulse ?? false;
+    const dim = this.props.restDim ?? 0.5;
+    const view = this.state.view;
+    const fw = this._frame.querySelector('[data-viewwrap="front"]');
+    const bw = this._frame.querySelector('[data-viewwrap="back"]');
+    if(fw) fw.style.display = view === 'front' ? 'block' : 'none';
+    if(bw) bw.style.display = view === 'back' ? 'block' : 'none';
+    this._frame.querySelectorAll('[data-dim]').forEach(d => { d.style.background = 'rgba(8,12,34,' + dim + ')'; });
+    const wrap = view === 'front' ? fw : bw;
+    if(!wrap) return;
+    const keys = this.curKeys();
+    const sets = this.curSets();
+    keys.forEach(k => {
+      const img = wrap.querySelector('[data-glow="' + k + '"]');
+      if(!img) return;
+      const r = this.region[k];
+      const s = sets[k] || 0;
+      img.style.opacity = String(this.opacityOf(s, r[0], r[1]) * master);
+      const productive = s >= r[0];
+      img.style.filter = productive ? 'drop-shadow(0 0 6px rgba(0,255,156,0.42))' : 'none';
+      img.style.animation = (productive && pulse) ? 'bodymap-pulse 2.6s ease-in-out infinite' : 'none';
+    });
+  }
+
+  renderVals(){
+    const view = this.state.view;
+    const scanlines = this.props.scanlines ?? true;
+    const keys = this.curKeys();
+    const sets = this.curSets();
+
+    const ZONE = {
+      rest:    { label:'REST',     color:'var(--text-dim)', fill:'transparent' },
+      building:{ label:'BUILDING', color:'#5FD0A8',         fill:'#2F8F6E' },
+      optimal: { label:'OPTIMAL',  color:'var(--neon)',     fill:'var(--neon)' },
+      high:    { label:'HIGH',     color:'var(--neon)',     fill:'var(--neon)' },
+    };
+
+    const groupDefs = view === 'front' ? [
+      { title:'SHOULDERS \u00B7 ARMS', keys:['delt_caps','biceps','forearms'] },
+      { title:'CHEST \u00B7 CORE', keys:['chest','abs','obliques'] },
+      { title:'LEGS', keys:['quads','abductors','shin_calf'] },
+    ] : [
+      { title:'SHOULDERS \u00B7 ARMS', keys:['rear_delts','triceps','forearms'] },
+      { title:'BACK', keys:['traps','lats','lower_back'] },
+      { title:'LEGS', keys:['glutes','hamstrings','calves'] },
+    ];
+
+    const mk = (k) => {
+      const r = this.region[k]; const mev = r[0]; const mav = r[1];
+      const s = sets[k] || 0;
+      const zone = this.zoneOf(s, mev, mav);
+      const z = ZONE[zone];
+      const pct = Math.max(0, Math.min(1, Math.min(s, mav) / mav)) * 100;
+      const mevPct = Math.max(0, Math.min(100, (mev / mav) * 100));
+      return {
+        key: k, label: this.LABEL[k], sets: s,
+        zoneLabel: z.label,
+        landmark: 'MEV ' + mev + '  \u00B7  MAV ' + mav,
+        inc: () => this.inc(k),
+        dec: () => this.dec(k),
+        zoneStyle: { fontFamily:'var(--font-display)', fontSize:'8px', letterSpacing:'1px', color: z.color },
+        bandStyle: { position:'absolute', top:0, bottom:0, left: mevPct + '%', right:0, background:'rgba(0,255,156,0.12)' },
+        fillStyle: { position:'absolute', left:0, top:0, bottom:0, width: pct + '%', background: z.fill, transition:'width 260ms cubic-bezier(0.33,1,0.68,1), background 260ms ease' },
+        mevTickStyle: { position:'absolute', top:0, bottom:0, left: mevPct + '%', width:'2px', background:'rgba(232,232,255,0.55)' },
+        capStyle: { position:'absolute', right:'-2px', top:'-7px', fontSize:'7px', lineHeight:1, color:'var(--text-muted)', display: zone === 'high' ? 'block' : 'none' },
+      };
+    };
+    const groups = groupDefs.map(g => ({ title: g.title, muscles: g.keys.map(mk) }));
+
+    let total = 0; const counts = { rest:0, building:0, optimal:0, high:0 };
+    keys.forEach(k => { const r = this.region[k]; const s = sets[k] || 0; total += s; counts[this.zoneOf(s, r[0], r[1])]++; });
+    const order = ['optimal','building','high','rest'];
+    const tally = order.filter(z => counts[z]).map(z => counts[z] + ' ' + z).join('  \u00B7  ');
+
+    return {
+      view, scanlines, groups,
+      isFront: view === 'front',
+      isBack: view === 'back',
+      frameRef: this.frameRef,
+      totalSets: total,
+      tally,
+      setFront: () => this.setView('front'),
+      setBack: () => this.setView('back'),
+      fillOptimal: () => this.fillOptimal(),
+      resetAll: () => this.resetAll(),
+    };
+  }
+}
+</script>
+</body>
+</html>

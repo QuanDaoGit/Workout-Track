@@ -15,9 +15,18 @@ so the steps stay crisp. **Render pixel sprites at an integer multiple of their 
 paint them (resolution-independent)**; a *non-integer* nearest-neighbour upscale shatters the grid
 into artifacts. **Outline painted sprites 4-connected (orthogonal only), never 8-connected** — a
 diagonal pass grows protruding black nubs at convex/bevel corners (they catch against any glow).
+**Compositing a STACK of translucent image layers** (a heat/coverage map of region masks over a base):
+apply per-layer intensity through **`Image`'s own `opacity:`** (true alpha scaling, paint-time, no
+buffer) — **never the `Opacity` widget** (a `saveLayer` per layer → jank) nor **`BlendMode.modulate`**
+(distorts a baked-colour RGBA toward white/dark). **Bake the glow into the art**, don't code a per-layer
+blur (`saveLayer` again); wrap the whole stack in a **`RepaintBoundary`** so it composites once and
+doesn't repaint with the surrounding scroll; skip a layer at opacity 0. Pre-coloured PNG art is the
+documented tokens-only exception (like the BIT sprites) — keep meter/label/bar colours token-driven.
 *Seen: round Train button → pixel keycap (2026-06); a 108→150 (1.39×) pad sprite showed ✕ artifacts
 → repainted as a `CustomPainter` (2026-06); the faceless BIT's plate corners showed black nubs from
-an 8-connected outline → 4-connected, matching the already-correct room companion (2026-06).*
+an 8-connected outline → 4-connected, matching the already-correct room companion (2026-06); the muscle
+body map's region masks → `Image.opacity` + baked glow + `RepaintBoundary`, Codex flagged `modulate`
+distortion pre-build (2026-06).*
 
 ### Raw color & alpha literals
 **Rule:** Raw color belongs only in `tokens.dart`. Everywhere else, import a token and express tints as
@@ -50,7 +59,14 @@ don't pick a louder shape. **Scroll/parallax on a pixel diorama:** drift only th
 layers** — fractionally translating a *crisp sprite* shimmers it (same grid-break as a non-integer
 upscale); keep sprites at scroll rate, clip + over-paint (a wall-colour underlay) so the drift never
 exposes a gap, and **gate the whole effect off under reduced motion** (WCAG 2.3.3 — it's a delight, not
-usability). *Seen: armed-Train motes; cold-open spin robotic at 500ms/easeInOutQuad →
+usability). **A user-triggered content/layout change MUST animate the transition** (show-more/less,
+expand/collapse, filter, paginate → `AnimatedSize` / `AnimatedCrossFade` / `AnimatedSwitcher`), never
+snap — the motion *is* the feedback that the tap registered; an instant content jump reads as broken /
+unresponsive. This is a floor, not a flourish (distinct from ambient decoration, which stays restrained);
+pair it with the reduced-motion rule (omit the animator, don't zero it). *Seen: the body-map groups
+animated their expand but the Logs SHOW MORE/LESS snapped the session list → wrapped the tiles in
+`AnimatedSize` (kMotionPop, branched out under reduced motion), the user flagged the missing motion as a
+UX rule-of-thumb (2026-06); armed-Train motes; cold-open spin robotic at 500ms/easeInOutQuad →
 ~1s/easeInOutCubic, ghosts removed; BIT's idle stepped from a `.round()`ed bob & the cheer reveal felt
 abrupt (cold easeOutBack, no wind-up/hold) → sub-pixel float + decoupled breathe + ramp-resume +
 explicit anticipation coil & peak hold; Home room parallax drifts only the soft `_RoomShellPainter`,
@@ -108,10 +124,36 @@ stacks a third band between content and chrome. Fold the cue **onto its element*
 changes state) instead. *Seen: the "READY · TAP TRAIN" hint bar removed; cue moved to the keycap
 caption TRAIN→START (2026-06).*
 
+### Transient feedback must not block the action area
+**Rule:** A bottom `SnackBar` used as action-confirmation on a form/list whose **primary controls are
+also bottom-anchored** (the next input, +ADD, Finish/CTA) **obscures and blocks taps** on them for its
+whole duration — worse with the keyboard up. Keep such a notice **brief + `SnackBarBehavior.floating`**
+or fold the cue onto a top/inline surface (an existing status bar) rather than a fresh overlay; in widget
+tests it silently steals the next bottom tap (use a tall surface or wait it out). *Seen: a "Rest timer
+started" SnackBar covered +ADD SET and broke a row-add test → floating + 1s + a tall test surface; the
+canonical rest cue stays the top rest bar (2026-06).*
+
+### Sibling field baseline alignment vs decoration asymmetry
+**Rule:** Two fields in one row mis-align when only one carries a prefix/suffix `Icon`: Flutter's
+`InputDecorator` sizes the input row to the (taller) icon and baseline-aligns the text inside it, so
+the icon-less sibling sits a few px off — matched outer height, `contentPadding`, **and even
+`textAlignVertical: center` all fail to fix it** (center moves the whole block, not the text relative
+to a no-icon field). Give the bare field a **zero-width height-spacer** of the icon's exact extent
+(one shared const, density-pinned via `VisualDensity.standard` so the rendered button height can't
+drift from the spacer) so both decorations resolve the same input-row height while the bare field
+keeps full text width. Prove it with a **geometric `EditableText`-center test** (font-independent, so
+it works in the test env where fonts are boxes), not a golden, and mutation-check it. *Seen: the
+weight field's plate-calc `suffixIcon` pushed "55" ~3px above the reps "15" → 0-width 28px spacer on
+the reps field (2026-06).*
+
 ### Reduced-motion needs a non-motion fallback
 **Rule:** Freezing an animation under `disableAnimations` must leave a **still, legible signal** — a
 label, a static frame, a Semantics announcement — never a dead/ambiguous control. Design the
-no-motion state first, then add motion on top. **The reduced-presentation trigger is the *union*
+no-motion state first, then add motion on top. **Disable an implicit animator by OMITTING it, not by
+zeroing its duration** — an `AnimatedSize` with `Duration.zero` re-dirties itself during layout
+(`RenderAnimatedSize was mutated in its own performLayout` assertion → every test that pumps it throws);
+branch `_reduce ? child : AnimatedSize(child:)` instead. *Seen: collapsible body-map groups crashed all
+meter-row tests under reduced motion until the AnimatedSize was branched out (2026-06).* **The reduced-presentation trigger is the *union*
 `disableAnimations || accessibleNavigation` — gate on it consistently across sibling surfaces; a
 screen that checks only `disableAnimations` strands a screen-reader/switch-access user in the full
 cinematic while its neighbours settle (prefer the shared `bool get _reduceMotion` idiom over an
@@ -165,7 +207,15 @@ a `none` opt-out for a button whose handler already owns its beat (avoids a doub
 meaning — and, being tactile/auditory not *vestibular*, do NOT gate it on reduced-motion; it carries its own
 toggle. A completion event detected by polling (no callback) fires its beat from the single dispose-managed
 observer (never a service-owned `Timer` — that leaks as a flutter_test "pending timer"), de-duped via the
-shared `cancel()`, with an overshoot guard so a stale post-background resume stays silent.** *Seen: keycap/motes/dioramas reused the motion + token vocabulary; the away
+shared `cancel()`, with an overshoot guard so a stale post-background resume stays silent. Scaling that channel
+**app-wide**: be generous with **COVERAGE** but disciplined with **INTENSITY/DURATION** — the broad
+layer is the *subtlest* tick (`selection`) via opt-in wrappers (default **silent**; never on passive
+scroll / informational chrome / disabled taps), heavier intents reserved for confirm/reward/destructive;
+**"continuous" = a SHORT pulse-train ridden off the `AnimationController`'s own listener** (threshold
+cursor, forward-only, **≤3 pulses**) — never a parallel `Timer` (drift) or a multi-second drone (the
+reward feel peaks ~400ms per JCR); **rate-coalesce the broad layer** (drop repeats <30ms); reduced-motion
+**suppresses *ambient* trains** and fires a single pulse only on an explicit action / visible state
+change.** *Seen: keycap/motes/dioramas reused the motion + token vocabulary; the away
 hologram was first a hand-painted blob + the send-off a bare fly-up → re-ported from `holo-bit.js`/
 `playLaunch` to render BIT's real sprite + the full 5-phase launch; BIT's home-room voice extended
 `BitSpeechBubble` additively (`child`/`emphasisColor`, then `downTailDx`/`downApexFrac` for the leaning
@@ -173,7 +223,10 @@ tail) — capped to ~85% width + re-stacked above the world window so a 2-line b
 proven against the onboarding/quest goldens (2026-06); `PixelButton` gained an optional `haptic` intent
 (default `tap`, `none` on the handler-owned CLAIM button) centralizing haptics across 74 buttons + a Settings
 toggle, and the rest-done haptic fired from `RestTimerBar`'s existing dispose-managed ticker, not a new
-service timer (2026-06).*
+service timer (2026-06). Then the app-wide pass: opt-in `haptic` on `ArcadeTap`/`HoldDepress`/`PhosphorTap`
+(default silent) + `ArcadeChip` default `selection` + `HapticService.fireCoalesced` + a reusable
+`HapticPulseTrack` (controller-coupled train) for BIT boot/cheer + the quest gem-flight (≤2 stream ticks)
++ a capped summary stat-reveal — generous coverage, subtle intensity (2026-06).*
 
 ### Discoverability & the false bottom
 **Rule:** An **optional step or secondary control buried at the bottom of a scrolling list under a pinned
@@ -184,6 +237,31 @@ an anti-pattern; the only honest CTA-scrolls case is *submit→first validation 
 optional control into the pinned action area** as a compact, always-visible summary-affordance (`LABEL ·
 value ▸`) that opens the full editor (a bottom sheet reusing the same primitives), and **surface a
 below-fold pre-selection by ordering it into view** (recommended-first), not by animating the page. Prove
-it with a phone-size page golden + a "summary visible without scroll / opens editor" widget test. *Seen: the
-onboarding weekday step was stranded under 3 tall program cards (user never saw it) → reordered recommended
-program to top + a pinned `TRAINING DAYS · MON·WED·FRI ▸` row above START THIS PATH (2026-06).*
+it with a phone-size page golden + a "summary visible without scroll / opens editor" widget test. **And
+reorganizing a flat list into a CONTEXTUAL/grouped browser** (by anatomy, by room, by category — soulful
+over a "page of cards + search") **silently loses what the new grouping can't reach**: items with no
+home (un-mappable), items with several homes (a bench under chest *and* triceps), and the plain
+"show me *all* of them" workflow. Keep a **quiet flat completeness net** beside the contextual hero (an
+"ALL …" route, every item once), and confirm every item is reachable. *Seen: the onboarding weekday step
+stranded under 3 tall program cards → pinned `TRAINING DAYS ▸` summary; the strength surface moved from a
+flat list to a tap-your-body dossier (Concept #1) but a body-only browser dropped bodyweight/un-mapped
+lifts + the "all lifts" intent → kept a secondary "ALL LIFTS" net, each lift filed under its primary
+muscle once (Codex, 2026-06).*
+
+### Domain jargon vs the plain verdict
+**Rule:** A surface driven by a computed metric must show the **plain-language verdict**, never the
+engine's internal units. The science (MEV/MAV, e1RM, percentile, kg-volume) *drives the math* but is
+**not the label** — a beginner can't act on "MEV 8". Lead with a plain word that says what it means and
+what to do (`RESTED / LIGHT / ON TRACK / PLENTY`, body-neutral — no good/bad alarm), let a visual carry
+"am I doing enough" (a target band on the bar, not a number), and **progressive-disclose the raw
+numbers** behind a tap for the few who want them. Same axis as hierarchy: the verdict is the hero, the
+count is secondary, the jargon hides. **Cross-surface coherence:** a browsable index/scan surface must
+plot the **same metric** as the detail it links to (compute both from one source) — a divergent teaser
+(a top-weight sparkline → an e1RM detail chart) **misranks and visibly contradicts** the page it
+promotes. **And a status/warning badge calibrated for a *curated few* turns hostile at scale** — carrying
+a `PLATEAU`-style flag from a 3-card hook onto an all-items list reads as repeated failure (the rule is
+usually too naive: a flat stretch is often maintenance/deload), so drop or soften it on the dense
+surface (body-neutral). *Seen: the muscle-map meter showed `19 · HIGH · MEV 8 · MAV 18` per row — the
+user couldn't read it → plain zone words + a tap-to-reveal "ideal range", MEV/MAV hidden; the strength
+index plots the **same Epley e1RM** the detail chart does (not the Load-Trends top-weight) and drops the
+PLATEAU flag on the all-lifts list (Codex, 2026-06).*

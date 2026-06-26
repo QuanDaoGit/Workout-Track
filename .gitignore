@@ -59,3 +59,7 @@ android/key.properties
 # Windows shell metadata
 desktop.ini
 .claude/worktrees/
+
+# Large binaries that don't belong in the repo (e.g. stray installers in screenshots)
+*.exe
+design/screenshots/*.exe

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
@@ -42,6 +41,7 @@ import '../widgets/arcade_card.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
 import '../widgets/active_session_found_dialog.dart';
+import '../widgets/home_section_header.dart';
 import '../widgets/last_session_tag.dart';
 import '../widgets/motion/crt_breathe.dart';
 import '../widgets/motion/crt_flicker.dart';
@@ -723,38 +723,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// kDebugMode-only: preview the expedition loop without waiting out the timer.
-  /// `+CHARGE` mints a charge (tap the pad → SEND to watch the launch); `RETURN
-  /// NOW` backdates the haul so reloading settles it + plays the homecoming and
-  /// drops the coffer (tap it to run the report). Compiled out of release builds.
-  Widget _buildDebugExpeditionControls() {
-    Future<void> run(Future<void> Function() op) async {
-      await op();
-      if (mounted) await _loadData();
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: kSpace2),
-      child: Row(
-        children: [
-          Expanded(
-            child: FilledButton(
-              onPressed: () => run(AdventureService().debugGrantCharge),
-              child: const Text('DBG +CHARGE'),
-            ),
-          ),
-          const SizedBox(width: kSpace2),
-          Expanded(
-            child: FilledButton(
-              onPressed: () => run(AdventureService().debugReturnPendingNow),
-              child: const Text('DBG RETURN NOW'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _homeCard({
     required Widget child,
     Color background = kCard,
@@ -1403,6 +1371,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget _buildWeeklyQuestsCard() {
     return ArcadeTap(
       onTap: widget.onViewQuests,
+      haptic: HapticIntent.selection,
       borderRadius: BorderRadius.circular(4),
       child: _homeCard(
         background: kCard,
@@ -1430,15 +1399,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     fontFamily: 'PressStart2P',
                     fontSize: 9,
                     color: kText,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'VIEW >',
-                  style: AppFonts.shareTechMono(
-                    color: kNeon,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -1638,6 +1598,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         borderRadius: BorderRadius.circular(kCardRadius),
         child: HoldDepress(
           onTap: () => _startWorkout(),
+          haptic: HapticIntent.selection,
           borderRadius: BorderRadius.circular(kCardRadius),
           child: card,
         ),
@@ -1877,7 +1838,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       accent: kAmber,
       borderColor: kAmber,
       trailing: const _MissionFinishedChip(),
-      meta: 'FINISHED',
       title: title.toUpperCase(),
       titleColor: kMutedText,
       detail: detail,
@@ -2050,7 +2010,8 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // Once there is a completed session, this card stops being a dead stat and
     // becomes the discoverable gate to the full training log (history, calendar,
     // stats). Before, the only door was the LCK pip — an unlabelled luck tap no
-    // one could guess. The trailing "VIEW LOG" is the visible signifier.
+    // one could guess. The "LAST WORKOUT / ANALYSIS >" section header above is
+    // now the visible signifier (the whole card stays the tap target).
     final onOpenLog = widget.onViewWorkouts;
     final isLogGate = session != null && onOpenLog != null;
 
@@ -2059,8 +2020,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       backgroundAlpha: 0.78,
       borderColor: kBorder,
       borderAlpha: 0.72,
-      // 12px inset to match the sibling cards (Weekly Quests, Expedition) so the
-      // trailing "VIEW >" right-aligns with theirs.
+      // 12px inset to match the sibling cards (Weekly Quests, Expedition).
       padding: const EdgeInsets.all(kSpace3),
       child: Row(
         children: [
@@ -2098,17 +2058,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ],
             ),
           ),
-          if (isLogGate) ...[
-            const SizedBox(width: kSpace2),
-            Text(
-              'VIEW >',
-              style: AppFonts.shareTechMono(
-                color: kNeon,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -2125,6 +2074,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           borderRadius: BorderRadius.circular(kCardRadius),
           child: HoldDepress(
             onTap: _startFirstWorkout,
+            haptic: HapticIntent.selection,
             borderRadius: BorderRadius.circular(kCardRadius),
             child: card,
           ),
@@ -2143,6 +2093,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         borderRadius: BorderRadius.circular(kCardRadius),
         child: HoldDepress(
           onTap: onOpenLog,
+          haptic: HapticIntent.selection,
           borderRadius: BorderRadius.circular(kCardRadius),
           child: card,
         ),
@@ -2216,7 +2167,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
               sliver: SliverList(
                 delegate: SliverChildListDelegate.fixed([
-                  if (kDebugMode) _buildDebugExpeditionControls(),
                   HomeLevelStrip(
                     level: _level,
                     totalXP: _totalXP,
@@ -2245,14 +2195,35 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ],
                   if (_adventureState != null) ...[
                     const SizedBox(height: kSectionGap),
+                    HomeSectionHeader(
+                      title: 'EXPEDITION',
+                      actionLabel: 'MAP >',
+                      onAction: _openAdventure,
+                    ),
                     AdventureCard(
                       state: _adventureState!,
                       onTap: _openAdventure,
                     ),
                   ],
                   const SizedBox(height: kSectionGap),
+                  // The header is always present so the section stays labelled
+                  // even before the first workout. The ANALYSIS link only
+                  // appears once there is a log to open — a new user's card is a
+                  // "start your first run" CTA, so a link to an empty log would
+                  // be a dead end (HomeSectionHeader hides the link when
+                  // onAction is null).
+                  HomeSectionHeader(
+                    title: 'LAST WORKOUT',
+                    actionLabel: 'ANALYSIS >',
+                    onAction: _lastWorkout != null ? widget.onViewWorkouts : null,
+                  ),
                   _buildLastWorkoutStat(),
                   const SizedBox(height: kSectionGap),
+                  HomeSectionHeader(
+                    title: 'QUESTS',
+                    actionLabel: 'DETAILS >',
+                    onAction: widget.onViewQuests,
+                  ),
                   _buildWeeklyQuestsCard(),
                   const SizedBox(height: kSpace5),
                 ]),
@@ -2517,6 +2488,7 @@ class HomeLevelStrip extends StatelessWidget {
       label: 'Level $level, $pct percent to next level, open profile',
       child: ArcadeTap(
         onTap: onTap,
+        haptic: HapticIntent.selection,
         borderRadius: BorderRadius.circular(kCardRadius),
         child: strip,
       ),
@@ -2712,6 +2684,7 @@ class _HomeHudMetric extends StatelessWidget {
         borderRadius: BorderRadius.circular(kCardRadius),
         child: HoldDepress(
           onTap: onTap,
+          haptic: HapticIntent.selection,
           borderRadius: BorderRadius.circular(kCardRadius),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

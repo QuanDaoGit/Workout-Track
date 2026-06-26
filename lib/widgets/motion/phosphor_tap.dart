@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../services/haptic_service.dart';
 import '../../theme/tokens.dart';
 
 class PhosphorTap extends StatefulWidget {
@@ -15,6 +16,7 @@ class PhosphorTap extends StatefulWidget {
     this.opacity = 0.4,
     this.borderRadius = const BorderRadius.all(Radius.circular(kCardRadius)),
     this.behavior = HitTestBehavior.opaque,
+    this.haptic = HapticIntent.none,
   });
 
   final Widget child;
@@ -25,6 +27,12 @@ class PhosphorTap extends StatefulWidget {
   final double opacity;
   final BorderRadius borderRadius;
   final HitTestBehavior behavior;
+
+  /// Opt-in tactile tick on a committed tap, routed through the rate-limited
+  /// [HapticService.fireCoalesced] so the broad layer stays a *tick*, never a
+  /// buzz. Defaults to [HapticIntent.none] (silent) — only meaningful, committing
+  /// taps should opt in (never passive scroll / informational chrome).
+  final HapticIntent haptic;
 
   @override
   State<PhosphorTap> createState() => _PhosphorTapState();
@@ -68,7 +76,12 @@ class _PhosphorTapState extends State<PhosphorTap> {
     return GestureDetector(
       behavior: widget.behavior,
       onTapDown: _startHalo,
-      onTap: tap,
+      onTap: tap == null
+          ? null
+          : () {
+              HapticService.instance.fireCoalesced(widget.haptic);
+              tap();
+            },
       onLongPress: longPress,
       child: Stack(
         fit: StackFit.passthrough,

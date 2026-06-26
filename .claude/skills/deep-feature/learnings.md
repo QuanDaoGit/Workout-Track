@@ -36,10 +36,17 @@ before its consumer leaves a stale reader. **Removing a derived *debuff/factor**
 computed-vs-cached diff. **Re-curving a value DERIVED from a stored source** (level←totalXP) is a
 *silent* migration — nothing stored changes, yet every threshold reading (level, rank) + every
 display/test/golden pinning it shifts: prove **monotonicity at each legacy boundary** (new ≥ old, so no
-consumer demotes) and repoint every pinned reading. *Seen: zero-set idle reveal; a 280 ms select-hold
+consumer demotes) and repoint every pinned reading. **One shared singleton driven by 2+ phases** (a
+between-set vs between-exercise rest, both on `RestTimerService`) means a takeover/derived view gated
+**only on the singleton's *active* state** fires in the wrong phase — scope it with a per-phase flag set
+where *that* phase's source starts, and **"suppress" the view by cancelling the SOURCE, not hiding it**
+(a hidden-but-live source leaks into a later surface — an orphan rest into the summary/next workout); test
+the sibling-phase path explicitly (it is the regression). *Seen: zero-set idle reveal; a 280 ms select-hold
 reacted on the wrong question after a Back; the weekday-anchored schedule unified
 RestService×ProgramService via one `ScheduleResolver` + frozen `scheduleByWeekKey`; decay removed
-(factor frozen + un-decay delta suppressed) + XP re-curved to √ with a no-loss-boundary proof (2026-06).*
+(factor frozen + un-decay delta suppressed) + XP re-curved to √ with a no-loss-boundary proof; a
+between-exercise rest takeover scoped via `_restAfterFinish` + suppress-on-last cancelling the shared
+`RestTimerService` so a between-set rest never bleeds into the overview (2026-06).*
 
 ### Legacy-data cliffs
 **Rule:** A new nullable field used in a threshold/comparison must define the null (legacy) case
@@ -111,10 +118,17 @@ pick) layered on a learned/adaptive signal is the same — it **seeds the cold s
 empty), it must **not hard-override** the learned signal once that has data: an override re-creates the
 exact failure the signal fixed (a clamp manufactures success → runaway load; a sticky once-set global
 pick can't represent a goal change and isn't editable; suggestions ignore what the user actually does).
-Make the preference the smarter sparse-fallback; let history win at confidence. *Seen: warm-up
-suggestion; history-anchored rep target #5 (top-set-rep median, aim=M+1/floor=M−2, deload gated on ≥2
-consistent sessions, simulation-proven); onboarding training-goal seeds the sparse rep target (5/8/15),
-Codex flipped a clamp→seed because the clamp ran load away (2026-06).*
+Make the preference the smarter sparse-fallback; let history win at confidence. (e) An **aggregate over
+a selectable window compared to a fixed-period landmark** (sets/wk vs weekly MEV/MAV across a 4/12-wk
+view) must **normalize to the landmark's period** — a per-period *average*, never the window *total* (a
+multi-week total vs a weekly band is nonsense) — and the averaging **divisor must cap to real history**
+(`min(window, now−firstEver)`, ≥1 period) so known activity is never divided by *empty pre-history* (a
+new user's hard week → falsely "RESTED"); **label the real span** ("avg/wk · last N wk") so the average
+isn't misread as raw recent work, and keep **one pure calc boundary** (a service helper, not the display
+widget) so the divide can't drift from the meter. *Seen: warm-up suggestion; history-anchored rep target
+#5 (top-set-rep median, aim=M+1/floor=M−2, deload gated on ≥2 consistent sessions, simulation-proven);
+onboarding training-goal seeds the sparse rep target (5/8/15), Codex flipped a clamp→seed because the
+clamp ran load away; body-map averaging-window divisor capped to firstSessionEver, Codex F1 (2026-06).*
 
 ### Entity-keyed side-state lifecycle
 **Rule:** Ephemeral state in a sibling store keyed by an entity id leaks/mis-applies unless cleared
@@ -130,8 +144,16 @@ ready but a tap is mis-read (read as "skip", not "continue"). Defer **only** fro
 callers (`didChangeDependencies`/`didUpdateWidget`, where a synchronous owner `setState` is illegal).
 Likewise a value **latched** from an `InheritedWidget` (MediaQuery reduce-motion) on first build must be
 **reconciled in `didChangeDependencies`** on later changes (don't early-return past the check) or a
-mid-interaction toggle is silently ignored. *Seen: BIT typewriter tap-to-continue dropped the first tap
-at the completion frame; reduced-motion toggled mid-type kept on typing (2026-06).*
+mid-interaction toggle is silently ignored. But any **side-effect** fired inside that reconciliation
+(a haptic/sound/analytics beat) must be **one-shot-guarded by a dedicated flag** — `didChangeDependencies`
+re-runs on *any* inherited change (MediaQuery/theme/locale), so a guard that leans on a sibling
+`_complete`/early-return will **replay** the beat without a new user action. And an **animation-coupled**
+side-effect rides the `AnimationController`'s **own listener** (threshold cursor, forward-only, flush the
+final on `completed`) — never a parallel `Timer` (it drifts against the frames *and* leaks as a
+flutter_test pending timer). *Seen: BIT typewriter tap-to-continue dropped the first tap at the completion
+frame; reduced-motion toggled mid-type kept on typing; the solution-page reduced-motion reward replayed on
+a MediaQuery change until guarded by `_bloomFired`; BIT-boot/cheer & gem-flight haptics ride their
+controllers via `HapticPulseTrack` (2026-06).*
 
 ### Navigation restructure: positional + always-present assumptions
 **Rule:** Remapping nav slots, converting tabs→pushed routes, or removing a persistent shell surface
@@ -156,3 +178,23 @@ selection draft gated by the session machine via one openWorkoutDraft entry; onb
 opened a blank picker on a seeded rest day → first session routed to activeWorkoutDay; a follow-up
 caught the Home empty last-workout card + the planned-recovery confirm still un-funnelled →
 _startFirstWorkout routes to the pre-filled Day-1 + showsRestDayTrainPrompt exempts isNewUser (2026-06).*
+
+### Hand-authored data layers need a source-validated integrity test
+**Rule:** When you hand-author a supplemental map keyed by another dataset's ids (a per-exercise
+override, a curated allow-list, a coefficient table), the authoring **drifts silently** — a typo'd
+id, an id that no longer exists, or an attribute asserted on an entity that doesn't actually have it
+all compile fine and just go dead. Add a **test that validates every authored entry against the
+canonical source** (read the real asset/registry, assert each key exists *and* the thing you're
+augmenting is genuinely present on it), so drift fails CI instead of silently dropping coverage.
+Pair it with a **fail-safe default for the un-authored long tail** (return the coarse/original value,
+never a guess) so partial authoring degrades honestly rather than fabricating precision. Prove the
+guard with a typo'd-entry mutation. **Corollary — two consumers of one derivation must share the
+*computation*, not just agree:** when a value is shown two ways (a per-muscle TOTAL on a bar + a
+BREAKDOWN list of what fed it), compute both from **one** shared per-unit credit so they can't diverge,
+and guard with a `sum(breakdown) == total` test. But that equality test only proves *agreement* — a bug
+in the shared helper makes both consistently wrong; keep **explicit expected-output fixtures** as the
+primary check (the equality test is secondary). *Seen: the curated `shoulders`/`abdominals` split
+overrides — an integrity test decoded `assets/exercises.json` and asserted all 60 ids exist + the split
+token is really on each; a `Crunchez_typo` mutation was caught; un-curated tokens stay coarse-generic;
+the body-map drill's `weeklyContributors` + `muscleBreakdown` share `creditPerSet` with the meter total,
+guarded by fixtures + a per-key sum==total test (Codex F1/F2, 2026-06).*

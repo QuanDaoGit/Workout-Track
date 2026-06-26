@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/exercise_demos.dart';
 import '../../models/overload_models.dart';
@@ -22,6 +21,15 @@ import '../../widgets/pixel_button.dart';
 import '../../widgets/plate_calculator_sheet.dart';
 import '../../widgets/rest_timer_bar.dart';
 import '../../widgets/strobe_flash.dart';
+
+/// Height of the weight field's plate-calculator `suffixIcon` box. A `suffixIcon`
+/// makes the `InputDecorator` size its input row to the icon (taller than the
+/// bare text), nudging that field's baseline down. The reps field carries a
+/// zero-width spacer of this exact height so both decorations resolve the same
+/// row height and the two numbers sit on one line. Pinned via the button's
+/// `VisualDensity.standard` so the rendered height matches this constant on any
+/// platform/density (the spacer is a plain box and is never density-adjusted).
+const double _kSetFieldSuffixExtent = 28;
 
 class _SetRow {
   _SetRow({this.isWarmup = false})
@@ -122,7 +130,6 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   final Map<int, int> _rowFlashTriggers = {};
   List<SetEntry>? _previousSets;
   final Set<int> _lockedSets = {};
-  bool _plateCalcSeen = true;
   bool _progressionEnabled = false;
   OverloadSuggestion? _set1Suggestion;
   final Set<int> _prefilledRows = {};
@@ -176,7 +183,6 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       }
     }
     _loadOverloadService();
-    _loadPlateCalcFlag();
   }
 
   Future<void> _loadOverloadService() async {
@@ -250,27 +256,10 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     super.dispose();
   }
 
-  Future<void> _loadPlateCalcFlag() async {
-    final prefs = await SharedPreferences.getInstance();
-    final seen = prefs.getBool('plate_calc_seen') ?? false;
-    if (!mounted) return;
-    setState(() => _plateCalcSeen = seen);
-  }
-
-  Future<void> _markPlateCalcSeen() async {
-    if (!_plateCalcSeen && mounted) {
-      setState(() => _plateCalcSeen = true);
-    }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('plate_calc_seen', true);
-  }
-
   /// Opens the plate calculator pre-filled with the advisory warm-up load, so a
   /// plate-loaded warm-up doesn't make the user do the plate math by hand. The
   /// warm-up card stays read-only — this is a reference, not an edit.
   Future<void> _openWarmupPlateCalc(WarmupSuggestion warmup) async {
-    await _markPlateCalcSeen();
-    if (!mounted) return;
     await PlateCalculatorSheet.show(
       context,
       initialTargetKg: displayToKg(warmup.displayWeight, Units.weight),
@@ -348,6 +337,10 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
 
     setState(() {
       _lockedSets.add(index);
+      // A logged row is committed truth, not a pending suggestion — drop any
+      // prefilled flag so its values render bright (auto-copied rows logged
+      // straight from their check button were staying muted).
+      _prefilledRows.remove(index);
       _deltas[index] = delta;
       if (isPR) {
         _prSets.add(index);
@@ -375,11 +368,36 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     // Every logged set ticks; a PR already fired the stronger reward() above.
     if (!isPR) HapticService.instance.selection();
     _startRest();
+    if (widget.restSeconds > 0) _quickNotice('Rest timer started');
     // Persist the now-committed snapshot to the parent (durable checkpoint).
     _emitCommitted();
   }
 
+  /// A brief, non-stacking confirmation/heads-up (replaces any current one so
+  /// rapid logging never queues a backlog of toasts).
+  void _quickNotice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          // Floating + brief so the rest-start / guard cue does not sit over the
+          // set rows or the +ADD SET / Finish controls for long.
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(milliseconds: 1000),
+        ),
+      );
+  }
+
+  /// Shown when a user taps a set whose turn has not come (a later set before
+  /// the current one is logged) — the sequential-logging guard.
+  void _warnLogPrevious() => _quickNotice('Log your previous set first');
+
   void _unlockSet(int index) {
+    // Re-editing an earlier set re-gates the rows below it; drop focus/keyboard
+    // so a now-gated field can't keep a stale caret.
+    FocusScope.of(context).unfocus();
     setState(() => _lockedSets.remove(index));
   }
 
@@ -390,6 +408,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   void _removeSet(int index) {
     if (index <= 0 || index >= _rows.length) return;
     if (_lockedSets.contains(index)) return;
+    HapticService.instance.warning(); // destructive: a set row is removed
     setState(() {
       _rows[index].dispose();
       _rows.removeAt(index);
@@ -788,6 +807,10 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
         : '0';
     final repsHint = prevSet != null ? prevSet.reps.toString() : '0';
     final isLocked = _lockedSets.contains(index);
+    // Sequential logging: only the first un-logged row (the frontier) is
+    // editable; later rows are gated until their turn comes.
+    final frontier = !isLocked && index == _firstUnlockedIndex();
+    final gated = !isLocked && !frontier;
     final flashTrigger = _rowFlashTriggers[index] ?? 0;
     final isPrefilled = _prefilledRows.contains(index);
     final fieldStyle = Theme.of(
@@ -796,6 +819,9 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
 
     final delta = _deltas[index];
     final hasPR = _prSets.contains(index);
+    // Only plate-loaded lifts show the calc button; when they do, the reps field
+    // gets a matching height-spacer so its baseline stays level with the weight.
+    final usesPlates = PlateCalculator.usesPlates(widget.exercise.equipment);
 
     return Padding(
       key: _rowKeys[index],
@@ -804,7 +830,14 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
         trigger: flashTrigger,
         borderRadius: BorderRadius.circular(4),
         child: GestureDetector(
-          onTap: isLocked ? () => _unlockSet(index) : null,
+          // Opaque on a locked/gated row so a tap over its disabled fields
+          // (which ignore pointers) still reaches this handler — unlock or warn.
+          behavior: (isLocked || gated)
+              ? HitTestBehavior.opaque
+              : HitTestBehavior.deferToChild,
+          onTap: isLocked
+              ? () => _unlockSet(index)
+              : (gated ? _warnLogPrevious : null),
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: kSpace2,
@@ -837,10 +870,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                         controller: row.weight,
                         focusNode: row.weightFocus,
                         hintText: weightHint,
-                        suffixIcon:
-                            !PlateCalculator.usesPlates(
-                              widget.exercise.equipment,
-                            )
+                        suffixIcon: !usesPlates
                             ? null
                             : Padding(
                                 padding: const EdgeInsets.only(right: 2),
@@ -867,9 +897,12 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                                   child: IconButton(
                                     tooltip: 'Plate calculator',
                                     padding: EdgeInsets.zero,
+                                    // Pin the rendered height to the constant the
+                                    // reps spacer matches (density-proof).
+                                    visualDensity: VisualDensity.standard,
                                     constraints: const BoxConstraints(
                                       minWidth: 28,
-                                      minHeight: 28,
+                                      minHeight: _kSetFieldSuffixExtent,
                                     ),
                                     icon: Image.asset(
                                       'assets/icons/control/ui/icon_load_calc_pad.png',
@@ -878,8 +911,6 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                                       fit: BoxFit.contain,
                                     ),
                                     onPressed: () async {
-                                      await _markPlateCalcSeen();
-                                      if (!mounted) return;
                                       final entered = parseWeightToKg(
                                         row.weight.text,
                                         Units.weight,
@@ -909,7 +940,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                           decimal: true,
                         ),
                         style: fieldStyle,
-                        enabled: !isLocked,
+                        enabled: frontier,
                         height: 48,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -932,7 +963,16 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                         hintText: repsHint,
                         keyboardType: TextInputType.number,
                         style: fieldStyle,
-                        enabled: !isLocked,
+                        enabled: frontier,
+                        // Zero-width spacer matching the weight field's calc
+                        // button height so both baselines line up (the reps text
+                        // keeps full width). Omitted when there's no calc button.
+                        suffixIcon: usesPlates
+                            ? const SizedBox(
+                                width: 0,
+                                height: _kSetFieldSuffixExtent,
+                              )
+                            : null,
                         height: 48,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -953,19 +993,28 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                       width: 48,
                       height: 48,
                       child: isLocked
-                          ? const Icon(
-                              Icons.check_circle_sharp,
-                              color: kNeon,
-                              size: 20,
+                          ? Semantics(
+                              label: 'Set ${index + 1} logged',
+                              child: const Icon(
+                                Icons.check_circle_sharp,
+                                color: kNeon,
+                                size: 20,
+                              ),
                             )
                           : IconButton(
                               padding: EdgeInsets.zero,
-                              icon: const Icon(
-                                Icons.save_sharp,
-                                color: Color(0xFFAAA8C0),
+                              tooltip: frontier
+                                  ? 'Log set ${index + 1}'
+                                  : 'Set ${index + 1} locked until the '
+                                        'previous set is logged',
+                              icon: Icon(
+                                Icons.radio_button_unchecked_sharp,
+                                color: frontier ? kNeon : kMutedText,
                                 size: 22,
                               ),
-                              onPressed: () => _logSet(index),
+                              onPressed: frontier
+                                  ? () => _logSet(index)
+                                  : _warnLogPrevious,
                             ),
                     ),
                     // Remove slot — reserved on every row so columns stay aligned;
@@ -998,33 +1047,6 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                         fontSize: 11,
                         color: kMutedText,
                       ),
-                    ),
-                  ),
-                if (index == 0 &&
-                    !_plateCalcSeen &&
-                    PlateCalculator.usesPlates(widget.exercise.equipment))
-                  Padding(
-                    padding: const EdgeInsets.only(left: 32, top: 2),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'plate calc \u2192',
-                          style: AppFonts.shareTechMono(
-                            color: kMutedText,
-                            fontSize: 11,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        GestureDetector(
-                          onTap: _markPlateCalcSeen,
-                          child: const Icon(
-                            Icons.close_sharp,
-                            size: 12,
-                            color: kMutedText,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 if (isLocked && (delta != null || hasPR))
@@ -1226,11 +1248,7 @@ class _WarmupSetRow extends StatelessWidget {
           child: IconButton(
             tooltip: 'Remove warm-up set',
             padding: EdgeInsets.zero,
-            icon: const Icon(
-              Icons.close_sharp,
-              color: kMutedText,
-              size: 20,
-            ),
+            icon: const Icon(Icons.close_sharp, color: kMutedText, size: 20),
             onPressed: onRemove,
           ),
         ),

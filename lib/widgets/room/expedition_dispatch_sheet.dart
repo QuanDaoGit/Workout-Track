@@ -65,10 +65,20 @@ class _DispatchSheetState extends State<_DispatchSheet> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// The expected gem haul for a route, rounded to the nearest 10 — the base
+  /// pay for the user's rank on the route's stat × the VIT duration multiplier.
+  /// (The payout's ±variance averages out, so base×mult is the expected value.)
+  /// This is the row's only at-a-glance "what do I get" cue now.
+  int _approxGemsFor(AdventureRouteDef route) {
+    final rank = StatEngine().getRank(widget.stats[route.statKey] ?? 0);
+    final base = AdventureService.basePayoutForRank(rank);
+    final expected = base * AdventureService.multiplierForVit(widget.vit);
+    return (expected / 10).round() * 10;
+  }
+
   @override
   Widget build(BuildContext context) {
     final route = adventureRouteById(_routeId);
-    final durH = (AdventureService.durationForVit(widget.vit) / 60).round();
     return Container(
       decoration: const BoxDecoration(
         color: kCard,
@@ -104,8 +114,7 @@ class _DispatchSheetState extends State<_DispatchSheet> {
               for (final r in adventureRoutes) ...[
                 _RouteRow(
                   route: r,
-                  rank: StatEngine().getRank(widget.stats[r.statKey] ?? 0),
-                  durH: durH,
+                  approxGems: _approxGemsFor(r),
                   selected: r.id == _routeId,
                   onTap: _busy ? null : () => setState(() => _routeId = r.id),
                 ),
@@ -127,19 +136,17 @@ class _DispatchSheetState extends State<_DispatchSheet> {
   }
 }
 
-/// One selectable route row — accent dot + name + stat/rank/duration.
+/// One selectable route row — accent dot + name + approximate gem haul.
 class _RouteRow extends StatelessWidget {
   const _RouteRow({
     required this.route,
-    required this.rank,
-    required this.durH,
+    required this.approxGems,
     required this.selected,
     required this.onTap,
   });
 
   final AdventureRouteDef route;
-  final String rank;
-  final int durH;
+  final int approxGems;
   final bool selected;
   final VoidCallback? onTap;
 
@@ -177,9 +184,36 @@ class _RouteRow extends StatelessWidget {
                 ),
               ),
             ),
-            Text(
-              '${route.statKey} · $rank · ~${durH}H',
-              style: AppFonts.shareTechMono(color: kMutedText, fontSize: 10),
+            // The only at-a-glance payoff cue: the approximate gem haul (a
+            // multiple of 10), gem-magenta so it reads as currency.
+            Semantics(
+              label: 'about $approxGems gems',
+              excludeSemantics: true,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/icons/economy/icon_gem.png',
+                    width: 14,
+                    height: 14,
+                    filterQuality: FilterQuality.none,
+                    errorBuilder: (_, _, _) => const Icon(
+                      Icons.diamond_sharp,
+                      color: kGemMagenta,
+                      size: 14,
+                    ),
+                  ),
+                  const SizedBox(width: kSpace1),
+                  Text(
+                    '~$approxGems',
+                    style: AppFonts.shareTechMono(
+                      color: kGemMagenta,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../../services/haptic_service.dart';
 import '../../theme/tokens.dart';
 import '../companion/bit_core_engine.dart' show bitGlow;
 
@@ -353,7 +354,10 @@ class _QuestBoardState extends State<QuestBoard> with SingleTickerProviderStateM
             button: true,
             label: label,
             child: GestureDetector(
-              onTap: widget.onTap,
+              onTap: () {
+                HapticService.instance.selection(); // glance at the board
+                widget.onTap!();
+              },
               behavior: HitTestBehavior.opaque,
               child: ExcludeSemantics(child: content),
             ),

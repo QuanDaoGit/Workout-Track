@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/haptic_service.dart';
 import '../theme/tokens.dart';
 import 'motion/phosphor_tap.dart';
 
@@ -17,6 +18,7 @@ class ArcadeTap extends StatelessWidget {
     this.flashOpacity = 0.15,
     this.flashMs = 80,
     this.behavior = HitTestBehavior.opaque,
+    this.haptic = HapticIntent.none,
   });
 
   final Widget child;
@@ -27,6 +29,9 @@ class ArcadeTap extends StatelessWidget {
   final double flashOpacity;
   final int flashMs;
   final HitTestBehavior behavior;
+
+  /// Opt-in tactile tick on a committed tap (rate-limited). Defaults to silent.
+  final HapticIntent haptic;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +44,7 @@ class ArcadeTap extends StatelessWidget {
       opacity: flashOpacity,
       borderRadius: borderRadius ?? const BorderRadius.all(Radius.circular(0)),
       behavior: behavior,
+      haptic: haptic,
       child: child,
     );
   }

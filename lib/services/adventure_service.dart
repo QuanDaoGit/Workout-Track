@@ -391,36 +391,6 @@ class AdventureService {
   });
 
   // ---------------------------------------------------------------------
-  // Debug helpers (wired only behind kDebugMode UI — never in release flows)
-  // ---------------------------------------------------------------------
-
-  /// Debug-only: grant one charge immediately (bypasses the one/day gate) so a
-  /// dispatch + launch can be triggered without first logging a workout.
-  Future<void> debugGrantCharge() => _serial(() async {
-    final prefs = await SharedPreferences.getInstance();
-    final state = _decode(prefs.getString(stateKey));
-    final charges = (state.charges + 1).clamp(0, AdventureState.chargeCap);
-    await _save(prefs, state.copyWith(charges: charges));
-  });
-
-  /// Debug-only: make the pending expedition return *now* (backdates its
-  /// `returnsAt`) so the report can be collected immediately — preview the whole
-  /// loop in seconds instead of waiting out the 4–8h timer.
-  Future<void> debugReturnPendingNow() => _serial(() async {
-    final prefs = await SharedPreferences.getInstance();
-    final state = _decode(prefs.getString(stateKey));
-    final pending = state.pending;
-    if (pending == null) return;
-    final now = _effectiveNow(state);
-    await _save(
-      prefs,
-      state.copyWith(
-        pending: pending.copyWith(returnsAtIso: now.toIso8601String()),
-      ),
-    );
-  });
-
-  // ---------------------------------------------------------------------
   // Persistence
   // ---------------------------------------------------------------------
 

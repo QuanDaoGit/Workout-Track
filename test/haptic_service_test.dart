@@ -85,6 +85,47 @@ void main() {
       // swallowed so it can never break the flow that triggered it.
       await HapticService.instance.success();
     });
+
+    group('fireCoalesced (the broad wrapper layer rate-limit)', () {
+      // The singleton carries `_lastCoalescedAt` across tests, so advance the
+      // fake clock monotonically (a big step each test) to clear any prior mark.
+      var epoch = 0;
+      late DateTime fakeNow;
+      setUp(() {
+        epoch += 1;
+        fakeNow = DateTime(2026).add(Duration(minutes: epoch));
+        HapticService.nowProvider = () => fakeNow;
+        HapticService.coalesceWindow = const Duration(milliseconds: 30);
+      });
+      tearDown(() {
+        HapticService.nowProvider = DateTime.now;
+        HapticService.coalesceWindow = const Duration(milliseconds: 30);
+      });
+
+      test('a repeat inside the window is dropped', () async {
+        await HapticService.instance.fireCoalesced(HapticIntent.selection);
+        fakeNow = fakeNow.add(const Duration(milliseconds: 10)); // < 30ms
+        await HapticService.instance.fireCoalesced(HapticIntent.selection);
+        expect(hapticArgs(), <Object?>['HapticFeedbackType.selectionClick'],
+            reason: 'the second tick is coalesced away');
+      });
+
+      test('a repeat past the window fires again', () async {
+        await HapticService.instance.fireCoalesced(HapticIntent.selection);
+        fakeNow = fakeNow.add(const Duration(milliseconds: 40)); // > 30ms
+        await HapticService.instance.fireCoalesced(HapticIntent.selection);
+        expect(hapticArgs(), <Object?>[
+          'HapticFeedbackType.selectionClick',
+          'HapticFeedbackType.selectionClick',
+        ]);
+      });
+
+      test('none is always a no-op and does not start the window', () async {
+        await HapticService.instance.fireCoalesced(HapticIntent.none);
+        await HapticService.instance.fireCoalesced(HapticIntent.selection);
+        expect(hapticArgs(), <Object?>['HapticFeedbackType.selectionClick']);
+      });
+    });
   });
 
   group('HapticSettingsService', () {

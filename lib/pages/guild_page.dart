@@ -12,6 +12,7 @@ import '../models/workout_models.dart';
 import '../services/character_service.dart';
 import '../services/class_service.dart';
 import '../services/guild_service.dart';
+import '../services/haptic_service.dart';
 import '../services/loot_service.dart';
 import '../services/profile_service.dart';
 import '../services/program_service.dart';
@@ -118,6 +119,7 @@ class GuildPageState extends State<GuildPage> {
     final ok = await _guild.sendForgeNod(member.userId);
     if (!mounted) return;
     if (ok) {
+      HapticService.instance.success(); // the forge-nod "sent" beat
       setState(() => _nodded.add(member.userId));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Forge nod sent to ${member.displayName}.')),
