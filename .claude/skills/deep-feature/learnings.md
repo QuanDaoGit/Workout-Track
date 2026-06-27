@@ -228,3 +228,27 @@ or run them **before** the analytics sink is installed (a no-op-until-bootstrap 
 first_workout_saved made lifetime-once via a persisted flag (Codex F1), workout_saved deduped on
 `alreadyCompleted` (F2), SEED_DEMO seed moved before bootstrap (F3), duration from
 actualDurationSeconds not engagement_time_msec (2026-06).*
+
+### Destructive bulk-data / codemod tooling
+**Rule:** A script that edits a large shared data file or removes an entity across many wiring points
+must: (1) **dry-run by default**, printing a unified diff — `--apply` writes; (2) **prove
+format-preservation before writing** — round-trip the *unmodified* file and byte-compare (a generic
+`json.dump`/serializer can silently reformat every entry and bury the one-line change); refuse on drift;
+(3) be **transactional** — run *all* validation first (no writes), stage deletions into a backup dir +
+hold text originals in memory, and **roll back on any exception** (git can't recover deleted
+untracked/generated files in a dirty tree); (4) **refuse ambiguous destruction** rather than guess — a
+*referenced* entity (a program lift) must be **replaced** (`--replace-with`, validated: target exists +
+not already in the same slot), never silently dropped to a short list; (5) **warn, don't auto-edit,
+bespoke data** (hand-tuned seed weights); (6) **reconcile the build MANIFEST, not just the data** —
+assets/files declared *individually* in a build manifest (Flutter's per-folder `pubspec.yaml` asset
+entries, because asset dirs are non-recursive) must lose their declaration when deleted, or the **build**
+breaks even though tests + data look clean; guard with a declared-==-on-disk test. Use **quoted-exact
+token** edits so `'X'` never matches inside `'X_2'`. Pair it with one **umbrella integrity test** asserting every cross-registry reference resolves
+to the live source (+ per-entity structural invariants), proven red-green — the net that makes an
+incomplete removal fail loudly in one place. *Seen: `ops/remove_exercise.py` (byte-stable JSON gate,
+staged-deletion rollback, refuse-program-lift-without-replace, warn-on-seeder) + `catalog_integrity_test.dart`
+(curated/programs/splits/manifest resolve + per-day uniqueness); Codex F1–F4; proven with dangling-id +
+dup-suggested-id, and ghost-pubspec-declaration mutations. A `--from-file` batch prune of 741 non-curated
+exercises surfaced the per-folder `pubspec.yaml` asset-declaration touchpoint the first audit missed —
+the build broke on deleted-but-still-declared dirs while data tests stayed green, fixed + guarded after
+(2026-06).*

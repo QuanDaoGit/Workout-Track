@@ -124,10 +124,13 @@ flutter:
     - assets/audio/
     - assets/exercises/demos/
     - assets/exercises.json
+    - assets/exercises/exercises/Air_Bike/
     - assets/exercises/exercises/Alternate_Hammer_Curl/
     - assets/exercises/exercises/Alternating_Renegade_Row/
+    - assets/exercises/exercises/Arnold_Dumbbell_Press/
     - assets/exercises/exercises/Around_The_Worlds/
     - assets/exercises/exercises/Atlas_Stones/
+    - assets/exercises/exercises/Barbell_Ab_Rollout_-_On_Knees/
     - assets/exercises/exercises/Barbell_Bench_Press_-_Medium_Grip/
     - assets/exercises/exercises/Barbell_Curl/
     - assets/exercises/exercises/Barbell_Deadlift/
@@ -137,12 +140,12 @@ flutter:
     - assets/exercises/exercises/Barbell_Incline_Bench_Press_-_Medium_Grip/
     - assets/exercises/exercises/Barbell_Lunge/
     - assets/exercises/exercises/Barbell_Squat/
-    - assets/exercises/exercises/Bench_Press_with_Chains/
     - assets/exercises/exercises/Behind_Head_Chest_Stretch/
+    - assets/exercises/exercises/Bench_Press_with_Chains/
+    - assets/exercises/exercises/Bent-Arm_Dumbbell_Pullover/
     - assets/exercises/exercises/Bent_Over_Barbell_Row/
     - assets/exercises/exercises/Bent_Over_Two-Arm_Long_Bar_Row/
     - assets/exercises/exercises/Bent_Over_Two-Dumbbell_Row/
-    - assets/exercises/exercises/Bent-Arm_Dumbbell_Pullover/
     - assets/exercises/exercises/Bodyweight_Flyes/
     - assets/exercises/exercises/Box_Squat_with_Bands/
     - assets/exercises/exercises/Box_Squat_with_Chains/
@@ -154,20 +157,23 @@ flutter:
     - assets/exercises/exercises/Clean_and_Jerk/
     - assets/exercises/exercises/Close-Grip_Barbell_Bench_Press/
     - assets/exercises/exercises/Close-Grip_Front_Lat_Pulldown/
+    - assets/exercises/exercises/Crunches/
+    - assets/exercises/exercises/Dead_Bug/
     - assets/exercises/exercises/Deadlift_with_Bands/
     - assets/exercises/exercises/Deadlift_with_Chains/
-    - assets/exercises/exercises/Deficit_Deadlift/
     - assets/exercises/exercises/Drag_Curl/
     - assets/exercises/exercises/Dumbbell_Bench_Press/
     - assets/exercises/exercises/Dumbbell_Bicep_Curl/
     - assets/exercises/exercises/Dumbbell_Flyes/
     - assets/exercises/exercises/Dumbbell_Lunges/
     - assets/exercises/exercises/Dumbbell_One-Arm_Triceps_Extension/
+    - assets/exercises/exercises/Dumbbell_Shoulder_Press/
     - assets/exercises/exercises/Dumbbell_Squat/
     - assets/exercises/exercises/Dumbbell_Step_Ups/
-    - assets/exercises/exercises/Elevated_Cable_Rows/
     - assets/exercises/exercises/EZ-Bar_Curl/
     - assets/exercises/exercises/EZ-Bar_Skullcrusher/
+    - assets/exercises/exercises/Elevated_Cable_Rows/
+    - assets/exercises/exercises/Face_Pull/
     - assets/exercises/exercises/Flat_Bench_Cable_Flyes/
     - assets/exercises/exercises/Front_Barbell_Squat/
     - assets/exercises/exercises/Front_Squat_Clean_Grip/
@@ -177,6 +183,7 @@ flutter:
     - assets/exercises/exercises/Hack_Squat/
     - assets/exercises/exercises/Hammer_Curls/
     - assets/exercises/exercises/Handstand_Push-Ups/
+    - assets/exercises/exercises/Hanging_Leg_Raise/
     - assets/exercises/exercises/High_Cable_Curls/
     - assets/exercises/exercises/Incline_Cable_Flye/
     - assets/exercises/exercises/Incline_Dumbbell_Flyes/
@@ -184,9 +191,9 @@ flutter:
     - assets/exercises/exercises/Kettlebell_Pistol_Squat/
     - assets/exercises/exercises/Kettlebell_Sumo_High_Pull/
     - assets/exercises/exercises/Kneeling_Cable_Triceps_Extension/
+    - assets/exercises/exercises/Leg-Over_Floor_Press/
     - assets/exercises/exercises/Leg_Extensions/
     - assets/exercises/exercises/Leg_Press/
-    - assets/exercises/exercises/Leg-Over_Floor_Press/
     - assets/exercises/exercises/Leverage_Chest_Press/
     - assets/exercises/exercises/Leverage_High_Row/
     - assets/exercises/exercises/Leverage_Iso_Row/
@@ -197,42 +204,44 @@ flutter:
     - assets/exercises/exercises/Lying_Triceps_Press/
     - assets/exercises/exercises/Machine_Bench_Press/
     - assets/exercises/exercises/Mixed_Grip_Chin/
+    - assets/exercises/exercises/Mountain_Climbers/
     - assets/exercises/exercises/Narrow_Stance_Leg_Press/
     - assets/exercises/exercises/Neck_Press/
-    - assets/exercises/exercises/One_Leg_Barbell_Squat/
     - assets/exercises/exercises/One-Arm_Dumbbell_Row/
-    - assets/exercises/exercises/One-Arm_Flat_Bench_Dumbbell_Flye/
     - assets/exercises/exercises/One-Arm_Kettlebell_Floor_Press/
     - assets/exercises/exercises/One-Arm_Kettlebell_Snatch/
     - assets/exercises/exercises/One_Arm_Chin-Up/
+    - assets/exercises/exercises/One_Leg_Barbell_Squat/
     - assets/exercises/exercises/Overhead_Cable_Curl/
     - assets/exercises/exercises/Overhead_Lat/
     - assets/exercises/exercises/Overhead_Squat/
     - assets/exercises/exercises/Overhead_Triceps/
+    - assets/exercises/exercises/Plank/
     - assets/exercises/exercises/Plyo_Kettlebell_Pushups/
     - assets/exercises/exercises/Preacher_Curl/
     - assets/exercises/exercises/Press_Sit-Up/
     - assets/exercises/exercises/Pullups/
     - assets/exercises/exercises/Push_Press/
-    - assets/exercises/exercises/Rack_Pull_with_Bands/
     - assets/exercises/exercises/Rack_Pulls/
     - assets/exercises/exercises/Reverse_Band_Deadlift/
     - assets/exercises/exercises/Reverse_Barbell_Preacher_Curls/
     - assets/exercises/exercises/Reverse_Grip_Bent-Over_Rows/
     - assets/exercises/exercises/Romanian_Deadlift/
+    - assets/exercises/exercises/Russian_Twist/
     - assets/exercises/exercises/Seated_Biceps/
     - assets/exercises/exercises/Seated_Cable_Rows/
     - assets/exercises/exercises/Seated_Calf_Raise/
     - assets/exercises/exercises/Seated_Front_Deltoid/
     - assets/exercises/exercises/Seated_Leg_Curl/
     - assets/exercises/exercises/Seated_One-arm_Cable_Pulley_Rows/
-    - assets/exercises/exercises/Single-Arm_Push-Up/
+    - assets/exercises/exercises/Side_Lateral_Raise/
     - assets/exercises/exercises/Smith_Machine_Bench_Press/
     - assets/exercises/exercises/Smith_Machine_Leg_Press/
     - assets/exercises/exercises/Smith_Machine_Squat/
     - assets/exercises/exercises/Speed_Squats/
     - assets/exercises/exercises/Standing_Biceps_Cable_Curl/
     - assets/exercises/exercises/Standing_Calf_Raises/
+    - assets/exercises/exercises/Standing_Military_Press/
     - assets/exercises/exercises/Straight-Arm_Dumbbell_Pullover/
     - assets/exercises/exercises/Straight-Arm_Pulldown/
     - assets/exercises/exercises/Sumo_Deadlift/
@@ -244,7 +253,6 @@ flutter:
     - assets/exercises/exercises/V-Bar_Pulldown/
     - assets/exercises/exercises/Wide-Grip_Barbell_Bench_Press/
     - assets/exercises/exercises/Wide-Grip_Decline_Barbell_Bench_Press/
-    - assets/exercises/exercises/Wide-Grip_Decline_Barbell_Pullover/
     - assets/exercises/exercises/Wide-Grip_Lat_Pulldown/
     - assets/exercises/exercises/Zercher_Squats/
     - assets/exercises/exercises/Zottman_Curl/
