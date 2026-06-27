@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/muscle_groups.dart';
 import '../models/workout_models.dart';
 import 'adventure_service.dart';
+import 'analytics_service.dart';
 import 'calibration_service.dart';
 import 'json_safe.dart';
 import 'keyed_lock.dart';
@@ -44,8 +45,13 @@ class WorkoutStorageService {
     // on the same blob); the sub-service orchestration below runs *outside* the
     // lock — some of those services mutate sessions themselves, so holding the
     // lock across them would deadlock on the same key.
+    // Captured inside the lock: a completed (non-ongoing) row already under this
+    // id means this is a re-save, not a new workout — so the funnel events below
+    // must not double-count it (Codex F2).
+    var alreadyCompleted = false;
     final sessions = await prefsWriteLock.synchronized(_sessionsKey, () async {
       final sessions = await getSessions();
+      alreadyCompleted = sessions.any((s) => s.id == session.id && !s.isOngoing);
       // Incremental autosave leaves an ongoing checkpoint row under this
       // session's id; the completed save replaces it (otherwise we'd keep both
       // an ongoing and a completed row with the same id — a duplicate + a
@@ -83,6 +89,22 @@ class WorkoutStorageService {
         // idempotent once/day. Swallows its own errors (never breaks a save).
         await WarmupRewardService().grantForSession(session);
         await markMissionFinished(session.date, MissionFinishState.completed);
+        // Telemetry (ADR 0001) — only a genuinely NEW completed session, so a
+        // re-save can't double-count the funnel; first_workout_saved is itself
+        // lifetime-once inside the facade. Synthetic seed/import paths persist
+        // sessions directly (not via saveSession), so they never reach here.
+        if (!alreadyCompleted) {
+          final setCount = session.exercises.fold<int>(
+            0,
+            (sum, e) => sum + e.sets.length,
+          );
+          await AnalyticsService.instance.logWorkoutSaved(
+            exerciseCount: session.exercises.length,
+            setCount: setCount,
+            durationSeconds: session.actualDurationSeconds,
+          );
+          await AnalyticsService.instance.logFirstWorkoutSaved();
+        }
       }
     }
   }

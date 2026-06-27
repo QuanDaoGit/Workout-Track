@@ -39,6 +39,12 @@ dependencies:
   flutter_local_notifications: ^22.0.1
   timezone: ^0.11.0
   flutter_timezone: ^5.1.0
+  firebase_core: ^4.11.0
+  firebase_analytics: ^12.4.3
+  # Pinned: versions <9.22.0 target an old Kotlin language version the project's
+  # Kotlin Gradle Plugin 2.2.20 rejects (sentry-dart #3433; fixed in 9.22.0).
+  sentry_flutter: 9.22.0
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -54,6 +60,18 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  sentry_dart_plugin: ^3.4.0
+
+# Sentry symbol upload for readable RELEASE crashes (ADR 0001). Build-time only,
+# not bundled into the app. After a release build, run: dart run sentry_dart_plugin
+# The auth token is read from the SENTRY_AUTH_TOKEN env var (never committed).
+sentry:
+  project: flutter
+  org: ironbit-49
+  upload_debug_symbols: true
+  upload_sources: false
+  # Obfuscated builds: add --obfuscate --split-debug-info=build/symbols to the
+  # flutter build, then the plugin uploads the Dart symbol map too.
 
 # Launcher icon — generated from the bordered tile. The generator already insets
 # the adaptive foreground 16% into the safe zone, so we pass the full tile; the

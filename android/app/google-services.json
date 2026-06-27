@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "491486859612",
+    "project_id": "ironbit-3aacc",
+    "storage_bucket": "ironbit-3aacc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:491486859612:android:2f3887e5aa17457090f199",
+        "android_client_info": {
+          "package_name": "com.erik.ironbit"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAugPZtfvA6Kc6k0fRbBTkhuBNlXBKGLFs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

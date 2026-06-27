@@ -386,5 +386,6 @@ loot appear. Saving writes the `WorkoutSession`, which is what makes every downs
 - **LCK** = streak (cap 100) → XP multiplier up to **3.0×**.
 - **Session XP** = 50 + 5×sets + 1×minute, ×LCK ×potions.
 - **Classes** = +20% volume to one stat for focus muscles (Assassin→AGI, Bruiser→STR, Tank→END).
-- **Everything derives from the local `WorkoutSession` history.** No cloud, no account, no IAP.
-  Earned identity, sticky progress, body-neutral, offline.
+- **Everything derives from the local `WorkoutSession` history.** No account, no IAP; training data
+  stays on-device. Earned identity, sticky progress, body-neutral, offline-first. (Anonymous opt-out
+  analytics + opt-in crash reporting — ADR 0001.)

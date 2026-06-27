@@ -44,3 +44,11 @@ surface/moment — its placement + framing are part of the precondition** (a rec
 analogical. *Seen: CET/CHI findings on a pre-action onboarding screen; BIT's chat-bubble layout reused
 in-world; Fitbod/Hevy muscle-map precedent over-read into finish-screen placement until Codex split
 "feature exists" from "belongs here" (2026-06).*
+
+### Metric/instrumentation research without a measurement contract
+**Rule:** Before recommending *what to track*, define the **measurement contract**: population/denominator
+(esp. under opt-out analytics — opt-out-rate shifts masquerade as metric moves), exact definition + timezone
++ cohort anchor, and **terminal/recovery states** (a missing success event ≠ failure: app-kill/crash/offline-
+batch/recovery aren't abandonment). Treat activation/retention "drivers" as correlation → label hypotheses,
+not causes. *Seen: a retention-instrumentation pass had the right events but under-grounded denominators,
+weekly-metric definitions, and the abandonment lifecycle until Codex flagged all three (2026-06).*

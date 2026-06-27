@@ -26,5 +26,7 @@ flutter pub get
 ```
 
 ## Notes
-- Persistence is `SharedPreferences` only (no DB to provision).
-- No backend, no API keys, no `.env` — the app is fully offline.
+- Persistence is `SharedPreferences` only (no DB to provision); user/training data stays on-device.
+- Telemetry (ADR 0001): **Firebase** needs `android/app/google-services.json` + the Google-services
+  Gradle plugin; **Sentry** needs a DSN. Keep secrets out of git. The app still runs offline-first —
+  it is no longer "no backend / no keys / fully offline".

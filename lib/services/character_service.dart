@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/character.dart';
+import 'analytics_service.dart';
 import 'onboarding_service.dart';
 
 class CharacterService {
@@ -30,5 +31,9 @@ class CharacterService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(activeCharacterKey, jsonEncode(character.toJson()));
     await OnboardingService().markComplete();
+    // Activation-funnel head (ADR 0001). During a SEED_DEMO seed this runs before
+    // AnalyticsService.bootstrap (main.dart orders the seed first), so the no-op
+    // facade absorbs it and a synthetic persona never emits onboarding_complete.
+    await AnalyticsService.instance.logOnboardingComplete();
   }
 }

@@ -204,4 +204,27 @@ primary check (the equality test is secondary). *Seen: the curated `shoulders`/`
 overrides — an integrity test decoded `assets/exercises.json` and asserted all 60 ids exist + the split
 token is really on each; a `Crunchez_typo` mutation was caught; un-curated tokens stay coarse-generic;
 the body-map drill's `weeklyContributors` + `muscleBreakdown` share `creditPerSet` with the meter total,
-guarded by fixtures + a per-key sum==total test (Codex F1/F2, 2026-06).*
+guarded by fixtures + a per-key sum==total test (Codex F1/F2, 2026-06). **Corollary — when the
+hand-authored layer is *redundant* with a self-describing source, delete it, don't just guard it:** if
+every artifact already carries the canonical id as its filename (source + output files named by catalog
+id), derive all paths from the id, **auto-discover** the sources, and **generate** the membership
+manifest from what's on disk — one source of truth, not two parallel hand-maps in two languages that
+must agree. Keep the integrity guard (every discovered source resolves to a real id *and* is registered)
+so a dropped/misnamed file fails CI; prove it with a non-id source-file mutation. *Seen: the dual Python
+`CLIPS` + Dart `_demos` demo maps — both re-encoding info already in the source filenames — collapsed to
+id-derived paths + a generated `kDemoExerciseIds` over auto-discovered sources; source-coverage test
+proven with a `__ghost_probe__.mp4` mutation (2026-06).*
+
+### Analytics/telemetry event integrity
+**Rule:** A funnel event emitted from a persistence chokepoint needs an explicit idempotency contract.
+A **once-per-lifetime** event (activation / first-X) gates on a **persisted flag**, never a count over
+**mutable** history — a delete/reset returns the count to its trigger value and re-fires it, corrupting
+the exact cohort the event defines. A **per-entity** event **dedupes by id** (capture "row already
+stored" *before* the write) so a retry / recovery / double-tap re-save can't double-count a conversion.
+**Synthetic paths** (seed / demo / import / fixtures) must not emit — route them around the chokepoint,
+or run them **before** the analytics sink is installed (a no-op-until-bootstrap facade only guards
+*pre*-bootstrap). Duration/quantity params come from the **app's own truth**, never a platform proxy
+(foreground engagement time mis-counts a backgrounded workout). *Seen: Phase-2 funnel wiring —
+first_workout_saved made lifetime-once via a persisted flag (Codex F1), workout_saved deduped on
+`alreadyCompleted` (F2), SEED_DEMO seed moved before bootstrap (F3), duration from
+actualDurationSeconds not engagement_time_msec (2026-06).*

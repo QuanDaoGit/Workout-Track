@@ -49,6 +49,11 @@ android/key.properties
 *.jks
 *.keystore
 
+# Sentry — the auth token belongs in the SENTRY_AUTH_TOKEN env var, never in the
+# repo. If you ever use the file fallback instead, keep it ignored.
+android/sentry.properties
+.sentryclirc
+
 # Agent / tooling runtime — never commit
 .codex_http.*
 .codex_screenshot_runtime/

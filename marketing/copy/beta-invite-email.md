@@ -7,7 +7,7 @@
 
 **Subject:** Your Ironbit beta access is ready — every rep builds your character
 
-**Preheader:** Android beta is live. ~2 minutes to install. Fully offline, no account.
+**Preheader:** Android beta is live. ~2 minutes to install. Offline-first, no account.
 
 ---
 
@@ -18,8 +18,8 @@ RPG character. Your access is ready.
 
 **What you're testing:** log real workouts (sets, reps, weight) and watch them feed a pixel-arcade
 character — STR/AGI/END stats, levels, ranks, classes, quests, and loot. Everything is earned from
-actual training. There's no account, no cloud, no ads, no purchases. Your data never leaves your
-phone.
+actual training. No account, no ads, no purchases — your workouts live on your phone. (The beta
+collects anonymous usage + crash reports so I can fix things fast; analytics is opt-out in Settings.)
 
 ## Install (Android, ~2 minutes)
 
@@ -45,6 +45,10 @@ phone.
 This is a first beta. Known rough edges exist; a future update *may* require a fresh install
 (your character would restart — I'll warn you first if so). It's Android-only for now.
 
+**Privacy:** your training data stays on your phone. The beta collects anonymous usage analytics
+(opt-out any time in Settings → Data & Privacy) plus opt-in crash reports. Full policy:
+https://quandaogit.github.io/ironbit-privacy/
+
 Thanks for training with me from day one. Your character is waiting.
 
 — Erik
@@ -55,8 +59,9 @@ Ironbit
 ## Notes (not part of the email)
 
 - `{$name|there}` is MailerLite's personalization syntax — adjust to your field name.
-- Voice check: identity hook in subject + closer, trust anchor ("no account / data never leaves
-  your phone"), no body-language or weight framing, no claims beyond the shipped product. ✓
+- Voice check: identity hook in subject + closer, trust anchor ("no account / your workouts stay on
+  your phone"; anonymous opt-out analytics + crash reports disclosed per ADR 0001), no body-language
+  or weight framing, no claims beyond the shipped product. ✓
 - The "fresh install" warning covers the S2 finding (fromJson hardening not done yet — a schema
   change between beta builds could require a data wipe).
 - Follow-up cadence suggestion: a short check-in email after ~1 week ("what made you stop / keep

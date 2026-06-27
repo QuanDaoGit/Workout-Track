@@ -1,86 +1,117 @@
 """Normalize the form-demo clips into app-ready mp4s + poster stills.
 
-The curated program lifts (FULL BODY A Day-1 lifts plus the chest/back lifts
-across Full Body / Upper-Lower / PPL) each have a short source .mp4 filed by
-muscle group under assets/exercises/animated-videos/<Group>/<Catalog_Id>.mp4
-(e.g. Chest/, Back/, Legs/). The app plays them with the video_player
-plugin (ExoPlayer — hardware-decoded, pausable), so each source produces two
-outputs in assets/exercises/demos/:
+Single source of truth = the source files on disk. Each form-demo clip is filed
+by muscle group under assets/exercises/animated-videos/<Group>/<Catalog_Id>.mp4,
+where the filename (without extension) is the exercise's **exact catalog id**
+(the `id` in assets/exercises.json, e.g. `Barbell_Bench_Press_-_Medium_Grip`).
 
-  <slug>.mp4          normalized clip (H.264 480p, muted, faststart) for the
+This script auto-discovers every source clip, validates its id against the
+catalog, and for each produces two id-named outputs in assets/exercises/demos/:
+
+  <Catalog_Id>.mp4    normalized clip (H.264 480p, muted, faststart) for the
                       demo cabinet / fullscreen player
-  <slug>_poster.webp  a mid-frame still for the static 60px thumbnails and the
+  <Catalog_Id>.webp   a mid-frame still for the static thumbnails and the
                       player's pre-init frame
+
+Because every artifact (source, mp4, poster) shares the catalog id as its
+basename, the app derives all demo paths from the id alone — there is no
+per-exercise path map to hand-maintain. The script regenerates the list of
+which ids have a demo into lib/data/exercise_demos.g.dart.
 
 Source .mp4s stay undeclared (not shipped). Only the generated demos/ files are
 declared in pubspec.yaml.
 
-Requires ffmpeg on PATH. Run from the repo root:
+Requires ffmpeg + ffprobe on PATH. Run from anywhere:
     python ops/generate_exercise_demos.py
+Adding a new demo: drop <Catalog_Id>.mp4 into the right group folder and re-run.
 """
 
-import os
+import json
 import subprocess
 import sys
+from pathlib import Path
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC_DIR = os.path.join(REPO_ROOT, "assets", "exercises", "animated-videos")
-OUT_DIR = os.path.join(REPO_ROOT, "assets", "exercises", "demos")
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = REPO_ROOT / "assets" / "exercises" / "animated-videos"
+OUT_DIR = REPO_ROOT / "assets" / "exercises" / "demos"
+CATALOG = REPO_ROOT / "assets" / "exercises.json"
+GEN_DART = REPO_ROOT / "lib" / "data" / "exercise_demos.g.dart"
 
-# source path (muscle-group subfolder / Catalog_Id.mp4) -> output slug.
-# Sources are filed by muscle group under animated-videos/; the filename is the
-# exercise's catalog id (matches the keys in lib/data/exercise_demos.dart).
-CLIPS = {
-    # FULL BODY A (Day-1) lifts.
-    "Chest/Barbell_Bench_Press_-_Medium_Grip.mp4": "barbell_bench_press",
-    "Back/Wide-Grip_Lat_Pulldown.mp4": "wide_grip_lat_pulldown",
-    "Legs/Barbell_Squat.mp4": "barbell_squat",
-    "Arms/Dumbbell_Bicep_Curl.mp4": "dumbbell_bicep_curl",
-    "Arms/Triceps_Pushdown.mp4": "triceps_pushdown",
-    # Remaining chest + back program lifts (Full Body / Upper-Lower / PPL).
-    "Chest/Dumbbell_Bench_Press.mp4": "dumbbell_bench_press",
-    "Chest/Incline_Dumbbell_Press.mp4": "incline_dumbbell_press",
-    "Chest/Barbell_Incline_Bench_Press_-_Medium_Grip.mp4": "barbell_incline_bench_press",
-    "Chest/Cable_Crossover.mp4": "cable_crossover",
-    "Chest/Dumbbell_Flyes.mp4": "dumbbell_flyes",
-    "Back/One-Arm_Dumbbell_Row.mp4": "one_arm_dumbbell_row",
-    "Back/Seated_Cable_Rows.mp4": "seated_cable_rows",
-    "Back/Close-Grip_Front_Lat_Pulldown.mp4": "close_grip_lat_pulldown",
-    "Back/Bent_Over_Barbell_Row.mp4": "bent_over_barbell_row",
-    "Back/Straight-Arm_Pulldown.mp4": "straight_arm_pulldown",
-}
-
-# 480p H.264 keeps form legible at small file size; -an strips audio;
-# faststart moves the moov atom up so asset playback starts instantly.
+# 480p H.264 keeps form legible at small file size; -an strips audio; faststart
+# moves the moov atom up so asset playback starts instantly. Source aspect ratio
+# is preserved (height -2) — the player letterboxes any ratio over near-black.
 WIDTH = 480
 CRF = 27
 
 
 def run(args):
-    print("  $", " ".join(a if " " not in a else f'"{a}"' for a in args))
+    print("  $", " ".join(str(a) for a in args))
     subprocess.run(args, check=True, capture_output=True)
 
 
+def catalog_ids():
+    data = json.loads(CATALOG.read_text(encoding="utf-8"))
+    return {item["id"] for item in data}
+
+
+def discover_sources():
+    """Every source clip, sorted by id. id = filename stem."""
+    return sorted(SRC_DIR.rglob("*.mp4"), key=lambda p: p.stem)
+
+
+def write_manifest(ids):
+    body = "\n".join(f"  '{i}'," for i in sorted(ids))
+    GEN_DART.write_text(
+        "// GENERATED FILE — DO NOT EDIT BY HAND.\n"
+        "// Regenerate with: python ops/generate_exercise_demos.py\n"
+        "//\n"
+        "// Every exercise catalog id that has a form-demo clip on disk. The mp4\n"
+        "// and poster are derived from the id (see exercise_demos.dart).\n"
+        "part of 'exercise_demos.dart';\n"
+        "\n"
+        "const Set<String> kDemoExerciseIds = {\n"
+        f"{body}\n"
+        "};\n",
+        encoding="utf-8",
+    )
+    print(f"\nwrote {GEN_DART.relative_to(REPO_ROOT)} ({len(ids)} ids)")
+
+
 def main():
-    if not os.path.isdir(SRC_DIR):
+    if not SRC_DIR.is_dir():
         sys.exit(f"Source dir not found: {SRC_DIR}")
-    os.makedirs(OUT_DIR, exist_ok=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    for src_name, slug in CLIPS.items():
-        src = os.path.join(SRC_DIR, *src_name.split("/"))
-        if not os.path.isfile(src):
-            sys.exit(f"Missing source clip: {src}")
+    catalog = catalog_ids()
+    sources = discover_sources()
+    if not sources:
+        sys.exit(f"No source clips found under {SRC_DIR}")
 
-        video_out = os.path.join(OUT_DIR, f"{slug}.mp4")
-        poster_out = os.path.join(OUT_DIR, f"{slug}_poster.webp")
+    # Validate every source id against the catalog BEFORE encoding so a misnamed
+    # clip (e.g. Lying_Leg_Curl vs the catalog's Lying_Leg_Curls) fails loudly
+    # instead of producing a demo the app can never resolve.
+    bad = [p for p in sources if p.stem not in catalog]
+    if bad:
+        lines = "\n".join(f"  {p.relative_to(SRC_DIR)} (id '{p.stem}')" for p in bad)
+        sys.exit(
+            "Source filenames must equal an exercise catalog id "
+            f"(assets/exercises.json). Not in catalog:\n{lines}"
+        )
+
+    ids = []
+    for src in sources:
+        ident = src.stem
+        ids.append(ident)
+        video_out = OUT_DIR / f"{ident}.mp4"
+        poster_out = OUT_DIR / f"{ident}.webp"
 
         # Idempotent: skip clips already generated so a re-run only produces the
         # new pairs and leaves committed demo binaries byte-stable.
-        if os.path.isfile(video_out) and os.path.isfile(poster_out):
-            print(f"{src_name} -> {slug}: skip (exists)")
+        if video_out.is_file() and poster_out.is_file():
+            print(f"{src.relative_to(SRC_DIR)} -> {ident}: skip (exists)")
             continue
 
-        print(f"{src_name} -> {slug}.mp4 + {slug}_poster.webp")
+        print(f"{src.relative_to(SRC_DIR)} -> {ident}.mp4 + {ident}.webp")
 
         # Normalized, muted, streamable mp4.
         run([
@@ -104,21 +135,25 @@ def main():
             poster_out,
         ])
 
-    # The pre-video pipeline shipped animated-WebP loops; remove any leftovers
-    # so only the mp4 + poster pairs stay declared.
-    for slug in CLIPS.values():
-        stale = os.path.join(OUT_DIR, f"{slug}.webp")
-        if os.path.isfile(stale):
-            os.remove(stale)
-            print(f"removed stale loop: {slug}.webp")
+    # Outputs whose source was removed — report so demos/ can be pruned by hand
+    # (never auto-deleted: a committed binary shouldn't vanish on a stray run).
+    keep = {f"{i}.mp4" for i in ids} | {f"{i}.webp" for i in ids}
+    orphans = sorted(
+        p.name for p in OUT_DIR.glob("*") if p.name not in keep
+    )
+    if orphans:
+        print("\norphan outputs (no matching source — remove by hand if stale):")
+        for name in orphans:
+            print(f"  {name}")
 
-    print("\nDone. Outputs in", os.path.relpath(OUT_DIR, REPO_ROOT))
+    write_manifest(ids)
+
+    print("\nDone. Outputs in", OUT_DIR.relative_to(REPO_ROOT))
     total = 0
-    for f in sorted(os.listdir(OUT_DIR)):
-        size = os.path.getsize(os.path.join(OUT_DIR, f))
+    for f in sorted(OUT_DIR.glob("*")):
+        size = f.stat().st_size
         total += size
-        print(f"  {f}: {size / 1024:.0f} KB")
-    print(f"  total: {total / 1024:.0f} KB")
+    print(f"  {len(ids)} demos, {total / 1024:.0f} KB total")
 
 
 if __name__ == "__main__":

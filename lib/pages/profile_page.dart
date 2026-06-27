@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_fonts.dart';
 
 import '../data/class_definitions.dart';
@@ -20,6 +21,8 @@ import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import '../models/character_class.dart';
 import '../models/class_state.dart';
+import '../services/analytics_consent_service.dart';
+import '../services/analytics_service.dart';
 import '../services/body_goal_service.dart';
 import '../services/body_metrics_service.dart';
 import '../services/calibration_service.dart';
@@ -97,6 +100,8 @@ class ProfilePageState extends State<ProfilePage> {
   bool _hapticsEnabled = true;
   bool _restAlertEnabled = true;
   bool _trainingReminderEnabled = false;
+  bool _analyticsEnabled = true;
+  bool _crashReportingEnabled = false;
   int _trainingReminderMinutes =
       NotificationSettingsService.defaultTrainingReminderMinutes;
   BodyGoalState? _bodyGoalState;
@@ -161,6 +166,9 @@ class ProfilePageState extends State<ProfilePage> {
         .isTrainingReminderEnabled();
     final trainingReminderMinutes = await NotificationSettingsService()
         .trainingReminderMinutes();
+    final analyticsEnabled = await AnalyticsConsentService().analyticsEnabled();
+    final crashReportingEnabled = await AnalyticsConsentService()
+        .crashReportingEnabled();
     final heightCm = await CalibrationService().heightCm();
     BodyGoalState? bodyGoalState;
     WeightEntry? lastWeightEntry;
@@ -202,6 +210,8 @@ class ProfilePageState extends State<ProfilePage> {
       _restAlertEnabled = restAlertEnabled;
       _trainingReminderEnabled = trainingReminderEnabled;
       _trainingReminderMinutes = trainingReminderMinutes;
+      _analyticsEnabled = analyticsEnabled;
+      _crashReportingEnabled = crashReportingEnabled;
       _bodyGoalState = bodyGoalState;
       _lastWeightEntry = lastWeightEntry;
       _weightEntries = weightEntries;
@@ -361,6 +371,41 @@ class ProfilePageState extends State<ProfilePage> {
     await ProgressionSettingsService().setEnabled(value);
     if (!mounted) return;
     setState(() => _progressionEnabled = value);
+  }
+
+  Future<void> _toggleAnalytics(bool value) async {
+    // The toggle reads as "analytics ON"; the stored flag is the inverse
+    // (opt-out). The facade also flips SDK collection immediately.
+    await AnalyticsService.instance.setAnalyticsOptedOut(!value);
+    if (!mounted) return;
+    setState(() => _analyticsEnabled = value);
+  }
+
+  Future<void> _toggleCrashReporting(bool value) async {
+    // Opt-in; Sentry initializes in main(), so a change applies next launch.
+    await AnalyticsConsentService().setCrashReportingOptedIn(value);
+    if (!mounted) return;
+    setState(() => _crashReportingEnabled = value);
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    const url = 'https://quandaogit.github.io/ironbit-privacy/';
+    try {
+      if (await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      )) {
+        return;
+      }
+    } catch (_) {
+      // Fall through to the in-app fallback below.
+    }
+    if (!mounted) return;
+    _showComingSoon(
+      title: 'Privacy Policy',
+      description: 'Open it in your browser:\n$url',
+      iconPath: 'assets/icons/control/icon_lock.png',
+    );
   }
 
   Future<void> _toggleSound(bool value) async {
@@ -1531,16 +1576,32 @@ class ProfilePageState extends State<ProfilePage> {
             subtitle: _formatReminderTime(_trainingReminderMinutes),
             onTap: _pickReminderTime,
           ),
+        const SizedBox(height: 18),
+        const _SectionHeader(title: 'DATA & PRIVACY'),
+        const SizedBox(height: 10),
+        _SettingsToggleRow(
+          iconPath: 'assets/icons/control/icon_graph.png',
+          title: 'Usage Analytics',
+          subtitle: _analyticsEnabled
+              ? 'Anonymous — no workouts, names, or weights leave your device.'
+              : 'Off — no usage data is collected.',
+          value: _analyticsEnabled,
+          onChanged: _toggleAnalytics,
+        ),
+        _SettingsToggleRow(
+          iconPath: 'assets/icons/control/icon_beetle.png',
+          title: 'Crash Reports',
+          subtitle: _crashReportingEnabled
+              ? 'Anonymous crash diagnostics on (takes effect next launch).'
+              : 'Off — opt in to send anonymous crash reports.',
+          value: _crashReportingEnabled,
+          onChanged: _toggleCrashReporting,
+        ),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_lock.png',
-          title: 'Privacy',
-          subtitle: 'Local data, visibility, and safety controls.',
-          onTap: () => _showComingSoon(
-            title: 'Privacy',
-            description:
-                'Privacy controls will matter more once sharing or cloud sync exists.',
-            iconPath: 'assets/icons/control/icon_lock.png',
-          ),
+          title: 'Privacy Policy',
+          subtitle: 'How your data is handled. Opens in your browser.',
+          onTap: _openPrivacyPolicy,
         ),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_save.png',
@@ -1553,6 +1614,9 @@ class ProfilePageState extends State<ProfilePage> {
             iconPath: 'assets/icons/control/icon_save.png',
           ),
         ),
+        const SizedBox(height: 18),
+        const _SectionHeader(title: 'ABOUT'),
+        const SizedBox(height: 10),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_interrogation.png',
           title: 'Help',

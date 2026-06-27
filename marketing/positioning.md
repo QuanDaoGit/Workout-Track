@@ -4,7 +4,7 @@
 
 ## One-liner
 A workout tracker where every rep builds a real RPG character you want to keep coming back to —
-fully offline, no account.
+offline-first, no account.
 
 ## Target user
 Solo gym-goers, beginner to early-intermediate, who stay consistent better when progress is visible,
@@ -17,7 +17,9 @@ fantasy; identity, streak, rank, loot, and ritual make the progress stick.
 ## Differentiators (all true today)
 - **Earned identity, not vanity metrics** — readable build stats (STR/AGI/END), recovery, streak,
   class, rank, title, and loot derived from logged training.
-- **Offline & private** — local-only storage, no account, no cloud, no tracking, no ads, no IAP.
+- **Local-first & private** — your training data lives on your device; no account, no ads, no IAP.
+  Anonymous usage analytics (opt-out) and opt-in crash reports help us improve the app — they never
+  carry your bodyweight, name, or workout content off the device.
 - **Body-neutral by design** — no weight-shaming, no good/bad framing.
 - **Pixel-arcade identity** — a distinct, cohesive visual world (see [../design/](../design/)).
 
@@ -25,7 +27,7 @@ fantasy; identity, streak, rank, loot, and ritual make the progress stick.
 1. *Train → become harder to abandon* (identity hook).
 2. *Every rep has a receipt* (competence hook).
 3. *Complete the build* (collection/rank hook).
-4. *Yours, private, offline* (trust anchor).
+4. *Your training data stays on your device* (trust anchor — local-first; analytics are anonymous & opt-out).
 
 ## Channels to consider (pre-launch)
 Play Store / ASO, short-form video (gameplay-style stat-up moments), indie-game & fitness

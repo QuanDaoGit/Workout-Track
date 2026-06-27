@@ -19,8 +19,11 @@ Pre-launch: the job is to build the launch story, not run live campaigns (no dat
   must be too. No "burn fat fast", no before/after shaming, no weight-loss promises.
 - **The hook:** every logged workout makes your character harder to abandon. Lean on identity,
   rank, loot, ritual return, and the fact that the fantasy is fed by real training.
-- **Claims:** only claim what the app does. It is offline, no-account, no-tracking, no IAP — these
-  are genuine selling points; use them. Don't claim social, AI coaching, or sync (out of scope).
+- **Claims:** only claim what the app does. It is **offline-first, no-account, no-IAP**; training
+  data stays on the device. It now ships **anonymous, opt-out usage analytics (Firebase) + opt-in
+  crash reporting (Sentry)** (see [ADR 0001](../docs/decisions/0001-usage-instrumentation.md)) — so
+  **do NOT claim "no tracking" or "data never leaves your device."** Don't claim social, AI coaching,
+  or sync (out of scope).
 
 ## Common tasks & how to do them well
 - *Write store listing* → pull facts from [PRD.md](../docs/PRD.md); keep to Play Store limits;

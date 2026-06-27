@@ -1,8 +1,15 @@
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+
+import 'firebase_options.dart';
 import 'theme/app_fonts.dart';
 import 'theme/tokens.dart';
 
 import 'pages/boot_splash_page.dart';
+import 'services/analytics_consent_service.dart';
+import 'services/analytics_service.dart';
 import 'services/demo_seed_service.dart';
 import 'widgets/motion/ambient_drift.dart';
 
@@ -11,16 +18,50 @@ import 'widgets/motion/ambient_drift.dart';
 ///   --dart-define=SEED_DEMO=clear          wipe local data back to first-run
 const _seedDemo = String.fromEnvironment('SEED_DEMO');
 
+/// Sentry DSN — a public client ingestion key (safe to embed/commit, like the
+/// Firebase config). Crash reporting is opt-in; see ADR 0001.
+const _sentryDsn =
+    'https://13f5ae6a799e4307afa57155b4caff79@o4511635128713216.ingest.us.sentry.io/4511635133825024';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Marketing/QA seed runs BEFORE telemetry init so a synthetic persona is built
+  // against the no-op analytics sink and never emits real events (ADR 0001).
   if (_seedDemo == 'intermediate') {
     await DemoSeedService.seedIntermediate();
   } else if (_seedDemo == 'clear') {
     await DemoSeedService.clearAll();
   }
+  // Off-device telemetry (ADR 0001). Guarded so a Firebase failure never blocks
+  // boot — the no-op analytics sink stays in place if init throws.
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    await AnalyticsService.bootstrap(
+      sink: FirebaseAnalyticsSink(FirebaseAnalytics.instance),
+    );
+  } catch (e) {
+    debugPrint('Telemetry init failed (continuing): $e');
+  }
+  // Crash reporting (Sentry) is OPT-IN (ADR 0001): only initialize after the
+  // user consents; otherwise run the app without it. A later opt-in takes
+  // effect on the next launch.
+  final crashOptedIn = await AnalyticsConsentService().crashReportingEnabled();
   // Launch work is relocated to BootSplashPage so the boot animation honestly
   // covers it (occupied-time) instead of running during the native splash.
-  runApp(const MyApp());
+  if (crashOptedIn) {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = _sentryDsn;
+        options.sendDefaultPii = false; // data minimization (ADR 0001)
+        options.tracesSampleRate = 0.0; // crashes only — no performance tracing
+      },
+      appRunner: () => runApp(const MyApp()),
+    );
+  } else {
+    runApp(const MyApp());
+  }
 }
 
 class MyApp extends StatelessWidget {

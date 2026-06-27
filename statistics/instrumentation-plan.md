@@ -1,6 +1,18 @@
 # Instrumentation & Observability Plan — Ironbit
 
-> Seed document from the 2026-05-31 audit. **Decisions here are proposals pending user sign-off.**
+> Seed document from the 2026-05-31 audit. **DECIDED 2026-06-27 — see [ADR 0001](../docs/decisions/0001-usage-instrumentation.md).**
+
+## ✅ Decision (2026-06-27)
+Posture **beyond C — standard product analytics, "no tracking" claim retired**:
+- **Analytics:** **Firebase Analytics**, on by default with disclosure + an in-app **opt-out**.
+  Tracks the activation + D1/D7/D30 retention funnel for real.
+- **Crash reporting:** **Sentry (`sentry_flutter`), opt-in / off by default**, with Android R8
+  symbolication.
+- **Data minimization holds:** no PII / no bodyweight / no names / no exercise content off-device —
+  anonymous funnel + aggregate events only (taxonomy in `metrics-glossary.md`).
+- **Deploy blockers:** hosted privacy policy + Play "Data safety" form + opt-out toggle. See the ADR.
+
+The posture table + priority tiers below are retained as the rationale of record.
 
 ## Audit snapshot (current state)
 - **Telemetry SDKs:** none. No Sentry/Crashlytics/Firebase/analytics anywhere.

@@ -2,7 +2,8 @@
 
 A workout tracker with an RPG character-growth layer: every rep you log feeds a character you become
 attached to.
-Flutter, **Android-first**, fully **offline** — no account, no cloud, no tracking. Pre-launch.
+Flutter, **Android-first**, **offline-first** — no account, no IAP; training data stays on-device
+(anonymous opt-out analytics + opt-in crash reporting, [ADR 0001](docs/decisions/0001-usage-instrumentation.md)). Pre-launch.
 
 > **Soul doctrine:** every logged workout should make your character feel harder to abandon.
 > Real training is the fuel; identity, streak, rank, loot, and ritual are the psychological engine.

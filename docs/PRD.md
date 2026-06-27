@@ -6,8 +6,8 @@
 
 ## Purpose
 Solo gym-goer logs and tracks workout sessions from their phone, and every logged lift
-feeds an RPG character-growth layer they become attached to. No account. No cloud. Works offline,
-always.
+feeds an RPG character-growth layer they become attached to. No account. Works offline-first; training
+data stays on-device (anonymous, opt-out usage analytics + opt-in crash reporting — [ADR 0001](decisions/0001-usage-instrumentation.md)).
 
 **Soul doctrine (from [PRODUCT.md](PRODUCT.md)):** every logged workout should make the user's
 character feel harder to abandon. Real training is the fuel; identity, streak, rank, loot, and
@@ -167,7 +167,9 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 - Paid features or in-app purchases.
 - **Server / cloud push notifications** (FCM, remarketing, any backend-driven message). On-device
   **local notifications** (rest-timer alerts, opt-in workout reminders) ARE in scope — they need no
-  backend/account/network and send no data off-device, so they preserve the offline/private wedge.
+  backend/account/network and send no data off-device. (Analytics/crash telemetry is a separate,
+  data-minimized stream — see [ADR 0001](decisions/0001-usage-instrumentation.md); **push/FCM
+  messaging stays out of scope**.)
 - Advanced periodization (RPE, autoregulation, block programming).
 
 ---
