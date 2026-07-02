@@ -197,7 +197,11 @@ back to the START caption + Semantics label (2026-06); the Home Room's BIT/pad t
 `spaceBetween` Row) overflowed at 320×1.3 → `Flexible`+ellipsis on each. **Golden-ing a full
 service-loaded page: one heavy page-pump per test *file*** — two `ProfilePage` pumps in one isolate
 raced the ~10-service async load (the 2nd intermittently showed only the loader); split into
-single-pump files + poll until the loader clears, never a fixed delay (2026-06).* **A custom chip that
+single-pump files + poll until the loader clears, never a fixed delay (2026-06). **A sub-widget
+golden wrapped in a bare `ColoredBox`/`Container` (no `Material`/`Scaffold` ancestor) paints the
+"no-Material" yellow debug underline under every `Text`** — it silently corrupts the visual proof
+while the test still passes; wrap the golden subject in a `Material` (a full-page golden inherits it
+from the page's own `Scaffold`) (2026-06).* **A custom chip that
 supplies its own `Semantics(label:)` as the accessible name must set `excludeSemantics: true`** — else
 the child `Text` node merges in, doubling the screen-reader announcement *and* breaking
 `find.bySemanticsLabel` (exact-match) in tests. **A gesture-only affordance (long-press / swipe) is
@@ -261,7 +265,13 @@ toggle, and the rest-done haptic fired from `RestTimerBar`'s existing dispose-ma
 service timer (2026-06). Then the app-wide pass: opt-in `haptic` on `ArcadeTap`/`HoldDepress`/`PhosphorTap`
 (default silent) + `ArcadeChip` default `selection` + `HapticService.fireCoalesced` + a reusable
 `HapticPulseTrack` (controller-coupled train) for BIT boot/cheer + the quest gem-flight (≤2 stream ticks)
-+ a capped summary stat-reveal — generous coverage, subtle intensity (2026-06).*
++ a capped summary stat-reveal — generous coverage, subtle intensity (2026-06). **Per-call-site
+opt-in is forgettable** — a whole new surface (the Crest Forge) shipped silent on every pick because
+its taps used a raw `GestureDetector`; coverage is now **structurally enforced** by
+`tap_haptic_coverage_test` (a raw `GestureDetector(onTap:)`/`InkWell` outside the wrappers fails CI; a
+legit raw gesture carries `// haptic-ok: <reason>`), the wrappers' by-role defaults (button→`tap`,
+chip→`selection`) keeping restraint — coverage and restraint enforced by two mechanisms, neither
+compromised (2026-06).*
 
 ### Discoverability & the false bottom
 **Rule:** An **optional step or secondary control buried at the bottom of a scrolling list under a pinned

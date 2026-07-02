@@ -14,6 +14,7 @@ import '../../services/favorite_service.dart';
 import '../../services/program_service.dart';
 import '../../services/workout_defaults_service.dart';
 import '../../services/workout_draft_controller.dart';
+import '../../services/simple_mode_service.dart';
 import '../../services/workout_storage_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
@@ -310,6 +311,11 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
       limit: 2,
     );
     if (top.isNotEmpty) return top;
+    // Simple Mode skips the curated first-run template (the generic "forced
+    // default") — a Simple-Mode user with no history for this group starts it
+    // empty and picks their own. Read at use-time (the curated fallback is rare,
+    // only a group with no history) so there's no init race on chip taps.
+    if (await SimpleModeService().isEnabled()) return const <String>[];
     return curatedExerciseIdsForMuscleGroups([group]).take(2).toList();
   }
 

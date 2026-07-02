@@ -11,19 +11,81 @@ import 'bit_quest_copy.dart';
 /// A waiting haul always wins (the only durable pending action in the room); a
 /// quest reward ready to claim nudges toward the board (tappable → Quests).
 
-/// The rotating home-advice pool. Grouped only for authoring clarity; rotation
-/// treats them as one flat pool (a fresh line on each Home re-entry).
-const List<String> bitRoomAdvice = [
+/// The everyday idle pool — the lines BIT rotates through at home (a fresh one
+/// on each Home re-entry). Together these share the non-wildcard 95% of every
+/// draw (1 - [kBitRoomWildcardChance]), split evenly across the pool, so
+/// adding/removing a line just re-divides the regular share — no per-line tuning.
+const List<String> bitRoomRegularAdvice = [
   // Recovery & fuel.
   'Remember to drink enough water',
   'Sleeping is the cheat code to muscle growth',
+  'Your muscles grow while you sleep',
+  'Rest days are training days',
   // Mindset & momentum.
   'Perfect is the enemy of good',
   'One day or day one?',
   'The hardest distance is the front door',
-  // Wildcard.
+  'Progress is neither fast nor slow, only yours',
+  'Consistency is the secret nobody sells',
+  'The only thing that can stop you is yourself',
+];
+
+/// The rare "wildcard" pool — flavour lines that should surprise, not saturate.
+/// The whole pool shares only [kBitRoomWildcardChance] of every draw (split
+/// evenly across it) AND is capped to at most one appearance per day. One line
+/// today holds the full 5%; the weighting scales to any pool size unchanged.
+const List<String> bitRoomWildcardAdvice = [
   '67',
 ];
+
+/// Wildcard share of an idle-advice draw; the regular pool takes the remaining
+/// 95%. A single knob — pool sizes don't affect the split between the two pools.
+const double kBitRoomWildcardChance = 0.05;
+
+/// Every advice line (regular + wildcard) — the combined view used by invariants
+/// and any surface that just wants "the things BIT can say at idle".
+const List<String> bitRoomAdvice = [
+  ...bitRoomRegularAdvice,
+  ...bitRoomWildcardAdvice,
+];
+
+/// One resolved idle-advice draw: the chosen [line] and whether it came from the
+/// wildcard pool (so the caller can record the once-per-day cap on a hit).
+class BitAdvicePick {
+  const BitAdvicePick({required this.line, required this.isWildcard});
+  final String line;
+  final bool isWildcard;
+}
+
+/// Draws one idle-advice line under the weighted, daily-capped scheme.
+///
+/// [roll] is a uniform random in [0, 1): a draw below [kBitRoomWildcardChance]
+/// targets the wildcard pool, the rest the regular pool. A wildcard draw falls
+/// back to the regular pool when [wildcardAllowedToday] is false (the day's cap
+/// is spent) or the wildcard pool is empty — so the cap never blanks the bubble.
+/// Each pool is read at its own rotating [regularIndex] / [wildcardIndex] so the
+/// caller controls no-immediate-repeat per pool. Pure + deterministic in [roll].
+BitAdvicePick pickRoomAdvice({
+  required double roll,
+  required bool wildcardAllowedToday,
+  required int regularIndex,
+  required int wildcardIndex,
+}) {
+  final wantWildcard = roll < kBitRoomWildcardChance &&
+      wildcardAllowedToday &&
+      bitRoomWildcardAdvice.isNotEmpty;
+  if (wantWildcard) {
+    final line =
+        bitRoomWildcardAdvice[wildcardIndex % bitRoomWildcardAdvice.length];
+    return BitAdvicePick(line: line, isWildcard: true);
+  }
+  if (bitRoomRegularAdvice.isEmpty) {
+    return const BitAdvicePick(line: '', isWildcard: false);
+  }
+  final line =
+      bitRoomRegularAdvice[regularIndex % bitRoomRegularAdvice.length];
+  return BitAdvicePick(line: line, isWildcard: false);
+}
 
 /// The homecoming greeting, shown once when the away hologram first appears.
 const String bitRoomGreeting = "It's me again";
@@ -88,7 +150,7 @@ abstract final class BitRoomVoice {
     required AdventurePhase phase,
     required bool haulReady,
     required bool greeted,
-    required int adviceIndex,
+    String adviceLine = '',
     String? routeName,
     int? backInHours,
     int claimableCount = 0,
@@ -135,19 +197,14 @@ abstract final class BitRoomVoice {
         semanticsLabel: '$text Tap to open quests.',
       );
     }
-    // Idle / home — BIT present, rotating advice.
-    if (bitRoomAdvice.isEmpty) {
-      return const BitRoomLine(
-        kind: BitRoomVoiceKind.advice,
-        text: '',
-        semanticsLabel: '',
-      );
-    }
-    final line = bitRoomAdvice[adviceIndex % bitRoomAdvice.length];
+    // Idle / home — BIT present, showing the already-resolved advice line. The
+    // weighted, daily-capped draw (regular vs wildcard pool) happens in
+    // [pickRoomAdvice]; the caller passes the winner so this selector stays a
+    // pure router with no randomness or persistence of its own.
     return BitRoomLine(
       kind: BitRoomVoiceKind.advice,
-      text: line,
-      semanticsLabel: line,
+      text: adviceLine,
+      semanticsLabel: adviceLine,
     );
   }
 }

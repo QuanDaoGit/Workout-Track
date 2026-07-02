@@ -37,6 +37,7 @@ import '../services/rest_service.dart';
 import '../services/haptic_service.dart';
 import '../services/haptic_settings_service.dart';
 import '../services/sfx_service.dart';
+import '../services/simple_mode_service.dart';
 import '../services/sound_settings_service.dart';
 import '../services/stat_engine.dart';
 import '../services/loot_service.dart';
@@ -78,7 +79,6 @@ class ProfilePage extends StatefulWidget {
 }
 
 class ProfilePageState extends State<ProfilePage> {
-
   final QuestService _questService = QuestService();
   final ProfileService _profileService = ProfileService();
   final StatEngine _statEngine = StatEngine();
@@ -96,6 +96,7 @@ class ProfilePageState extends State<ProfilePage> {
   int _potionBonusXP = 0;
   bool _bodyMetricsEnabled = false;
   bool _progressionEnabled = true;
+  bool _simpleMode = false;
   bool _soundEnabled = true;
   bool _hapticsEnabled = true;
   bool _restAlertEnabled = true;
@@ -158,6 +159,7 @@ class ProfilePageState extends State<ProfilePage> {
     final metricsService = BodyMetricsService();
     final bodyMetricsEnabled = await metricsService.isEnabled();
     final progressionEnabled = await ProgressionSettingsService().isEnabled();
+    final simpleModeEnabled = await SimpleModeService().isEnabled();
     final soundEnabled = await SoundSettingsService().isEnabled();
     final hapticsEnabled = await HapticSettingsService().isEnabled();
     final restAlertEnabled = await NotificationSettingsService()
@@ -205,6 +207,7 @@ class ProfilePageState extends State<ProfilePage> {
       _respecStatus = respecStatus;
       _bodyMetricsEnabled = bodyMetricsEnabled;
       _progressionEnabled = progressionEnabled;
+      _simpleMode = simpleModeEnabled;
       _soundEnabled = soundEnabled;
       _hapticsEnabled = hapticsEnabled;
       _restAlertEnabled = restAlertEnabled;
@@ -373,6 +376,12 @@ class ProfilePageState extends State<ProfilePage> {
     setState(() => _progressionEnabled = value);
   }
 
+  Future<void> _toggleSimpleMode(bool value) async {
+    await SimpleModeService().setEnabled(value);
+    if (!mounted) return;
+    setState(() => _simpleMode = value);
+  }
+
   Future<void> _toggleAnalytics(bool value) async {
     // The toggle reads as "analytics ON"; the stored flag is the inverse
     // (opt-out). The facade also flips SDK collection immediately.
@@ -457,10 +466,7 @@ class ProfilePageState extends State<ProfilePage> {
       hour: _trainingReminderMinutes ~/ 60,
       minute: _trainingReminderMinutes % 60,
     );
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: current,
-    );
+    final picked = await showTimePicker(context: context, initialTime: current);
     if (picked == null) return;
     final minutes = picked.hour * 60 + picked.minute;
     await NotificationSettingsService().setTrainingReminderMinutes(minutes);
@@ -540,11 +546,7 @@ class ProfilePageState extends State<ProfilePage> {
             children: [
               Row(
                 children: [
-                  ImageIcon(
-                    AssetImage(iconPath),
-                    size: 22,
-                    color: kNeon,
-                  ),
+                  ImageIcon(AssetImage(iconPath), size: 22, color: kNeon),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -781,9 +783,7 @@ class ProfilePageState extends State<ProfilePage> {
             },
             icon: ImageIcon(
               const AssetImage('assets/icons/control/icon_hammer.png'),
-              color: _editingName
-                  ? kAmber
-                  : kNeon,
+              color: _editingName ? kAmber : kNeon,
             ),
           ),
         ],
@@ -880,13 +880,13 @@ class ProfilePageState extends State<ProfilePage> {
               // One typographic competence line: the earned RANK as the colour-
               // laddered headline + the quieter muted LEVEL detail — replaces the
               // two stacked filled chips so rank stays the single identity cue.
-              Center(child: IdentityStampLine(level: level, rank: rank)),
+              Center(
+                child: IdentityStampLine(level: level, rank: rank),
+              ),
               const SizedBox(height: kSpace4),
               Row(
                 children: [
-                  Expanded(
-                    child: ArcadeBar(value: xpProgress.fraction),
-                  ),
+                  Expanded(child: ArcadeBar(value: xpProgress.fraction)),
                   if (lckMultiplier > 1.0) ...[
                     const SizedBox(width: 8),
                     LckBuffBadge(multiplier: lckMultiplier, lck: lck),
@@ -1389,8 +1389,9 @@ class ProfilePageState extends State<ProfilePage> {
     final titleColor = titleItem?.color ?? kMutedText;
     final align = centered ? TextAlign.center : TextAlign.start;
     return Column(
-      crossAxisAlignment:
-          centered ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      crossAxisAlignment: centered
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
       children: [
         Text(
           _profile.displayName,
@@ -1494,13 +1495,25 @@ class ProfilePageState extends State<ProfilePage> {
           onChanged: _toggleBodyMetrics,
         ),
         _SettingsToggleRow(
+          iconPath: 'assets/icons/control/icon_visibility_off.png',
+          title: 'Simple Mode',
+          subtitle: _simpleMode
+              ? 'Streamlined — warm-up tips, suggestions, and curated defaults hidden.'
+              : 'Hide warm-up tips, load suggestions, and curated defaults.',
+          value: _simpleMode,
+          onChanged: _toggleSimpleMode,
+        ),
+        _SettingsToggleRow(
           iconPath: 'assets/icons/control/ui/icon_suggested_loads.png',
           title: 'Suggested loads',
-          subtitle: _progressionEnabled
+          subtitle: _simpleMode
+              ? 'Off while Simple Mode is on.'
+              : _progressionEnabled
               ? 'TRY: prompts on Set 1 of each exercise.'
               : 'No suggestions — every set entry blank.',
           value: _progressionEnabled,
           onChanged: _toggleProgression,
+          enabled: !_simpleMode,
         ),
         _SettingsRow(
           iconPath: 'assets/icons/control/icon_target.png',
@@ -1916,7 +1929,10 @@ class _HeightSheetState extends State<_HeightSheet> {
             style: AppFonts.shareTechMono(color: kText, fontSize: 18),
             hintText: 'e.g. 5',
             suffixText: 'ft',
-            suffixStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+            suffixStyle: AppFonts.shareTechMono(
+              color: kMutedText,
+              fontSize: 12,
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -1927,7 +1943,10 @@ class _HeightSheetState extends State<_HeightSheet> {
             style: AppFonts.shareTechMono(color: kText, fontSize: 18),
             hintText: 'e.g. 11',
             suffixText: 'in',
-            suffixStyle: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+            suffixStyle: AppFonts.shareTechMono(
+              color: kMutedText,
+              fontSize: 12,
+            ),
           ),
         ),
       ],
@@ -2130,9 +2149,7 @@ class _DefaultStepButton extends StatelessWidget {
     return FilledButton(
       onPressed: onPressed,
       style: FilledButton.styleFrom(
-        backgroundColor: onPressed == null
-            ? kBorderDark
-            : kNeon,
+        backgroundColor: onPressed == null ? kBorderDark : kNeon,
         foregroundColor: onPressed == null ? kDim : kBg,
         minimumSize: const Size(40, 40),
         padding: EdgeInsets.zero,
@@ -2467,11 +2484,7 @@ class _SettingsRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              ImageIcon(
-                AssetImage(iconPath),
-                size: 20,
-                color: kNeon,
-              ),
+              ImageIcon(AssetImage(iconPath), size: 20, color: kNeon),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -2513,6 +2526,7 @@ class _SettingsToggleRow extends StatelessWidget {
     required this.subtitle,
     required this.value,
     required this.onChanged,
+    this.enabled = true,
   });
 
   final String iconPath;
@@ -2521,58 +2535,64 @@ class _SettingsToggleRow extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
+  /// When false the row dims and its switch is inert — used to show a setting
+  /// that another toggle (Simple Mode) is currently overriding.
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: kCard,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          children: [
-            ImageIcon(
-              AssetImage(iconPath),
-              size: 20,
-              color: kNeon,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: kText,
-                      fontWeight: FontWeight.w700,
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.5,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: kCard,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            children: [
+              ImageIcon(AssetImage(iconPath), size: 20, color: kNeon),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: kText,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(color: kMutedText, fontSize: 12),
-                  ),
-                ],
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(color: kMutedText, fontSize: 12),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Switch(
-              value: value,
-              // Every settings toggle ticks on flip (the Haptics toggle's own
-              // enable-confirmation is handled in its setter).
-              onChanged: (v) {
-                HapticService.instance.selection();
-                onChanged(v);
-              },
-              activeThumbColor: kNeon,
-              activeTrackColor: kNeon.withValues(alpha: 0.3),
-              inactiveThumbColor: kMutedText,
-              inactiveTrackColor: kBorder,
-            ),
-          ],
+              const SizedBox(width: 8),
+              Switch(
+                value: value,
+                // Every settings toggle ticks on flip (the Haptics toggle's own
+                // enable-confirmation is handled in its setter). Inert when the
+                // row is overridden by another setting.
+                onChanged: enabled
+                    ? (v) {
+                        HapticService.instance.selection();
+                        onChanged(v);
+                      }
+                    : null,
+                activeThumbColor: kNeon,
+                activeTrackColor: kNeon.withValues(alpha: 0.3),
+                inactiveThumbColor: kMutedText,
+                inactiveTrackColor: kBorder,
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -35,7 +35,7 @@ void main() {
   }
 
   // Bench: 2 weighted sessions, rising to an all-time high → NEW BEST.
-  // Curl: 1 session → a fresh "log once more" row (RECENTLY TRAINED).
+  // Curl: 1 session → a fresh "save once more" row (RECENTLY TRAINED).
   List<WorkoutSession> sample() => [
     session([
       log('Bench', 'Bench Press', [const SetEntry(weight: 100, reps: 5)]),
@@ -87,7 +87,7 @@ void main() {
 
     expect(find.text('Bench Press'), findsOneWidget);
     expect(find.text('Barbell Curl'), findsOneWidget);
-    expect(find.text('1 session · log once more'), findsOneWidget);
+    expect(find.text('1 session · save once more'), findsOneWidget);
     expect(find.textContaining('PLATEAU'), findsNothing);
   });
 
@@ -150,7 +150,7 @@ void main() {
     await tester.pumpWidget(host());
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Log a weighted set'), findsOneWidget);
+    expect(find.textContaining('Save a weighted set'), findsOneWidget);
   });
 
   testWidgets('long-press pins a lift to the top (and shows the count)', (

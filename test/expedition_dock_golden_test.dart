@@ -27,7 +27,9 @@ RoomAdventureView _view({
     phase: phase,
     haulReady: haulReady,
     greeted: greeted,
-    adviceIndex: 0,
+    // The idle/ready states show the advice bubble; pin a fixed line so this
+    // golden stays deterministic (the real rotation/weighting is unit-tested).
+    adviceLine: 'Remember to drink enough water',
     routeName: routeName,
     backInHours: backInHours,
   ),

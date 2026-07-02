@@ -548,7 +548,7 @@ class _LogsTabState extends State<_LogsTab> {
         title: 'READY TO LIFT?',
         body:
             'Your first workout starts here —\n'
-            'log a session and your stats begin to climb.',
+            'save a session and your stats begin to climb.',
         ctaLabel: 'NEW WORKOUT',
         onCta: () => _openStartWorkout(context, onReturn: _load),
       );
@@ -825,7 +825,7 @@ class _LogsTabState extends State<_LogsTab> {
           const SizedBox(height: kSpace3),
           if (_trends.isEmpty)
             Text(
-              'Log 5 weighted sets on an exercise to unlock load trends.',
+              'Save 5 weighted sets on an exercise to unlock load trends.',
               style: Theme.of(context).textTheme.bodySmall,
             )
           else
@@ -878,7 +878,7 @@ class _LogsTabState extends State<_LogsTab> {
                       const SizedBox(height: kSpace4),
                       if (_pbs.isEmpty)
                         Text(
-                          'Log weighted sets to set records.',
+                          'Save weighted sets to set records.',
                           style: Theme.of(context).textTheme.bodySmall,
                         )
                       else

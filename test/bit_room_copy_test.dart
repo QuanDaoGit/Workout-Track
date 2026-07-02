@@ -10,7 +10,7 @@ void main() {
     required AdventurePhase phase,
     bool haulReady = false,
     bool greeted = false,
-    int adviceIndex = 0,
+    String adviceLine = '',
     String? routeName,
     int? backInHours,
     int claimableCount = 0,
@@ -18,7 +18,7 @@ void main() {
     phase: phase,
     haulReady: haulReady,
     greeted: greeted,
-    adviceIndex: adviceIndex,
+    adviceLine: adviceLine,
     routeName: routeName,
     backInHours: backInHours,
     claimableCount: claimableCount,
@@ -103,25 +103,92 @@ void main() {
     });
   });
 
-  group('advice indexing', () {
-    test('each index maps to its line; wraps modulo the pool', () {
-      for (var i = 0; i < bitRoomAdvice.length; i++) {
-        expect(sel(phase: AdventurePhase.idle, adviceIndex: i).text,
-            bitRoomAdvice[i]);
-      }
+  group('advice routing', () {
+    test('idle → the resolved advice line verbatim (selector is a pure router)',
+        () {
       expect(
-        sel(phase: AdventurePhase.idle, adviceIndex: bitRoomAdvice.length + 2)
+        sel(phase: AdventurePhase.idle, adviceLine: 'Rest days are training days')
             .text,
-        bitRoomAdvice[2],
+        'Rest days are training days',
+      );
+      expect(
+        sel(phase: AdventurePhase.returned, adviceLine: '67').text,
+        '67',
+      );
+    });
+
+    test('empty line → an empty advice bubble (never throws)', () {
+      final l = sel(phase: AdventurePhase.idle, adviceLine: '');
+      expect(l.kind, BitRoomVoiceKind.advice);
+      expect(l.text, '');
+    });
+  });
+
+  group('weighted, daily-capped advice draw (pickRoomAdvice)', () {
+    test('a low roll under the chance draws the wildcard pool', () {
+      final p = pickRoomAdvice(
+        roll: 0.0,
+        wildcardAllowedToday: true,
+        regularIndex: 0,
+        wildcardIndex: 0,
+      );
+      expect(p.isWildcard, isTrue);
+      expect(p.line, bitRoomWildcardAdvice[0]);
+    });
+
+    test('a roll at/above the chance draws the regular pool', () {
+      final p = pickRoomAdvice(
+        roll: kBitRoomWildcardChance, // exclusive bound → regular
+        wildcardAllowedToday: true,
+        regularIndex: 2,
+        wildcardIndex: 0,
+      );
+      expect(p.isWildcard, isFalse);
+      expect(p.line, bitRoomRegularAdvice[2]);
+    });
+
+    test('the daily cap forces a wildcard-winning roll back to regular', () {
+      final p = pickRoomAdvice(
+        roll: 0.0, // would hit the wildcard pool…
+        wildcardAllowedToday: false, // …but today's slot is spent
+        regularIndex: 1,
+        wildcardIndex: 0,
+      );
+      expect(p.isWildcard, isFalse);
+      expect(p.line, bitRoomRegularAdvice[1]);
+    });
+
+    test('indices wrap modulo each pool', () {
+      expect(
+        pickRoomAdvice(
+          roll: 1.0,
+          wildcardAllowedToday: true,
+          regularIndex: bitRoomRegularAdvice.length + 1,
+          wildcardIndex: 0,
+        ).line,
+        bitRoomRegularAdvice[1],
       );
     });
   });
 
-  test('the advice pool is the 6 approved lines — no empty / no food line', () {
-    expect(bitRoomAdvice.length, 6);
+  test('the advice pools hold the approved lines — no empty / no food line', () {
+    // The user-approved additions are present in the regular pool.
+    expect(bitRoomRegularAdvice, contains('Remember to drink enough water'));
+    expect(bitRoomRegularAdvice, contains('Your muscles grow while you sleep'));
+    expect(bitRoomRegularAdvice,
+        contains('Progress is neither fast nor slow, only yours'));
+    expect(bitRoomRegularAdvice, contains('Rest days are training days'));
+    expect(bitRoomRegularAdvice, contains('Consistency is the secret nobody sells'));
+    expect(bitRoomRegularAdvice,
+        contains('The only thing that can stop you is yourself'));
+    // "67" is the lone wildcard, not in the everyday pool.
+    expect(bitRoomWildcardAdvice, contains('67'));
+    expect(bitRoomRegularAdvice, isNot(contains('67')));
+    // No blanks, no retired food line, in either pool.
     expect(bitRoomAdvice, isNot(contains('')));
     expect(bitRoomAdvice.any((l) => l.toLowerCase().contains('burden')), isFalse);
-    expect(bitRoomAdvice, contains('67'));
-    expect(bitRoomAdvice, contains('Remember to drink enough water'));
+    // The combined view is the two pools concatenated.
+    expect(bitRoomAdvice.length,
+        bitRoomRegularAdvice.length + bitRoomWildcardAdvice.length);
   });
 }

@@ -120,6 +120,12 @@ or note it's pre-existing and unrelated). None of these should survive in new co
   a non-pill — use 4px / pixel-staircase geometry.
 - **Icons:** `Icons.` without a `_sharp` suffix (unless it's an `assets/icons/control/` pixel asset),
   and any emoji used as an icon.
+- **Silent tap (no-haptic bypass):** a `GestureDetector(onTap:/onLongPress:)` or `InkWell` ships a
+  tappable with **no haptic** (and no press feedback) — route it through a haptic-aware wrapper
+  (`ArcadeTap` / `HoldDepress` / `PixelButton` / `ArcadeChip`, which carry the right intent **by role**:
+  button→`tap`, chip→`selection`) so feedback auto-wires; a genuine raw gesture (drag/pan/decorative/
+  custom hit-area) needs an inline `// haptic-ok: <reason>`. `test/tap_haptic_coverage_test.dart`
+  enforces this on every non-baseline file — keep it green.
 
 State the result in your completion note ("grepped N changed files, 0 hits" or the replacements made).
 

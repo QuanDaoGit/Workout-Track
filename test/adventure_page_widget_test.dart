@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/models/adventure_models.dart';
 import 'package:workout_track/pages/adventure_page.dart';
 import 'package:workout_track/services/adventure_service.dart';
-import 'package:workout_track/services/guild_service.dart';
+import 'package:workout_track/utils/iso_week.dart';
 import 'package:workout_track/widgets/adventure/route_diorama.dart';
 import 'package:workout_track/widgets/pixel_loader.dart';
 
@@ -105,7 +105,7 @@ void main() {
     await seed(
       AdventureState(
         charges: 1,
-        weekIso: GuildService.weekIso(DateTime.now()),
+        weekIso: isoWeekKey(DateTime.now()),
         weekCount: 5,
       ),
     );

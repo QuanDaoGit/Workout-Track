@@ -328,7 +328,7 @@ const List<LootItem> lootRegistry = [
   LootItem(
     id: 'title_set_smith',
     name: 'Set Smith',
-    description: 'Logged 25 total sets.',
+    description: 'Saved 25 total sets.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.common,
     assetPath: '',
@@ -392,7 +392,7 @@ const List<LootItem> lootRegistry = [
   LootItem(
     id: 'title_apex_1000',
     name: 'Apex 1000',
-    description: 'Logged 1,000 total sets.',
+    description: 'Saved 1,000 total sets.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.epic,
     assetPath: '',

@@ -86,7 +86,7 @@ class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'you log when you want.',
+            'you save when you want.',
             textAlign: TextAlign.center,
             style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
           ),
@@ -118,7 +118,7 @@ class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'WHEN TO LOG',
+            'WHEN TO SAVE',
             style: TextStyle(
               fontFamily: 'PressStart2P',
               fontSize: 14,
@@ -126,7 +126,7 @@ class _BodyMetricsOnboardingPageState extends State<BodyMetricsOnboardingPage> {
             ),
           ),
           const SizedBox(height: 32),
-          _guidanceLine('log anytime — daily is fine.'),
+          _guidanceLine('save anytime — daily is fine.'),
           _guidanceLine('morning is best. before food. before water.'),
           _guidanceLine('wear the same thing each time.'),
           _guidanceLine('the trend line smooths the noise.'),

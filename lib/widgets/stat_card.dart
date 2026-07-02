@@ -116,7 +116,7 @@ class _StatCardState extends State<StatCard> {
             _InfoLine(
               text:
                   'STR is power, AGI is control, END is stamina. They grow '
-                  'from logged training (volume and reps) and rank D->S '
+                  'from saved training (volume and reps) and rank D->S '
                   '(C 100, B 300, A 600, S 900).',
             ),
             const SizedBox(height: 8),

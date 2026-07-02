@@ -24,6 +24,7 @@ import '../../services/milestone_service.dart';
 import '../../services/program_service.dart';
 import '../../services/progression_settings_service.dart';
 import '../../services/rest_service.dart';
+import '../../services/simple_mode_service.dart';
 import '../../services/stat_engine.dart';
 import '../../services/unit_settings_service.dart';
 import '../../services/workout_storage_service.dart';
@@ -269,7 +270,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
 
     if (_totalSets == 0 && !widget.isAbandoned) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Log at least one set before saving.')),
+        const SnackBar(content: Text('Save at least one set first.')),
       );
       return;
     }
@@ -334,7 +335,8 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         _lckMultiplier = XpService.lckXpMultiplier(lck);
         final potionPreview = await xpBoost.previewConsume();
         _potionMultiplier = potionPreview.multiplier;
-        commitPotionSpend = () => xpBoost.commitConsume(potionPreview.survivors);
+        commitPotionSpend = () =>
+            xpBoost.commitConsume(potionPreview.survivors);
         _cacheDrop = await LootDropService().rollForSession(
           session: sessionWithClass,
           lck: lck,
@@ -543,26 +545,19 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   }
 
   String get _xpMathLabel {
-    if (widget.isAbandoned) return '+$_earnedXP XP EARNED';
     if (_rewardEligibility?.eligible == false) return '+0 XP SAVED';
-    final lckLabel = XpService.multiplierLabel(_lckMultiplier);
-    final potionLabel = XpService.multiplierLabel(_potionMultiplier);
-    if (_lckMultiplier <= 1.0 &&
-        _potionMultiplier <= 1.0 &&
-        _lootBonusXP <= 0) {
-      return '+$_earnedXP XP EARNED';
-    }
-    final parts = <String>['+$_baseXP XP'];
-    if (_lckMultiplier > 1.0) parts.add('× $lckLabel LCK');
-    if (_potionMultiplier > 1.0) parts.add('× $potionLabel BOOST');
-    if (_lootBonusXP > 0) parts.add('+ $_lootBonusXP CACHE');
-    return '${parts.join(' ')} = +$_earnedXP XP';
+    // Just the headline total — the receipt card below carries the full
+    // BASE × LCK + CACHE math, so repeating it here as big text is redundant.
+    return '+$_earnedXP XP EARNED';
   }
 
   Future<void> _maybeShowProgressionOptIn(
     List<WorkoutSession> allSessions,
   ) async {
     if (!mounted || widget.isCalibration || widget.isAbandoned) return;
+    // Simple Mode opted out of the suggestion scaffolding — don't nudge them
+    // back into it.
+    if (await SimpleModeService().isEnabled()) return;
     final service = ProgressionSettingsService();
     if (!await service.shouldShowOptInPrompt(sessions: allSessions)) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {

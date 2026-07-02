@@ -17,6 +17,7 @@ import '../services/workout_draft_controller.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
+import '../widgets/arcade_tap.dart';
 import '../widgets/idle_session_dialog.dart';
 import '../widgets/train_nav_button.dart';
 import 'Workout session/active_workout.dart';
@@ -214,6 +215,8 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       case AppDestination.labs:
         _profileKey.currentState?.reload();
     }
+    // Pause the hall's ambient loop unless the Guild tab is the active one.
+    _guildKey.currentState?.setActive(destination == AppDestination.guild);
     _loadOngoingSession();
     setState(() {
       _destination = destination;
@@ -747,11 +750,11 @@ class _NavItem extends StatelessWidget {
     // with the "you are here" selection state.
     final color = active ? kText : kMutedText;
     return Expanded(
-      child: InkWell(
-        onTap: () {
-          HapticService.instance.selection(); // tactile tick on a nav choice
-          onTap();
-        },
+      // Nav choice → the canonical arcade tap wrapper carries the `selection`
+      // tick (no inline HapticService call, no Material InkWell ripple).
+      child: ArcadeTap(
+        haptic: HapticIntent.selection,
+        onTap: onTap,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [

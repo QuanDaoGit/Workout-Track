@@ -6,8 +6,10 @@
 part of 'exercise_demos.dart';
 
 const Set<String> kDemoExerciseIds = {
+  'Alternate_Hammer_Curl',
   'Barbell_Bench_Press_-_Medium_Grip',
   'Barbell_Curl',
+  'Barbell_Full_Squat',
   'Barbell_Incline_Bench_Press_-_Medium_Grip',
   'Barbell_Squat',
   'Bent_Over_Barbell_Row',
@@ -21,13 +23,17 @@ const Set<String> kDemoExerciseIds = {
   'Dumbbell_One-Arm_Triceps_Extension',
   'EZ-Bar_Curl',
   'EZ-Bar_Skullcrusher',
+  'Front_Barbell_Squat',
   'Front_Squat_Clean_Grip',
+  'Full_Range-Of-Motion_Lat_Pulldown',
   'Hack_Squat',
   'Hammer_Curls',
   'Incline_Dumbbell_Press',
   'Leg_Extensions',
   'Leg_Press',
   'Lying_Leg_Curls',
+  'Lying_Triceps_Press',
+  'Narrow_Stance_Leg_Press',
   'One-Arm_Dumbbell_Row',
   'Preacher_Curl',
   'Romanian_Deadlift',

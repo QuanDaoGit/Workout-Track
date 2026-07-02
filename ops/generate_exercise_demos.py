@@ -49,6 +49,29 @@ def run(args):
     subprocess.run(args, check=True, capture_output=True)
 
 
+def assert_square_sar(video):
+    """Fail loudly if an encoded clip carries a non-square pixel aspect ratio.
+
+    A non-square (Extended) SAR in the H.264 VUI makes Android's hardware
+    decoder REFUSE to initialize — the demo then silently never plays while
+    still looking fine to ffprobe/desktop players (that's exactly how the
+    Seated_Cable_Rows / Seated_Calf_Raise breakage hid). setsar=1 in the encode
+    prevents it; this is the belt-and-suspenders check that it stuck.
+    """
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=sample_aspect_ratio",
+         "-of", "csv=p=0", str(video)],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    if out not in ("1:1", "0:1", "N/A", ""):
+        sys.exit(
+            f"ENCODE DEFECT: {video.name} has non-square SAR '{out}'. Android's "
+            "hardware decoder will refuse this clip (silent no-play). The scale "
+            "filter must include setsar=1."
+        )
+
+
 def catalog_ids():
     data = json.loads(CATALOG.read_text(encoding="utf-8"))
     return {item["id"] for item in data}
@@ -113,10 +136,15 @@ def main():
 
         print(f"{src.relative_to(SRC_DIR)} -> {ident}.mp4 + {ident}.webp")
 
-        # Normalized, muted, streamable mp4.
+        # Normalized, muted, streamable mp4. setsar=1 forces square pixels: a
+        # source with a tagged non-square SAR (or one the aspect-preserving
+        # scale can't hit exactly at even height) otherwise bakes an Extended
+        # SAR into the H.264 VUI, which Android's hardware decoder REFUSES to
+        # initialize — the clip then silently never plays. The ~0.15% aspect
+        # nudge is imperceptible (and the player letterboxes via BoxFit anyway).
         run([
             "ffmpeg", "-y", "-i", src,
-            "-vf", f"scale={WIDTH}:-2",
+            "-vf", f"scale={WIDTH}:-2,setsar=1",
             "-c:v", "libx264",
             "-profile:v", "main",
             "-pix_fmt", "yuv420p",
@@ -126,6 +154,7 @@ def main():
             "-movflags", "+faststart",
             video_out,
         ])
+        assert_square_sar(video_out)
 
         # Poster still from roughly the middle of the clip.
         run([

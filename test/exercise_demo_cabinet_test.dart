@@ -26,7 +26,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
   }
 
-  testWidgets('cabinet renders strip, autoplays, and shows controls', (
+  testWidgets('cabinet renders strip and opens PAUSED with controls', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -38,33 +38,44 @@ void main() {
     expect(find.text('FORM DEMO'), findsOneWidget);
     expect(find.text('LOOP'), findsOneWidget);
     expect(find.text('HIDE'), findsOneWidget);
-    expect(fake.log, contains('play'));
-    // Playing → strip shows the pause control.
-    expect(find.byIcon(Icons.pause_sharp), findsOneWidget);
+    // Opens paused: no play() on mount, and the strip shows the play control
+    // (the stage also shows the big glyph, so scope to the InkWell button).
+    expect(fake.log, isNot(contains('play')));
+    expect(
+      find.widgetWithIcon(InkWell, Icons.play_arrow_sharp),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.pause_sharp), findsNothing);
 
     await unmount(tester);
   });
 
-  testWidgets('strip button pauses and resumes playback', (tester) async {
+  testWidgets('strip button starts playback, then pauses', (tester) async {
     await tester.pumpWidget(
       _host(const ExerciseDemoCabinet(demo: _demo, exerciseName: 'Bench')),
     );
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 100));
 
-    await tester.tap(find.byIcon(Icons.pause_sharp));
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(fake.log, contains('pause'));
-    // Paused → strip flips to a play control (the stage also shows the big
-    // glyph, so scope to the InkWell strip button).
+    // Opens paused → strip shows a play control (scope to the InkWell button;
+    // the stage shows its own glyph too).
     final stripPlay = find.widgetWithIcon(InkWell, Icons.play_arrow_sharp);
     expect(stripPlay, findsOneWidget);
 
-    fake.log.clear();
     await tester.tap(stripPlay);
     await tester.pump(const Duration(milliseconds: 100));
     expect(fake.log, contains('play'));
+    // Playing → strip flips to the pause control.
     expect(find.byIcon(Icons.pause_sharp), findsOneWidget);
+
+    fake.log.clear();
+    await tester.tap(find.byIcon(Icons.pause_sharp));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(fake.log, contains('pause'));
+    expect(
+      find.widgetWithIcon(InkWell, Icons.play_arrow_sharp),
+      findsOneWidget,
+    );
 
     await unmount(tester);
   });
@@ -169,6 +180,11 @@ void main() {
         _host(const ExerciseDemoCabinet(demo: _demo, exerciseName: 'Bench')),
       );
       await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // The cabinet opens paused; start it so the fullscreen handoff has
+      // playback to pause on the way in and resume on the way back.
+      await tester.tap(find.widgetWithIcon(InkWell, Icons.play_arrow_sharp));
       await tester.pump(const Duration(milliseconds: 100));
       fake.log.clear();
 

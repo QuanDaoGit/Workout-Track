@@ -98,7 +98,7 @@ class XpService {
     return SessionRewardEligibility(
       eligible: false,
       reason:
-          'Log 15 min, ${formatWeight(200, Units.weight, decimals: 0)}, or 3 exercises to earn XP.',
+          'Train 15 min, ${formatWeight(200, Units.weight, decimals: 0)}, or 3 exercises to earn XP.',
     );
   }
 

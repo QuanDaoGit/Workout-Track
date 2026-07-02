@@ -11,8 +11,10 @@ import '../services/haptic_service.dart';
 import '../services/quest_service.dart';
 import '../services/sfx_service.dart';
 import '../services/workout_storage_service.dart';
+import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_bar.dart';
+import '../widgets/chest_open_animation.dart';
 import '../widgets/companion/bit_mood_core.dart';
 import '../widgets/companion/bit_speech_bubble.dart';
 import '../widgets/pixel_button.dart';
@@ -51,6 +53,21 @@ class QuestsPageState extends State<QuestsPage> {
   bool _bitCheer = false;
   Timer? _bitCheerTimer;
 
+  // Section-completion celebration: which section chest(s) are mid-open (a Set so
+  // claim-all clearing BOTH daily and weekly opens both), the bonus gems pending
+  // their chest-open flight, and per-chest keys (the flight origin). Driven ONLY
+  // by a claim result carrying a NEW section bonus (Codex F2 — no replay on
+  // reload); the timer settles the chest back to its static open frame.
+  final Set<QuestCategory> _celebrating = {};
+  final Map<QuestCategory, int> _pendingBonus = {};
+  final GlobalKey _dailyChestKey = GlobalKey();
+  final GlobalKey _weeklyChestKey = GlobalKey();
+  final GlobalKey _claimAllKey = GlobalKey();
+  final List<Timer> _celebrateTimers = [];
+
+  GlobalKey _chestKeyFor(QuestCategory c) =>
+      c == QuestCategory.weekly ? _weeklyChestKey : _dailyChestKey;
+
   @override
   void initState() {
     super.initState();
@@ -60,6 +77,9 @@ class QuestsPageState extends State<QuestsPage> {
   @override
   void dispose() {
     _bitCheerTimer?.cancel();
+    for (final t in _celebrateTimers) {
+      t.cancel();
+    }
     super.dispose();
   }
 
@@ -122,13 +142,96 @@ class QuestsPageState extends State<QuestsPage> {
       );
     }
 
+    final reduce = MediaQuery.of(context).disableAnimations;
     try {
-      await _questService.claimReward(quest.claimKey, _sessions, now: _now);
+      final result =
+          await _questService.claimReward(quest.claimKey, _sessions, now: _now);
+      // Arm the section chest BEFORE reload so it animates straight from closed
+      // (no static-open flash): reload's setState then renders the chest play=true.
+      final cat = result.sectionBonusCategory;
+      if (cat != null && result.sectionBonusGems > 0 && !reduce) {
+        _pendingBonus[cat] = result.sectionBonusGems;
+        _celebrating.add(cat);
+      }
       await reload();
       widget.onQuestChanged?.call();
+      _settleSectionBonus(result, reduce);
     } finally {
       _claimingKeys.remove(quest.claimKey);
     }
+  }
+
+  /// Claim every claimable quest in one tap. Sequential awaited claims (serialised
+  /// by the gem ledger's per-key lock) so a section bonus only fires after its
+  /// completing claim is durably persisted (Codex F1); the per-quest gem-flights
+  /// pool onto one running clock, so it reads as one satisfying burst, not N.
+  Future<void> _claimAll() async {
+    final summary = _summary;
+    if (summary == null) return;
+    final claimables = [
+      ...summary.dailyQuests,
+      ...summary.weeklyQuests,
+      ...summary.sideQuests,
+    ].where((q) => q.claimable && !_claimingKeys.contains(q.claimKey)).toList();
+    if (claimables.isEmpty) return;
+    final box = _claimAllKey.currentContext?.findRenderObject() as RenderBox?;
+    final origin =
+        box != null ? (box.localToGlobal(Offset.zero) & box.size) : Rect.zero;
+    for (final quest in claimables) {
+      await _claim(quest, origin);
+    }
+  }
+
+  /// After a claim that cleared a section: under reduced motion just bank the
+  /// bonus (the chest is already a static open frame); otherwise schedule the
+  /// chest to settle back to its static open frame once the one-shot finishes.
+  void _settleSectionBonus(QuestClaimResult result, bool reduce) {
+    final cat = result.sectionBonusCategory;
+    final gems = result.sectionBonusGems;
+    if (cat == null || gems <= 0 || !mounted) return;
+    if (reduce) {
+      _pendingBonus.remove(cat);
+      _walletKey.currentState
+          ?.land(gems, snap: true, big: gems >= kBigRewardThreshold);
+      _triggerBitCheer(true);
+      return;
+    }
+    final timer = Timer(
+      ChestOpenAnimation.playDuration + const Duration(milliseconds: 250),
+      () {
+        if (mounted) setState(() => _celebrating.remove(cat));
+      },
+    );
+    _celebrateTimers.add(timer);
+  }
+
+  /// The section chest popped open — fly its bonus gems from the chest up to the
+  /// wallet (the same homecoming as a quest claim, just sourced from the chest).
+  void _onChestOpened(QuestCategory cat) {
+    final gems = _pendingBonus.remove(cat) ?? 0;
+    if (gems <= 0 || !mounted) return;
+    final big = gems >= kBigRewardThreshold;
+    final chestBox =
+        _chestKeyFor(cat).currentContext?.findRenderObject() as RenderBox?;
+    final walletBox =
+        _walletKey.currentContext?.findRenderObject() as RenderBox?;
+    SfxService.instance.playQuestClaim();
+    HapticService.instance.reward();
+    if (chestBox == null || walletBox == null) {
+      _walletKey.currentState?.land(gems, snap: true, big: big);
+      _triggerBitCheer(big);
+      return;
+    }
+    final chestRect = chestBox.localToGlobal(Offset.zero) & chestBox.size;
+    final walletRect = walletBox.localToGlobal(Offset.zero) & walletBox.size;
+    _gemFlightTicks = 0;
+    _walletKey.currentState?.showDelta(gems);
+    _flightKey.currentState?.fly(
+      originGlobal: chestRect,
+      walletGlobal: walletRect,
+      reward: gems,
+      big: big,
+    );
   }
 
   // Budget for the soft "gems streaming in" ticks (the claim reward already fired
@@ -187,6 +290,29 @@ class QuestsPageState extends State<QuestsPage> {
                 cheer: _bitCheer,
                 walletKey: _walletKey,
               ),
+              // CLAIM ALL — a friction-reducer shown only when something is
+              // claimable. The pinned BIT line already announces the count, so
+              // this strip carries the action alone (no redundant restatement).
+              if (summary.claimableCount > 0)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  decoration: const BoxDecoration(
+                    color: kBg,
+                    border: Border(bottom: BorderSide(color: kBorder)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      PixelButton(
+                        key: _claimAllKey,
+                        label: 'CLAIM ALL',
+                        fullWidth: false,
+                        minHeight: 36,
+                        onPressed: _claimAll,
+                      ),
+                    ],
+                  ),
+                ),
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: reload,
@@ -195,24 +321,43 @@ class QuestsPageState extends State<QuestsPage> {
                     children: [
                       _QuestSection(
                         title: 'DAILY QUESTS',
-                        subtitle: 'Resets at 00:00',
+                        subtitleWidget: ResetCountdown(
+                          kind: ResetKind.daily,
+                          nowProvider: widget.nowProvider,
+                        ),
                         quests: summary.dailyQuests,
-                        onClaim: _claim,
-                      ),
-                      const SizedBox(height: 24),
-                      _QuestSection(
-                        title: 'WEEKLY QUESTS',
-                        subtitle: 'Resets Monday',
-                        quests: summary.weeklyQuests,
-                        header: ArcadeBar.segments(
-                          litCells: summary.weeklyCompleted,
-                          totalCells: summary.weeklyTotal,
+                        header: QuestProgressBar(
+                          litCells: summary.dailyCompleted,
+                          totalCells: summary.dailyTotal,
+                          bonusGems: QuestService.dailySectionBonusGems,
+                          chestKey: _dailyChestKey,
+                          play: _celebrating.contains(QuestCategory.daily),
+                          onChestOpened: () => _onChestOpened(QuestCategory.daily),
                         ),
                         onClaim: _claim,
                       ),
                       const SizedBox(height: 24),
                       _QuestSection(
-                        title: 'SIDE QUESTS',
+                        title: 'WEEKLY QUESTS',
+                        subtitleWidget: ResetCountdown(
+                          kind: ResetKind.weekly,
+                          nowProvider: widget.nowProvider,
+                        ),
+                        quests: summary.weeklyQuests,
+                        header: QuestProgressBar(
+                          litCells: summary.weeklyCompleted,
+                          totalCells: summary.weeklyTotal,
+                          bonusGems: QuestService.weeklySectionBonusGems,
+                          chestKey: _weeklyChestKey,
+                          play: _celebrating.contains(QuestCategory.weekly),
+                          onChestOpened: () =>
+                              _onChestOpened(QuestCategory.weekly),
+                        ),
+                        onClaim: _claim,
+                      ),
+                      const SizedBox(height: 24),
+                      _QuestSection(
+                        title: 'ACHIEVEMENTS',
                         subtitle: 'Permanent milestones',
                         quests: summary.sideQuests,
                         onClaim: _claim,
@@ -281,14 +426,22 @@ class _PinnedHeader extends StatelessWidget {
 class _QuestSection extends StatelessWidget {
   const _QuestSection({
     required this.title,
-    required this.subtitle,
     required this.quests,
     required this.onClaim,
+    this.subtitle,
+    this.subtitleWidget,
     this.header,
-  });
+  }) : assert(subtitle != null || subtitleWidget != null,
+            'a section needs either a static subtitle or a live one');
 
   final String title;
-  final String subtitle;
+
+  /// Static muted caption (e.g. side quests' "Permanent milestones").
+  final String? subtitle;
+
+  /// Live caption override (the daily/weekly reset countdown). Takes precedence
+  /// over [subtitle] when supplied.
+  final Widget? subtitleWidget;
   final List<QuestItem> quests;
   final Widget? header;
   final void Function(QuestItem quest, Rect originRect) onClaim;
@@ -306,18 +459,26 @@ class _QuestSection extends StatelessWidget {
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
             ),
-            Text(
-              '${quests.where((quest) => quest.completed).length} / ${quests.length}',
-              style: const TextStyle(
-                fontFamily: 'PressStart2P',
-                fontSize: 9,
-                color: kText,
+            // Sections with a progress bar move the count above the bar's end
+            // (see [QuestProgressBar]); only the bar-less Achievements section
+            // keeps the count in the header.
+            if (header == null)
+              Text(
+                '${quests.where((quest) => quest.completed).length} / ${quests.length}',
+                style: const TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 9,
+                  color: kText,
+                ),
               ),
-            ),
           ],
         ),
         const SizedBox(height: 4),
-        Text(subtitle, style: const TextStyle(color: kMutedText, fontSize: 11)),
+        subtitleWidget ??
+            Text(
+              subtitle!,
+              style: const TextStyle(color: kMutedText, fontSize: 11),
+            ),
         if (header != null) ...[const SizedBox(height: 12), header!],
         const SizedBox(height: 12),
         for (final quest in quests)
@@ -329,6 +490,214 @@ class _QuestSection extends StatelessWidget {
               onClaim: (rect) => onClaim(quest, rect),
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// Which bucket a [ResetCountdown] tracks (its reset cadence differs).
+enum ResetKind { daily, weekly }
+
+/// Formats a "time until reset" interval for the section caption. Seconds always
+/// tick (the "something is running" signal); a `Nd ` day prefix appears only
+/// once at least a full day remains, so the weekly's multi-day horizon reads
+/// `5d 14:23:51` while the daily stays a clean `14:23:51`. Clamps a past/zero
+/// interval to `00:00:00`. Pure + public so it can be unit/mutation-tested.
+String formatResetRemaining(Duration remaining) {
+  final d = remaining.isNegative ? Duration.zero : remaining;
+  String two(int n) => n.toString().padLeft(2, '0');
+  final hms = '${two(d.inHours % 24)}:${two(d.inMinutes % 60)}'
+      ':${two(d.inSeconds % 60)}';
+  return d.inDays > 0 ? '${d.inDays}d $hms' : hms;
+}
+
+/// The live "Resets in HH:MM:SS" caption. A leaf widget: its 1-second
+/// [Timer.periodic] rebuilds only itself (the heavy quest list never repaints).
+/// Under reduced motion (`disableAnimations || accessibleNavigation`) it starts
+/// NO timer and shows a single frozen value — a still, legible signal, and the
+/// reason a `pumpAndSettle` test of this page still settles. The reset target is
+/// recomputed fresh each tick from [nowProvider], so it auto-rolls at the
+/// boundary instead of ticking into negatives.
+///
+/// Public + self-contained so the reduced-motion gate can be unit-tested in
+/// isolation (the full page can't `pumpAndSettle` — BIT's idle never settles).
+class ResetCountdown extends StatefulWidget {
+  const ResetCountdown({super.key, required this.kind, this.nowProvider});
+
+  final ResetKind kind;
+  final DateTime Function()? nowProvider;
+
+  @override
+  State<ResetCountdown> createState() => _ResetCountdownState();
+}
+
+class _ResetCountdownState extends State<ResetCountdown> {
+  Timer? _timer;
+  bool _reduce = false;
+
+  DateTime get _now => (widget.nowProvider ?? DateTime.now)();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final mq = MediaQuery.of(context);
+    // The app's documented reduced-presentation trigger is the UNION — gating on
+    // disableAnimations alone would leave a screen-reader/switch user with a
+    // ticking timer (and hang their pumpAndSettle harness). (Codex review #1.)
+    _reduce = mq.disableAnimations || mq.accessibleNavigation;
+    _timer?.cancel();
+    if (!_reduce) {
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  DateTime _target(DateTime now) => switch (widget.kind) {
+        ResetKind.daily => QuestService.nextDailyReset(now),
+        ResetKind.weekly => QuestService.nextWeeklyReset(now),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final now = _now;
+    final remaining = _target(now).difference(now);
+    return Text.rich(
+      TextSpan(
+        children: [
+          const TextSpan(text: 'Resets in '),
+          TextSpan(
+            text: formatResetRemaining(remaining),
+            // Mono so the digits keep fixed columns — a proportional font would
+            // jitter the row horizontally every second as digit widths change.
+            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
+          ),
+        ],
+      ),
+      style: const TextStyle(color: kMutedText, fontSize: 11),
+    );
+  }
+}
+
+/// A section's progress meter: the canonical segmented [ArcadeBar] filling
+/// toward a reward [ChestOpenAnimation] end-cap (closed while unfinished, opening
+/// once the section is cleared). One shared widget for both the daily (3-seg) and
+/// weekly (5-seg) sections so their treatment can't drift. Public so its chest
+/// states can be golden-tested on the real dark theme.
+class QuestProgressBar extends StatelessWidget {
+  const QuestProgressBar({
+    super.key,
+    required this.litCells,
+    required this.totalCells,
+    required this.bonusGems,
+    this.play = false,
+    this.chestKey,
+    this.onChestOpened,
+  });
+
+  final int litCells;
+  final int totalCells;
+
+  /// The section-completion bonus the chest pays out — shown in the bubble above
+  /// the still-closed chest as a "what's inside" hint.
+  final int bonusGems;
+
+  /// One-shot: flip true to play the chest-open (the section was just cleared).
+  final bool play;
+
+  /// Global key on the chest so the page can launch the bonus gem-flight from it.
+  final Key? chestKey;
+
+  /// Fired at the lid-pop — the page launches the bonus gem-flight here.
+  final VoidCallback? onChestOpened;
+
+  /// Chest slot height — roomier than the bar (the user's "more space"); the
+  /// open-burst reads modestly here while the gem-flight carries the spectacle.
+  static const double _chestHeight = 30;
+
+  /// Fixed column the chest + its bubble share, so the (wider) bubble can centre
+  /// over the chest and its tail lands on the chest centre.
+  static const double _chestColW = 56;
+
+  @override
+  Widget build(BuildContext context) {
+    final complete = totalCells > 0 && litCells >= totalCells;
+    final count = '$litCells / $totalCells';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Top strip: the count right-aligned above the bar's end, and (while the
+        // chest is still closed) the gem bubble centred over the chest.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  child: Text(
+                    count,
+                    style: const TextStyle(
+                      fontFamily: 'PressStart2P',
+                      fontSize: 9,
+                      color: kText,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: kSpace3),
+            SizedBox(
+              width: _chestColW,
+              child: Center(
+                child: (!complete && bonusGems > 0)
+                    ? _ChestBonusBubble(gems: bonusGems)
+                    : const SizedBox.shrink(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        // The bar fills toward the chest end-cap (chest centred in the same column
+        // as the bubble above, so the tail points at it).
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: ArcadeBar.segments(
+                litCells: litCells,
+                totalCells: totalCells,
+              ),
+            ),
+            const SizedBox(width: kSpace3),
+            SizedBox(
+              width: _chestColW,
+              child: Center(
+                child: Semantics(
+                  label: complete
+                      ? 'Reward chest, opened'
+                      : 'Reward chest, locked. Holds $bonusGems gems',
+                  child: ExcludeSemantics(
+                    child: ChestOpenAnimation(
+                      key: chestKey,
+                      height: _chestHeight,
+                      open: complete,
+                      play: play,
+                      onOpened: onChestOpened,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -569,10 +938,89 @@ class _QuestCardState extends State<_QuestCard>
       QuestCategory.daily => (widget.quest.completed || _isClaimed)
           ? 'assets/icons/control/ui/icon_quest_bullet_done.png'
           : 'assets/icons/control/ui/icon_quest_bullet.png',
-      QuestCategory.weekly => 'assets/icons/control/icon_trophy.png',
-      QuestCategory.side => 'assets/icons/control/icon_shield.png',
+      QuestCategory.weekly => 'assets/icons/control/icon_shield.png',
+      QuestCategory.side => 'assets/icons/control/icon_trophy.png',
     };
   }
+}
+
+/// A small speech bubble that floats above a still-locked reward chest and points
+/// down at it: just the gem glyph + the bonus amount the chest pays out when the
+/// section is cleared (no label — the chest below is the subject). Hidden once the
+/// chest is opened (the gems have already flown). The currency magenta ties it to
+/// the wallet; kept small so it reads as a quiet hint, not a price tag.
+class _ChestBonusBubble extends StatelessWidget {
+  const _ChestBonusBubble({required this.gems});
+
+  final int gems;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: kCard,
+            border: Border.all(color: kBorder),
+            borderRadius: BorderRadius.circular(kCardRadius),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/icons/economy/icon_gem.png',
+                width: 11,
+                height: 11,
+                filterQuality: FilterQuality.none,
+                errorBuilder: (_, _, _) => const Icon(
+                  Icons.diamond_sharp,
+                  size: 11,
+                  color: kGemMagenta,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '$gems',
+                style: AppFonts.shareTechMono(color: kText, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        // The tail — a small downward notch pointing at the chest below.
+        CustomPaint(
+          size: const Size(10, 5),
+          painter: _BubbleTailPainter(),
+        ),
+      ],
+    );
+  }
+}
+
+/// A downward speech-tail: a [kCard] triangle with [kBorder] sides (no top edge,
+/// so it reads continuous with the bubble box above it).
+class _BubbleTailPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(w, 0)
+      ..lineTo(w / 2, h)
+      ..close();
+    canvas.drawPath(path, Paint()..color = kCard..isAntiAlias = false);
+    final edge = Paint()
+      ..color = kBorder
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..isAntiAlias = false;
+    canvas.drawLine(const Offset(0, 0), Offset(w / 2, h), edge);
+    canvas.drawLine(Offset(w, 0), Offset(w / 2, h), edge);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BubbleTailPainter old) => false;
 }
 
 class _StatusBadge extends StatelessWidget {

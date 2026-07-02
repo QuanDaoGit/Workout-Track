@@ -29,7 +29,7 @@ class LootUnlockRule {
       case UnlockKind.lifetimeVolume:
         return 'Earned through lifetime training volume.';
       case UnlockKind.lifetimeReps:
-        return 'Earned through lifetime logged reps.';
+        return 'Earned through lifetime saved reps.';
       case UnlockKind.muscleSessions:
         return 'Earned by returning to ${muscleGroup ?? 'this focus'}.';
       case UnlockKind.muscleVolume:

@@ -10,6 +10,7 @@ import '../../services/calibration_service.dart';
 import '../../services/haptic_service.dart';
 import '../../services/plate_calculator.dart';
 import '../../services/progression_settings_service.dart';
+import '../../services/simple_mode_service.dart';
 import '../../services/progressive_overload_service.dart';
 import '../../services/rest_timer_service.dart';
 import '../../services/unit_settings_service.dart';
@@ -131,6 +132,9 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   List<SetEntry>? _previousSets;
   final Set<int> _lockedSets = {};
   bool _progressionEnabled = false;
+  // Simple Mode (read once at init, like _progressionEnabled): hides the
+  // warm-up advisory card + the TRY suggestion on this screen.
+  bool _simpleMode = false;
   OverloadSuggestion? _set1Suggestion;
   final Set<int> _prefilledRows = {};
 
@@ -201,12 +205,14 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     // Resolved here (not in a separate racing method) so the anchor gate below
     // always sees the real flag.
     final progressionEnabled = await ProgressionSettingsService().isEnabled();
+    final simpleMode = await SimpleModeService().isEnabled();
     if (!mounted) return;
     final previous = service.getLastSessionSets(widget.exercise.id);
     setState(() {
       _overloadService = service;
       _previousSets = previous;
       _progressionEnabled = progressionEnabled;
+      _simpleMode = simpleMode;
       _set1Suggestion = suggestion;
       // When suggestions are OFF the warm-up anchors to the real last working
       // set — never a deloaded/bumped *suggested* load the user can't even see.
@@ -315,7 +321,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     final r = int.tryParse(row.reps.text);
     if (w == null || w < 0 || r == null || r <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fill in weight and reps before logging')),
+        const SnackBar(content: Text('Fill in weight and reps before saving')),
       );
       return;
     }
@@ -392,7 +398,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
 
   /// Shown when a user taps a set whose turn has not come (a later set before
   /// the current one is logged) — the sequential-logging guard.
-  void _warnLogPrevious() => _quickNotice('Log your previous set first');
+  void _warnLogPrevious() => _quickNotice('Save your previous set first');
 
   void _unlockSet(int index) {
     // Re-editing an earlier set re-gates the rows below it; drop focus/keyboard
@@ -709,7 +715,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                           anchorKg: _warmupAnchorKg,
                           unit: Units.weight,
                         )
-                        case final warmup?) ...[
+                        case final warmup? when !_simpleMode) ...[
                       _WarmupCard(
                         suggestion: warmup,
                         onLog: () => _logWarmupFromSuggestion(warmup),
@@ -729,31 +735,33 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                       const SizedBox(height: kSpace3),
                     ],
 
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 32,
-                          child: Text(
-                            'Set',
-                            style: Theme.of(context).textTheme.bodySmall,
+                    // Padded to match the data rows' inner horizontal inset
+                    // (kSpace2) so each header sits exactly over its column: the
+                    // empty 32 leading slot offsets past the set-number column,
+                    // landing "Weight"'s W on the weight box's left edge (and
+                    // "Reps" over its field), mirroring the row layout below.
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: kSpace2),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 32),
+                          Expanded(
+                            child: Text(
+                              'Weight (${Units.weight.label})',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            'Weight (${Units.weight.label})',
-                            style: Theme.of(context).textTheme.bodySmall,
+                          const SizedBox(width: kSpace2),
+                          Expanded(
+                            child: Text(
+                              'Reps',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: kSpace2),
-                        Expanded(
-                          child: Text(
-                            'Reps',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                        // Aligns with the trailing save (48) + remove (32) slots.
-                        const SizedBox(width: 88),
-                      ],
+                          // Mirrors the trailing gap (8) + save (64) + remove (32).
+                          const SizedBox(width: 104),
+                        ],
+                      ),
                     ),
 
                     const SizedBox(height: kSpace2),
@@ -848,6 +856,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
               children: [
                 if (index == _firstUnlockedIndex() &&
                     _progressionEnabled &&
+                    !_simpleMode &&
                     _set1Suggestion != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 32, bottom: 4),
@@ -990,28 +999,25 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                     ),
                     const SizedBox(width: kSpace2),
                     SizedBox(
-                      width: 48,
+                      width: 64,
                       height: 48,
                       child: isLocked
                           ? Semantics(
-                              label: 'Set ${index + 1} logged',
-                              child: const Icon(
-                                Icons.check_circle_sharp,
-                                color: kNeon,
-                                size: 20,
+                              label: 'Set ${index + 1} saved',
+                              child: const Center(
+                                child: Icon(
+                                  Icons.check_circle_sharp,
+                                  color: kNeon,
+                                  size: 20,
+                                ),
                               ),
                             )
-                          : IconButton(
-                              padding: EdgeInsets.zero,
-                              tooltip: frontier
-                                  ? 'Log set ${index + 1}'
+                          : _SaveSetButton(
+                              enabled: frontier,
+                              semanticsLabel: frontier
+                                  ? 'Save set ${index + 1}'
                                   : 'Set ${index + 1} locked until the '
-                                        'previous set is logged',
-                              icon: Icon(
-                                Icons.radio_button_unchecked_sharp,
-                                color: frontier ? kNeon : kMutedText,
-                                size: 22,
-                              ),
+                                        'previous set is saved',
                               onPressed: frontier
                                   ? () => _logSet(index)
                                   : _warnLogPrevious,
@@ -1071,6 +1077,47 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   }
 }
 
+/// The per-set commit control: a labelled "SAVE" chip (replaces the old empty
+/// circle so the call-to-action reads as a button, not an ambiguous checkbox).
+/// Same OUTLINED recipe as the warm-up card's chip (dark fill + accent border +
+/// accent text) so every SAVE on the screen shares one format — the frontier row
+/// is the bright neon accent, a gated row is muted (kBorder) but still tappable
+/// so its tap can warn ("save your previous set first").
+class _SaveSetButton extends StatelessWidget {
+  const _SaveSetButton({
+    required this.enabled,
+    required this.onPressed,
+    required this.semanticsLabel,
+  });
+
+  final bool enabled;
+  final VoidCallback onPressed;
+  final String semanticsLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: semanticsLabel,
+      excludeSemantics: true,
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          minimumSize: const Size(60, 44),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          backgroundColor: kCard,
+          foregroundColor: enabled ? kNeon : kMutedText,
+          side: BorderSide(color: enabled ? kNeon : kBorder),
+          textStyle: AppFonts.shareTechMono(fontSize: 12, letterSpacing: 1.2),
+        ),
+        child: const Text('SAVE'),
+      ),
+    );
+  }
+}
+
 /// Advisory warm-up suggestion, styled as a demoted (amber) card above the set
 /// table. [onLog] one-taps the suggested load into a real warm-up row; the card
 /// itself is never a logged set and feeds no volume/stat/XP path.
@@ -1079,7 +1126,7 @@ class _WarmupCard extends StatelessWidget {
 
   final WarmupSuggestion suggestion;
 
-  /// One-tap "LOG IT": records the suggested load as a warm-up set.
+  /// One-tap "SAVE": records the suggested load as a warm-up set.
   final VoidCallback? onLog;
 
   /// When non-null, the card shows a plate-calculator shortcut (plate-loaded
@@ -1170,7 +1217,7 @@ class _WarmupCard extends StatelessWidget {
                     letterSpacing: 1.2,
                   ),
                 ),
-                child: const Text('LOG IT'),
+                child: const Text('SAVE'),
               ),
             ),
           ],

@@ -8,9 +8,12 @@ import '../theme/tokens.dart';
 import 'arcade_route.dart';
 import 'exercise_demo_player.dart';
 
-/// A neon-framed "demo cabinet" that plays an exercise's looping form demo.
+/// A neon-framed "demo cabinet" that shows an exercise's looping form demo.
 ///
-/// Used on the large surfaces (set-logging screen). The strip's `LOOP ⤢`
+/// Opens PAUSED (the poster/first frame under a ▶ glyph) so the clip never
+/// starts moving the instant you open a lift mid-workout — tap the stage or the
+/// strip play button to start it. Used on the large surfaces (set-logging
+/// screen). The strip's `LOOP ⤢`
 /// opens a fullscreen viewer sharing this cabinet's controller; HIDE collapses
 /// the cabinet to the strip (pausing playback) and the choice persists
 /// app-wide. Exercises without a demo never build this — callers fall back to
@@ -124,6 +127,12 @@ class _ExerciseDemoCabinetState extends State<ExerciseDemoCabinet> {
                             ExerciseDemoPlayer(
                               demo: widget.demo,
                               controller: _controller,
+                              // Opens PAUSED mid-workout: the clip is a glance-
+                              // when-you-need-it reference, not something that
+                              // should start moving the instant you open a lift.
+                              // The poster/first frame shows with a ▶ glyph;
+                              // tap the stage or the strip button to play.
+                              autoPlay: false,
                             ),
                           const IgnorePointer(
                             child: CustomPaint(painter: _CornerTicksPainter()),

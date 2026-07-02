@@ -138,7 +138,79 @@ class QuestService {
 
     await _grantQuestTitle(quest.id);
     await _saveState(state.copyWith(claims: claims));
-    return QuestClaimResult(xp: 0, gems: awardedGems, title: quest.rewardTitle);
+
+    // Section-completion bonus: if THIS claim just made its daily/weekly section
+    // fully cleared (every quest in it completed AND claimed), award the one-shot
+    // bonus *after* the claim is persisted. The award is idempotent per period,
+    // so it (and the chest celebration the page derives from it) fire exactly
+    // once — a reload of an already-cleared section returns 0 (Codex F1/F2).
+    final (bonusGems, bonusCategory) = await _maybeAwardSectionBonus(
+      quest.category,
+      summary,
+      claims,
+      state,
+      currentTime,
+    );
+
+    return QuestClaimResult(
+      xp: 0,
+      gems: awardedGems,
+      title: quest.rewardTitle,
+      sectionBonusGems: bonusGems,
+      sectionBonusCategory: bonusCategory,
+    );
+  }
+
+  /// Gems for clearing a whole daily / weekly section (sized "more than one quest,
+  /// less than the section sum" — the individual completions stay the dominant
+  /// reward; the bonus is a capstone bow, not a jackpot). Research-grounded:
+  /// daily quests are 5 each ×3 = 15 (bonus 10 > one quest, < the 15 sum); weekly
+  /// quests are 5–20 each (bonus 25 > the biggest single, < the section sum).
+  static const int dailySectionBonusGems = 10;
+  static const int weeklySectionBonusGems = 25;
+
+  /// Awards the daily/weekly section-completion bonus iff [category]'s section is
+  /// now fully completed AND claimed (evaluated against the just-updated [claims]).
+  /// Returns `(gemsAwarded, category)` — `(0, null)` for an incomplete section, a
+  /// non-bonus section (side/achievements never gets one), an empty section, or a
+  /// repeat (already awarded this period → the ledger returns 0). The non-null
+  /// category is the page's one-shot signal to play that section's chest + flight.
+  Future<(int, QuestCategory?)> _maybeAwardSectionBonus(
+    QuestCategory category,
+    QuestSummary summary,
+    Map<String, QuestClaim> claims,
+    QuestState state,
+    DateTime now,
+  ) async {
+    final (List<QuestItem> quests, String periodKey, int amount, String label) =
+        switch (category) {
+      QuestCategory.daily => (
+          summary.dailyQuests,
+          state.dailyPeriodKey,
+          dailySectionBonusGems,
+          'Daily quests cleared',
+        ),
+      QuestCategory.weekly => (
+          summary.weeklyQuests,
+          state.weeklyPeriodKey,
+          weeklySectionBonusGems,
+          'Weekly quests cleared',
+        ),
+      QuestCategory.side => (const <QuestItem>[], '', 0, ''),
+    };
+    if (quests.isEmpty) return (0, null);
+    final allCleared = quests.every(
+      (q) => q.completed && claims.containsKey(q.claimKey),
+    );
+    if (!allCleared) return (0, null);
+    final awarded = await GemService().awardQuestSectionBonus(
+      section: category.name,
+      periodKey: periodKey,
+      amount: amount,
+      label: label,
+      now: now,
+    );
+    return (awarded, awarded > 0 ? category : null);
   }
 
   /// Grants the loot title that a claimed side quest rewards. The very first
@@ -166,6 +238,22 @@ class QuestService {
   static String weeklyPeriodKey(DateTime date) {
     final day = DateTime(date.year, date.month, date.day);
     return _dateKey(day.subtract(Duration(days: day.weekday - 1)));
+  }
+
+  /// The next local-midnight after [now] — when the daily quests roll over.
+  /// Built from the date constructor (not `Duration.add`) so it lands on real
+  /// local midnight across a DST transition, and is always strictly after [now]
+  /// (at exactly 00:00 it returns tomorrow, never a zero/negative interval).
+  static DateTime nextDailyReset(DateTime now) =>
+      DateTime(now.year, now.month, now.day + 1);
+
+  /// The next Monday 00:00 (local) after [now] — when the weekly quests roll
+  /// over. Mirrors [weeklyPeriodKey]'s Monday anchor; always strictly after
+  /// [now] (on Monday 00:00 it returns the following Monday, +7 days).
+  static DateTime nextWeeklyReset(DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
+    final monday = today.subtract(Duration(days: today.weekday - 1));
+    return DateTime(monday.year, monday.month, monday.day + 7);
   }
 
   Future<QuestState> _loadState(DateTime now) async {
@@ -286,7 +374,7 @@ class QuestService {
     _QuestTemplate(
       id: 'volume_floor', title: 'Volume Floor', gems: 5,
       done: (s) => s.todayVolume >= 1000,
-      describe: (s) => 'Log ${_descVol(1000)} total volume today.',
+      describe: (s) => 'Save ${_descVol(1000)} total volume today.',
       progress: (s) => _progVol(s.todayVolume, 1000),
     ),
     _QuestTemplate(
@@ -298,7 +386,7 @@ class QuestService {
     _QuestTemplate(
       id: 'rack_work', title: 'Rack Work', gems: 5,
       done: (s) => s.todaySets >= 12,
-      describe: (s) => 'Log 12 sets today.',
+      describe: (s) => 'Save 12 sets today.',
       progress: (s) => '${min(s.todaySets, 12)} / 12 sets',
     ),
     _QuestTemplate(
@@ -310,7 +398,7 @@ class QuestService {
     _QuestTemplate(
       id: 'warm_first', title: 'Warm First', gems: 5,
       done: (s) => s.todayWarmedUp,
-      describe: (s) => 'Log a warm-up set today.',
+      describe: (s) => 'Save a warm-up set today.',
       progress: (s) => s.todayWarmedUp ? 'DONE' : '0 / 1',
     ),
     _QuestTemplate(
@@ -433,7 +521,7 @@ class QuestService {
     _QuestTemplate(
       id: 'set_chaser', title: 'Set Chaser', gems: 10,
       done: (s) => s.weekSetCount >= 30,
-      describe: (s) => 'Log 30 sets this week.',
+      describe: (s) => 'Save 30 sets this week.',
       progress: (s) => '${min(s.weekSetCount, 30)} / 30 sets',
     ),
     _QuestTemplate(
@@ -506,7 +594,7 @@ class QuestService {
     _QuestTemplate(
       id: 'side_sets_25', title: 'Set Smith', gems: 100, rewardTitle: 'Set Smith',
       done: (s) => s.lifetimeSetCount >= 25,
-      describe: (s) => 'Log 25 total sets.',
+      describe: (s) => 'Save 25 total sets.',
       progress: (s) => '${min(s.lifetimeSetCount, 25)} / 25 sets',
     ),
     _QuestTemplate(
@@ -562,7 +650,7 @@ class QuestService {
       id: 'side_sets_1000', title: 'Apex 1000', gems: 100,
       rewardTitle: 'Apex 1000',
       done: (s) => s.lifetimeSetCount >= 1000,
-      describe: (s) => 'Log 1,000 total sets.',
+      describe: (s) => 'Save 1,000 total sets.',
       progress: (s) => '${min(s.lifetimeSetCount, 1000)} / 1000 sets',
     ),
   ];

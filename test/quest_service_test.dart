@@ -7,6 +7,7 @@ import 'package:workout_track/models/rest_models.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/services/gem_service.dart';
 import 'package:workout_track/services/loot_service.dart';
+import 'package:workout_track/models/quest_models.dart';
 import 'package:workout_track/services/quest_service.dart';
 import 'package:workout_track/models/unit_models.dart';
 import 'package:workout_track/services/rest_service.dart';
@@ -293,6 +294,47 @@ void main() {
     expect(QuestService.weeklyPeriodKey(DateTime(2026, 5, 13)), '2026-05-11');
   });
 
+  test('nextDailyReset is the next local midnight, strictly after now', () {
+    // Mid-day → tonight's midnight.
+    expect(
+      QuestService.nextDailyReset(DateTime(2026, 5, 13, 9, 30, 15)),
+      DateTime(2026, 5, 14),
+    );
+    // Exactly midnight → tomorrow (never a zero interval), not today.
+    expect(
+      QuestService.nextDailyReset(DateTime(2026, 5, 13)),
+      DateTime(2026, 5, 14),
+    );
+    // Month rollover.
+    expect(
+      QuestService.nextDailyReset(DateTime(2026, 5, 31, 23, 59)),
+      DateTime(2026, 6, 1),
+    );
+    // Year rollover.
+    expect(
+      QuestService.nextDailyReset(DateTime(2026, 12, 31, 12)),
+      DateTime(2027, 1, 1),
+    );
+  });
+
+  test('nextWeeklyReset is the next Monday 00:00, strictly after now', () {
+    // Wed 2026-05-13 → Mon 2026-05-18.
+    expect(
+      QuestService.nextWeeklyReset(DateTime(2026, 5, 13, 9)),
+      DateTime(2026, 5, 18),
+    );
+    // Sunday (end of week) → the very next day's Monday.
+    expect(
+      QuestService.nextWeeklyReset(DateTime(2026, 5, 17, 23, 59)),
+      DateTime(2026, 5, 18),
+    );
+    // Exactly Monday 00:00 → the FOLLOWING Monday (+7d), never a zero interval.
+    expect(
+      QuestService.nextWeeklyReset(DateTime(2026, 5, 18)),
+      DateTime(2026, 5, 25),
+    );
+  });
+
   test('recovery XP does not scale gem rewards or complete quests', () async {
     final now = DateTime(2026, 5, 12);
     SharedPreferences.setMockInitialValues({
@@ -392,6 +434,156 @@ void main() {
     final warm = await service.getSummary(sessions, now: now);
     final lb = warm.weeklyQuests.firstWhere((q) => q.id == 'limit_break');
     expect(lb.description, contains('5100 lbs'));
+  });
+
+  group('section-completion bonus', () {
+    // A session rich enough to satisfy EVERY daily/weekly quest template, so
+    // whichever 3 daily / 5 weekly the deterministic rotation surfaces are all
+    // complete — letting the whole section be claimed.
+    WorkoutSession rich(DateTime date) => WorkoutSession(
+          id: date.microsecondsSinceEpoch.toString(),
+          date: date,
+          muscleGroup: 'Chest',
+          targetMuscleGroups: const [
+            'Chest',
+            'Back',
+            'Shoulders',
+            'Legs',
+            'Core',
+          ],
+          targetDurationMinutes: 30,
+          actualDurationSeconds: 2000, // > 25 min daily; ×3 > 90 min weekly
+          estimatedCalories: 100,
+          exercises: [
+            ExerciseLog(
+              exerciseId: 'bench',
+              exerciseName: 'Bench Press',
+              sets: [
+                for (var i = 0; i < 12; i++)
+                  const SetEntry(weight: 100, reps: 5), // 12 sets, 6000 kg
+              ],
+              warmupSets: const [SetEntry(weight: 40, reps: 8, isWarmup: true)],
+            ),
+          ],
+        );
+
+    test('daily section: the completing claim awards the 10-gem bonus once',
+        () async {
+      final service = QuestService();
+      final now = DateTime(2026, 5, 13, 10);
+      final sessions = [rich(now)];
+      final summary = await service.getSummary(sessions, now: now);
+      expect(summary.dailyQuests.length, 3);
+      expect(summary.dailyQuests.every((q) => q.completed), isTrue);
+
+      final results = <QuestClaimResult>[];
+      for (final q in summary.dailyQuests) {
+        results.add(await service.claimReward(q.claimKey, sessions, now: now));
+      }
+      // Only the LAST claim (the one clearing the section) carries the bonus.
+      expect(results.take(2).every((r) => r.sectionBonusGems == 0), isTrue);
+      expect(results.last.sectionBonusGems, 10);
+      expect(results.last.sectionBonusCategory, QuestCategory.daily);
+      expect(await GemService().balance(), 25); // 3×5 quests + 10 bonus
+    });
+
+    test('no bonus until the final quest of the section is claimed', () async {
+      final service = QuestService();
+      final now = DateTime(2026, 5, 13, 10);
+      final sessions = [rich(now)];
+      final summary = await service.getSummary(sessions, now: now);
+      final r1 = await service.claimReward(
+          summary.dailyQuests[0].claimKey, sessions, now: now);
+      final r2 = await service.claimReward(
+          summary.dailyQuests[1].claimKey, sessions, now: now);
+      expect(r1.sectionBonusGems, 0);
+      expect(r2.sectionBonusGems, 0);
+      expect(await GemService().balance(), 10); // two quest rewards, no bonus
+    });
+
+    test('the daily bonus is a one-shot — no replay once the section is cleared',
+        () async {
+      final service = QuestService();
+      final now = DateTime(2026, 5, 13, 10);
+      final sessions = [rich(now)];
+      final summary = await service.getSummary(sessions, now: now);
+      for (final q in summary.dailyQuests) {
+        await service.claimReward(q.claimKey, sessions, now: now);
+      }
+      expect(await GemService().balance(), 25);
+      // Re-claiming an already-claimed quest (a reload path) re-awards nothing.
+      final replay = await service.claimReward(
+          summary.dailyQuests.last.claimKey, sessions, now: now);
+      expect(replay.sectionBonusGems, 0);
+      expect(await GemService().balance(), 25);
+    });
+
+    test('a new day re-awards the daily bonus (per-period id)', () async {
+      final service = QuestService();
+      final day1 = DateTime(2026, 5, 13, 10);
+      final day2 = DateTime(2026, 5, 14, 10);
+      final sessions = [rich(day1), rich(day2)];
+      final s1 = await service.getSummary(sessions, now: day1);
+      for (final q in s1.dailyQuests) {
+        await service.claimReward(q.claimKey, sessions, now: day1);
+      }
+      final s2 = await service.getSummary(sessions, now: day2);
+      final r2 = <QuestClaimResult>[];
+      for (final q in s2.dailyQuests) {
+        r2.add(await service.claimReward(q.claimKey, sessions, now: day2));
+      }
+      expect(r2.last.sectionBonusGems, 10); // fresh period → awarded again
+      expect(await GemService().balance(), 50); // 6×5 quests + 2×10 bonuses
+    });
+
+    test('weekly section: clearing all weekly awards the 25-gem bonus', () async {
+      final service = QuestService();
+      final monday = DateTime(2026, 5, 11, 10);
+      // 3 distinct training days → satisfies the multi-session weekly templates
+      // (2/3 workouts, 3-day cadence, 3 warm-ups, 3 class hits, 90 min).
+      final sessions = [
+        rich(monday),
+        rich(monday.add(const Duration(days: 1))),
+        rich(monday.add(const Duration(days: 2))),
+      ];
+      final now = monday.add(const Duration(days: 2));
+      final summary = await service.getSummary(sessions, now: now);
+      expect(summary.weeklyQuests.length, 5);
+      expect(summary.weeklyQuests.every((q) => q.completed), isTrue);
+      final results = <QuestClaimResult>[];
+      for (final q in summary.weeklyQuests) {
+        results.add(await service.claimReward(q.claimKey, sessions, now: now));
+      }
+      expect(results.last.sectionBonusGems, 25);
+      expect(results.last.sectionBonusCategory, QuestCategory.weekly);
+    });
+
+    test('side / achievement claims never award a section bonus', () async {
+      final service = QuestService();
+      final now = DateTime(2026, 5, 13, 10);
+      final sessions = [rich(now)];
+      final summary = await service.getSummary(sessions, now: now);
+      final side = summary.sideQuests.firstWhere((q) => q.claimable);
+      final r = await service.claimReward(side.claimKey, sessions, now: now);
+      expect(r.sectionBonusGems, 0);
+      expect(r.sectionBonusCategory, isNull);
+    });
+  });
+
+  group('GemService.awardQuestSectionBonus', () {
+    test('idempotent per period; re-awards a fresh period', () async {
+      final gems = GemService();
+      final first = await gems.awardQuestSectionBonus(
+          section: 'daily', periodKey: '2026-05-13', amount: 10, label: 'x');
+      final repeat = await gems.awardQuestSectionBonus(
+          section: 'daily', periodKey: '2026-05-13', amount: 10, label: 'x');
+      final nextDay = await gems.awardQuestSectionBonus(
+          section: 'daily', periodKey: '2026-05-14', amount: 10, label: 'x');
+      expect(first, 10);
+      expect(repeat, 0); // same period → no double credit
+      expect(nextDay, 10); // fresh period → awarded
+      expect(await gems.balance(), 20);
+    });
   });
 }
 

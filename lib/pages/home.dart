@@ -16,12 +16,13 @@ import '../models/profile_models.dart';
 import '../models/rest_models.dart';
 import '../models/workout_models.dart';
 import '../services/adventure_service.dart';
+import '../services/bit_advice_service.dart';
 import '../services/calorie_service.dart';
 import '../services/haptic_service.dart';
 import '../services/class_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/gem_service.dart';
-import '../services/guild_service.dart';
+import '../utils/iso_week.dart';
 import '../services/loot_service.dart';
 import '../services/profile_service.dart';
 import '../services/program_customization_service.dart';
@@ -206,7 +207,13 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // record the line the last build showed, so a re-entry can consume a shown
   // greeting (flip to the away status) without recomputing phase.
   final Random _adviceRng = Random();
-  int _adviceIndex = 0;
+  // Two rotating cursors — one per advice pool — plus the line resolved for the
+  // current build. The wildcard pool draws ~5% of rotations and is capped to one
+  // hit per day (_wildcardUsedToday, seeded from BitAdviceService on load).
+  int _regularAdviceIndex = 0;
+  int _wildcardAdviceIndex = 0;
+  String _adviceLine = '';
+  bool _wildcardUsedToday = false;
   String? _greetedExpeditionId;
   BitRoomVoiceKind? _lastVoiceKind;
   String? _lastVoicePendingId;
@@ -230,6 +237,12 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    // Cold open shows a regular line (never a wildcard — those only surface via
+    // a rotation draw), picked at random so it isn't always the same greeting.
+    if (bitRoomRegularAdvice.isNotEmpty) {
+      _regularAdviceIndex = _adviceRng.nextInt(bitRoomRegularAdvice.length);
+      _adviceLine = bitRoomRegularAdvice[_regularAdviceIndex];
+    }
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(
       () => _roomScroll.value = _scrollController.offset,
@@ -273,14 +286,36 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (mounted) await reload(); // re-reads the flag + settles a returned haul
   }
 
-  /// Advance the home-advice cursor to a different random line (no immediate
-  /// repeat). Used only on a real Home re-entry.
+  /// Resolve a fresh advice line for a real Home re-entry. Advances each pool's
+  /// cursor (no immediate repeat within a pool), then draws regular-vs-wildcard
+  /// via [pickRoomAdvice] — wildcard ~5% and only if today's slot is unspent. A
+  /// wildcard hit spends the slot (local flag + a fire-and-forget persist so the
+  /// cap survives a restart). Caller wraps this in setState.
   void _rotateAdvice() {
-    final n = bitRoomAdvice.length;
-    if (n <= 1) return;
+    _regularAdviceIndex =
+        _nextAdviceIndex(_regularAdviceIndex, bitRoomRegularAdvice.length);
+    _wildcardAdviceIndex =
+        _nextAdviceIndex(_wildcardAdviceIndex, bitRoomWildcardAdvice.length);
+    final pick = pickRoomAdvice(
+      roll: _adviceRng.nextDouble(),
+      wildcardAllowedToday: !_wildcardUsedToday,
+      regularIndex: _regularAdviceIndex,
+      wildcardIndex: _wildcardAdviceIndex,
+    );
+    _adviceLine = pick.line;
+    if (pick.isWildcard) {
+      _wildcardUsedToday = true;
+      BitAdviceService().markWildcardShown();
+    }
+  }
+
+  /// Next cursor for a pool of [n] lines: a random index that isn't the current
+  /// one (so no line repeats back-to-back). 0 for an empty/singleton pool.
+  int _nextAdviceIndex(int current, int n) {
+    if (n <= 1) return 0;
     var next = _adviceRng.nextInt(n);
-    if (next == _adviceIndex) next = (next + 1) % n;
-    _adviceIndex = next;
+    if (next == current) next = (next + 1) % n;
+    return next;
   }
 
   @override
@@ -349,6 +384,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         await WorkoutStorageService.missionFinishStateToday();
     final adventureState = await _loadAdventureStateSafely();
     final greetedExpeditionId = await AdventureService().loadGreetedExpeditionId();
+    final wildcardUsedToday = await BitAdviceService().wasWildcardShownToday();
     final characterClass = await ClassService().getCurrentClass();
     if (!mounted) return;
 
@@ -472,6 +508,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _trainingWeekdays = restService.trainingWeekdaysForDate(today, restState);
       _adventureState = adventureState;
       _greetedExpeditionId = greetedExpeditionId;
+      // OR in the persisted flag — never un-set a wildcard already shown this
+      // session (a fire-and-forget markWildcardShown may not have landed before
+      // this re-read), so the daily cap can't be re-opened by a race.
+      _wildcardUsedToday = _wildcardUsedToday || wildcardUsedToday;
       _characterClass = characterClass;
       _combatStats = storedStats;
       _lckMultiplier = lckMultiplier;
@@ -614,7 +654,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final ui = adventureUiStateOf(
       state,
       now,
-      currentWeekIso: GuildService.weekIso(now),
+      currentWeekIso: isoWeekKey(now),
     );
     final route = adventureRouteById(
       state.pending?.routeId ?? state.standingOrderRouteId,
@@ -640,7 +680,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       phase: ui.phase,
       haulReady: haulReady,
       greeted: greeted,
-      adviceIndex: _adviceIndex,
+      adviceLine: _adviceLine,
       routeName: route.name,
       backInHours: backInHours,
       claimableCount: _questClaimable,
@@ -675,7 +715,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final ui = adventureUiStateOf(
       state,
       now,
-      currentWeekIso: GuildService.weekIso(now),
+      currentWeekIso: isoWeekKey(now),
     );
     if (!ui.canDispatch) {
       _showArcadeSnack(
@@ -1570,7 +1610,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // workout is a free pick. Program users get the merged Day-1 program card
     // upstream (see _buildMainMissionPanel / newUserMissionShowsProgramDayOne),
     // so the first workout reads as their program beginning, not a separate quest.
-    const detail = 'Log your first workout to begin.';
+    const detail = 'Save your first workout to begin.';
     final card = _missionCard(
       accent: kNeon,
       headerMode: MissionHeaderMode.active,
@@ -1832,7 +1872,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final title = session?.targetMuscleLabel ?? 'Today\'s mission';
     final detail = session == null
         ? ''
-        : '${_fmtDuration(session.actualDurationSeconds)} logged';
+        : '${_fmtDuration(session.actualDurationSeconds)} saved';
 
     return _missionCard(
       accent: kAmber,

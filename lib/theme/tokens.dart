@@ -32,6 +32,12 @@ const kAmberDark = Color(0xFFFFA500);
 const kCyan = Color(0xFF00BFFF);
 const kDanger = Color(0xFFFF2D55);
 
+/// Semantic action alias — the ONE "hot-action" colour. Prefer this over a bare
+/// `kNeon` on tap-targets so "neon = the action, nothing else" stays enforceable
+/// (the colour-hierarchy discipline). Reward = [kAmber], gems = [kGemMagenta],
+/// identity = the class colour; none of those may borrow the action colour.
+const kActionPrimary = kNeon;
+
 /// Recovery / rest-day accent — semantic alias of [kCyan] (cool = calm/recovery,
 /// per the validated color-psychology insight). Recovery mission cards reference
 /// this, NOT `kCyan` directly, so the rest theme stays decoupled from kCyan's

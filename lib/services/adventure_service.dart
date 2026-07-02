@@ -6,8 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/adventure_routes.dart';
 import '../models/adventure_models.dart';
 import '../models/workout_models.dart';
+import '../utils/iso_week.dart';
 import 'gem_service.dart';
-import 'guild_service.dart';
 import 'stat_engine.dart';
 
 /// "Adventure" — workout-fueled expeditions that pay gems scaled by stat
@@ -295,7 +295,7 @@ class AdventureService {
     // review). `_settleIfRevealable` already bumped maxSeenAtIso on `state`.
     final now = _effectiveNow(state);
     final today = _dateOnly(now);
-    final weekIso = GuildService.weekIso(today);
+    final weekIso = isoWeekKey(today);
     final weekCount = state.weekIso == weekIso ? state.weekCount : 0;
     if (weekCount >= weeklyCap) {
       await _save(prefs, state.copyWith(weekIso: weekIso, weekCount: weekCount));

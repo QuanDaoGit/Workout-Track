@@ -95,8 +95,16 @@ proof, surfaces pinned to 130/260 (2026-06).*
 Idempotency-by-entity-id is NOT a rate cap — for once-per-period rewards key the ledger id on the
 *period* so the dedup is the cap. Reward an **observable artifact** (a logged set), not a bare
 self-report toggle. A variant many aggregators read goes in its **own field**, never a flag
-filtered at every consumer (a missed reader silently inflates). *Seen: stat intensity; body-metrics
-anchor; warm-up `warmup:<day>` then re-anchored to `ExerciseLog.warmupSets` (2026).*
+filtered at every consumer (a missed reader silently inflates). **A period reward whose completion is
+measured over a metric WINDOW (active-days *this week*) and keyed by the PERIOD must derive both the
+window and the key from ONE captured `now` + ONE period basis** (the same Monday-of-week — not a
+Thursday-ISO key over a Monday window), or they drift at a Sun/Mon/DST/timezone edge → a second arm or
+mis-read state; **derive "already claimed" from the ledger** (the durable truth) so the banked reward
+stays final when the metric later changes (a deleted session), and **prefer auto-bank on completion
+over a manual claim** (a completed-but-unclaimed period strands the reward, and an expiring payout reads
+as guilt-pressure). *Seen: stat intensity; body-metrics anchor; warm-up `warmup:<day>` re-anchored to
+`ExerciseLog.warmupSets`; guild Weekly Cache `guildcache:v1:<mondayKey>` — one `now` for window+key,
+ledger-derived banked, auto-bank not claim (Codex F2/F5/F6, 2026-06).*
 
 ### Decoupled id sources
 **Rule:** When an id's uniqueness rode on a correlate you're removing (session id, per-day timestamp, boot
@@ -213,7 +221,14 @@ must agree. Keep the integrity guard (every discovered source resolves to a real
 so a dropped/misnamed file fails CI; prove it with a non-id source-file mutation. *Seen: the dual Python
 `CLIPS` + Dart `_demos` demo maps — both re-encoding info already in the source filenames — collapsed to
 id-derived paths + a generated `kDemoExerciseIds` over auto-discovered sources; source-coverage test
-proven with a `__ghost_probe__.mp4` mutation (2026-06).*
+proven with a `__ghost_probe__.mp4` mutation (2026-06). **Corollary — enforce a cross-cutting CODE
+convention the same way, not just hand-authored data:** a per-call-site opt-in ("pass a haptic intent
+on every tap") is silently forgotten on a new surface (the Crest Forge shipped haptic-less). Ban the
+bypass with a CI test — a **comment/string + depth-aware source scan** for the raw widget
+(`GestureDetector(onTap:)`/`InkWell` outside the wrapper allowlist), a **shrink-only baseline** of
+existing violations (never a central grandfather list that rots), and an explicit inline marker
+(`// haptic-ok: <reason>`) so legit raw-gesture exceptions stay *visible*. Codex hardened a naive grep →
+the depth/comment-aware scan + classify-not-grandfather (`tap_haptic_coverage_test`, 2026-06).*
 
 ### Analytics/telemetry event integrity
 **Rule:** A funnel event emitted from a persistence chokepoint needs an explicit idempotency contract.
@@ -252,3 +267,20 @@ dup-suggested-id, and ghost-pubspec-declaration mutations. A `--from-file` batch
 exercises surfaced the per-folder `pubspec.yaml` asset-declaration touchpoint the first audit missed —
 the build broke on deleted-but-still-declared dirs while data tests stayed green, fixed + guarded after
 (2026-06).*
+
+### Widget-test lifecycle & prefs cross-test isolation
+**Rule:** A new pref-gated feature trips three test-harness traps, none of them feature bugs. (a) A
+`late`/lazy `AnimationController`/ticker field that a widget's `dispose()` is the **first** to touch
+lazy-creates it *during* dispose → "Looking up a deactivated widget's ancestor is unsafe" (TickerMode
+lookup on a dead element); **create tickers eagerly in `initState`**, never in a `late` field a
+dispose-before-first-build can trigger (a real production crash too — any such widget torn down before it
+ever animated). (b) `SharedPreferences.setMockInitialValues` updates the mock store but **not the cached
+`getInstance()` singleton**, so a bool one test writes (or a *late* read after other getInstance calls)
+reads **stale across tests** — passes in isolation, fails in-suite; fix by `clear()`-ing the instance in
+`setUp` and **seeding through the prefs instance** (`setString`/the service `setEnabled`), not
+setMockInitialValues. (c) Two `pumpWidget`s in one widget test **collide** when the page keeps
+tickers/timers alive — **one pump per test**; and drive an async-pref-gated assertion through a path the
+page *awaits* (an init seed, e.g. `initialMuscleGroups`) rather than a fire-and-forget tap, so the read
+fully settles before the assertion (a lingering async fires during teardown). *Seen: Simple Mode —
+`_SelectionCheckbox` controller moved to `initState`; prefs leak cleared + instance-seeded; curated-skip
+driven via the awaited entry seed; two-state tests split to single-pump (2026-06).*

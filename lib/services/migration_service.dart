@@ -62,6 +62,10 @@ class MigrationService {
     'class_ultimate_pending_reveal',
     'unlocked_abilities',
     'ultimate_progress',
+    // Guild (social feature removed — rebuilt from scratch)
+    'guild_v1',
+    'guild_members_v1',
+    'guild_forge_nods_v1',
   ];
 
   /// Runs once. Idempotent. Safe to call from `main.dart` before runApp.

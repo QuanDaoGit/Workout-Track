@@ -31,11 +31,26 @@ class QuestClaim {
 }
 
 class QuestClaimResult {
-  const QuestClaimResult({required this.xp, required this.gems, this.title});
+  const QuestClaimResult({
+    required this.xp,
+    required this.gems,
+    this.title,
+    this.sectionBonusGems = 0,
+    this.sectionBonusCategory,
+  });
 
   final int xp;
   final int gems;
   final String? title;
+
+  /// Gems newly awarded because this claim **completed its section** (all daily
+  /// or all weekly quests now claimed). 0 on every claim but the completing one,
+  /// and 0 forever after (the ledger one-shot). Drives the chest-open + the bonus
+  /// gem-flight; the page must not infer the celebration any other way.
+  final int sectionBonusGems;
+
+  /// Which section the [sectionBonusGems] belongs to (daily/weekly), or null.
+  final QuestCategory? sectionBonusCategory;
 }
 
 class QuestState {
@@ -159,6 +174,10 @@ class QuestSummary {
   final int claimedRewardGems;
   final int todayClaimedXP;
   final int todayClaimedGems;
+
+  int get dailyCompleted =>
+      dailyQuests.where((quest) => quest.completed).length;
+  int get dailyTotal => dailyQuests.length;
 
   int get weeklyCompleted =>
       weeklyQuests.where((quest) => quest.completed).length;

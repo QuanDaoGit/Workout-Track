@@ -55,9 +55,21 @@ the source). Extract shared art behind one entry point and prove the original go
 exact semantics, don't assume. **An effect defined in a sprite's NATIVE pixel coords** must be overlaid
 on the **same display box** as the host sprite (so it scales by the *identical* mapping and tracks 1:1
 even under a non-integer stretch) **and use the handoff's OWN sprite those coords were measured against**
-— a divergent app copy of the asset drifts the effect off its target. *Seen: the glitch slice ported as
+— a divergent app copy of the asset drifts the effect off its target. **A celebration handoff authored
+for a LARGE stage, placed at a small inline slot (a placement delta), keeps fidelity by painting in the
+design-space + `canvas.scale` (FX track the sprite 1:1) — but its fine pixel FX won't *read* at icon
+scale, so the spectacle must come from a robust app-level effect (reuse the real gem-flight/particle
+layer), not the shrunk burst; and DON'T anchor a transient full-size overlay to a scrolling list
+position (it detaches under scroll / when the anchor is off-screen) — animate IN-PLACE tied to the
+widget (`RepaintBoundary`, one-shot `AnimationController`).** *Seen: the glitch slice ported as
 three clipped passes (band shifts, no double-draw); the sprite extraction gated on a byte-identical
 companion golden; Dart `.round()` (ties away from zero) silently diverged from JS `Math.round`
 (ties → +∞) at the hover-bob trough → ported as `(x+0.5).floor()`; the pad charge-meter (native
 x25–82) overlaid on the pad box + the pad swapped to the handoff's own sprite so the LED lands on the
-strip (2026-06).*
+strip (2026-06); the 300×341 chest-open ported into a ~30px end-of-bar slot — design-space +
+`canvas.scale`, the gem-flight (not the burst) carries the moment, in-place not a scroll-anchored
+overlay (Codex F5, 2026-06). Porting a per-pixel canvas recolour to `dart:ui`
+(`toByteData`→recolour→`decodeImageFromPixels`) is an **async** layer build; a golden of a widget
+**gated behind a parent's async load** (so it mounts only at the post-`runAsync` pump) renders it
+**invisible while the test still passes** → pump INSIDE `runAsync` *after* the parent settles, so the
+gated child mounts and its engine callbacks fire within the real-async window (2026-06).*

@@ -197,7 +197,10 @@ foreground via the codex plugin (`/codex:adversarial-review` flow). Stable rules
    verification); get approval.
 2. Implement to the CLAUDE.md bar: `flutter analyze` zero issues, `flutter test` all pass, new
    fixture tests per user archetype (beginner / veteran / calisthenics / missing-data) where
-   mechanics changed, tokens-only colors, sharp icons.
+   mechanics changed, tokens-only colors, sharp icons. **Every interactive surface routes through a
+   haptic-aware tap wrapper** (`ArcadeTap` / `HoldDepress` / `PixelButton` / `ArcadeChip`) so haptics
+   auto-wire — never a raw `GestureDetector(onTap:)`/`InkWell` (mark a genuine raw gesture
+   `// haptic-ok: <reason>`); `test/tap_haptic_coverage_test.dart` enforces it.
 3. The Codex stop-time review gate fires automatically at turn end; after committing, also run
    `/codex:review --wait` for a diff-grounded review (see `.claude/codex-local.md` for why the
    automatic gate may be weaker than it looks on this machine).

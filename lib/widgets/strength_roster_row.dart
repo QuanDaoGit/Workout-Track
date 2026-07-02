@@ -55,7 +55,7 @@ class StrengthRosterRow extends StatelessWidget {
   ({String text, Color color})? get _delta {
     final m = trend.momentum;
     if (m == StrengthMomentum.fresh) {
-      return (text: '1 session · log once more', color: kDim);
+      return (text: '1 session · save once more', color: kDim);
     }
     final d = trend.deltaVsPrevious;
     if (m == StrengthMomentum.holding || d.abs() < 0.05) {

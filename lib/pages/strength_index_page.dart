@@ -158,7 +158,7 @@ class _StrengthIndexPageState extends State<StrengthIndexPage>
           ? const Center(child: PixelLoader())
           : _trends.isEmpty
           ? const _EmptyNote(
-              text: 'Log a weighted set on any exercise to\n'
+              text: 'Save a weighted set on any exercise to\n'
                   'start tracking your strength.',
             )
           : Column(

@@ -27,7 +27,7 @@ the app cannot verify. The only manual action is claiming a completed quest rewa
 |---|---|---|---|
 | Daily | every day at 00:00 | show-up nudges | gems |
 | Weekly | every Monday | weekly cadence | gems |
-| Side | never | lifetime milestones | gems + title |
+| Side _(shown in-app as **Achievements**)_ | never | lifetime milestones | gems + title |
 
 Each bucket is a fixed template list. Completion is recomputed from stored sessions. Daily and
 weekly quests become claimable again in each new period; side quests are claimable once ever.
@@ -53,6 +53,13 @@ Class-focus groups:
 | Tank | Legs |
 | Vanguard | all groups count |
 
+The Daily section shows a **three-segment progress bar** (one lit segment per completed daily
+quest), mirroring the Weekly bar's treatment. Its caption is a **live `Resets in HH:MM:SS`
+countdown** to the next local midnight (the seconds tick so the section reads as alive; it freezes
+to a static value under reduced motion). The bar ends in a **reward-chest cap** — muted while the
+day is incomplete, amber-lit once all daily quests are done (a placeholder for a future "day
+cleared" reward moment).
+
 ---
 
 ## 4. Weekly Quests
@@ -68,14 +75,16 @@ Weekly quests reset Monday at 00:00 and award a fixed weekly sweep of **50 gems*
 | Hour Trial | Train 60 total minutes | at least 60 minutes this week | 20 |
 
 The Weekly section also shows a five-segment progress bar, one lit segment per completed weekly
-quest.
+quest. It carries the same live countdown caption (`Resets in [Nd ]HH:MM:SS` to the next Monday
+00:00 — a `Nd` day prefix appears while more than a day remains) and the same reward-chest cap
+(muted until the weekly sweep is complete, then amber-lit) as the Daily section.
 
 ---
 
 ## 5. Side Quests
 
-Side quests are lifetime milestones. They award **100 gems each** and still grant their existing
-title reward.
+Side quests (labelled **Achievements** in the app, with a trophy icon) are lifetime milestones.
+They award **100 gems each** and still grant their existing title reward.
 
 | Quest | Description | Completes when | Title reward | Gems |
 |---|---|---|---|---:|
@@ -160,13 +169,43 @@ Partial and abandoned sessions do not complete quests. Week boundaries are Monda
 
 ---
 
-## 10. Screen Copy
+## 10. Section-Completion Chest + Bonus
 
-Each quest card shows title, description, progress, and one of:
+The Daily and Weekly section progress bars each end in a **reward chest** (a ported pixel
+animation). It shows **closed** while the section is unfinished and plays a one-shot **open**
+(rattle → pop + amber/neon pixel burst) the moment that section's quests are **all claimed**, then
+the **bonus gems fly to the wallet** (the same flight as a quest claim). Sizing — a capstone "bow",
+not a jackpot, with the individual completions staying the dominant reward:
 
-- `+N GEMS` when claimable
+| Section | Section-completion bonus |
+|---|---:|
+| Daily (3 quests × 5) | **10 gems** |
+| Weekly (5 quests) | **25 gems** |
+
+The bonus is awarded **once per period** (idempotent ledger id `questbonus:<daily\|weekly>:<periodKey>`,
+source kind `questBonus`) the instant the **completing claim is persisted**, so a reload/reopen of a
+fully-cleared board never re-awards or replays the celebration. A new day/week re-arms the bonus.
+**Achievements** (side quests) have no chest/bonus.
+
+A small **gem bubble** floats above each still-closed chest — `[gem] N` (the section bonus, no label),
+a quiet "what's inside" hint pointing down at the chest; it disappears once the chest opens (the gems
+have flown). The section's **count** (`N / total`) sits above the end of that section's progress bar.
+
+A **CLAIM ALL** button appears (under the header) whenever ≥1 reward is claimable; it claims every
+claimable quest in one tap (the per-quest gem-flights pool into one burst), firing any section
+chest + bonus it completes.
+
+## 11. Screen Copy
+
+Quest **cards** show title, description, and progress only — **no** per-quest gem amount (the reward
+you earn, not a price tag). Each card carries one of:
+
+- `CLAIM` when claimable
 - `CLAIMED` once claimed
-- `+N` with the earned-gem icon when incomplete
+- `IN PROGRESS` when incomplete
+
+The only gem amount surfaced on the board is the **chest bonus** (the bubble above each section's
+chest). The Home mission reward chip also uses gem copy for quest rewards. Live workout XP remains XP.
 
 The Home mission reward chip also uses gem copy for quest rewards. Live workout XP remains XP.
 

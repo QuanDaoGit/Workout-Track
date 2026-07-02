@@ -337,7 +337,7 @@ class AdventureUiState {
 }
 
 /// Pure derivation of [AdventureUiState]. [currentWeekIso] is supplied by the
-/// caller (`GuildService.weekIso(now)`) so this model stays service-free; a
+/// caller (`isoWeekKey(now)`) so this model stays service-free; a
 /// stale stored `weekIso` (last week's) therefore reads as not-capped.
 AdventureUiState adventureUiStateOf(
   AdventureState state,

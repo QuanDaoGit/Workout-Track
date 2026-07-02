@@ -83,7 +83,7 @@ String calendarStatusBody(
     RestDayKind.protectedMiss => 'Recovery shield protected this training day.',
     RestDayKind.unplannedMiss => 'Scheduled training was missed.',
     RestDayKind.abandonedOnly => 'Time XP only. Not counted toward missions.',
-    RestDayKind.trainingDay => 'No workout logged yet.',
+    RestDayKind.trainingDay => 'No workout saved yet.',
     RestDayKind.workoutComplete =>
       'Open the session below for exercise details.',
   };

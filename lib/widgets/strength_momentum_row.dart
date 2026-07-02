@@ -51,7 +51,7 @@ class StrengthMomentumRow extends StatelessWidget {
     final delta = _deltaLabel;
 
     final semantics = fresh
-        ? '${trend.exerciseName}, one session, log once more for a trend'
+        ? '${trend.exerciseName}, one session, save once more for a trend'
         : '${trend.exerciseName}, $word, estimated max $_estMax'
               '${delta == null ? '' : ', $delta'}';
 
@@ -91,7 +91,7 @@ class StrengthMomentumRow extends StatelessWidget {
                     const SizedBox(height: 4),
                     if (fresh)
                       Text(
-                        '1 session · log once more for a trend',
+                        '1 session · save once more for a trend',
                         style: AppFonts.shareTechMono(
                           color: kMutedText,
                           fontSize: 11,

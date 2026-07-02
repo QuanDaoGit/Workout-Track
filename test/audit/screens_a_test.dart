@@ -13,7 +13,6 @@ import 'package:workout_track/services/character_service.dart';
 import 'package:workout_track/services/gem_service.dart';
 import 'package:workout_track/pages/profile_page.dart';
 import 'package:workout_track/pages/shop_page.dart';
-import 'package:workout_track/pages/guild_page.dart';
 import 'package:workout_track/pages/calendar_page.dart';
 import 'package:workout_track/pages/strength_index_page.dart';
 import 'package:workout_track/pages/log_weight_page.dart';
@@ -87,10 +86,6 @@ void main() {
 
   testWidgets('audit/shop', (t) async {
     await cap(t, 'shop', (_) => const ShopPage());
-  }, skip: skip, timeout: t90);
-
-  testWidgets('audit/guild', (t) async {
-    await cap(t, 'guild', (_) => const GuildPage());
   }, skip: skip, timeout: t90);
 
   testWidgets('audit/calendar', (t) async {

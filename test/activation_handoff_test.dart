@@ -75,7 +75,7 @@ void main() {
 
       expect(find.text('1 QUEST ACTIVE'), findsOneWidget);
       expect(
-        find.text('▸ First Forge · log your first workout'),
+        find.text('▸ First Forge · save your first workout'),
         findsOneWidget,
       );
       expect(find.text('0 rewards ready'), findsNothing);

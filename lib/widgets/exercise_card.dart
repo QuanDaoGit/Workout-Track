@@ -136,9 +136,7 @@ class ExerciseCard extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              border: Border.all(
-                                color: kCyan,
-                              ),
+                              border: Border.all(color: kCyan),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: const Text(
@@ -212,15 +210,21 @@ class _SelectionCheckbox extends StatefulWidget {
 
 class _SelectionCheckboxState extends State<_SelectionCheckbox>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: kMotionPop,
-  );
+  // Created eagerly in initState (not a `late` lazy field): a checkbox disposed
+  // before its `_scale` was ever read would otherwise lazy-create the controller
+  // inside dispose(), doing an unsafe TickerMode lookup on a deactivated element.
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
 
-  late final Animation<double> _scale = TweenSequence<double>([
-    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.2), weight: 1),
-    TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0), weight: 1),
-  ]).animate(_controller);
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: kMotionPop);
+    _scale = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.2), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0), weight: 1),
+    ]).animate(_controller);
+  }
 
   @override
   void didUpdateWidget(_SelectionCheckbox oldWidget) {

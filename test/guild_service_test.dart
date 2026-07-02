@@ -1,146 +1,184 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:workout_track/models/character_class.dart';
+import 'package:workout_track/models/guild_models.dart';
+import 'package:workout_track/models/workout_models.dart';
+import 'package:workout_track/services/gem_service.dart';
 import 'package:workout_track/services/guild_service.dart';
+
+WorkoutSession _session({bool partial = false, bool abandoned = false}) =>
+    WorkoutSession(
+      id: 's',
+      date: DateTime(2026, 6, 29),
+      muscleGroup: 'Chest',
+      targetMuscleGroups: const ['Chest'],
+      targetDurationMinutes: 30,
+      actualDurationSeconds: 1800,
+      estimatedCalories: 0,
+      exercises: const [],
+      isPartial: partial,
+      isAbandoned: abandoned,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  group('weekIso', () {
-    test('formats ISO week and is stable across a Mon–Sun week', () {
+  group('guild entity', () {
+    test('ensureGuild creates a "BIT" guild stamped at founding time', () async {
+      final svc = GuildService(nowProvider: () => DateTime(2026, 6, 29, 10));
+      final g = await svc.ensureGuild();
+      expect(g.name, 'BIT');
+      expect(g.createdAt, DateTime(2026, 6, 29, 10));
+      expect(g.id, isNotEmpty);
+      expect(g.crest, isA<GuildCrest>()); // default crest present
+    });
+
+    test('ensureGuild is idempotent — same id, never re-stamped', () async {
+      final first = await GuildService(
+        nowProvider: () => DateTime(2026, 6, 29, 10),
+      ).ensureGuild();
+      final second = await GuildService(
+        nowProvider: () => DateTime(2026, 7, 15, 8),
+      ).ensureGuild();
+      expect(second.id, first.id);
+      expect(second.createdAt, first.createdAt);
+    });
+
+    test('getGuild is null before creation, the guild after', () async {
+      final svc = GuildService(nowProvider: () => DateTime(2026, 6, 29));
+      expect(await svc.getGuild(), isNull);
+      await svc.ensureGuild();
+      expect((await svc.getGuild())!.name, 'BIT');
+    });
+
+    test('roster is the player + 5 OPEN slots', () {
+      expect(GuildService.rosterSize, 6);
+    });
+  });
+
+  group('crest persistence', () {
+    test('updateCrest persists and round-trips', () async {
+      final svc = GuildService(nowProvider: () => DateTime(2026, 6, 29));
+      await svc.updateCrest(
+        const GuildCrest(
+          shape: 1,
+          emblem: 2,
+          bannerColor: 0xFF00FF9C,
+          emblemColor: 0xFFFF2D55,
+        ),
+      );
+      final reloaded = (await svc.getGuild())!.crest;
+      expect(reloaded.shape, 1);
+      expect(reloaded.emblem, 2);
+      expect(reloaded.bannerColor, 0xFF00FF9C);
+      expect(reloaded.emblemColor, 0xFFFF2D55);
+    });
+
+    test('a guild blob without a crest decodes to the default crest', () {
+      final g = Guild.fromJson({
+        'id': '1',
+        'name': 'BIT',
+        'createdAt': DateTime(2026, 6, 29).toIso8601String(),
+      });
+      expect(g.crest.shape, 0);
+      expect(g.crest.emblem, 0); // default sword
+      expect(g.crest.bannerColor, 0); // 0 = auto/class
+      expect(g.crest.emblemColor, 0);
+    });
+
+    test('a legacy {shape, charge, color} crest blob decodes gracefully', () {
+      // The old code-drawn placeholder stored a charge glyph + one colour.
+      final crest = GuildCrest.fromJson({
+        'shape': 2,
+        'charge': 4, // dropped — no longer an emblem concept
+        'color': 0xFFB14DFF,
+      });
+      expect(crest.shape, 2); // carries over (clamped to the 4 banners)
+      expect(crest.emblem, 0); // defaults to sword
+      expect(crest.bannerColor, 0xFFB14DFF); // legacy colour seeds both layers
+      expect(crest.emblemColor, 0xFFB14DFF);
+    });
+  });
+
+  group('guild level (body-neutral: sessions, not volume)', () {
+    test('completedSessions excludes partial + abandoned', () {
+      final sessions = [
+        _session(),
+        _session(partial: true),
+        _session(abandoned: true),
+        _session(),
+      ];
+      expect(GuildService.completedSessions(sessions), 2);
+    });
+
+    test('level climbs across the session thresholds', () {
+      expect(GuildService.guildLevel(0), 1);
+      expect(GuildService.guildLevel(4), 1);
+      expect(GuildService.guildLevel(5), 2);
+      expect(GuildService.guildLevel(14), 2);
+      expect(GuildService.guildLevel(15), 3);
+      expect(GuildService.guildLevel(29), 3);
+      expect(GuildService.guildLevel(30), 4);
+      expect(GuildService.guildLevel(51), 4);
+      expect(GuildService.guildLevel(52), 5);
+      expect(GuildService.guildLevel(500), 5);
+    });
+
+    test('progress is within the current level span; null at max', () {
+      expect(GuildService.guildLevelProgress(0), (0, 5));
+      expect(GuildService.guildLevelProgress(7), (2, 10));
+      expect(GuildService.guildLevelProgress(20), (5, 15));
+      expect(GuildService.guildLevelProgress(52), isNull);
+    });
+
+    test('rank ladder maps to the guild level (clamped)', () {
+      expect(GuildService.guildRank(1), 'RECRUIT');
+      expect(GuildService.guildRank(2), 'MEMBER');
+      expect(GuildService.guildRank(3), 'VETERAN');
+      expect(GuildService.guildRank(4), 'OFFICER');
+      expect(GuildService.guildRank(5), 'LEADER');
+      expect(GuildService.guildRank(99), 'LEADER');
+    });
+  });
+
+  group('weekly cache', () {
+    test('target is 3 solo, scales with members', () {
+      expect(GuildService.cacheTarget(0), 3);
+      expect(GuildService.cacheTarget(1), 3);
+      expect(GuildService.cacheTarget(2), 6);
+    });
+
+    test('week key is the Monday-of-week date, stable within the week', () {
       // 2026-05-25 is a Monday.
-      final mon = DateTime(2026, 5, 25);
-      final sun = DateTime(2026, 5, 31);
-      expect(GuildService.weekIso(mon), GuildService.weekIso(sun));
-      expect(GuildService.weekIso(mon), matches(RegExp(r'^\d{4}-W\d{2}$')));
-      // Next Monday rolls the week.
+      expect(GuildService.cacheWeekKey(DateTime(2026, 5, 25)), '2026-05-25');
+      expect(GuildService.cacheWeekKey(DateTime(2026, 5, 31, 23)), '2026-05-25');
+      expect(GuildService.cacheWeekKey(DateTime(2026, 6, 1)), '2026-06-01');
+    });
+
+    test('reward auto-banks once per week, re-arms next week', () async {
+      final gem = GemService();
+      final wk = GuildService.cacheWeekKey(DateTime(2026, 5, 25));
+      expect(await gem.isGuildCacheBanked(wk), isFalse);
+      final first = await gem.awardGuildCacheGems(
+        weekKey: wk,
+        amount: GuildService.cacheRewardGems,
+        label: 'Weekly Cache',
+      );
+      expect(first, GuildService.cacheRewardGems);
+      expect(await gem.isGuildCacheBanked(wk), isTrue);
+      // replay is a no-op (idempotent one-shot)
       expect(
-        GuildService.weekIso(DateTime(2026, 6, 1)),
-        isNot(GuildService.weekIso(mon)),
+        await gem.awardGuildCacheGems(
+          weekKey: wk,
+          amount: GuildService.cacheRewardGems,
+          label: 'Weekly Cache',
+        ),
+        0,
       );
-    });
-  });
-
-  group('ensureAssigned', () {
-    test('creates a guild with player + seeded NPCs, idempotent', () async {
-      final svc = GuildService();
-      final g1 = await svc.ensureAssigned(classFocus: CharacterClass.bruiser);
-      final g2 = await svc.ensureAssigned(classFocus: CharacterClass.tank);
-      expect(g1.id, g2.id); // idempotent — same guild
-      expect(g1.classFocus, CharacterClass.bruiser);
-
-      final view = await svc.loadGuildView(
-        classFocus: CharacterClass.bruiser,
-        playerWeeklyVolumeKg: 0,
-        playerWeeklySessions: 0,
-      );
-      expect(view.members.where((m) => m.isPlayer).length, 1);
-      expect(view.members.length, greaterThan(1)); // NPCs present
-      expect(view.members.length, lessThanOrEqualTo(GuildService.maxMembers));
-    });
-  });
-
-  group('loadGuildView', () {
-    test(
-      'syncs player numbers and sorts members by weekly volume desc',
-      () async {
-        final svc = GuildService();
-        final now = DateTime(2026, 5, 25, 9);
-        final view = await svc.loadGuildView(
-          classFocus: CharacterClass.assassin,
-          playerWeeklyVolumeKg: 999999, // dominate the board
-          playerWeeklySessions: 5,
-          now: now,
-        );
-        expect(view.members.first.isPlayer, isTrue);
-        // Sorted descending.
-        for (var i = 1; i < view.members.length; i++) {
-          expect(
-            view.members[i - 1].weeklyVolumeKg >=
-                view.members[i].weeklyVolumeKg,
-            isTrue,
-          );
-        }
-        // Guild total equals the sum of member volumes.
-        final sum = view.members.fold<int>(0, (s, m) => s + m.weeklyVolumeKg);
-        expect(view.guild.weeklyVolumeKg, sum);
-      },
-    );
-
-    test(
-      'NPC weekly volume is stable within a week, changes across weeks',
-      () async {
-        final svc = GuildService();
-        final wk1 = DateTime(2026, 5, 25);
-        final wk1b = DateTime(2026, 5, 27);
-        final wk2 = DateTime(2026, 6, 1);
-
-        Future<int> npcVol(DateTime now) async {
-          final v = await svc.loadGuildView(
-            classFocus: CharacterClass.tank,
-            playerWeeklyVolumeKg: 0,
-            playerWeeklySessions: 0,
-            now: now,
-          );
-          return v.members.firstWhere((m) => !m.isPlayer).weeklyVolumeKg;
-        }
-
-        // Same NPC ordering isn't guaranteed; compare the guild's NPC-only total.
-        Future<int> npcTotal(DateTime now) async {
-          final v = await svc.loadGuildView(
-            classFocus: CharacterClass.tank,
-            playerWeeklyVolumeKg: 0,
-            playerWeeklySessions: 0,
-            now: now,
-          );
-          return v.members
-              .where((m) => !m.isPlayer)
-              .fold<int>(0, (s, m) => s + m.weeklyVolumeKg);
-        }
-
-        await npcVol(wk1);
-        final a = await npcTotal(wk1);
-        final b = await npcTotal(wk1b);
-        final c = await npcTotal(wk2);
-        expect(a, b); // stable within the week
-        expect(a, isNot(c)); // changes next week
-      },
-    );
-  });
-
-  group('forge nod uniqueness', () {
-    test('one nod per recipient per week, resets next week', () async {
-      final svc = GuildService();
-      await svc.ensureAssigned(classFocus: CharacterClass.bruiser);
-      final now = DateTime(2026, 5, 25);
-
-      expect(await svc.sendForgeNod('npc_0', now: now), isTrue);
-      expect(await svc.sendForgeNod('npc_0', now: now), isFalse); // dup
-      expect(await svc.hasNodded('npc_0', now: now), isTrue);
-      // Different recipient same week is allowed.
-      expect(await svc.sendForgeNod('npc_1', now: now), isTrue);
-      // Next week the same recipient is allowed again.
-      final nextWeek = DateTime(2026, 6, 1);
-      expect(await svc.hasNodded('npc_0', now: nextWeek), isFalse);
-      expect(await svc.sendForgeNod('npc_0', now: nextWeek), isTrue);
-    });
-  });
-
-  group('recap', () {
-    test('reports guild name, totals, and top three', () async {
-      final svc = GuildService();
-      final recap = await svc.recap(
-        classFocus: CharacterClass.tank,
-        playerWeeklyVolumeKg: 5000,
-        playerWeeklySessions: 3,
-        now: DateTime(2026, 5, 25),
-      );
-      expect(recap.guildName, isNotEmpty);
-      expect(recap.playerVolumeKg, 5000);
-      expect(recap.topThreeUserIds.length, 3);
-      expect(recap.weeklyVolumeKg, greaterThanOrEqualTo(5000));
+      // next week is a fresh cache
+      final wk2 = GuildService.cacheWeekKey(DateTime(2026, 6, 1));
+      expect(await gem.isGuildCacheBanked(wk2), isFalse);
     });
   });
 }

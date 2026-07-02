@@ -1,31 +1,38 @@
 import 'package:flutter/material.dart';
 
-import '../data/loot_registry.dart';
-import '../data/programs_library.dart';
-import '../models/avatar_spec.dart';
 import '../models/character_class.dart';
 import '../models/guild_models.dart';
 import '../models/loot_item.dart';
-import '../models/program_models.dart';
-import '../models/unit_models.dart';
-import '../models/workout_models.dart';
 import '../services/character_service.dart';
 import '../services/class_service.dart';
+import '../services/gem_service.dart';
 import '../services/guild_service.dart';
 import '../services/haptic_service.dart';
 import '../services/loot_service.dart';
 import '../services/profile_service.dart';
-import '../services/program_service.dart';
-import '../services/unit_settings_service.dart';
+import '../services/workout_metric_service.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
-import '../widgets/avatar/ironbit_avatar.dart';
+import '../widgets/arcade_bar.dart';
+import '../widgets/arcade_card.dart';
+import '../widgets/companion/bit_mood_core.dart';
+import '../widgets/motion/hold_depress.dart';
+import '../widgets/guild/guild_bit_strip.dart';
+import '../widgets/guild/guild_crest.dart';
+import '../widgets/guild/guild_crest_editor.dart';
+import '../widgets/guild/guild_hall_backdrop.dart';
+import '../widgets/guild/guild_legends_card.dart';
+import '../widgets/guild/guild_roster.dart';
+import '../widgets/guild/weekly_cache_card.dart';
 
-/// Weekly volume tonnage (stored kg) rendered in the active unit.
-String _vol(int kg) =>
-    '${fmtVol(kgToDisplay(kg.toDouble(), Units.weight))} ${Units.weight.label}';
-
+/// The Guild surface — rebuilt from scratch. The living **Guild Hall** backdrop
+/// sits at the top with the craftable **crest** in its centre bay; below it the
+/// identity header (BIT · guild level · XP bar · customize) and the **roster**
+/// (you + OPEN slots). Weekly Cache and Legends layer in over later steps.
+///
+/// The hall animates only while this tab is active (RootPage drives
+/// [GuildPageState.setActive]); off-tab it freezes to a clean static frame.
 class GuildPage extends StatefulWidget {
   const GuildPage({super.key});
 
@@ -34,20 +41,18 @@ class GuildPage extends StatefulWidget {
 }
 
 class GuildPageState extends State<GuildPage> {
-  final GuildService _guild = GuildService();
-
-  bool _loading = true;
-  Guild? _guildData;
-  List<GuildMember> _members = const [];
-  GuildRecap? _recap;
-  int _nodsReceived = 0;
-  final Set<String> _nodded = {};
-
-  CharacterClass? _playerClass;
-  String _playerName = '';
-  AvatarSpec _playerAvatar = AvatarSpec.fallback;
-  LootItem? _equippedTitle;
-  List<ProgramCompletion> _completions = const [];
+  bool _active = false;
+  Guild? _guild;
+  GuildMember? _player;
+  Color _classColor = kCyan;
+  int _level = 1;
+  (int, int)? _progress;
+  int _cacheActiveDays = 0;
+  int _cacheTarget = 3;
+  bool _cacheBanked = false;
+  bool _cacheJustBanked = false;
+  int _streak = 0;
+  int _improvedDelta = 0;
 
   @override
   void initState() {
@@ -55,424 +60,276 @@ class GuildPageState extends State<GuildPage> {
     reload();
   }
 
+  /// RootPage calls this when the Guild tab gains/loses focus.
+  void setActive(bool value) {
+    if (value == _active) return;
+    setState(() => _active = value);
+  }
+
+  /// Creates the guild on first visit and refreshes identity + roster.
   Future<void> reload() async {
-    final classFocus = await ClassService().getCurrentClass();
-    final sessions = await WorkoutStorageService().getSessions();
     final now = DateTime.now();
-    final week = GuildService.weekIso(now);
-
-    var volume = 0;
-    var count = 0;
-    for (final s in sessions) {
-      if (s.isPartial || s.isAbandoned) continue;
-      if (GuildService.weekIso(s.date) != week) continue;
-      volume += _sessionVolume(s).round();
-      count += 1;
-    }
-
-    final view = await _guild.loadGuildView(
-      classFocus: classFocus,
-      playerWeeklyVolumeKg: volume,
-      playerWeeklySessions: count,
-      now: now,
-    );
-    final recap = await _guild.recap(
-      classFocus: classFocus,
-      playerWeeklyVolumeKg: volume,
-      playerWeeklySessions: count,
-      now: now,
-    );
-    final nodded = <String>{};
-    for (final m in view.members) {
-      if (!m.isPlayer && await _guild.hasNodded(m.userId, now: now)) {
-        nodded.add(m.userId);
-      }
-    }
+    final guild = await GuildService().ensureGuild();
+    final classFocus = await ClassService().getCurrentClass();
     final character = await CharacterService().loadActiveCharacter();
     final profile = await ProfileService().loadProfile();
-    final equippedTitle = await LootService().getEquippedItem(
-      LootCategory.titleBadge,
+    final sessions = await WorkoutStorageService().getSessions();
+    final completed = GuildService.completedSessions(sessions);
+    final activeDays = WorkoutMetricService.trainingDaysThisWeek(
+      sessions,
+      now: now,
     );
-    final completions = await ProgramService().completedPrograms();
+
+    // Weekly Cache — auto-bank the reward the instant it completes. One captured
+    // `now` drives BOTH the active-days window and the reward week key (Codex F2),
+    // so they can never disagree across a Sunday/Monday boundary.
+    final target = GuildService.cacheTarget(1); // solo v1
+    final weekKey = GuildService.cacheWeekKey(now);
+    final gem = GemService();
+    var banked = await gem.isGuildCacheBanked(weekKey);
+    var justBanked = false;
+    if (activeDays >= target && !banked) {
+      final credited = await gem.awardGuildCacheGems(
+        weekKey: weekKey,
+        amount: GuildService.cacheRewardGems,
+        label: 'Weekly Cache',
+        now: now,
+      );
+      banked = true;
+      justBanked = credited > 0;
+      // A real 20-gem earn — fire the reward beat (one-shot, guarded/muted by the
+      // service). Lands ~with the card's chest-open on the next rebuild.
+      if (justBanked) HapticService.instance.reward();
+    }
+
+    final streak = WorkoutMetricService.currentStreak(sessions, now: now);
+    final lastWeekDays = WorkoutMetricService.trainingDaysThisWeek(
+      sessions,
+      now: now.subtract(const Duration(days: 7)),
+    );
+    final rank = GuildService.guildRank(GuildService.guildLevel(completed));
+    final frame = await LootService().getEquippedItem(LootCategory.avatarFrame);
+
     if (!mounted) return;
     setState(() {
-      _guildData = view.guild;
-      _members = view.members;
-      _recap = recap;
-      _nodsReceived = _guild.nodsReceivedThisWeek(now: now);
-      _nodded
-        ..clear()
-        ..addAll(nodded);
-      _playerClass = classFocus;
-      _playerName = character?.name ?? '';
-      _playerAvatar = profile.avatarSpec;
-      _equippedTitle = equippedTitle;
-      _completions = completions;
-      _loading = false;
+      _guild = guild;
+      _classColor = classFocus.themeColor;
+      _level = GuildService.guildLevel(completed);
+      _progress = GuildService.guildLevelProgress(completed);
+      _cacheActiveDays = activeDays;
+      _cacheTarget = target;
+      _cacheBanked = banked;
+      _cacheJustBanked = justBanked;
+      _streak = streak;
+      _improvedDelta = activeDays - lastWeekDays;
+      _player = GuildMember(
+        name: character?.name ?? '',
+        avatarSpec: profile.avatarSpec,
+        activeDays: activeDays,
+        rank: rank,
+        framePath: frame?.assetPath,
+        frameCount: frame?.frameCount ?? 1,
+      );
     });
   }
 
-  double _sessionVolume(WorkoutSession s) =>
-      s.exercises.fold(0.0, (sum, e) => sum + e.totalVolume);
-
-  Future<void> _sendNod(GuildMember member) async {
-    final ok = await _guild.sendForgeNod(member.userId);
-    if (!mounted) return;
-    if (ok) {
-      HapticService.instance.success(); // the forge-nod "sent" beat
-      setState(() => _nodded.add(member.userId));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Forge nod sent to ${member.displayName}.')),
-      );
+  Future<void> _editCrest() async {
+    final guild = _guild;
+    if (guild == null) return;
+    final result = await showModalBottomSheet<GuildCrest>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => GuildCrestEditorSheet(
+        initial: guild.crest,
+        classColor: _classColor,
+      ),
+    );
+    if (result != null) {
+      await GuildService().updateCrest(result);
+      await reload();
     }
   }
+
+  /// BIT's state-derived line — anti-guilt by design (rest is always fine).
+  String get _bitLine {
+    if (_cacheJustBanked) return 'The cache cracked — solid week, warrior.';
+    if (_cacheBanked) return 'Cache banked. The guild holds steady.';
+    if (_cacheActiveDays == 0) {
+      return 'New week. No rush — show up when you can.';
+    }
+    return '$_cacheActiveDays ${_cacheActiveDays == 1 ? 'day' : 'days'} in. '
+        'Rest when you need it.';
+  }
+
+  BitPose get _bitPose => _cacheBanked
+      ? BitPose.cheer
+      : (_cacheActiveDays == 0 ? BitPose.rest : BitPose.neutral);
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: kNeon)),
-      );
-    }
-    final guild = _guildData!;
+    final guild = _guild;
+    final player = _player;
     return Scaffold(
-      appBar: AppBar(title: const Text('Guild')),
-      body: RefreshIndicator(
-        color: kNeon,
-        onRefresh: reload,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+      backgroundColor: kBg,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _header(guild),
-            const SizedBox(height: 16),
-            _guildCard(),
-            const SizedBox(height: 16),
-            _recapCard(),
-            const SizedBox(height: 16),
-            Text(
-              'MEMBERS',
-              style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
+            Stack(
+              children: [
+                GuildHallBackdrop(animate: _active),
+                if (guild != null)
+                  Positioned.fill(
+                    child: LayoutBuilder(
+                      builder: (context, c) {
+                        // Crest hung COMPACT in the upper bay — box width =
+                        // 95/540 of the hall width, rod near the top, hem ~at the
+                        // torch-sconce level. A user-directed, more-compact
+                        // placement than the handoff's floor-reaching ~60%
+                        // (`placement.png` measured hem at 67% — too low).
+                        // Sway pauses off-tab (rides _active) + reduced-motion.
+                        return Align(
+                          alignment: const Alignment(0, -0.79),
+                          child: GuildCrestBadge(
+                            crest: guild.crest,
+                            fallbackColor: _classColor,
+                            size: c.maxWidth * 95 / 540,
+                            animate: _active,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
             ),
-            const SizedBox(height: 8),
-            for (final m in _members) ...[
-              _MemberTile(
-                member: m,
-                // Player row mirrors the live profile face; NPCs wear their
-                // own stored spec.
-                avatarSpec: m.isPlayer ? _playerAvatar : m.avatarSpec,
-                nodded: _nodded.contains(m.userId),
-                onNod: m.isPlayer ? null : () => _sendNod(m),
-              ),
-              const SizedBox(height: 8),
-            ],
-            const SizedBox(height: 8),
-            Text(
-              'Members other than you are simulated — this build is offline, so '
-              'forge nods stay on your device.',
-              style: AppFonts.shareTechMono(
-                color: kDim,
-                fontSize: 10,
-                height: 1.4,
-              ),
+            Expanded(
+              child: (guild == null || player == null)
+                  ? const SizedBox.shrink()
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          GuildBitStrip(line: _bitLine, pose: _bitPose),
+                          const SizedBox(height: 16),
+                          _IdentityHeader(
+                            level: _level,
+                            progress: _progress,
+                            accent: _classColor,
+                            onCustomize: _editCrest,
+                          ),
+                          const SizedBox(height: 16),
+                          WeeklyCacheCard(
+                            activeDays: _cacheActiveDays,
+                            target: _cacheTarget,
+                            banked: _cacheBanked,
+                            reward: GuildService.cacheRewardGems,
+                            justBanked: _cacheJustBanked,
+                          ),
+                          const SizedBox(height: 16),
+                          GuildLegendsCard(
+                            activeDays: _cacheActiveDays,
+                            streak: _streak,
+                            improvedDelta: _improvedDelta,
+                          ),
+                          const SizedBox(height: 16),
+                          GuildRoster(
+                            player: player,
+                            openSlots: GuildService.rosterSize - 1,
+                          ),
+                        ],
+                      ),
+                    ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _header(Guild guild) {
-    return Container(
-      key: const ValueKey('guild_header_card'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: kCard,
-        border: Border.all(color: kNeon),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            guild.name.toUpperCase(),
-            style: const TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 14,
-              color: kNeon,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${_members.length}/${GuildService.maxMembers} members · '
-            '${_vol(guild.weeklyVolumeKg)} this week',
-            style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
-          ),
-          if (_nodsReceived > 0) ...[
-            const SizedBox(height: 4),
-            Text(
-              'You received $_nodsReceived nods this week.',
-              style: AppFonts.shareTechMono(color: kAmber, fontSize: 12),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _guildCard() {
-    final clazz = _playerClass;
-    final accent = clazz?.themeColor ?? kNeon;
-    final title = _equippedTitle;
-    return Container(
-      key: const ValueKey('guild_player_card'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: kCard,
-        border: Border.all(color: accent),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'GUILD CARD',
-            style: AppFonts.shareTechMono(
-              color: kMutedText,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _playerName.isEmpty ? 'RECRUIT' : _playerName.toUpperCase(),
-            style: const TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 14,
-              color: kText,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            clazz == null ? 'NO CLASS' : clazz.displayName.toUpperCase(),
-            style: AppFonts.shareTechMono(color: accent, fontSize: 12),
-          ),
-          if (title != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              'TITLE · ${title.name}',
-              style: AppFonts.shareTechMono(color: title.color, fontSize: 12),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Text(
-            'PATHS FORGED',
-            style: AppFonts.shareTechMono(
-              color: kMutedText,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          if (_completions.isEmpty)
-            Text(
-              'No paths forged yet. Finish a program to forge your first.',
-              style: AppFonts.shareTechMono(
-                color: kDim,
-                fontSize: 12,
-                height: 1.4,
-              ),
-            )
-          else
-            for (final c in _completions) ...[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  '- ${programById(c.programId)?.name ?? c.programId}'
-                  '  ·  ${lootItemById(c.titleId)?.name ?? ''}',
-                  style: AppFonts.shareTechMono(
-                    color: kText,
-                    fontSize: 12,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-            ],
-        ],
-      ),
-    );
-  }
-
-  Widget _recapCard() {
-    final recap = _recap!;
-    return Container(
-      key: const ValueKey('guild_weekly_recap_card'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: kCard,
-        border: Border.all(color: kBorder),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'WEEKLY RECAP',
-            style: AppFonts.shareTechMono(
-              color: kMutedText,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${recap.guildName} lifted ${_vol(recap.weeklyVolumeKg)} this week. '
-            'You: ${_vol(recap.playerVolumeKg)}. '
-            'Top 3 received a frame fragment.',
-            style: AppFonts.shareTechMono(
-              color: kText,
-              fontSize: 13,
-              height: 1.4,
-            ),
-          ),
-          if (recap.playerInTopThree) ...[
-            const SizedBox(height: 6),
-            Text(
-              'You finished top 3 — fragment earned.',
-              key: const ValueKey('guild_fragment_earned_text'),
-              style: AppFonts.shareTechMono(
-                color: kAmber,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }
 }
 
-class _MemberTile extends StatelessWidget {
-  const _MemberTile({
-    required this.member,
-    required this.avatarSpec,
-    required this.nodded,
-    required this.onNod,
+class _IdentityHeader extends StatelessWidget {
+  const _IdentityHeader({
+    required this.level,
+    required this.progress,
+    required this.accent,
+    required this.onCustomize,
   });
 
-  final GuildMember member;
-  final AvatarSpec? avatarSpec;
-  final bool nodded;
-  final VoidCallback? onNod;
-
-  String _lastActive(DateTime now) {
-    final diff = now.difference(member.lastActiveAt);
-    if (diff.inDays >= 1) return '${diff.inDays}d ago';
-    if (diff.inHours >= 1) return '${diff.inHours}h ago';
-    return 'just now';
-  }
+  final int level;
+  final (int, int)? progress;
+  final Color accent;
+  final VoidCallback onCustomize;
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final inactive = member.inactiveAsOf(now);
-    final tint = member.isPlayer ? kNeon : kBorder;
-    return Opacity(
-      opacity: inactive ? 0.45 : 1.0,
-      child: Container(
-        key: ValueKey(
-          member.isPlayer
-              ? 'guild_member_player'
-              : 'guild_member_${member.userId}',
-        ),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: kCard,
-          border: Border.all(color: tint),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          children: [
-            _avatar(),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        member.displayName,
-                        style: AppFonts.shareTechMono(
-                          color: member.isPlayer ? kNeon : kText,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (inactive) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          'INACTIVE',
-                          style: AppFonts.shareTechMono(
-                            color: kMutedText,
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${_vol(member.weeklyVolumeKg)} · ${member.weeklySessions} '
-                    'sessions · ${_lastActive(now)}',
-                    style: AppFonts.shareTechMono(
-                      color: kMutedText,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
+    final p = progress;
+    final frac = p == null || p.$2 == 0 ? 1.0 : p.$1 / p.$2;
+    return ArcadeCard(
+      key: const ValueKey('guild_identity_header'),
+      borderColor: accent, // the identity anchor wears the class hue
+      borderAlpha: 0.7,
+      borderWidth: kPrimaryCardBorderWidth,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'BIT',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 14,
+                  color: kText, // identity, NOT the action colour
+                ),
               ),
-            ),
-            if (onNod != null && !inactive)
+              const SizedBox(width: 8),
+              Text(
+                'LV.$level',
+                style: AppFonts.shareTechMono(color: accent, fontSize: 12),
+              ),
+              const Spacer(),
               Semantics(
                 button: true,
-                label: 'Send forge nod to ${member.displayName}',
-                child: IconButton(
-                  onPressed: nodded ? null : onNod,
-                  icon: Icon(
-                    Icons.bolt_sharp,
-                    color: nodded ? kMutedText : kAmber,
-                    size: 20,
+                label: 'Customize guild crest',
+                child: HoldDepress(
+                  onTap: onCustomize,
+                  haptic: HapticIntent.selection,
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.edit_sharp,
+                        color: kActionPrimary,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'CUSTOMIZE',
+                        style: AppFonts.shareTechMono(
+                          color: kActionPrimary,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ArcadeBar(value: frac.clamp(0.0, 1.0), accent: accent, height: 8),
+          const SizedBox(height: 4),
+          Text(
+            p == null
+                ? 'MAX GUILD LEVEL'
+                : '${p.$1}/${p.$2} sessions to LV.${level + 1}',
+            style: AppFonts.shareTechMono(color: kDim, fontSize: 10),
+          ),
+        ],
       ),
-    );
-  }
-
-  Widget _avatar() {
-    final spec = avatarSpec;
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: kBg,
-        border: Border.all(color: member.isPlayer ? kNeon : kBorder),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: spec == null
-          ? const Icon(Icons.person_sharp, color: kMutedText, size: 22)
-          // Rosters render many faces — isolate each sprite's repaints.
-          : RepaintBoundary(
-              child: Center(child: IronbitAvatar(spec: spec, size: 36)),
-            ),
     );
   }
 }

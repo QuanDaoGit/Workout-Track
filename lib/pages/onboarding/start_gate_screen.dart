@@ -430,7 +430,7 @@ class _StartGateScreenState extends State<StartGateScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '▸ First Forge · log your first workout',
+                      '▸ First Forge · save your first workout',
                       style: AppFonts.shareTechMono(
                         color: kMutedText,
                         fontSize: 11,

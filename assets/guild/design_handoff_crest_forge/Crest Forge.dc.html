@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/typography.css">
+  <style>
+    *{box-sizing:border-box;}
+    html,body{margin:0;padding:0;}
+    body{min-height:100vh;background:#0c0d15;background-image:linear-gradient(180deg,#13142a,#0b0c16);background-attachment:fixed;color:#E8E8FF;font-family:var(--font-mono,monospace);-webkit-font-smoothing:none;}
+    canvas,img{display:block;image-rendering:auto;}
+    .ck-lbl{font-family:var(--font-display);font-size:8px;color:#9aa6c4;letter-spacing:1px;margin-bottom:12px;}
+    .ck-pickrow{display:flex;flex-wrap:wrap;gap:10px;}
+    .ck-pick{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:8px;cursor:pointer;border:2px solid #24243e;border-radius:5px;background:#11111f;padding:10px 8px 8px;transition:border-color .12s,background .12s;}
+    .ck-pick:hover{background:#16162a;}
+    .ck-pickname{font-family:var(--font-display);font-size:6px;letter-spacing:.5px;color:#8a8aac;}
+    .ck-sw{width:30px;height:30px;border-radius:5px;cursor:pointer;border:2px solid #11111f;box-shadow:0 0 0 1px #2a2a44;}
+  </style>
+</helmet>
+
+<div ref="{{ rootRef }}">
+  <div style="position:fixed;inset:0;pointer-events:none;z-index:50;background:repeating-linear-gradient(0deg,rgba(0,0,0,0.16) 0px,rgba(0,0,0,0.16) 1px,transparent 1px,transparent 3px);opacity:.45;mix-blend-mode:multiply;"></div>
+
+  <div style="max-width:900px;margin:0 auto;padding:32px 22px 56px;">
+    <div style="font-family:var(--font-display);font-size:9px;color:#37d2cf;letter-spacing:3px;margin-bottom:12px;text-shadow:0 0 12px rgba(55,210,207,.6);">IRONBIT // GUILD</div>
+    <h1 style="margin:0 0 8px;font-family:var(--font-display);font-size:17px;line-height:1.5;color:#E8E8FF;letter-spacing:1px;">CREST FORGE</h1>
+    <div style="font-family:var(--font-mono);font-size:13px;color:#9494B8;line-height:1.55;margin-bottom:30px;max-width:560px;">Build the guild crest &mdash; pick a banner shape, stamp an emblem, set any color. The cloth sways gently.</div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start;">
+      <div style="flex:0 0 auto;">
+        <div style="position:relative;width:300px;height:392px;border:1px solid #24243e;border-radius:8px;background:radial-gradient(ellipse at 50% 38%, #1b1d33 0%, #0c0d16 78%);box-shadow:inset 0 0 60px -20px #000, 0 0 30px -12px rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+          <canvas ref="{{ previewRef }}" width="300" height="392" style="width:300px;height:392px;position:relative;"></canvas>
+        </div>
+        <div style="margin-top:16px;text-align:center;">
+          <input value="{{ name }}" onInput="{{ onName }}" maxlength="18" spellcheck="false" style="width:100%;text-align:center;background:transparent;border:none;outline:none;font-family:var(--font-display);font-size:13px;letter-spacing:1px;color:#E8E8FF;padding:2px 0;" />
+          <input value="{{ motto }}" onInput="{{ onMotto }}" maxlength="34" spellcheck="false" style="width:100%;text-align:center;background:transparent;border:none;outline:none;font-family:var(--font-mono);font-size:12px;color:#8a8aac;margin-top:7px;padding:2px 0;" />
+        </div>
+      </div>
+
+      <div style="flex:1 1 320px;min-width:300px;display:flex;flex-direction:column;gap:26px;">
+        <div>
+          <div class="ck-lbl">BANNER SHAPE</div>
+          <div class="ck-pickrow">
+            <div class="ck-pick" style="border-color:{{ sh.swallowtail.bord }};background:{{ sh.swallowtail.bg }};" onClick="{{ sh.swallowtail.onClick }}">
+              <img src="assets/guild/crest/blank_swallowtail.png" alt="Swallowtail" style="height:74px;width:auto;">
+              <span class="ck-pickname">SWALLOWTAIL</span>
+            </div>
+            <div class="ck-pick" style="border-color:{{ sh.pennant.bord }};background:{{ sh.pennant.bg }};" onClick="{{ sh.pennant.onClick }}">
+              <img src="assets/guild/crest/blank_pennant.png" alt="Pennant" style="height:74px;width:auto;">
+              <span class="ck-pickname">PENNANT</span>
+            </div>
+            <div class="ck-pick" style="border-color:{{ sh.draped.bord }};background:{{ sh.draped.bg }};" onClick="{{ sh.draped.onClick }}">
+              <img src="assets/guild/crest/blank_draped.png" alt="Draped" style="height:74px;width:auto;">
+              <span class="ck-pickname">DRAPED</span>
+            </div>
+            <div class="ck-pick" style="border-color:{{ sh.notched.bord }};background:{{ sh.notched.bg }};" onClick="{{ sh.notched.onClick }}">
+              <img src="assets/guild/crest/blank_notched.png" alt="Notched" style="height:74px;width:auto;">
+              <span class="ck-pickname">NOTCHED</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="ck-lbl">EMBLEM</div>
+          <div class="ck-pickrow">
+            <div class="ck-pick" style="border-color:{{ em.sword.bord }};background:{{ em.sword.bg }};width:62px;height:84px;" onClick="{{ em.sword.onClick }}">
+              <img src="assets/guild/crest/icon_sword.png" alt="Sword" style="height:42px;width:auto;">
+              <span class="ck-pickname">SWORD</span>
+            </div>
+            <div class="ck-pick" style="border-color:{{ em.shield.bord }};background:{{ em.shield.bg }};width:62px;height:84px;" onClick="{{ em.shield.onClick }}">
+              <img src="assets/guild/crest/icon_shield.png" alt="Shield" style="height:42px;width:auto;">
+              <span class="ck-pickname">SHIELD</span>
+            </div>
+            <div class="ck-pick" style="border-color:{{ em.gem.bord }};background:{{ em.gem.bg }};width:62px;height:84px;" onClick="{{ em.gem.onClick }}">
+              <img src="assets/guild/crest/icon_gem.png" alt="Gem" style="height:42px;width:auto;">
+              <span class="ck-pickname">GEM</span>
+            </div>
+            <div class="ck-pick" style="border-color:{{ em.bolt.bord }};background:{{ em.bolt.bg }};width:62px;height:84px;" onClick="{{ em.bolt.onClick }}">
+              <img src="assets/guild/crest/icon_bolt.png" alt="Bolt" style="height:42px;width:auto;">
+              <span class="ck-pickname">BOLT</span>
+            </div>
+            <div class="ck-pick" style="border-color:{{ em.none.bord }};background:{{ em.none.bg }};width:62px;height:84px;" onClick="{{ em.none.onClick }}">
+              <span style="font-family:var(--font-display);font-size:9px;color:#5a5a78;">&empty;</span>
+              <span class="ck-pickname">NONE</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="ck-lbl">BANNER COLOR</div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+            <sc-for list="{{ bannerColorItems }}" as="it" hint-placeholder-count="0">
+              <div class="ck-sw" style="background:{{ it.hex }};box-shadow:{{ it.ring }};" onClick="{{ it.onClick }}"></div>
+            </sc-for>
+            <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;margin-left:4px;border:1px dashed #34345a;border-radius:5px;padding:6px 10px;">
+              <span style="width:18px;height:18px;border-radius:4px;background:{{ customBannerSwatch }};box-shadow:0 0 0 1px #2a2a44;"></span>
+              <span style="font-family:var(--font-display);font-size:7px;color:#9aa6c4;letter-spacing:.5px;">CUSTOM</span>
+              <input type="color" value="{{ bannerColor }}" onInput="{{ onBannerColor }}" style="width:0;height:0;opacity:0;position:absolute;" />
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <div class="ck-lbl">EMBLEM COLOR</div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+            <sc-for list="{{ emblemColorItems }}" as="it" hint-placeholder-count="0">
+              <div class="ck-sw" style="background:{{ it.hex }};box-shadow:{{ it.ring }};" onClick="{{ it.onClick }}"></div>
+            </sc-for>
+            <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;margin-left:4px;border:1px dashed #34345a;border-radius:5px;padding:6px 10px;">
+              <span style="width:18px;height:18px;border-radius:4px;background:{{ customEmblemSwatch }};box-shadow:0 0 0 1px #2a2a44;"></span>
+              <span style="font-family:var(--font-display);font-size:7px;color:#9aa6c4;letter-spacing:.5px;">CUSTOM</span>
+              <input type="color" value="{{ emblemColor }}" onInput="{{ onEmblemColor }}" style="width:0;height:0;opacity:0;position:absolute;" />
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 900, &quot;height&quot;: 640 }
+}">
+class Component extends DCLogic {
+  rootRef = React.createRef();
+  previewRef = React.createRef();
+  DEFAULT = '#37d2cf';
+  SHAPES = [['swallowtail', 'SWALLOWTAIL'], ['pennant', 'PENNANT'], ['draped', 'DRAPED'], ['notched', 'NOTCHED']];
+  EMBLEMS = [['sword', 'SWORD'], ['shield', 'SHIELD'], ['gem', 'GEM'], ['bolt', 'BOLT']];
+  COLORS = ['#37d2cf', '#00FF9C', '#FFD700', '#00BFFF', '#FF4DCD', '#FF2D55'];
+
+  state = { shape: 'swallowtail', emblem: 'sword', bannerColor: '#37d2cf', emblemColor: '#37d2cf', name: 'IRON ANVIL', motto: 'strength runs in the iron' };
+
+  componentDidMount() {
+    try { const s = JSON.parse(localStorage.getItem('ironbit_crest_forge') || 'null'); if (s) { this.state = Object.assign({}, this.state, s); if (s.color) { if (!s.bannerColor) this.state.bannerColor = s.color; if (!s.emblemColor) this.state.emblemColor = s.color; } } } catch (e) {}
+    this.reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    this._sig = '';
+    this.cache = {};
+    const keys = this.SHAPES.map(s => 'blank_' + s[0]).concat(this.EMBLEMS.map(e => 'icon_' + e[0]));
+    keys.forEach((k) => { const img = new Image(); img.onload = () => { this.cache[k] = img; this._sig = ''; }; img.src = 'assets/guild/crest/' + k + '.png'; });
+    this._last = 0;
+    const loop = (ts) => {
+      this.raf = requestAnimationFrame(loop);
+      if (ts - this._last < 33) return; this._last = ts;
+      const sig = [this.state.shape, this.state.emblem, this.state.bannerColor, this.state.emblemColor].join('|');
+      if (sig !== this._sig) { if (this.buildLayers()) this._sig = sig; }
+      this.composite(this.reduced ? 0 : ts);
+    };
+    this.raf = requestAnimationFrame(loop);
+  }
+  componentDidUpdate() { try { localStorage.setItem('ironbit_crest_forge', JSON.stringify(this.state)); } catch (e) {} }
+  componentWillUnmount() { if (this.raf) cancelAnimationFrame(this.raf); }
+  set(k, v) { this.setState({ [k]: v }); }
+
+  layer(W, H) { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; }
+
+  buildLayers() {
+    const cv = this.previewRef.current; if (!cv || !this.cache) return false;
+    const banner = this.cache['blank_' + this.state.shape]; if (!banner) return false;
+    const W = cv.width, H = cv.height;
+    const bScale = Math.min(W / banner.width, H / banner.height) * 0.90;
+    const bw = banner.width * bScale, bh = banner.height * bScale, bx = (W - bw) / 2, by = (H - bh) * 0.42;
+    const bl = this.layer(W, H), blc = bl.getContext('2d'); blc.imageSmoothingEnabled = true; blc.imageSmoothingQuality = 'high';
+    blc.drawImage(banner, bx, by, bw, bh);
+    if (this.state.bannerColor.toLowerCase() !== this.DEFAULT) this.recolor(blc, W, H, this.state.bannerColor);
+    this._bl = bl;
+    let el = null;
+    if (this.state.emblem !== 'none') {
+      const em = this.cache['icon_' + this.state.emblem];
+      if (!em) return false;
+      const th = bh * 0.30, es = th / em.height, ew = em.width * es, eh = em.height * es;
+      el = this.layer(W, H); const elc = el.getContext('2d'); elc.imageSmoothingEnabled = true; elc.imageSmoothingQuality = 'high';
+      elc.drawImage(em, W / 2 - ew / 2, by + bh * 0.50 - eh / 2, ew, eh);
+      if (this.state.emblemColor.toLowerCase() !== this.DEFAULT) this.recolor(elc, W, H, this.state.emblemColor);
+    }
+    this._el = el;
+    this._meta = { by, bh };
+    return true;
+  }
+
+  composite(t) {
+    const cv = this.previewRef.current; if (!cv || !this._bl || !this._meta) return;
+    const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
+    const W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    const by = this._meta.by, bh = this._meta.bh, band = 2, A = 2.6;
+    for (let y = 0; y < H; y += band) {
+      const yn = Math.max(0, Math.min(1, (y - by) / bh));
+      const off = this.reduced ? 0 : Math.round(A * yn * Math.sin(t * 0.0019 - yn * 3.0) + 0.9 * yn * Math.sin(t * 0.0011 + 1.3));
+      ctx.drawImage(this._bl, 0, y, W, band, off, y, W, band);
+      if (this._el) ctx.drawImage(this._el, 0, y, W, band, off, y, W, band);
+    }
+  }
+
+  hexToRgb(h) { h = h.replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+  rampAt(T, Y) {
+    const mix = (a, b, t) => a + (b - a) * t;
+    if (Y < 0.5) { const t = Y / 0.5; return [mix(T[0] * 0.20, T[0], t), mix(T[1] * 0.20, T[1], t), mix(T[2] * 0.20, T[2], t)]; }
+    const t = (Y - 0.5) / 0.5; return [mix(T[0], 255, t * 0.82), mix(T[1], 255, t * 0.82), mix(T[2], 255, t * 0.82)];
+  }
+  recolor(ctx, W, H, hex) {
+    const T = this.hexToRgb(hex), id = ctx.getImageData(0, 0, W, H), d = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      const S = mx === 0 ? 0 : (mx - mn) / mx, Y = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      const amt = Math.max(0, Math.min(1, (S - 0.18) * 1.7)), rp = this.rampAt(T, Y);
+      d[i] = r + (rp[0] - r) * amt; d[i + 1] = g + (rp[1] - g) * amt; d[i + 2] = b + (rp[2] - b) * amt;
+    }
+    ctx.putImageData(id, 0, 0);
+  }
+
+  renderVals() {
+    const st = this.state, ACC = '#00FF9C';
+    const mk = (sel) => ({ bord: sel ? ACC : '#24243e', bg: sel ? '#16261f' : '#11111f' });
+    const sh = {}; this.SHAPES.forEach(([k]) => { sh[k] = Object.assign(mk(st.shape === k), { onClick: () => this.set('shape', k) }); });
+    const em = {}; this.EMBLEMS.forEach(([k]) => { em[k] = Object.assign(mk(st.emblem === k), { onClick: () => this.set('emblem', k) }); });
+    em.none = Object.assign(mk(st.emblem === 'none'), { onClick: () => this.set('emblem', 'none') });
+    const ringOf = (cur, hex) => cur.toLowerCase() === hex.toLowerCase() ? '0 0 0 2px #0c0d15, 0 0 0 4px #E8E8FF' : '0 0 0 1px #2a2a44';
+    const bannerColorItems = this.COLORS.map((hex) => ({ hex, onClick: () => this.set('bannerColor', hex), ring: ringOf(st.bannerColor, hex) }));
+    const emblemColorItems = this.COLORS.map((hex) => ({ hex, onClick: () => this.set('emblemColor', hex), ring: ringOf(st.emblemColor, hex) }));
+    return {
+      rootRef: this.rootRef, previewRef: this.previewRef,
+      sh, em, bannerColorItems, emblemColorItems,
+      name: st.name, motto: st.motto,
+      bannerColor: st.bannerColor, emblemColor: st.emblemColor,
+      customBannerSwatch: st.bannerColor, customEmblemSwatch: st.emblemColor,
+      onName: (e) => this.set('name', e.target.value),
+      onMotto: (e) => this.set('motto', e.target.value),
+      onBannerColor: (e) => this.set('bannerColor', e.target.value),
+      onEmblemColor: (e) => this.set('emblemColor', e.target.value)
+    };
+  }
+}
+</script>
+</body>
+</html>

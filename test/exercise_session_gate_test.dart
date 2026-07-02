@@ -54,7 +54,7 @@ void main() {
     // Tapping the gated row warns instead of accepting input.
     await tester.tapAt(tester.getCenter(find.byType(TextField).at(2)));
     await tester.pump();
-    expect(find.text('Log your previous set first'), findsOneWidget);
+    expect(find.text('Save your previous set first'), findsOneWidget);
   });
 
   testWidgets('logging the frontier promotes the next row to editable', (
@@ -68,7 +68,7 @@ void main() {
     // Log row 0.
     await tester.enterText(find.byType(TextField).at(0), '100');
     await tester.enterText(find.byType(TextField).at(1), '5');
-    await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp).first);
+    await tester.tap(find.widgetWithText(FilledButton, 'SAVE').first);
     await tester.pump();
 
     // Row 1 is now the frontier → editable.
@@ -81,7 +81,7 @@ void main() {
     await pumpPage(tester);
     await tester.enterText(find.byType(TextField).at(0), '100');
     await tester.enterText(find.byType(TextField).at(1), '5');
-    await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp));
+    await tester.tap(find.widgetWithText(FilledButton, 'SAVE'));
     await tester.pump();
     expect(find.text('Rest timer started'), findsOneWidget);
     expect(RestTimerService.instance.current.value?.isActive, isTrue);

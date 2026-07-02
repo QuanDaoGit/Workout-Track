@@ -140,6 +140,8 @@ class _TrainNavButtonState extends State<TrainNavButton>
     return Semantics(
       button: true,
       label: _semanticsLabel,
+      // Bespoke keycap: onTapDown/Up/Cancel drive the press-depth animation.
+      // haptic-ok: wrappers don't expose those; fires HapticService.tap() inline.
       child: GestureDetector(
         onTap: () {
           // The hero action gets a light press tap (the keystone bar's lone CTA).
@@ -190,7 +192,7 @@ class _TrainNavButtonState extends State<TrainNavButton>
               ),
             ),
             Transform.translate(
-              offset: const Offset(0, -2),
+              offset: const Offset(0, -4),
               child: Text(
                 _caption,
                 style: TextStyle(

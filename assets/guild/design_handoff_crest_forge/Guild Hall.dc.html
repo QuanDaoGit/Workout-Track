@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/ironbit-beta-e9840b3c-d1af-4972-b13d-6b9d1019a977/tokens/typography.css">
+  <style>
+    *{box-sizing:border-box;}
+    html,body{margin:0;padding:0;}
+    body{min-height:100vh;background:#0c0d15;background-image:linear-gradient(180deg,#13142a,#0b0c16);background-attachment:fixed;color:#E8E8FF;font-family:var(--font-mono,monospace);-webkit-font-smoothing:none;}
+  </style>
+</helmet>
+
+<div style="max-width:600px;margin:0 auto;padding:34px 20px 44px;">
+  <div style="font-family:var(--font-display);font-size:9px;color:#37d2cf;letter-spacing:3px;margin-bottom:12px;text-shadow:0 0 12px rgba(55,210,207,.6);">IRONBIT // GUILD</div>
+  <h1 style="margin:0 0 8px;font-family:var(--font-display);font-size:17px;line-height:1.5;color:#E8E8FF;letter-spacing:1px;">GUILD HALL</h1>
+  <div style="font-family:var(--font-mono);font-size:13px;color:#9494B8;line-height:1.55;margin-bottom:18px;">The hall is alive &mdash; torches sway and flicker, the teal indicator lights breathe, and dust drifts through the firelight. Console panel removed. All driven from your own pixels.</div>
+
+  <div style="position:relative;border-radius:6px;overflow:hidden;box-shadow:0 0 30px -10px rgba(0,0,0,.9);">
+    <canvas ref="{{ canvasRef }}" width="540" height="324" style="display:block;width:100%;height:auto;image-rendering:pixelated;background:#0d0f17;"></canvas>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+    <span style="font-family:var(--font-display);font-size:7px;color:#6A6A8C;letter-spacing:1px;border:1px solid #2A2A44;border-radius:3px;padding:5px 6px;white-space:nowrap;">SPRITE WARP</span>
+    <span style="font-family:var(--font-mono);font-size:11.5px;color:#7A7A9C;line-height:1.4;">your art, displaced &amp; brightness-cycled per frame</span>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:16px;font-family:var(--font-mono);font-size:11.5px;color:#7A7A9C;line-height:1.4;">
+    <div style="display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;background:#FF8A22;border-radius:1px;box-shadow:0 0 8px -1px #FF8A22;"></span>flame sway + embers</div>
+    <div style="display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;background:#37d2cf;border-radius:1px;box-shadow:0 0 8px -1px #37d2cf;"></span>breathing lights</div>
+    <div style="display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;background:#FFD9A0;border-radius:1px;"></span>drifting dust</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 640, &quot;height&quot;: 470 },
+  &quot;crest&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Room&quot; },
+  &quot;flicker&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Fire&quot; },
+  &quot;embers&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Fire&quot; },
+  &quot;glow&quot;: { &quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 1, &quot;min&quot;: 0, &quot;max&quot;: 1.6, &quot;step&quot;: 0.1, &quot;unit&quot;: &quot;x&quot;, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Fire&quot; },
+  &quot;lights&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Room&quot; },
+  &quot;dust&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Room&quot; }
+}">
+class Component extends DCLogic {
+  canvasRef = React.createRef();
+
+  componentDidMount() {
+    this.W = 540; this.H = 324;
+    this.flames = [
+      { sx: 60, sy: 64, w: 30, h: 44, cx: 76, phase: 0.0 },
+      { sx: 450, sy: 64, w: 30, h: 44, cx: 466, phase: 3.1 }
+    ];
+    // teal indicator lights detected across the hall (540x324 coords)
+    this.lights = [
+      { x: 15, y: 220, r: 8, ph: 0.0, sp: 0.10, base: 0.14, amp: 0.22 },
+      { x: 524, y: 220, r: 8, ph: 1.7, sp: 0.11, base: 0.14, amp: 0.22 },
+      { x: 137, y: 37, r: 6, ph: 2.4, base: 0.05, amp: 0.32, fl: 1 },
+      { x: 403, y: 37, r: 6, ph: 0.8, base: 0.05, amp: 0.32, fl: 1 },
+      { x: 36, y: 201, r: 5, ph: 3.1, base: 0.05, amp: 0.28, fl: 1 },
+      { x: 157, y: 201, r: 5, ph: 1.1, sp: 0.14, base: 0.08, amp: 0.14 },
+      { x: 384, y: 201, r: 5, ph: 2.0, base: 0.05, amp: 0.28, fl: 1 },
+      { x: 504, y: 201, r: 5, ph: 0.4, sp: 0.13, base: 0.08, amp: 0.14 }
+    ];
+    this.reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    this.tick = 0; this.ready = false; this.loaded = 0;
+    this.baseImg = new Image(); this.flameImg = new Image(); this.bannerImg = new Image();
+    const onload = () => { this.loaded++; if (this.loaded >= 3) { this.ready = true; this.initEmbers(); this.initDust(); this.draw(); this.start(); } };
+    this.baseImg.onload = onload; this.flameImg.onload = onload; this.bannerImg.onload = onload;
+    this.baseImg.src = 'assets/guild/guild_hall_base540.png';
+    this.flameImg.src = 'assets/guild/flame_diff540.png';
+    this.bannerImg.src = 'assets/guild/guild_crest_banner.png';
+  }
+  start() {
+    if (this.reduced || this.raf) return;
+    let last = 0;
+    const loop = (ts) => {
+      this.raf = requestAnimationFrame(loop);
+      if (ts - last < 70) return; last = ts; this.tick++;
+      if (this.props.flicker !== false) this.updateEmbers();
+      if (this.props.dust !== false) this.updateDust();
+      this.draw();
+    };
+    this.raf = requestAnimationFrame(loop);
+  }
+  componentDidUpdate() { this.draw(); }
+  componentWillUnmount() { if (this.raf) cancelAnimationFrame(this.raf); }
+
+  draw() {
+    const cv = this.canvasRef.current; if (!cv || !this.ready) return;
+    const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    ctx.clearRect(0, 0, this.W, this.H);
+    ctx.drawImage(this.baseImg, 0, 0, this.W, this.H);
+
+    // crest banner — copied art, hung centered in the empty bay (in front of the wall)
+    if (this.bannerImg && this.props.crest !== false) {
+      const bw = 96, bh = Math.round(bw * this.bannerImg.height / this.bannerImg.width);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(this.bannerImg, Math.round(this.W / 2 - bw / 2), 16, bw, bh);
+      ctx.imageSmoothingEnabled = false;
+    }
+
+    const moving = !this.reduced;
+    const t = moving ? this.tick : 0;
+    const flameOn = moving && this.props.flicker !== false;
+    const glow = this.props.glow ?? 1;
+
+    // ---- torches: warp the original flame + breathe its glow ----
+    for (const f of this.flames) {
+      const flick = flameOn ? (0.8 + 0.2 * (Math.sin(t * 0.9 + f.phase) * 0.5 + 0.5)) : 0.96;
+      ctx.globalCompositeOperation = 'lighter';
+      const gr = (11 + 5 * (Math.sin(t * 0.7 + f.phase) * 0.5 + 0.5)) * glow;
+      this.rGlow(ctx, f.cx, f.sy + f.h * 0.42, gr, '255,140,64', 0.16 * glow * flick);
+      ctx.globalAlpha = flick;
+      for (let r = 0; r < f.h; r++) {
+        const topness = 1 - r / f.h;
+        let off = 0;
+        if (flameOn) off = Math.round(Math.sin(t * 0.45 + f.phase + r * 0.42) * 2.0 * topness + Math.sin(t * 0.95 + f.phase) * 1.0 * topness);
+        ctx.drawImage(this.flameImg, f.sx, f.sy + r, f.w, 1, f.sx + off, f.sy + r, f.w, 1);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // embers
+    if (flameOn && this.props.embers !== false) {
+      ctx.globalCompositeOperation = 'lighter';
+      this.drawEmbers(ctx);
+    }
+
+    // ---- breathing teal indicator lights ----
+    if (this.props.lights !== false) {
+      ctx.globalCompositeOperation = 'lighter';
+      for (const L of this.lights) {
+        let p;
+        if (!moving) p = 0.6;
+        else if (L.fl) p = this.techFlicker(t, L);
+        else p = 0.5 + 0.5 * Math.sin(t * L.sp + L.ph);
+        this.rGlow(ctx, L.x, L.y, L.r * (0.8 + 0.35 * p), '55,214,207', L.base + L.amp * p);
+      }
+    }
+
+    // ---- dust drifting in the firelight ----
+    if (moving && this.props.dust !== false) {
+      ctx.globalCompositeOperation = 'lighter';
+      this.drawDust(ctx);
+    }
+
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  }
+
+  rGlow(g, cx, cy, R, rgb, alpha) {
+    if (R <= 0 || alpha <= 0) return;
+    const grad = g.createRadialGradient(cx, cy, 0, cx, cy, R);
+    grad.addColorStop(0, 'rgba(' + rgb + ',' + alpha + ')');
+    grad.addColorStop(0.5, 'rgba(' + rgb + ',' + (alpha * 0.45) + ')');
+    grad.addColorStop(1, 'rgba(' + rgb + ',0)');
+    g.fillStyle = grad; g.fillRect(cx - R, cy - R, R * 2, R * 2);
+  }
+
+  hash(a, b) { const s = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453; return s - Math.floor(s); }
+
+  // mostly-on electronic light with occasional slow stutters
+  techFlicker(t, L) {
+    let v = 0.74 + 0.26 * Math.sin(t * 0.09 + L.ph);
+    const g = this.hash(Math.floor(t / 4) + L.ph * 7, L.ph * 3.3 + 1);
+    if (g > 0.9) v *= 0.18;
+    else if (g > 0.82) v *= 0.55;
+    v *= 0.9 + 0.1 * Math.sin(t * 1.4 + L.ph * 2);
+    return Math.max(0.08, Math.min(1, v));
+  }
+
+  initEmbers() {
+    this.embers = [];
+    for (let i = 0; i < 8; i++) this.embers.push(this.spawnEmber());
+  }
+  spawnEmber() {
+    const f = this.flames[Math.floor(Math.random() * this.flames.length)];
+    return { x: f.cx + (Math.random() * 6 - 3), y: f.sy + 10 + Math.random() * 12, vx: Math.random() * 0.6 - 0.3, vy: -(0.25 + Math.random() * 0.4), life: 0, max: 18 + Math.random() * 22, top: f.sy };
+  }
+  updateEmbers() {
+    for (const e of this.embers) {
+      e.x += e.vx; e.y += e.vy; e.life++;
+      e.vx += Math.random() * 0.16 - 0.08;
+      if (e.life > e.max || e.y < e.top - 18) Object.assign(e, this.spawnEmber());
+    }
+  }
+  drawEmbers(ctx) {
+    for (const e of this.embers) {
+      const k = 1 - e.life / e.max;
+      ctx.fillStyle = k > 0.6 ? '#ffe9b0' : k > 0.3 ? '#ffc24a' : '#ff9a3a';
+      ctx.fillRect(Math.round(e.x), Math.round(e.y), 1, 1);
+    }
+  }
+
+  initDust() {
+    this.dust = [];
+    for (let i = 0; i < 16; i++) { const m = this.spawnDust(); m.life = Math.random() * m.max; this.dust.push(m); }
+  }
+  spawnDust() {
+    const f = this.flames[Math.floor(Math.random() * this.flames.length)];
+    return { x: f.cx + (Math.random() * 80 - 40), y: 56 + Math.random() * 78, vx: Math.random() * 0.3 - 0.15, vy: -(0.04 + Math.random() * 0.12), life: 0, max: 130 + Math.random() * 130, a: 0.10 + Math.random() * 0.16 };
+  }
+  updateDust() {
+    for (const m of this.dust) {
+      m.x += m.vx; m.y += m.vy; m.life++;
+      m.vx += Math.random() * 0.05 - 0.025;
+      if (m.life > m.max || m.y < 28) Object.assign(m, this.spawnDust());
+    }
+  }
+  drawDust(ctx) {
+    for (const m of this.dust) {
+      const k = Math.sin(Math.PI * Math.min(1, m.life / m.max));
+      ctx.globalAlpha = m.a * k;
+      ctx.fillStyle = '#ffd9a0';
+      ctx.fillRect(Math.round(m.x), Math.round(m.y), 1, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  renderVals() { return { canvasRef: this.canvasRef }; }
+}
+</script>
+</body>
+</html>

@@ -90,7 +90,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), '100');
     await tester.enterText(find.byType(TextField).at(1), '5');
-    await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp));
+    await tester.tap(find.widgetWithText(FilledButton, 'SAVE'));
     await tester.pump();
     await tester.tap(find.text('Finish Exercise'));
     // The overview rest panel mounts BIT (a perpetual Ticker) — pumpAndSettle
@@ -136,7 +136,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), '100');
     await tester.enterText(find.byType(TextField).at(1), '5');
-    await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp));
+    await tester.tap(find.widgetWithText(FilledButton, 'SAVE'));
     await tester.pump();
     await tester.pageBack();
     await tester.pumpAndSettle();

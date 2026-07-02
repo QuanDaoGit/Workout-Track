@@ -27,13 +27,13 @@ Future<void> _pumpActive(WidgetTester tester) async {
 }
 
 /// Logs one working set inside exercise 'a' (taps the tile, fills the row, taps
-/// the save icon) and returns once the in-flight checkpoint has settled.
+/// the SAVE chip) and returns once the in-flight checkpoint has settled.
 Future<void> _logOneSetInA(WidgetTester tester) async {
   await tester.tap(find.text('a'));
   await tester.pumpAndSettle();
   await tester.enterText(find.byType(TextField).at(0), '100');
   await tester.enterText(find.byType(TextField).at(1), '5');
-  await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp));
+  await tester.tap(find.widgetWithText(FilledButton, 'SAVE'));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 200));
 }
@@ -103,11 +103,11 @@ void main() {
     // Commit a working set.
     await tester.enterText(find.byType(TextField).at(0), '100');
     await tester.enterText(find.byType(TextField).at(1), '5');
-    await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp));
+    await tester.tap(find.widgetWithText(FilledButton, 'SAVE').last);
     await tester.pump();
 
-    // Then a warm-up-only commit (LOG IT on the advisory card).
-    await tester.tap(find.text('LOG IT'));
+    // Then a warm-up-only commit (SAVE on the advisory card).
+    await tester.tap(find.widgetWithText(FilledButton, 'SAVE'));
     await tester.pump();
 
     expect(emissions, isNotEmpty);
@@ -124,16 +124,16 @@ void main() {
       MaterialApp(home: ExerciseSessionPage(exercise: _exercise('a'))),
     );
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.radio_button_unchecked_sharp), findsOneWidget); // 1 row
+    expect(find.widgetWithText(FilledButton, 'SAVE'), findsOneWidget); // 1 row
 
     await tester.tap(find.text('+ ADD SET'));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.radio_button_unchecked_sharp), findsNWidgets(2)); // 2 rows
+    expect(find.widgetWithText(FilledButton, 'SAVE'), findsNWidgets(2)); // 2 rows
     expect(find.byIcon(Icons.close_sharp), findsOneWidget); // only row 2 removable
 
     await tester.tap(find.byIcon(Icons.close_sharp));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.radio_button_unchecked_sharp), findsOneWidget); // back to 1 row
+    expect(find.widgetWithText(FilledButton, 'SAVE'), findsOneWidget); // back to 1 row
   });
 
   testWidgets('removing a middle row preserves the locked first row '
@@ -151,7 +151,7 @@ void main() {
     // Lock Set 1, then add two more rows.
     await tester.enterText(find.byType(TextField).at(0), '100');
     await tester.enterText(find.byType(TextField).at(1), '5');
-    await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp));
+    await tester.tap(find.widgetWithText(FilledButton, 'SAVE'));
     await tester.pump();
     await tester.tap(find.text('+ ADD SET'));
     await tester.pumpAndSettle();
@@ -218,7 +218,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).at(0), '60');
     await tester.enterText(find.byType(TextField).at(1), '8');
-    await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp).first);
+    await tester.tap(find.widgetWithText(FilledButton, 'SAVE').first);
     await tester.pumpAndSettle();
 
     // The chip did not vanish — it followed down to the now-first-unlogged Set 2.
@@ -243,6 +243,6 @@ void main() {
 
     // Two locked rows → two saved-check icons, no save icons.
     expect(find.byIcon(Icons.check_circle_sharp), findsNWidgets(2));
-    expect(find.byIcon(Icons.radio_button_unchecked_sharp), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'SAVE'), findsNothing);
   });
 }

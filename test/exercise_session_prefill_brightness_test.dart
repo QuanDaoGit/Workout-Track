@@ -61,12 +61,12 @@ void main() {
       // Type Set 1 by hand, then log it → rows 2 & 3 auto-fill (muted/prefilled).
       await tester.enterText(find.byType(TextField).at(0), '55');
       await tester.enterText(find.byType(TextField).at(1), '8');
-      await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp).first);
+      await tester.tap(find.widgetWithText(FilledButton, 'SAVE').first);
       await tester.pumpAndSettle();
 
       // Row 2 (frontier now) is prefilled "55"/"8" — log it directly via its
       // check button, WITHOUT tapping the field (the screenshot's path).
-      await tester.tap(find.byIcon(Icons.radio_button_unchecked_sharp).first);
+      await tester.tap(find.widgetWithText(FilledButton, 'SAVE').first);
       await tester.pumpAndSettle();
 
       // UI: the just-logged prefilled row is no longer muted (bright like Set 1).

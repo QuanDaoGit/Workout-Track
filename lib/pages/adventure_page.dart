@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../data/adventure_routes.dart';
 import '../models/adventure_models.dart';
 import '../services/adventure_service.dart';
-import '../services/guild_service.dart';
+import '../utils/iso_week.dart';
 import '../services/stat_engine.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
@@ -67,7 +67,7 @@ class _AdventurePageState extends State<AdventurePage> {
   AdventureUiState get _ui => adventureUiStateOf(
     _state,
     DateTime.now(),
-    currentWeekIso: GuildService.weekIso(DateTime.now()),
+    currentWeekIso: isoWeekKey(DateTime.now()),
   );
 
   /// A coarse logic timer (NOT an animation) that recomputes the phase so an

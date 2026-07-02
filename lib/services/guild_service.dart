@@ -1,302 +1,135 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/avatar_spec.dart';
-import '../models/character_class.dart';
 import '../models/guild_models.dart';
+import '../models/workout_models.dart';
 
-/// Local, single-player simulation of the guild feature. There is no backend,
-/// so the player's guild is seeded with NPC "members" and every social signal
-/// (Forge Nods, weekly recap, member stats) is computed on-device. NPC weekly
-/// numbers are deterministic per ISO week so the screen is stable within a week
-/// and refreshes on Monday.
+/// Owns the guild entity (`guild_v2`). Rebuilt from scratch — no NPC members,
+/// no simulation. The guild is auto-created on first need, always named "BIT",
+/// and persisted once; the roster (player + OPEN slots) is derived at the UI
+/// layer from the live profile + this week's training, so nothing fake is stored.
 class GuildService {
-  static const _guildKey = 'guild_v1';
-  static const _membersKey = 'guild_members_v1';
-  static const _nodsKey = 'guild_forge_nods_v1';
+  GuildService({DateTime Function()? nowProvider})
+    : _now = nowProvider ?? DateTime.now;
 
-  static const maxMembers = 10;
-  static const _seedNpcCount = 6;
+  final DateTime Function() _now;
 
-  static const _adjectives = [
-    'Iron',
-    'Brass',
-    'Hollow',
-    'Forge',
-    'Quiet',
-    'Bright',
-    'Black',
-    'Bronze',
-    'Steel',
-    'Old',
-  ];
-  static const _nouns = [
-    'Wake',
-    'Anvil',
-    'Vault',
-    'Pact',
-    'Crew',
-    'Ring',
-    'Drift',
-    'Chain',
-    'Watch',
-    'Mark',
-  ];
+  static const String _key = 'guild_v2';
 
-  static const _npcNames = [
-    'Rho',
-    'Vex',
-    'Cass',
-    'Tor',
-    'Juno',
-    'Bex',
-    'Kane',
-    'Mara',
-    'Pyx',
-    'Lun',
-  ];
+  /// The guild's fixed name in v1.
+  static const String guildName = 'BIT';
 
-  // ---------------------------------------------------------------------------
-  // ISO week helpers
-  // ---------------------------------------------------------------------------
+  /// Total roster slots: the player + (rosterSize - 1) OPEN slots.
+  static const int rosterSize = 6;
 
-  static String weekIso(DateTime date) {
-    final d = DateTime.utc(date.year, date.month, date.day);
-    final thursday = d.add(Duration(days: 4 - d.weekday));
-    final firstThursdayYear = thursday.year;
-    final firstJan = DateTime.utc(firstThursdayYear, 1, 1);
-    final week = 1 + (thursday.difference(firstJan).inDays ~/ 7);
-    return '$firstThursdayYear-W${week.toString().padLeft(2, '0')}';
-  }
+  /// Count of crest banner shapes / emblem symbols (ported pixel-art assets).
+  /// Emblems also offer a "none" option in the editor beyond these 4.
+  static const int crestShapeCount = 4;
+  static const int crestEmblemCount = 4;
 
-  // ---------------------------------------------------------------------------
-  // Assignment / seeding
-  // ---------------------------------------------------------------------------
+  /// Highest guild level.
+  static const int maxGuildLevel = 5;
 
-  /// Ensures the player is in a guild. Local build: always creates the player's
-  /// own guild (no cross-user matching is possible) and seeds NPC members.
-  /// Idempotent.
-  Future<Guild> ensureAssigned({
-    required CharacterClass classFocus,
-    DateTime? now,
-  }) async {
+  /// Cumulative completed-session thresholds at which the guild reaches each
+  /// level. Body-neutral: progress is **showing up** (sessions), never volume.
+  static const List<int> _levelThresholds = [0, 5, 15, 30, 52];
+
+  /// Returns the guild, creating + persisting it on first call. Idempotent —
+  /// the stored entity (id + founding date) is never re-stamped.
+  Future<Guild> ensureGuild() async {
     final prefs = await SharedPreferences.getInstance();
-    final existing = prefs.getString(_guildKey);
-    if (existing != null) {
-      return Guild.fromJson(jsonDecode(existing) as Map<String, dynamic>);
+    final raw = prefs.getString(_key);
+    if (raw != null) {
+      return Guild.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     }
-
-    final n = now ?? DateTime.now();
-    final name = await _generateName(prefs);
+    final now = _now();
     final guild = Guild(
-      id: n.microsecondsSinceEpoch.toString(),
-      name: name,
-      classFocus: classFocus,
-      createdAt: n,
-      weekIso: weekIso(n),
-      weeklyVolumeKg: 0,
-      weeklySessionsTotal: 0,
+      id: now.microsecondsSinceEpoch.toString(),
+      name: guildName,
+      createdAt: now,
     );
-    final members = <GuildMember>[
-      GuildMember(
-        userId: kPlayerGuildUserId,
-        displayName: 'You',
-        joinedAt: n,
-        lastActiveAt: n,
-        weeklyVolumeKg: 0,
-        weeklySessions: 0,
-        isPlayer: true,
-      ),
-      for (var i = 0; i < _seedNpcCount; i++) _seedNpc(i, n),
-    ];
-    await prefs.setString(_guildKey, jsonEncode(guild.toJson()));
-    await _saveMembers(prefs, members);
+    await prefs.setString(_key, jsonEncode(guild.toJson()));
     return guild;
   }
 
-  GuildMember _seedNpc(int index, DateTime now) {
-    // One NPC is intentionally stale to demonstrate the inactive (greyed) tile.
-    final lastActive = index == _seedNpcCount - 1
-        ? now.subtract(const Duration(days: 18))
-        : now.subtract(Duration(days: index % 3));
-    return GuildMember(
-      userId: 'npc_$index',
-      displayName: _npcNames[index % _npcNames.length],
-      joinedAt: now.subtract(Duration(days: 7 + index)),
-      lastActiveAt: lastActive,
-      weeklyVolumeKg: 0, // filled deterministically on weekly sync
-      weeklySessions: 0,
-      // Seeded Random → the same NPC always wears the same random face.
-      avatarSpec: AvatarSpec.random(Random(index)),
-    );
-  }
-
-  Future<String> _generateName(SharedPreferences prefs) async {
-    // Single guild locally, so collisions are effectively impossible; the
-    // number-suffix rule is kept for parity with the spec.
-    final seed = DateTime.now().microsecondsSinceEpoch;
-    final adj = _adjectives[seed % _adjectives.length];
-    final noun = _nouns[(seed ~/ 7) % _nouns.length];
-    return '$adj $noun';
-  }
-
-  // ---------------------------------------------------------------------------
-  // Reads (weekly reset applied)
-  // ---------------------------------------------------------------------------
-
+  /// The guild if it exists, else null (no side effects).
   Future<Guild?> getGuild() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_guildKey);
+    final raw = prefs.getString(_key);
     return raw == null
         ? null
         : Guild.fromJson(jsonDecode(raw) as Map<String, dynamic>);
   }
 
-  Future<List<GuildMember>> _members(SharedPreferences prefs) async {
-    final raw = prefs.getString(_membersKey);
-    if (raw == null) return [];
-    return [
-      for (final m in jsonDecode(raw) as List<dynamic>)
-        GuildMember.fromJson(m as Map<String, dynamic>),
-    ];
-  }
-
-  Future<void> _saveMembers(
-    SharedPreferences prefs,
-    List<GuildMember> members,
-  ) async {
-    await prefs.setString(
-      _membersKey,
-      jsonEncode(members.map((m) => m.toJson()).toList()),
-    );
-  }
-
-  /// One-stop read for the guild screen: applies the weekly reset, syncs the
-  /// player's real weekly numbers, refreshes NPC weekly numbers for the current
-  /// week, and returns members sorted by weekly volume (desc).
-  Future<({Guild guild, List<GuildMember> members})> loadGuildView({
-    required CharacterClass classFocus,
-    required int playerWeeklyVolumeKg,
-    required int playerWeeklySessions,
-    DateTime? now,
-  }) async {
-    final n = now ?? DateTime.now();
-    await ensureAssigned(classFocus: classFocus, now: n);
+  /// Persists a new crest (creating the guild first if needed). Returns the
+  /// updated guild.
+  Future<Guild> updateCrest(GuildCrest crest) async {
+    final guild = await ensureGuild();
+    final updated = guild.copyWith(crest: crest);
     final prefs = await SharedPreferences.getInstance();
-    final week = weekIso(n);
+    await prefs.setString(_key, jsonEncode(updated.toJson()));
+    return updated;
+  }
 
-    final members = await _members(prefs);
-    final synced = <GuildMember>[];
-    for (final m in members) {
-      if (m.isPlayer) {
-        synced.add(
-          m.copyWith(
-            weeklyVolumeKg: playerWeeklyVolumeKg,
-            weeklySessions: playerWeeklySessions,
-            lastActiveAt: playerWeeklySessions > 0 ? n : m.lastActiveAt,
-          ),
-        );
-      } else {
-        final vol = _npcWeeklyVolume(m.userId, week);
-        synced.add(
-          m.copyWith(
-            weeklyVolumeKg: vol,
-            weeklySessions: _npcWeeklySessions(m.userId, week),
-            // Backfill faces for guilds seeded before the pixel-face system
-            // (legacy image paths decode to null). Seeded by userId → stable.
-            avatarSpec:
-                m.avatarSpec ??
-                AvatarSpec.random(Random(m.userId.hashCode & 0x7fffffff)),
-          ),
-        );
-      }
+  /// Completed (non-partial, non-abandoned) sessions — the guild's lifetime
+  /// "showing up" count that drives its level.
+  static int completedSessions(List<WorkoutSession> sessions) =>
+      sessions.where((s) => !s.isPartial && !s.isAbandoned).length;
+
+  /// The guild level (1..maxGuildLevel) for a completed-session count.
+  static int guildLevel(int completed) {
+    var level = 1;
+    for (var i = 1; i < _levelThresholds.length; i++) {
+      if (completed >= _levelThresholds[i]) level = i + 1;
     }
-    synced.sort((a, b) => b.weeklyVolumeKg.compareTo(a.weeklyVolumeKg));
-
-    final total = synced.fold<int>(0, (sum, m) => sum + m.weeklyVolumeKg);
-    final totalSessions = synced.fold<int>(0, (s, m) => s + m.weeklySessions);
-    final guild = (await getGuild())!.copyWith(
-      weekIso: week,
-      weeklyVolumeKg: total,
-      weeklySessionsTotal: totalSessions,
-    );
-
-    await prefs.setString(_guildKey, jsonEncode(guild.toJson()));
-    await _saveMembers(prefs, synced);
-    return (guild: guild, members: synced);
+    return level;
   }
 
-  // Deterministic per-week NPC numbers (stable within a week, fresh on Monday).
-  int _npcWeeklyVolume(String userId, String week) {
-    final h = '$week|$userId'.hashCode & 0x7fffffff;
-    return 2000 + (h % 16000); // 2,000–18,000 kg
+  /// Progress within the current level: (sessionsIntoLevel, sessionsForLevel).
+  /// At max level returns null (no bar to fill).
+  static (int, int)? guildLevelProgress(int completed) {
+    final level = guildLevel(completed);
+    if (level >= maxGuildLevel) return null;
+    final floor = _levelThresholds[level - 1];
+    final next = _levelThresholds[level];
+    return (completed - floor, next - floor);
   }
 
-  int _npcWeeklySessions(String userId, String week) {
-    final h = '$week|s|$userId'.hashCode & 0x7fffffff;
-    return 2 + (h % 5); // 2–6 sessions
-  }
+  // ---- Roles (the earned guild rank ladder) -------------------------------
 
-  // ---------------------------------------------------------------------------
-  // Forge Nod — one per (recipient, week)
-  // ---------------------------------------------------------------------------
+  /// Role ladder — your earned standing in the guild (status, NOT authority over
+  /// others). Mapped to the guild level: showing up climbs your rank.
+  static const List<String> rankNames = [
+    'RECRUIT',
+    'MEMBER',
+    'VETERAN',
+    'OFFICER',
+    'LEADER',
+  ];
 
-  Future<Set<String>> _nods(SharedPreferences prefs) async {
-    final raw = prefs.getString(_nodsKey);
-    if (raw == null) return {};
-    return {for (final e in jsonDecode(raw) as List<dynamic>) e as String};
-  }
+  static String guildRank(int level) =>
+      rankNames[(level - 1).clamp(0, rankNames.length - 1)];
 
-  String _nodKey(String recipientId, String week) => '$week|$recipientId';
+  // ---- Weekly Cache (cooperative active-days goal) -------------------------
 
-  Future<bool> hasNodded(String recipientId, {DateTime? now}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final nods = await _nods(prefs);
-    return nods.contains(_nodKey(recipientId, weekIso(now ?? DateTime.now())));
-  }
+  /// Gems auto-banked once per week when the cache completes.
+  static const int cacheRewardGems = 20;
 
-  /// Sends a Forge Nod. Returns false if already sent to this member this week.
-  Future<bool> sendForgeNod(String recipientId, {DateTime? now}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final week = weekIso(now ?? DateTime.now());
-    final nods = await _nods(prefs);
-    final key = _nodKey(recipientId, week);
-    if (nods.contains(key)) return false;
-    nods.add(key);
-    await prefs.setString(_nodsKey, jsonEncode(nods.toList()));
-    return true;
-  }
+  /// Active-days target. Solo = 3 (WHO-floor-ish — resting is safe, leaves 4
+  /// rest days). Scales with real members in Phase 2 (per-member daily cap is
+  /// inherent in active-days). The ledger id is versioned so this can evolve.
+  static int cacheTarget(int eligibleMembers) =>
+      eligibleMembers <= 1 ? 3 : 3 * eligibleMembers;
 
-  /// Simulated count of nods the player "received" this week (deterministic).
-  int nodsReceivedThisWeek({DateTime? now}) {
-    final week = weekIso(now ?? DateTime.now());
-    return (week.hashCode & 0x7fffffff) % 6; // 0–5
-  }
-
-  // ---------------------------------------------------------------------------
-  // Weekly recap
-  // ---------------------------------------------------------------------------
-
-  Future<GuildRecap> recap({
-    required CharacterClass classFocus,
-    required int playerWeeklyVolumeKg,
-    required int playerWeeklySessions,
-    DateTime? now,
-  }) async {
-    final view = await loadGuildView(
-      classFocus: classFocus,
-      playerWeeklyVolumeKg: playerWeeklyVolumeKg,
-      playerWeeklySessions: playerWeeklySessions,
-      now: now,
-    );
-    final topThree = view.members.take(3).map((m) => m.userId).toList();
-    return GuildRecap(
-      guildName: view.guild.name,
-      weeklyVolumeKg: view.guild.weeklyVolumeKg,
-      playerVolumeKg: playerWeeklyVolumeKg,
-      topThreeUserIds: topThree,
-    );
+  /// Canonical Monday-of-week key (yyyy-MM-dd), derived from the SAME `now` and
+  /// the SAME Monday basis as `WorkoutMetricService.trainingDaysThisWeek`, so the
+  /// reward week can never drift from the active-days window (Codex F2).
+  static String cacheWeekKey(DateTime now) {
+    final day = DateTime(now.year, now.month, now.day);
+    final monday = day.subtract(Duration(days: day.weekday - 1));
+    return '${monday.year.toString().padLeft(4, '0')}-'
+        '${monday.month.toString().padLeft(2, '0')}-'
+        '${monday.day.toString().padLeft(2, '0')}';
   }
 }

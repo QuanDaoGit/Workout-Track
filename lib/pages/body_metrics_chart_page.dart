@@ -56,7 +56,7 @@ class _BodyMetricsChartPageState extends State<BodyMetricsChartPage> {
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Text(
-                  'NO CHECK-INS YET\n\nlog your weight to start your trend.',
+                  'NO CHECK-INS YET\n\nsave your weight to start your trend.',
                   textAlign: TextAlign.center,
                   style: AppFonts.shareTechMono(
                     color: kMutedText,
@@ -91,7 +91,7 @@ class _BodyMetricsChartPageState extends State<BodyMetricsChartPage> {
           const SizedBox(height: 10),
           Center(
             child: Text(
-              'trend builds as you log',
+              'trend builds as you save',
               style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
             ),
           ),

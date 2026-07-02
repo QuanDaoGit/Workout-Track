@@ -82,7 +82,6 @@ void main() {
       phase: phase,
       haulReady: haulReady,
       greeted: greeted,
-      adviceIndex: 0,
       routeName: routeName,
       backInHours: backInHours,
     ),

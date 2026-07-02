@@ -354,7 +354,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _updateElapsed();
     if (_totalLoggedSets == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Log at least one set before finishing.')),
+        const SnackBar(content: Text('Save at least one set before finishing.')),
       );
       return;
     }

@@ -97,7 +97,7 @@ class _ExerciseHistoryPageState extends State<ExerciseHistoryPage> {
               child: Padding(
                 padding: const EdgeInsets.all(kSpace5),
                 child: Text(
-                  'No logged sets yet.\nThis page fills in as you train.',
+                  'No saved sets yet.\nThis page fills in as you train.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
@@ -166,7 +166,7 @@ class _ExerciseHistoryPageState extends State<ExerciseHistoryPage> {
     if (points.length < 2) {
       return [
         Text(
-          'Log this exercise in one more session to unlock the trend chart.',
+          'Save this exercise in one more session to unlock the trend chart.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: kSpace4),

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/adventure_routes.dart';
 import '../../models/adventure_models.dart';
-import '../../services/guild_service.dart';
+import '../../utils/iso_week.dart';
 import '../../services/haptic_service.dart';
 import '../../theme/tokens.dart';
 
@@ -28,7 +28,7 @@ class AdventureCard extends StatelessWidget {
     final ui = adventureUiStateOf(
       state,
       now,
-      currentWeekIso: GuildService.weekIso(now),
+      currentWeekIso: isoWeekKey(now),
     );
     final route = adventureRouteById(state.standingOrderRouteId);
     final pending = state.pending;

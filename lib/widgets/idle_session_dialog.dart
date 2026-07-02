@@ -22,10 +22,10 @@ Future<IdleSessionChoice?> showIdleSessionDialog(
   required int idleMinutes,
 }) {
   final body = hasSets
-      ? 'No sets for about $idleMinutes minutes. Your logged sets are safe — '
+      ? 'No sets for about $idleMinutes minutes. Your saved sets are safe — '
             'save and finish here, or keep training. Time is counted up to your '
             'last set.'
-      : 'No sets for about $idleMinutes minutes. Nothing has been logged yet — '
+      : 'No sets for about $idleMinutes minutes. Nothing has been saved yet — '
             'keep training or discard this session.';
 
   return showDialog<IdleSessionChoice>(

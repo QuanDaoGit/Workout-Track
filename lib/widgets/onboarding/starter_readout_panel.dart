@@ -220,7 +220,7 @@ class StarterReadoutPanel extends StatelessWidget {
               Text(
                 hasProgram
                     ? '${program.daysPerWeek} days/week · ${program.recommendedWeeks} weeks'
-                    : 'log freely — no fixed plan',
+                    : 'save freely — no fixed plan',
                 style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
               ),
             ],

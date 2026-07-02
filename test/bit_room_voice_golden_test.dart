@@ -19,7 +19,7 @@ void main() {
     bool greeted = false,
     int charges = 0,
     bool canDispatch = false,
-    int adviceIndex = 0,
+    String? adviceLine,
     String? routeName,
     Color? routeAccent,
     int? backInHours,
@@ -28,7 +28,7 @@ void main() {
       phase: phase,
       haulReady: haulReady,
       greeted: greeted,
-      adviceIndex: adviceIndex,
+      adviceLine: adviceLine ?? bitRoomRegularAdvice.first,
       routeName: routeName,
       backInHours: backInHours,
     );
@@ -101,10 +101,11 @@ void main() {
       view(phase: AdventurePhase.idle, charges: 0),
       'room_voice_advice.png'));
   testWidgets('advice short ("67")', (t) => shot(t,
-      view(phase: AdventurePhase.idle, adviceIndex: 5),
+      view(phase: AdventurePhase.idle, adviceLine: '67'),
       'room_voice_advice_short.png'));
   testWidgets('advice longest line', (t) => shot(t,
-      view(phase: AdventurePhase.idle, adviceIndex: 1),
+      view(phase: AdventurePhase.idle,
+          adviceLine: 'Sleeping is the cheat code to muscle growth'),
       'room_voice_advice_long.png'));
   testWidgets('greeting (away first)', (t) => shot(t,
       view(phase: AdventurePhase.out, routeName: 'IRON VAULT',

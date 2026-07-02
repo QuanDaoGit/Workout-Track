@@ -260,7 +260,7 @@ class _MuscleBodyMapState extends State<MuscleBodyMap>
           const SizedBox(height: kSpace2),
           Center(
             child: Text(
-              'Log a workout to light up your map.',
+              'Save a workout to light up your map.',
               style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
             ),
           ),

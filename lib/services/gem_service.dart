@@ -48,6 +48,39 @@ class GemService {
     });
   }
 
+  /// Awards a quest **section-completion bonus** (all of a daily/weekly section's
+  /// quests claimed). Idempotent by `questbonus:<section>:<periodKey>` — the
+  /// per-period id IS the anti-farm cap (one daily bonus per day, one weekly per
+  /// week), and it makes the award the **durable one-shot** the chest celebration
+  /// fires from: a replay after the section is already settled returns 0 (Codex
+  /// review F1/F2). Returns the amount newly credited (0 if already awarded).
+  Future<int> awardQuestSectionBonus({
+    required String section,
+    required String periodKey,
+    required int amount,
+    required String label,
+    DateTime? now,
+  }) async {
+    if (amount <= 0) return 0;
+    final id = 'questbonus:$section:$periodKey';
+    return prefsWriteLock.synchronized(ledgerKey, () async {
+      final entries = await ledger();
+      if (entries.any((entry) => entry.id == id)) return 0;
+      await _save([
+        ...entries,
+        GemLedgerEntry(
+          id: id,
+          amount: amount,
+          sourceKind: GemLedgerSourceKind.questBonus,
+          sourceId: '$section:$periodKey',
+          label: label,
+          createdAt: now ?? DateTime.now(),
+        ),
+      ]);
+      return amount;
+    });
+  }
+
   /// Awards an expedition's gem payout. Idempotent by expedition id — a
   /// settle retried after a crash (or raced from two paths) can never
   /// double-credit.
@@ -104,6 +137,45 @@ class GemService {
       ]);
       return amount;
     });
+  }
+
+  /// Auto-banks the Weekly Cache reward. Idempotent by **week** — id
+  /// `guildcache:v1:<weekKey>` — so the cache pays out at most once per week; a
+  /// reload after banking returns 0 (the durable one-shot the chest fires from).
+  /// Versioned (`v1`) so a future pooled-guild rule can change target semantics
+  /// without colliding with historical claims. Returns the amount newly credited.
+  Future<int> awardGuildCacheGems({
+    required String weekKey,
+    required int amount,
+    required String label,
+    DateTime? now,
+  }) async {
+    if (amount <= 0) return 0;
+    final id = 'guildcache:v1:$weekKey';
+    return prefsWriteLock.synchronized(ledgerKey, () async {
+      final entries = await ledger();
+      if (entries.any((entry) => entry.id == id)) return 0;
+      await _save([
+        ...entries,
+        GemLedgerEntry(
+          id: id,
+          amount: amount,
+          sourceKind: GemLedgerSourceKind.guildCache,
+          sourceId: weekKey,
+          label: label,
+          createdAt: now ?? DateTime.now(),
+        ),
+      ]);
+      return amount;
+    });
+  }
+
+  /// Whether this week's cache has already banked (the ledger is the source of
+  /// truth for the banked state — survives session edits/deletes, Codex F5).
+  Future<bool> isGuildCacheBanked(String weekKey) async {
+    final id = 'guildcache:v1:$weekKey';
+    final entries = await ledger();
+    return entries.any((entry) => entry.id == id);
   }
 
   Future<int> awardDemoGems({
