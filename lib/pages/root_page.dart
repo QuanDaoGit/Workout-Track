@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/workout_models.dart';
+import '../services/analytics_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/haptic_service.dart';
 import '../services/idle_session_guard.dart';
@@ -97,7 +98,9 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       setState(() => _ongoingSession = null);
       _reloadQuestAwarePages();
     });
+    _reportIncompleteWorkoutIfFound();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _reportAccessibilityProps();
       _showExpiredPausedSummaryIfNeeded();
       _showIdleRevealIfNeeded();
     });
@@ -195,14 +198,43 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      unawaited(AnalyticsService.instance.logAppOpen());
+      // OS accessibility settings can change between sessions; re-report on
+      // every foreground so the `reduced_motion` segment stays current.
+      _reportAccessibilityProps();
       _showExpiredPausedSummaryIfNeeded();
       _showIdleRevealIfNeeded();
     }
   }
 
+  /// One-shot on launch: a leftover ongoing session means the app was killed
+  /// mid-workout and this is a force-kill recovery. Fired once per process (not
+  /// from the per-second dock poll) so it can't double-count.
+  Future<void> _reportIncompleteWorkoutIfFound() async {
+    final session = await WorkoutStorageService().getOngoingSession();
+    if (session != null) {
+      unawaited(AnalyticsService.instance.logIncompleteWorkoutFound());
+    }
+  }
+
+  /// Sets the `reduced_motion` user property from the OS accessibility state
+  /// (there is no in-app toggle — it's a MediaQuery-level setting).
+  void _reportAccessibilityProps() {
+    if (!mounted) return;
+    final media = MediaQuery.of(context);
+    unawaited(
+      AnalyticsService.instance.setUserProperties(
+        reducedMotion: media.disableAnimations || media.accessibleNavigation,
+      ),
+    );
+  }
+
   /// Switch the active destination. Semantic (not index-based) so callers never
   /// couple to a numeric slot — remapping the bar can't silently misroute.
   void goTo(AppDestination destination) {
+    // Character-attachment signal: only a *real* tab change into Items/Labs (not
+    // a re-tap or a rebuild) counts as deliberately visiting the character.
+    final isChange = destination != _destination;
     switch (destination) {
       case AppDestination.home:
         _homeKey.currentState?.onReenter(); // re-entry → rotate BIT's advice
@@ -210,10 +242,24 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
         // Kept alive in the IndexedStack, so initState runs once — re-fetch on
         // re-entry to surface loot earned since the first build.
         _inventoryKey.currentState?.reload();
+        if (isChange) {
+          unawaited(
+            AnalyticsService.instance.logCharacterView(
+              AnalyticsValue.surfaceInventory,
+            ),
+          );
+        }
       case AppDestination.guild:
         _guildKey.currentState?.reload();
       case AppDestination.labs:
         _profileKey.currentState?.reload();
+        if (isChange) {
+          unawaited(
+            AnalyticsService.instance.logCharacterView(
+              AnalyticsValue.surfaceProfile,
+            ),
+          );
+        }
     }
     // Pause the hall's ambient loop unless the Guild tab is the active one.
     _guildKey.currentState?.setActive(destination == AppDestination.guild);
@@ -312,6 +358,11 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
 
     final hasSets = session.exercises.any((log) => log.sets.isNotEmpty);
     if (!hasSets) {
+      unawaited(
+        AnalyticsService.instance.logWorkoutDiscarded(
+          AnalyticsValue.discardIdleZeroSets,
+        ),
+      );
       await WorkoutStorageService().deleteSession(session.id);
       if (!mounted) return;
       _loadOngoingSession();
@@ -343,6 +394,11 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       case IdleSessionChoice.resume:
         await _resumeOngoingSession(session);
       case IdleSessionChoice.discard:
+        unawaited(
+          AnalyticsService.instance.logWorkoutDiscarded(
+            AnalyticsValue.discardUser,
+          ),
+        );
         await WorkoutStorageService().deleteSession(session.id);
         await ProgramService().clearOngoingProgramSession(session.id);
         if (!mounted) return;

@@ -44,7 +44,6 @@ void main() {
 
     expect(stats, {
       'STR': 10,
-      'DEF': 10,
       'VIT': 10,
       'AGI': 10,
       'END': 10,
@@ -136,7 +135,7 @@ void main() {
         _session(
           date: now,
           muscleGroup: 'Chest',
-          logs: [_log('curl', weight: 20, reps: 10, sets: 3)],
+          logs: [_log('press', weight: 20, reps: 10, sets: 3)],
         ),
       ]);
 
@@ -145,8 +144,12 @@ void main() {
         catalog: catalog,
       ).calculateAllStats();
 
-      expect(stats['STR'], greaterThan(10));
-      expect(stats['DEF'], greaterThan(10));
+      // 'press' primary is shoulders (AGI-led). Had the engine fallen back to
+      // the workout target (Chest, STR-led), STR would dominate instead. AGI
+      // rising above baseline and outweighing STR proves the exercise's own
+      // primary muscle drove the stat.
+      expect(stats['AGI'], greaterThan(10));
+      expect(stats['AGI'], greaterThan(stats['STR']!));
     },
   );
 
@@ -379,7 +382,6 @@ void main() {
 
     expect(stats, {
       'STR': 10,
-      'DEF': 10,
       'VIT': 10,
       'AGI': 10,
       'END': 10,
@@ -470,7 +472,6 @@ void main() {
       StatEngine.combatStatsKey,
       jsonEncode({
         'STR': 800,
-        'DEF': 500,
         'VIT': 100,
         'AGI': 0,
         'END': 100,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/avatar_spec.dart';
+import '../../models/calibration_quiz_models.dart';
 import '../../models/character.dart';
 import '../../services/notification_service.dart';
 import '../../services/notification_settings_service.dart';
@@ -13,6 +14,7 @@ import '../../widgets/motion/ambient_drift.dart';
 import '../../widgets/motion/hold_depress.dart';
 import '../../widgets/motion/phosphor_tap.dart';
 import '../../widgets/pixel_button.dart';
+import 'gift_reveal_screen.dart';
 import 'start_gate_screen.dart';
 
 /// One-time, opt-in **soft-ask** for Tier B training-day reminders, shown once at
@@ -68,12 +70,24 @@ class _RemindersPrimerPageState extends State<RemindersPrimerPage> {
 
   void _continue() {
     if (!mounted) return;
+    // The motivational reel — offered via the "gift" beat, then the Charge
+    // Ritual — is for the two LOWEST experience tiers only (novice / beginner).
+    // Seasoned lifters (intermediate / advanced) don't need the hype video, so
+    // they skip the gift + reel entirely and go straight to the Start Gate.
+    final exp = widget.character.calibration.exp;
+    final showReel =
+        exp == Experience.novice || exp == Experience.beginner;
     Navigator.of(context).pushReplacement(
       arcadeRoute(
-        (_) => StartGateScreen(
-          character: widget.character,
-          avatarSpec: widget.avatarSpec,
-        ),
+        (_) => showReel
+            ? GiftRevealScreen(
+                character: widget.character,
+                avatarSpec: widget.avatarSpec,
+              )
+            : StartGateScreen(
+                character: widget.character,
+                avatarSpec: widget.avatarSpec,
+              ),
       ),
     );
   }

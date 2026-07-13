@@ -61,7 +61,12 @@ design-space + `canvas.scale` (FX track the sprite 1:1) — but its fine pixel F
 scale, so the spectacle must come from a robust app-level effect (reuse the real gem-flight/particle
 layer), not the shrunk burst; and DON'T anchor a transient full-size overlay to a scrolling list
 position (it detaches under scroll / when the anchor is off-screen) — animate IN-PLACE tied to the
-widget (`RepaintBoundary`, one-shot `AnimationController`).** *Seen: the glitch slice ported as
+widget (`RepaintBoundary`, one-shot `AnimationController`).** **A rAF prototype's per-frame ORDER is
+part of the spec:** it computes the frame's transform in `evaluate(t)` *before* `stepFX` spawns
+particles at that position; splitting the port so the transform lands in Flutter's *build* while the
+spawner runs in the *tick* reads a stale/zero position (a corner-spawned spark) — keep evaluate-order
+side effects together in the ticker callback, and let build only consume their stored results
+(2026-07, session ceremony thrust trail). *Seen: the glitch slice ported as
 three clipped passes (band shifts, no double-draw); the sprite extraction gated on a byte-identical
 companion golden; Dart `.round()` (ties away from zero) silently diverged from JS `Math.round`
 (ties → +∞) at the hover-bob trough → ported as `(x+0.5).floor()`; the pad charge-meter (native
@@ -72,4 +77,9 @@ overlay (Codex F5, 2026-06). Porting a per-pixel canvas recolour to `dart:ui`
 (`toByteData`→recolour→`decodeImageFromPixels`) is an **async** layer build; a golden of a widget
 **gated behind a parent's async load** (so it mounts only at the post-`runAsync` pump) renders it
 **invisible while the test still passes** → pump INSIDE `runAsync` *after* the parent settles, so the
-gated child mounts and its engine callbacks fire within the real-async window (2026-06).*
+gated child mounts and its engine callbacks fire within the real-async window (2026-06). **A ported
+self-contained timer/clock stays AUTHORITATIVE + gets a watchdog — never re-couple it to an app async
+resource (a video's end-event) as the source of truth, or a stall/failed load soft-locks the flow**:
+the Charge Ritual reel drives the charge from an independent bounded clock (video position = best-effort
+visual sync) + `finishReel()` on end/error/watchdog, so a degraded reel can't trap onboarding (Codex
+F2, 2026-07).*

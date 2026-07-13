@@ -49,18 +49,30 @@ class WorkoutStorageService {
     // id means this is a re-save, not a new workout — so the funnel events below
     // must not double-count it (Codex F2).
     var alreadyCompleted = false;
-    final sessions = await prefsWriteLock.synchronized(_sessionsKey, () async {
-      final sessions = await getSessions();
-      alreadyCompleted = sessions.any((s) => s.id == session.id && !s.isOngoing);
-      // Incremental autosave leaves an ongoing checkpoint row under this
-      // session's id; the completed save replaces it (otherwise we'd keep both
-      // an ongoing and a completed row with the same id — a duplicate + a
-      // lingering resume dock).
-      sessions.removeWhere((s) => s.id == session.id && s.isOngoing);
-      sessions.add(session);
-      await _writeSessions(sessions);
-      return sessions;
-    });
+    final List<WorkoutSession> sessions;
+    try {
+      sessions = await prefsWriteLock.synchronized(_sessionsKey, () async {
+        final sessions = await getSessions();
+        alreadyCompleted = sessions.any((s) => s.id == session.id && !s.isOngoing);
+        // Incremental autosave leaves an ongoing checkpoint row under this
+        // session's id; the completed save replaces it (otherwise we'd keep both
+        // an ongoing and a completed row with the same id — a duplicate + a
+        // lingering resume dock).
+        sessions.removeWhere((s) => s.id == session.id && s.isOngoing);
+        sessions.add(session);
+        await _writeSessions(sessions);
+        return sessions;
+      });
+    } catch (e) {
+      // Persistence failed — surface it to analytics, then RETHROW so the
+      // caller's existing error handling is unchanged (telemetry never swallows
+      // a real save failure).
+      final reason = e.toString().toLowerCase().contains('timeout')
+          ? AnalyticsValue.saveFailLockTimeout
+          : AnalyticsValue.saveFailWriteFailed;
+      unawaited(AnalyticsService.instance.logWorkoutSaveFailed(reason));
+      rethrow;
+    }
     if (!session.isPartial) {
       // A finalized session can never be resumed — drop its ephemeral program
       // swaps (Codex plan-review F3 lifecycle).

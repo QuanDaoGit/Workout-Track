@@ -7,6 +7,11 @@ import 'arcade_bar.dart';
 import 'glitch_text.dart';
 import 'strobe_flash.dart';
 
+/// Duration of a single bar-fill *climb*. Deliberately **fixed** (not scaled by
+/// distance) and kept equal to the riser SFX length (`ops/gen_xp_riser.py` DUR,
+/// 0.80s) so the "bar running up" sound rises and lands together with the fill.
+const Duration kXpBarFillDuration = Duration(milliseconds: 800);
+
 /// The finish arc's XP / level beat. Fills the bar from the old XP fraction
 /// toward the next level; on each level crossed it flashes the bar, punch-scales
 /// the `LV n` number as it increments, resets to empty, and refills into the new
@@ -22,6 +27,7 @@ class XpLevelMeter extends StatefulWidget {
     this.play = true,
     this.prominent = true,
     this.onLevelUp,
+    this.onClimbStart,
   });
 
   final int oldTotalXP;
@@ -34,6 +40,12 @@ class XpLevelMeter extends StatefulWidget {
   /// small inline `LV n` instead, so only the actual hero owns the big beat.
   final bool prominent;
   final VoidCallback? onLevelUp;
+
+  /// Fires at the start of **each** bar-fill segment (not under reduced motion —
+  /// the bar snaps then). The parent plays the rising "bar running up" SFX, whose
+  /// length is matched to the fill ([kXpBarFillDuration]) so they land together.
+  /// Kept as a callback so this widget stays sound-free/testable.
+  final VoidCallback? onClimbStart;
 
   @override
   State<XpLevelMeter> createState() => _XpLevelMeterState();
@@ -140,6 +152,9 @@ class _XpLevelMeterState extends State<XpLevelMeter>
     for (final segment in _segments()) {
       if (!mounted) return;
       setState(() => _level = segment.level);
+      // Sound the rising "bar running up" SFX for this fill segment — the riser
+      // and the climb share [kXpBarFillDuration], so they rise and land together.
+      if (segment.to > segment.from) widget.onClimbStart?.call();
       await _animateFill(segment.from, segment.to);
       if (!mounted) return;
       if (segment.levelUpTo != null) {
@@ -157,31 +172,45 @@ class _XpLevelMeterState extends State<XpLevelMeter>
 
   Future<void> _animateFill(double from, double to) async {
     _fillTween = Tween<double>(begin: from, end: to);
+    // A climb runs for the FIXED [kXpBarFillDuration] (matched to the riser SFX)
+    // so sound and fill land together, regardless of how far the bar travels; the
+    // zero-distance opening hold stays brief.
+    final climbing = (to - from).abs() > 0.0001;
     _controller
-      ..duration = Duration(
-        milliseconds: (560 * (to - from).abs()).clamp(260, 600).round(),
-      )
+      ..duration = climbing
+          ? kXpBarFillDuration
+          : const Duration(milliseconds: 220)
       ..reset();
     await _controller.forward();
   }
 
-  Widget _bar() => StrobeFlash(
-    trigger: _barFlash,
-    color: kAmber,
-    opacity: 0.55,
-    toggles: 2,
-    toggleMs: 70,
-    borderRadius: BorderRadius.circular(4),
-    // The meter's own controller drives `_fill` (segment climb + level-up
-    // reset); ArcadeBar with flashOnIncrease:false renders that fill each frame
-    // (beveled, no second ease). Amber = the XP/reward read, matching the home
-    // XP strip.
-    child: ArcadeBar(
-      value: _fill,
-      accent: kAmber,
-      height: 12,
-      flashOnIncrease: false,
-    ),
+  Widget _bar() => Stack(
+    children: [
+      StrobeFlash(
+        trigger: _barFlash,
+        color: kAmber,
+        opacity: 0.55,
+        toggles: 2,
+        toggleMs: 70,
+        borderRadius: BorderRadius.circular(4),
+        // The meter's own controller drives `_fill` (segment climb + level-up
+        // reset); ArcadeBar with flashOnIncrease:false renders that fill each
+        // frame (beveled, no second ease). Amber = the XP/reward read, matching
+        // the home XP strip.
+        child: ArcadeBar(
+          value: _fill,
+          accent: kAmber,
+          height: 12,
+          flashOnIncrease: false,
+        ),
+      ),
+      // A one-shot white-hot light band sweeps across the bar on each level
+      // crossing (driven by the same `_barFlash` counter as the strobe). Purely
+      // additive juice — omitted under reduced motion (the strobe still reads).
+      Positioned.fill(
+        child: IgnorePointer(child: _BarSurge(trigger: _barFlash)),
+      ),
+    ],
   );
 
   @override
@@ -202,13 +231,16 @@ class _XpLevelMeterState extends State<XpLevelMeter>
               alignment: Alignment.center,
               clipBehavior: Clip.none,
               children: [
-                GlitchText(
-                  key: ValueKey('level_$_level'),
-                  text: 'LEVEL $_level',
-                  style: const TextStyle(
-                    fontFamily: 'PressStart2P',
-                    fontSize: 18,
-                    color: kAmber,
+                _LevelPunch(
+                  trigger: _level,
+                  child: GlitchText(
+                    key: ValueKey('level_$_level'),
+                    text: 'LEVEL $_level',
+                    style: const TextStyle(
+                      fontFamily: 'PressStart2P',
+                      fontSize: 18,
+                      color: kAmber,
+                    ),
                   ),
                 ),
                 Positioned(top: -6, child: _LevelFloat(trigger: _floatTrigger)),
@@ -234,12 +266,15 @@ class _XpLevelMeterState extends State<XpLevelMeter>
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'LV $_level',
-              style: AppFonts.shareTechMono(
-                color: kAmber,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
+            _LevelPunch(
+              trigger: _level,
+              child: Text(
+                'LV $_level',
+                style: AppFonts.shareTechMono(
+                  color: kAmber,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             Text(
@@ -314,4 +349,154 @@ class _LevelFloatState extends State<_LevelFloat>
       },
     );
   }
+}
+
+/// A quick scale "punch" (1.18 → 1.0, easeOutCubic over [kMotionPop]) fired each
+/// time [trigger] changes — the level number popping as it ticks up. Rests at
+/// 1.0 (so it doesn't sit enlarged before the first punch). Static under reduced
+/// motion.
+class _LevelPunch extends StatefulWidget {
+  const _LevelPunch({required this.trigger, required this.child});
+
+  final int trigger;
+  final Widget child;
+
+  @override
+  State<_LevelPunch> createState() => _LevelPunchState();
+}
+
+class _LevelPunchState extends State<_LevelPunch>
+    with SingleTickerProviderStateMixin {
+  // Created in initState (not lazily) so it's always initialized while the
+  // element is active — a lazy `late` field first touched in dispose() (when the
+  // reduced-motion build never reads it) does an unsafe deactivated-ancestor
+  // TickerMode lookup.
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: kMotionPop)
+      ..value = 1;
+  }
+
+  @override
+  void didUpdateWidget(covariant _LevelPunch oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.trigger != oldWidget.trigger &&
+        !MediaQuery.of(context).disableAnimations) {
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.of(context).disableAnimations) return widget.child;
+    return AnimatedBuilder(
+      animation: _controller,
+      child: widget.child,
+      builder: (context, child) {
+        final t = Curves.easeOutCubic.transform(_controller.value);
+        final scale = 1.0 + 0.18 * (1 - t);
+        return Transform.scale(scale: scale, child: child);
+      },
+    );
+  }
+}
+
+/// A one-shot white-hot light band that sweeps left→right across the bar once
+/// per level crossing (driven by [trigger]). Additive glint over the fill —
+/// omitted entirely under reduced motion.
+class _BarSurge extends StatefulWidget {
+  const _BarSurge({required this.trigger});
+
+  final int trigger;
+
+  @override
+  State<_BarSurge> createState() => _BarSurgeState();
+}
+
+class _BarSurgeState extends State<_BarSurge>
+    with SingleTickerProviderStateMixin {
+  // Created in initState (not lazily) — see _LevelPunchState for why.
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: kMotionPop);
+  }
+
+  @override
+  void didUpdateWidget(covariant _BarSurge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.trigger != oldWidget.trigger &&
+        widget.trigger > 0 &&
+        !MediaQuery.of(context).disableAnimations) {
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.of(context).disableAnimations) return const SizedBox.shrink();
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final v = _controller.value;
+        if (v <= 0 || v >= 1) return const SizedBox.shrink();
+        return CustomPaint(
+          painter: _BarSurgePainter(progress: Curves.easeOut.transform(v)),
+        );
+      },
+    );
+  }
+}
+
+class _BarSurgePainter extends CustomPainter {
+  _BarSurgePainter({required this.progress});
+
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    // Triangle fade (0 → 1 → 0) so the glint rises and falls across the pass.
+    final fade = (progress < 0.5 ? progress * 2 : (1 - progress) * 2)
+        .clamp(0.0, 1.0);
+    final alpha = fade * 0.9;
+    if (alpha <= 0) return;
+    final hot = Color.lerp(kAmber, kText, 0.85)!;
+    final band = w * 0.16;
+    final headX = -band + progress * (w + band);
+    final p = Paint()..isAntiAlias = false;
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    // Dim trailing wash + a bright leading head.
+    canvas.drawRect(
+      Rect.fromLTWH(headX - band, 0, band, h),
+      p..color = hot.withValues(alpha: alpha * 0.4),
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(headX, 0, band * 0.5, h),
+      p..color = hot.withValues(alpha: alpha),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _BarSurgePainter old) =>
+      old.progress != progress;
 }

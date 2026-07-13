@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/pages/Workout session/workout_summary.dart';
+import 'package:workout_track/services/sfx_service.dart';
 
 /// Phase 1b static restructure of the finish summary: hero headline replaces the
 /// flat stat row, per-exercise calorie readouts are gone, and the receipt facts
@@ -10,7 +11,11 @@ import 'package:workout_track/pages/Workout session/workout_summary.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    SfxService.enabled = false; // no audio plugin in the test env
+  });
+  tearDown(() => SfxService.enabled = true);
 
   Future<void> pumpSummary(
     WidgetTester tester, {

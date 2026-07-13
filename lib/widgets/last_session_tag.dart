@@ -6,9 +6,9 @@ import '../theme/tokens.dart';
 import 'count_up_text.dart';
 
 /// The "changed Home" closing beat: a compact tag summarizing the just-finished
-/// session's visible capability gains (STR/AGI/END) with any rank-ups. DEF is
-/// hidden, VIT is the recovery meter, and LCK is a milestone — none appear here.
-/// Renders nothing when the session produced no visible capability gain.
+/// session's visible capability gains (STR/AGI/END) with any rank-ups. VIT is
+/// the recovery meter and LCK is a milestone — neither appears here. Renders
+/// nothing when the session produced no visible capability gain.
 class LastSessionTag extends StatelessWidget {
   const LastSessionTag({super.key, required this.delta, required this.stats});
 

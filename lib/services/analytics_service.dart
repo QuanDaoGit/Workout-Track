@@ -87,10 +87,12 @@ class AnalyticsService {
   Future<void> logOnboardingComplete() => _log('onboarding_complete');
 
   Future<void> logWorkoutStarted({
+    required List<String> muscleGroups,
     required int exerciseCount,
     required String source,
   }) =>
       _log('workout_started', {
+        'muscle_groups': muscleGroups.join(','),
         'exercise_count': exerciseCount,
         'source': source,
       });
@@ -153,6 +155,13 @@ class AnalyticsService {
     }
   }
 
+  /// Consent telemetry — fires when the user flips the analytics opt-out or the
+  /// crash-reporting opt-in toggle. `scope` ∈ {analytics, crash}; `value` is the
+  /// new enabled-state. Emitted BEFORE opt-out disables collection so the last
+  /// event a departing user sends is their own opt-out (ADR 0001).
+  Future<void> logConsentChanged(String scope, bool value) =>
+      _log('consent_changed', {'scope': scope, 'value': value});
+
   Future<void> _log(String name, [Map<String, Object>? parameters]) async {
     if (!_enabled) return;
     try {
@@ -161,4 +170,50 @@ class AnalyticsService {
       // Telemetry must never crash the app.
     }
   }
+}
+
+/// Centralized param-value vocabulary for the event taxonomy
+/// (`statistics/metrics-glossary.md`). Callers reference these instead of bare
+/// string literals so an enum value means one thing everywhere.
+abstract final class AnalyticsValue {
+  // onboarding_step.step (visual step order)
+  static const stepColdOpen = 'cold_open';
+  static const stepProblem = 'problem';
+  static const stepSolution = 'solution';
+  static const stepCalibrationQuizA = 'calibration_quiz_a';
+  static const stepClassReveal = 'class_reveal';
+  static const stepCalibrationQuizB = 'calibration_quiz_b';
+  static const stepProgramSelection = 'program_selection';
+  static const stepNameScreen = 'name_screen';
+  static const stepStartGate = 'start_gate';
+
+  // workout_started.source
+  static const sourceProgram = 'program';
+  static const sourceFree = 'free';
+
+  // workout_save_failed.reason
+  static const saveFailLockTimeout = 'lock_timeout';
+  static const saveFailWriteFailed = 'write_failed';
+
+  // workout_discarded.reason
+  static const discardIdleZeroSets = 'idle_zero_sets';
+  static const discardUser = 'user_discard';
+
+  // rest_action.kind
+  static const restStart = 'start';
+  static const restFinish = 'finish';
+  static const restSkip = 'skip';
+  static const restAdjust = 'adjust';
+
+  // character_view.surface
+  static const surfaceInventory = 'inventory';
+  static const surfaceProfile = 'profile';
+
+  // cosmetic_equipped.kind
+  static const cosmeticTitle = 'title';
+  static const cosmeticFrame = 'frame';
+
+  // consent_changed.scope
+  static const consentAnalytics = 'analytics';
+  static const consentCrash = 'crash';
 }

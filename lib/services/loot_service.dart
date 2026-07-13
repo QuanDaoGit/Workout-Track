@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,7 @@ import '../models/loot_item.dart';
 import '../models/loot_unlock_rule.dart';
 import '../models/milestone_models.dart';
 import '../models/workout_models.dart';
+import 'analytics_service.dart';
 import 'exercise_catalog_service.dart';
 import 'gem_service.dart';
 import 'json_safe.dart';
@@ -81,6 +83,15 @@ class LootService {
       encoded[entry.key.storageKey] = entry.value.id;
     }
     await prefs.setString(_equippedKey, jsonEncode(encoded));
+    // Collection-engagement signal; single chokepoint catches both the manual
+    // equip and the first-title auto-equip on unlock.
+    unawaited(
+      AnalyticsService.instance.logCosmeticEquipped(
+        item.category == LootCategory.titleBadge
+            ? AnalyticsValue.cosmeticTitle
+            : AnalyticsValue.cosmeticFrame,
+      ),
+    );
   }
 
   /// Clear the equipped item in [category] (e.g. revert a title to "None").

@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <!-- Lets the boot receiver below re-arm a pending rest alert after a device reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Amplitude/waveform vibration (the `vibration` package) for the XP-bar climb
+         buzz + level-up stamp; the stock HapticFeedback path needs no permission. -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
     <application
         android:label="Ironbit"
         android:name="${applicationName}"

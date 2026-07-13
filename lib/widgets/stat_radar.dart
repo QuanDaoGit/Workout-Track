@@ -19,8 +19,8 @@ class StatRadar extends StatelessWidget {
   final Map<String, int> stats;
   final double height;
 
-  // Triangle: STR / AGI / END only. DEF retired from visible UI; VIT renders as
-  // a separate horizontal bar in the stat card.
+  // Triangle: STR / AGI / END only. VIT renders as a separate horizontal bar in
+  // the stat card.
   static const _labels = StatRadarRead.visibleStats;
   static const _activationThreshold = 10;
 

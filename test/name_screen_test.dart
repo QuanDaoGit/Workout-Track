@@ -9,6 +9,7 @@ import 'package:workout_track/models/avatar_spec.dart';
 import 'package:workout_track/models/user_profile_sex.dart';
 import 'package:workout_track/pages/onboarding/name_screen.dart';
 import 'package:workout_track/pages/onboarding/reminders_primer_page.dart';
+import 'package:workout_track/pages/onboarding/gift_reveal_screen.dart';
 import 'package:workout_track/pages/onboarding/start_gate_screen.dart';
 import 'package:workout_track/services/character_service.dart';
 import 'package:workout_track/services/profile_service.dart';
@@ -94,8 +95,11 @@ void main() {
     // The one-time reminders primer is the first stop after the name commit.
     expect(find.byType(RemindersPrimerPage), findsOneWidget);
     await tester.tap(find.text('NOT NOW'));
-    await tester.pumpAndSettle();
-    expect(find.byType(StartGateScreen), findsOneWidget);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    // The gift reveal is the first stop after the primer (BIT offers the gift,
+    // then flies onward); pump, never pumpAndSettle (perpetual ambient drift).
+    expect(find.byType(GiftRevealScreen), findsOneWidget);
   });
 
   testWidgets('button tap commits, lands on the primer, then the gate', (
@@ -110,8 +114,11 @@ void main() {
 
     expect(find.byType(RemindersPrimerPage), findsOneWidget);
     await tester.tap(find.text('NOT NOW'));
-    await tester.pumpAndSettle();
-    expect(find.byType(StartGateScreen), findsOneWidget);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    // The gift reveal is the first stop after the primer (BIT offers the gift,
+    // then flies onward); pump, never pumpAndSettle (perpetual ambient drift).
+    expect(find.byType(GiftRevealScreen), findsOneWidget);
   });
 
   testWidgets('the typed name creates the character (no avatar step)', (
@@ -135,10 +142,34 @@ void main() {
     );
     // Continue past the primer to the gate, where the name renders.
     await tester.tap(find.text('NOT NOW'));
-    await tester.pumpAndSettle();
-    expect(find.byType(StartGateScreen), findsOneWidget);
-    expect(find.text('Nova'), findsOneWidget);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    // The gift reveal precedes the ritual/gate; deeper flow is covered in
+    // charge_ritual_screen_test.
+    expect(find.byType(GiftRevealScreen), findsOneWidget);
   });
+
+  testWidgets(
+    'experienced lifters skip the gift/reel — primer routes straight to the gate',
+    (tester) async {
+      await _pumpNameScreen(tester, draft: _intermediateDraft);
+
+      await tester.enterText(find.byType(TextField), 'Rex');
+      await tester.pump();
+      await tester.tap(find.text('I AM REX'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RemindersPrimerPage), findsOneWidget);
+      await tester.tap(find.text('NOT NOW'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      // Intermediate (and advanced) skip the gift reveal + motivational reel
+      // entirely — straight to the Start Gate. Pump, never pumpAndSettle (the
+      // gate carries perpetual ambient drift).
+      expect(find.byType(GiftRevealScreen), findsNothing);
+      expect(find.byType(StartGateScreen), findsOneWidget);
+    },
+  );
 }
 
 Future<void> _pumpNameScreen(
@@ -163,6 +194,19 @@ final _baseDraft = CharacterDraft(
     goal: BodyGoal.cut,
     freq: TrainingFreq.mid,
     exp: Experience.beginner,
+    bodyWeightKg: 72,
+    sex: UserProfileSex.preferNotToSay,
+    clazz: CharacterClass.assassin,
+  ),
+  classConfirmedAt: DateTime(2026, 5, 29, 12),
+);
+
+/// A seasoned lifter — routed past the gift/reel straight to the Start Gate.
+final _intermediateDraft = CharacterDraft(
+  calibration: const CalibrationResult(
+    goal: BodyGoal.cut,
+    freq: TrainingFreq.mid,
+    exp: Experience.intermediate,
     bodyWeightKg: 72,
     sex: UserProfileSex.preferNotToSay,
     clazz: CharacterClass.assassin,

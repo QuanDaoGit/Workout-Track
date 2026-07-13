@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../services/analytics_service.dart';
 import '../services/haptic_service.dart';
 import '../services/rest_timer_service.dart';
 import '../theme/app_fonts.dart';
@@ -56,6 +57,11 @@ class _RestBreakPanelState extends State<RestBreakPanel> {
         if (DateTime.now().difference(snap.endsAt) <
             const Duration(seconds: 3)) {
           HapticService.instance.success();
+          // A rest that elapsed naturally while the user watched it (a stale
+          // backgrounded expiry is intentionally excluded).
+          unawaited(
+            AnalyticsService.instance.logRestAction(AnalyticsValue.restFinish),
+          );
         }
         RestTimerService.instance.cancel();
       }
@@ -151,7 +157,14 @@ class _RestBreakPanelState extends State<RestBreakPanel> {
                 child: _AdjustButton(
                   label: '−15s',
                   semanticLabel: 'Subtract 15 seconds of rest',
-                  onTap: () => RestTimerService.instance.adjust(-15),
+                  onTap: () {
+                    RestTimerService.instance.adjust(-15);
+                    unawaited(
+                      AnalyticsService.instance.logRestAction(
+                        AnalyticsValue.restAdjust,
+                      ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(width: kSpace2),
@@ -159,7 +172,14 @@ class _RestBreakPanelState extends State<RestBreakPanel> {
                 child: _AdjustButton(
                   label: '+15s',
                   semanticLabel: 'Add 15 seconds of rest',
-                  onTap: () => RestTimerService.instance.adjust(15),
+                  onTap: () {
+                    RestTimerService.instance.adjust(15);
+                    unawaited(
+                      AnalyticsService.instance.logRestAction(
+                        AnalyticsValue.restAdjust,
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -170,6 +190,11 @@ class _RestBreakPanelState extends State<RestBreakPanel> {
             child: FilledButton(
               onPressed: () {
                 HapticService.instance.tap(); // skip the rest, back to logging
+                unawaited(
+                  AnalyticsService.instance.logRestAction(
+                    AnalyticsValue.restSkip,
+                  ),
+                );
                 widget.onSkip();
               },
               style: FilledButton.styleFrom(

@@ -15,8 +15,9 @@ void main() {
   // exerciseId -> primary muscle, mirroring StatEngine's catalog shape.
   const catalog = {
     'bench': 'chest', // STR
-    'row': 'lats', // DEF
-    'squat': 'quadriceps', // VIT
+    'row': 'lats', // STR (back)
+    'squat': 'quadriceps', // STR/END (legs)
+    'press': 'shoulders', // AGI
   };
 
   StatEngine engine(DateTime now) =>
@@ -170,9 +171,10 @@ void main() {
       await engine(day1).calculateAllStats();
 
       // A later, unrelated normal session that trains a DIFFERENT stat than the
-      // seeded STR — back/row feeds DEF (legs now feed STR, so use row here).
+      // seeded STR — shoulder press feeds AGI (chest/back/legs all feed STR, so
+      // press gives a clean non-STR signal).
       final later = _session(day2, [
-        _log('row', weight: 100, reps: 5),
+        _log('press', weight: 100, reps: 5),
       ], id: 'later');
       await _seedSessions([calibration, later]);
 
@@ -182,10 +184,10 @@ void main() {
 
       // Calibrated STR survives the recompute (not erased by the new session).
       expect(stats['STR'], 650);
-      // The new session touched DEF, not STR; the constant seed never appears
+      // The new session touched AGI, not STR; the constant seed never appears
       // as a per-session delta.
       expect(delta.containsKey('STR'), isFalse);
-      expect(delta['DEF'], greaterThan(0));
+      expect(delta['AGI'], greaterThan(0));
     },
   );
 

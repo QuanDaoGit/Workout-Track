@@ -104,9 +104,7 @@ class _RankAssessedPageState extends State<RankAssessedPage> {
 
   List<Widget> _statRows() {
     return [
-      // DEF is hidden legacy storage only (see CLAUDE.md Combat Stats) — never
-      // surface it as a graded stat. The other output stats stay.
-      for (final stat in StatEngine.outputStats.where((s) => s != 'DEF'))
+      for (final stat in StatEngine.outputStats)
         Padding(
           padding: const EdgeInsets.only(bottom: kSpace3),
           child: Row(

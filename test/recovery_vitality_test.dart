@@ -15,7 +15,7 @@ void main() {
   const catalog = {
     'bench': 'chest', // STR
     'squat': 'quadriceps', // STR now (was VIT)
-    'row': 'lats', // DEF
+    'row': 'lats', // STR (back)
     'ohp': 'shoulders', // AGI
   };
 

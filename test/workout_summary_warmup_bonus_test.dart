@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/pages/Workout session/workout_summary.dart';
 import 'package:workout_track/services/gem_service.dart';
+import 'package:workout_track/services/sfx_service.dart';
 import 'package:workout_track/services/warmup_reward_service.dart';
 
 /// A warmed-up real session shows the calm warm-up bonus on the summary AND the
@@ -12,7 +13,11 @@ import 'package:workout_track/services/warmup_reward_service.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    SfxService.enabled = false; // no audio plugin in the test env
+  });
+  tearDown(() => SfxService.enabled = true);
 
   testWidgets('warmed-up session reveals the bonus and credits the gems', (tester) async {
     await tester.pumpWidget(

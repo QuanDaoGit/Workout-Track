@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_fonts.dart';
@@ -68,6 +69,7 @@ import 'inventory_page.dart';
 import 'log_weight_page.dart';
 import 'shop_page.dart';
 import 'workout_page.dart';
+import 'Workout session/workout_summary.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, this.onProfileChanged});
@@ -384,8 +386,22 @@ class ProfilePageState extends State<ProfilePage> {
 
   Future<void> _toggleAnalytics(bool value) async {
     // The toggle reads as "analytics ON"; the stored flag is the inverse
-    // (opt-out). The facade also flips SDK collection immediately.
-    await AnalyticsService.instance.setAnalyticsOptedOut(!value);
+    // (opt-out). The facade also flips SDK collection immediately. Order matters
+    // so the consent event isn't self-suppressed: opting IN must re-enable
+    // collection before logging; opting OUT must log while still enabled.
+    if (value) {
+      await AnalyticsService.instance.setAnalyticsOptedOut(false);
+      await AnalyticsService.instance.logConsentChanged(
+        AnalyticsValue.consentAnalytics,
+        true,
+      );
+    } else {
+      await AnalyticsService.instance.logConsentChanged(
+        AnalyticsValue.consentAnalytics,
+        false,
+      );
+      await AnalyticsService.instance.setAnalyticsOptedOut(true);
+    }
     if (!mounted) return;
     setState(() => _analyticsEnabled = value);
   }
@@ -393,6 +409,10 @@ class ProfilePageState extends State<ProfilePage> {
   Future<void> _toggleCrashReporting(bool value) async {
     // Opt-in; Sentry initializes in main(), so a change applies next launch.
     await AnalyticsConsentService().setCrashReportingOptedIn(value);
+    await AnalyticsService.instance.logConsentChanged(
+      AnalyticsValue.consentCrash,
+      value,
+    );
     if (!mounted) return;
     setState(() => _crashReportingEnabled = value);
   }
@@ -481,6 +501,45 @@ class ProfilePageState extends State<ProfilePage> {
     final period = h24 < 12 ? 'AM' : 'PM';
     final h12 = h24 % 12 == 0 ? 12 : h24 % 12;
     return '$h12:${m.toString().padLeft(2, '0')} $period';
+  }
+
+  /// Debug-only (Profile → DEBUG): open the finish summary in showcase mode so
+  /// every reveal beat + all the new juice fires without needing a real session
+  /// that happens to cross a level.
+  void _openFinishShowcase() {
+    final logs = [
+      ExerciseLog(
+        exerciseId: 'Barbell_Bench_Press_-_Medium_Grip',
+        exerciseName: 'Bench Press',
+        sets: const [
+          SetEntry(weight: 80, reps: 8),
+          SetEntry(weight: 80, reps: 8),
+          SetEntry(weight: 80, reps: 6),
+        ],
+      ),
+      ExerciseLog(
+        exerciseId: 'Barbell_Squat',
+        exerciseName: 'Squat',
+        sets: const [
+          SetEntry(weight: 100, reps: 5),
+          SetEntry(weight: 100, reps: 5),
+        ],
+      ),
+    ];
+    Navigator.push(
+      context,
+      arcadeRoute(
+        (_) => WorkoutSummaryPage(
+          muscleGroup: 'Chest',
+          targetMuscleGroups: const ['Chest', 'Legs'],
+          durationMinutes: 45,
+          elapsedSeconds: 45 * 60,
+          exerciseLogs: logs,
+          debugShowcase: true,
+        ),
+        motion: ArcadeRouteMotion.reveal,
+      ),
+    );
   }
 
   Future<void> _openLogWeight() async {
@@ -1651,6 +1710,17 @@ class ProfilePageState extends State<ProfilePage> {
             iconPath: 'assets/icons/control/ui/icon_about.png',
           ),
         ),
+        if (kDebugMode) ...[
+          const SizedBox(height: 18),
+          const _SectionHeader(title: 'DEBUG'),
+          const SizedBox(height: 10),
+          _SettingsRow(
+            iconPath: 'assets/icons/control/icon_beetle.png',
+            title: 'Finish Arc Showcase',
+            subtitle: 'Preview the summary with every effect firing.',
+            onTap: _openFinishShowcase,
+          ),
+        ],
       ],
     );
   }

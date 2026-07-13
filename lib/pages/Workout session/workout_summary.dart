@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../../theme/app_fonts.dart';
@@ -13,6 +14,7 @@ import '../../models/workout_models.dart';
 import '../../models/xp_reward_models.dart';
 import '../../models/gem_ledger_entry.dart';
 import '../../services/adventure_service.dart';
+import '../../services/analytics_service.dart';
 import '../../services/calibration_service.dart';
 import '../../services/gem_service.dart';
 import '../../services/haptic_service.dart';
@@ -24,14 +26,19 @@ import '../../services/milestone_service.dart';
 import '../../services/program_service.dart';
 import '../../services/progression_settings_service.dart';
 import '../../services/rest_service.dart';
+import '../../services/sfx_service.dart';
 import '../../services/simple_mode_service.dart';
 import '../../services/stat_engine.dart';
 import '../../services/unit_settings_service.dart';
 import '../../services/workout_storage_service.dart';
 import '../../services/xp_boost_service.dart';
 import '../../services/xp_service.dart';
+import '../../data/companion_address.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_route.dart';
+import '../../widgets/companion/bit_companion.dart';
+import '../../widgets/companion/bit_sprite.dart' show BitMood;
+import '../../widgets/companion/session_ceremony.dart';
 import '../../widgets/count_up_text.dart';
 import '../../widgets/floating_stat_number.dart';
 import '../../widgets/glitch_text.dart';
@@ -67,6 +74,7 @@ class WorkoutSummaryPage extends StatefulWidget {
     this.advanceProgramRestDayOnCompletion = false,
     this.isCalibration = false,
     this.autoSavedAfterIdle = false,
+    this.debugShowcase = false,
   });
 
   final String muscleGroup;
@@ -94,6 +102,12 @@ class WorkoutSummaryPage extends StatefulWidget {
   /// than a manual Finish). Shows a calm cutoff note so the trimmed duration is
   /// not a silent rewrite.
   final bool autoSavedAfterIdle;
+
+  /// Debug-only: skip the real save/recompute and inject a synthetic "everything
+  /// fires" finish (multi-level-up hero + stat gains + loot/title + cache +
+  /// charge + warm-up) so the full finish arc — and all its new juice — can be
+  /// previewed on demand. Wired behind `kDebugMode` from Profile → Settings.
+  final bool debugShowcase;
 
   @override
   State<WorkoutSummaryPage> createState() => _WorkoutSummaryPageState();
@@ -137,6 +151,30 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   // under reduced motion.
   int _summaryShakeTrigger = 0;
   int _levelFlashTrigger = 0;
+
+  // ── BIT Session-Complete ceremony (design_handoff_session_ceremony) ────────
+  // BIT owns the screen for 2.55s, then flies into the 72px seat that replaced
+  // the medal; the staged reveal starts at max(saveDone, touchdown).
+  final GlobalKey _seatKey = GlobalKey();
+
+  /// Whether this summary plays the ceremony at all. Resolved once (needs
+  /// MediaQuery): abandoned sessions get no celebration (anti-guilt), the
+  /// calibration path has its own rank reveal, and reduced motion goes straight
+  /// to seated + revealed per the handoff.
+  bool? _playCeremony;
+
+  /// Touchdown delivered (or ceremony not played) — gates the reveal AND makes
+  /// the seat visible.
+  bool _ceremonyDone = false;
+
+  /// Overlay fully inert and removed from the tree.
+  bool _ceremonyGone = false;
+  int _seatFlashTick = 0;
+  int _ceremonyShakeTrigger = 0;
+
+  // Fire the rolling-counter SFX exactly once, when the first stat number starts
+  // rolling (hero stat-gain at stage 3, else the STAT GAINS row at stage 4).
+  bool _statCounterSfxFired = false;
 
   List<String> get _targetMuscleGroups {
     final normalized = normalizeTargetMuscleGroups(widget.targetMuscleGroups);
@@ -182,7 +220,11 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     _earnedXP = _baseXP;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _saveAndExit();
+      if (widget.debugShowcase) {
+        _loadShowcase();
+      } else {
+        _saveAndExit();
+      }
     });
   }
 
@@ -199,6 +241,50 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     return mq.disableAnimations || mq.accessibleNavigation;
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _playCeremony ??=
+        !_reducedMotion && !widget.isAbandoned && !widget.isCalibration;
+    if (!_playCeremony!) {
+      _ceremonyDone = true;
+      _ceremonyGone = true;
+    }
+  }
+
+  /// The seated BIT's mood — the handoff's session-hero rule: a level-up
+  /// session holds the amber CHEER; a standard session settles to NEUTRAL.
+  BitMood get _seatMood => _selection?.hero.kind == HeroKind.levelUp
+      ? BitMood.cheer
+      : BitMood.neutral;
+
+  /// BIT's typed sign-off (the handoff's summary line, honorific register).
+  String get _bitSignOffLine =>
+      'Good haul today, ${bitAddress(BitRegister.honorific)}.';
+
+  /// The reveal fires at max(saveDone, ceremony touchdown) — never earlier,
+  /// and each caller is safe to invoke repeatedly (`_startReveal` is
+  /// idempotent). A save that never completes leaves exactly the pre-ceremony
+  /// behavior (the scrim still lifts at touchdown; the CTA stays "SAVING...").
+  void _maybeStartReveal() {
+    if (!_saved || !_ceremonyDone) return;
+    _startReveal();
+  }
+
+  bool _lootViewedLogged = false;
+
+  /// The loot-unlock hero reveal IS the collection-engagement moment
+  /// (`loot_unlock_viewed`). Fired from every path the hero can become visible —
+  /// the staged timer, the reduced-motion snap, AND tap-to-skip — and guarded so
+  /// it lands at most once per summary regardless of which path wins.
+  void _logLootUnlockViewedIfHero() {
+    if (_lootViewedLogged) return;
+    if (_selection?.hero.kind == HeroKind.lootUnlock) {
+      _lootViewedLogged = true;
+      unawaited(AnalyticsService.instance.logLootUnlockViewed());
+    }
+  }
+
   /// Kicks off the staged reveal once data is ready. Reduced motion snaps to the
   /// final state instantly. Not used on the calibration path (it navigates to
   /// the rank reveal instead).
@@ -207,6 +293,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     _revealStarted = true;
     if (_reducedMotion) {
       setState(() => _stage = _maxStage);
+      _logLootUnlockViewedIfHero();
       return;
     }
     void at(int ms, int stage) {
@@ -229,17 +316,42 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
       Timer(const Duration(milliseconds: 2600), () {
         if (!mounted) return;
         setState(() => _stage = 3);
+        _logLootUnlockViewedIfHero();
         // Level-ups already punched the screen from the meter (per level); only
         // the other Tier-3 heroes (rank/diamond) punch on their reveal here.
         if (_selection?.hero.tier == FinishTier.tier3 &&
             _selection?.hero.kind != HeroKind.levelUp) {
           _fireLevelUpJuice();
         }
+        // A hero stat-gain rolls its number here — sound the tally.
+        if (_selection?.hero.kind == HeroKind.statGain) {
+          _fireStatCounterSfxOnce();
+        }
       }),
     );
-    at(3200, 4);
+    // Stage 4 reveals the STAT GAINS row — sound the tally as it rolls (if the
+    // hero beat didn't already).
+    _revealTimers.add(
+      Timer(const Duration(milliseconds: 3200), () {
+        if (!mounted) return;
+        setState(() => _stage = 4);
+        final sel = _selection;
+        if (sel != null && _supportingDeltas(sel.hero).isNotEmpty) {
+          _fireStatCounterSfxOnce();
+        }
+      }),
+    );
     at(3500, 5);
     at(3900, 6);
+  }
+
+  /// Plays the rolling-counter SFX at most once per summary. Only reached from
+  /// the staged-reveal timers, which run only when not reduced motion — so the
+  /// tally never plays over instantly-snapped numbers.
+  void _fireStatCounterSfxOnce() {
+    if (_statCounterSfxFired || !mounted) return;
+    _statCounterSfxFired = true;
+    SfxService.instance.playStatCounter();
   }
 
   /// "Tap to continue" — skip the wait and jump to the breakdown + CTA.
@@ -249,9 +361,94 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     }
     _revealTimers.clear();
     if (mounted) setState(() => _stage = _maxStage);
+    // Skipping still reveals the loot hero — log it here too (idempotent), since
+    // the staged stage-3 timer that normally logs it was just cancelled.
+    _logLootUnlockViewedIfHero();
   }
 
   bool _show(int stage) => _reducedMotion || _stage >= stage;
+
+  /// Text entrances TYPE (the app's one text idiom — title and BIT's sign-off
+  /// already type); reduced motion renders the finished line.
+  Widget _typedOrStatic(
+    String text, {
+    TextStyle? style,
+    TextAlign textAlign = TextAlign.center,
+  }) => _reducedMotion
+      ? Text(text, style: style, textAlign: textAlign)
+      : TypewriterText(text, charMs: 22, style: style, textAlign: textAlign);
+
+  /// Debug-only: inject a synthetic "everything fires" finish and start the
+  /// reveal without touching real storage. Level-up is the hero (so the meter
+  /// owns the screen-level shake/burst) and every reward card is populated.
+  void _loadShowcase() {
+    final oldXP = XpService.xpForCurrentLevel(7) + 30;
+    final newXP = XpService.xpForCurrentLevel(9) + 40; // crosses 7 → 9
+    _statDelta = {'STR': 14, 'AGI': 9, 'END': 6};
+    _combatStats = {'STR': 132, 'AGI': 88, 'END': 74, 'VIT': 60, 'LCK': 3};
+    _xpBreakdown = XpService.buildBreakdown(
+      session: _baseSession,
+      baseXP: 120,
+      lckMultiplier: 1.5,
+      potionMultiplier: 2.0,
+      lootBonusXP: 40,
+    );
+    _baseXP = _xpBreakdown!.baseXP;
+    _earnedXP = _xpBreakdown!.finalXP;
+    _potionBonusXP = _xpBreakdown!.potionBonusXP;
+    _cacheDrop = LootDrop(
+      id: 'debug_showcase',
+      sessionId: _baseSession.id,
+      tier: LootDropTier.rare,
+      contentKind: LootDropContentKind.xpBonus,
+      awardedAt: _baseSession.date,
+      xpBonus: 40,
+    );
+    _chargeGranted = true;
+    _chargeBalance = 2;
+    _chargeOnExpedition = false;
+    _warmupBonusGranted = true;
+    _warmupBonusAmount = 5;
+    _finish = FinishResult(
+      completion: FinishCompletion.complete,
+      earnedXP: _earnedXP,
+      oldTotalXP: oldXP,
+      newTotalXP: newXP,
+      statDelta: _statDelta,
+      afterStats: _combatStats,
+      lckBefore: 0,
+      lckAfter: 0,
+      lootUnlocked: const ['iron'],
+      elapsedSeconds: widget.elapsedSeconds,
+      totalSets: _totalSets,
+      exerciseCount: _exerciseCount,
+      estimatedCalories: _estimatedCalories,
+    );
+    _selection = FinishSelection(
+      hero: FinishHero(
+        kind: HeroKind.levelUp,
+        tier: FinishTier.tier3,
+        amount: XpService.getLevel(newXP),
+      ),
+      secondaryBadges: const [
+        FinishHero(
+          kind: HeroKind.lootUnlock,
+          tier: FinishTier.tier2,
+          lootId: 'iron',
+        ),
+        FinishHero(
+          kind: HeroKind.titleUnlock,
+          tier: FinishTier.tier2,
+          title: 'Squire',
+        ),
+      ],
+    );
+    setState(() {
+      _saving = false;
+      _saved = true;
+    });
+    _maybeStartReveal();
+  }
 
   String _fmt(int secs) {
     final m = secs ~/ 60;
@@ -490,8 +687,9 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         _saved = true;
       });
       // Begin the staged finish-arc reveal (normal flow only; the calibration
-      // path navigates to the rank reveal below instead).
-      if (!widget.isCalibration) _startReveal();
+      // path navigates to the rank reveal below instead). Gated on the
+      // ceremony's touchdown when one is playing.
+      if (!widget.isCalibration) _maybeStartReveal();
     }
 
     // Calibration run: show rank reveal, then pop this summary so the awaiting
@@ -614,15 +812,23 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
   Map<String, int> _supportingDeltas(FinishHero hero) =>
       supportingGains(_statDelta, hero);
 
-  /// Fired by the XP meter each time the bar crosses a level — shakes and
-  /// flashes the whole screen. No-op under reduced motion.
+  /// Fired by the XP meter each time the bar crosses a level. The reward beat
+  /// (haptic + chime) fires for EVERY level-up so a non-hero level-up is never
+  /// silently swallowed; the whole-screen shake + CRT burst stay reserved for
+  /// when level-up is the session hero (single-peak — they'd fight a rank/
+  /// diamond hero's own beat). The meter's local bar surge + LV punch fire on
+  /// their own for every crossing.
   void _fireLevelUpJuice() {
     if (!mounted) return;
-    // Tactile level-up, fired per level crossed. Haptics aren't a vestibular
-    // trigger, so this lands even under reduced motion (which skips the
-    // shake/flash below); they carry their own opt-out instead.
-    HapticService.instance.reward();
+    // Tactile + audible level-up, fired per level crossed. Neither is a
+    // vestibular trigger, so both land even under reduced motion (which skips
+    // the shake/flash below); each carries its own opt-out (Haptics / Sound).
+    // The stamp (two firm bumps) replaces any lingering climb buzz.
+    HapticService.instance.levelUp();
+    SfxService.instance.playLevelUp();
     if (_reducedMotion) return;
+    // Screen-level celebration only when level-up owns the screen.
+    if (_selection?.hero.kind != HeroKind.levelUp) return;
     setState(() {
       _summaryShakeTrigger++;
       _levelFlashTrigger++;
@@ -653,8 +859,16 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
         ),
         body: ScreenShake(
           trigger: _summaryShakeTrigger,
-          child: Stack(
-            children: [
+          // The ceremony's surge release — the handoff's ±2px × 120ms device
+          // shake ("the haptic made visible"), separate from the level-up
+          // shake above so the shipped juice stays untouched.
+          child: ScreenShake(
+            trigger: _ceremonyShakeTrigger,
+            frames: 4,
+            frameMs: 30,
+            magnitude: 2,
+            child: Stack(
+              children: [
               Positioned.fill(
                 child: SingleChildScrollView(
                   // Add the system nav-bar inset so the "Back to Home" CTA
@@ -670,12 +884,29 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const SizedBox(height: kSpace4),
-                      _RevealBeat(
-                        child: Image.asset(
-                          'assets/icons/control/ui/icon_session_complete.png',
-                          width: 96,
-                          height: 96,
-                          filterQuality: FilterQuality.none,
+                      // BIT's seat — the companion replaced the old medal
+                      // (ceremony handoff): hidden but laid out until the
+                      // flight touches down (the overlay measures its center),
+                      // then it appears with a cheer flash + dust puff and
+                      // idles forever. Tap = the press orbit reaction. The
+                      // session-hero rule picks the mood.
+                      Center(
+                        child: Opacity(
+                          opacity: _ceremonyDone ? 1 : 0,
+                          child: SizedBox(
+                            key: _seatKey,
+                            width: 72,
+                            height: 72,
+                            child: ExcludeSemantics(
+                              excluding: !_ceremonyDone,
+                              child: BitCompanion(
+                                size: 72,
+                                mood: _seatMood,
+                                flashTick: _seatFlashTick,
+                                spamRestArmed: false,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: kSpace3),
@@ -706,19 +937,27 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                           textAlign: TextAlign.center,
                         ),
                       ],
-                      // Beat 1 — XP earned.
+                      // Beat 1 — XP earned. The XP math label SLAMS in —
+                      // instantly readable (the fact the user came for; Codex:
+                      // never delay it behind a wipe) but landing with force.
+                      // The secondary lines follow with the themed entrances,
+                      // one moving edge at a time (80ms apart).
                       if (_show(1)) ...[
                         const SizedBox(height: kSpace3),
-                        PulseColorText(
-                          _xpMathLabel,
-                          style: const TextStyle(
-                            fontFamily: 'PressStart2P',
-                            fontSize: 12,
+                        _SlamIn(
+                          child: PulseColorText(
+                            _xpMathLabel,
+                            style: const TextStyle(
+                              fontFamily: 'PressStart2P',
+                              fontSize: 12,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
                         ),
                         if (_potionBonusXP > 0) ...[
                           const SizedBox(height: 12),
+                          // Text types out (the app's one text idiom — the
+                          // title and BIT's sign-off type too).
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -730,7 +969,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                                 size: 20,
                               ),
                               const SizedBox(width: 8),
-                              Text(
+                              _typedOrStatic(
                                 '+$_potionBonusXP BONUS XP',
                                 style: AppFonts.shareTechMono(
                                   color: kAmber,
@@ -743,7 +982,12 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                         ],
                         if (_xpBreakdown != null) ...[
                           const SizedBox(height: kSpace3),
-                          _XpReceiptCard(breakdown: _xpBreakdown!),
+                          // A ledger prints: rows tick out one-by-one, the
+                          // TOTAL lands last with a flash.
+                          _XpReceiptCard(
+                            breakdown: _xpBreakdown!,
+                            printIn: !_reducedMotion,
+                          ),
                         ],
                       ],
                       // Beat 2 — XP / level meter: fills from old toward the next
@@ -761,9 +1005,21 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                           newTotalXP: _finish!.newTotalXP,
                           play: _show(2),
                           prominent: selection?.hero.kind == HeroKind.levelUp,
-                          onLevelUp: selection?.hero.kind == HeroKind.levelUp
-                              ? _fireLevelUpJuice
-                              : null,
+                          // Every level-up earns its reward beat (chime + haptic
+                          // + the meter's local surge/punch); the screen-level
+                          // shake/burst inside _fireLevelUpJuice stay hero-gated.
+                          onLevelUp: _fireLevelUpJuice,
+                          // The rising sound + a continuous "bar running up"
+                          // buzz for each fill segment, both matched to
+                          // kXpBarFillDuration. Skipped under reduced motion (the
+                          // bar snaps — nothing to ride).
+                          onClimbStart: () {
+                            if (_reducedMotion) return;
+                            SfxService.instance.playXpRiser();
+                            HapticService.instance.climbBuzz(
+                              durationMs: kXpBarFillDuration.inMilliseconds,
+                            );
+                          },
                         ),
                       ],
                       // Beat 3 — the single hero beat (tiered). Level-ups are shown
@@ -786,6 +1042,8 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                         ],
                         if (_supportingDeltas(selection.hero).isNotEmpty) ...[
                           const SizedBox(height: kSpace3),
+                          // Instant: the numbers' own count-up roll IS this
+                          // row's entrance (a delayed clip was hiding it).
                           _SupportingStatRow(
                             deltas: _supportingDeltas(selection.hero),
                           ),
@@ -794,9 +1052,11 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                       // Beat 5 — breakdown.
                       if (exerciseLogs.isNotEmpty && _show(5)) ...[
                         const SizedBox(height: kSpace5),
-                        Text(
+                        // Section header types out like an arcade menu title.
+                        _typedOrStatic(
                           'BREAKDOWN',
                           style: Theme.of(context).textTheme.headlineSmall,
+                          textAlign: TextAlign.start,
                         ),
                         const SizedBox(height: kSpace3),
                         // Rows pop in one-by-one with a hard phosphor strobe (the
@@ -820,26 +1080,29 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                       // Beat 6 — demoted receipts + the ending CTA.
                       if (_show(6)) ...[
                         const SizedBox(height: kSpace4),
-                        _RevealBeat(
-                          child: _ReceiptStrip(
-                            elapsedSeconds: widget.elapsedSeconds,
-                            totalSets: _totalSets,
-                            moves: exerciseLogs.length,
-                            estimatedCalories: _estimatedCalories,
-                            durationLabel: _fmt(widget.elapsedSeconds),
-                          ),
+                        // The receipt facts type out; each reward card enters
+                        // by its NATURE — loot drops, energy charges up,
+                        // warmth kindles — staggered so each lands alone.
+                        _ReceiptStrip(
+                          elapsedSeconds: widget.elapsedSeconds,
+                          totalSets: _totalSets,
+                          moves: exerciseLogs.length,
+                          estimatedCalories: _estimatedCalories,
+                          durationLabel: _fmt(widget.elapsedSeconds),
+                          typed: !_reducedMotion,
                         ),
                         if (_cacheDrop != null) ...[
                           const SizedBox(height: kSpace3),
-                          _RevealBeat(
+                          _LootDropIn(
                             delayMs: 120,
+                            color: _tierColor(_cacheDrop!.tier),
                             child: _CacheDropCard(drop: _cacheDrop!),
                           ),
                         ],
                         if (_chargeGranted) ...[
                           const SizedBox(height: kSpace3),
-                          _RevealBeat(
-                            delayMs: 140,
+                          _ChargeUpIn(
+                            delayMs: 280,
                             child: _ChargeGrantedCard(
                               balance: _chargeBalance,
                               onExpedition: _chargeOnExpedition,
@@ -848,12 +1111,40 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                         ],
                         if (_warmupBonusGranted) ...[
                           const SizedBox(height: kSpace3),
-                          _RevealBeat(
-                            delayMs: 160,
+                          _KindleIn(
+                            delayMs: 440,
                             child: _WarmupBonusCard(amount: _warmupBonusAmount),
                           ),
                         ],
+                        // BIT's sign-off line (ceremony handoff) — typed at
+                        // 22ms/char; complete instantly under reduced motion.
+                        // Fixed-height so the column doesn't shift as it types.
                         const SizedBox(height: kSpace5),
+                        _RevealBeat(
+                          delayMs: 40,
+                          child: SizedBox(
+                            height: 18,
+                            child: _reducedMotion
+                                ? Text(
+                                    _bitSignOffLine,
+                                    textAlign: TextAlign.center,
+                                    style: AppFonts.shareTechMono(
+                                      color: kMutedText,
+                                      fontSize: 13,
+                                    ),
+                                  )
+                                : TypewriterText(
+                                    _bitSignOffLine,
+                                    charMs: 22,
+                                    textAlign: TextAlign.center,
+                                    style: AppFonts.shareTechMono(
+                                      color: kMutedText,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: kSpace4),
                         _RevealBeat(
                           delayMs: 80,
                           child: FilledButton(
@@ -883,11 +1174,33 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                     },
                   ),
                 ),
+              // The Session-Complete ceremony: BIT owns the screen, then flies
+              // into the seat above; touchdown gates the staged reveal. Above
+              // the reveal's own skip catcher (the ceremony catches taps
+              // first), below LevelUpBurst.
+              if (_playCeremony == true && !_ceremonyGone)
+                Positioned.fill(
+                  child: SessionCeremony(
+                    seatKey: _seatKey,
+                    onSurge: () =>
+                        setState(() => _ceremonyShakeTrigger++),
+                    onSettled: () {
+                      setState(() {
+                        _ceremonyDone = true;
+                        _seatFlashTick++;
+                      });
+                      _maybeStartReveal();
+                    },
+                    onFinished: () =>
+                        setState(() => _ceremonyGone = true),
+                  ),
+                ),
               // The app's native level-up celebration — rising "+1 LV", amber
               // phosphor wash, and a CRT scanline surge (mirrors the onboarding
               // handoff). Driven by the same trigger as the screen shake.
               Positioned.fill(child: LevelUpBurst(trigger: _levelFlashTrigger)),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1090,6 +1403,74 @@ class _RingPainter extends CustomPainter {
       old.progress != progress || old.color != color;
 }
 
+/// The XP math label's **slam** — instantly readable (never delayed behind a
+/// wipe: it is the fact the user opened the screen for) but landing with
+/// force: a punch-scale settle (1.16→1.0) + a brief amber strobe + one subtle
+/// tick. Reduced motion = the plain child.
+class _SlamIn extends StatefulWidget {
+  const _SlamIn({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_SlamIn> createState() => _SlamInState();
+}
+
+class _SlamInState extends State<_SlamIn> with SingleTickerProviderStateMixin {
+  // Assigned in initState — a `late final _c = …` initializer is LAZY, and a
+  // reduced-motion build that never reads it would first construct it inside
+  // dispose() (the unsafe deactivated-ancestor TickerMode lookup).
+  late final AnimationController _c;
+
+  bool get _reduce {
+    final mq = MediaQuery.of(context);
+    return mq.disableAnimations || mq.accessibleNavigation;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(vsync: this, duration: kMotionFast);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _reduce) return;
+      HapticService.instance.selection();
+      _c.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_reduce) return widget.child;
+    // Center absorbs the stretch: StrobeFlash's Stack shrink-wraps its child
+    // top-left (the same quirk _HeroBeat works around), which would yank the
+    // centered XP label to the left edge.
+    return Center(
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, child) {
+          final t = Curves.easeOutCubic.transform(_c.value);
+          return Transform.scale(scale: 1.16 - 0.16 * t, child: child);
+        },
+        child: StrobeFlash(
+          fireOnMount: true,
+          trigger: null,
+          color: kAmber,
+          opacity: 0.18,
+          toggles: 3,
+          toggleMs: 55,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
 /// CRT power-on entrance for a reveal beat — a stepped pixel-arcade flicker
 /// (0→0.3→0.8→1.0 brightness) rather than a generic fade+slide, so each element
 /// comes up like a powering screen. Reuses [PowerOn]. Reduced motion = static.
@@ -1219,10 +1600,9 @@ class _BreakdownRevealState extends State<_BreakdownReveal> {
 /// bar cells. Reserves its layout slot so the list doesn't jitter. Reduced
 /// motion renders the child solid immediately.
 class _PhosphorReveal extends StatefulWidget {
-  const _PhosphorReveal({super.key, required this.child, this.delayMs = 0});
+  const _PhosphorReveal({super.key, required this.child});
 
   final Widget child;
-  final int delayMs;
 
   static const int _toggles = 5;
   static const int _toggleMs = 55;
@@ -1235,7 +1615,6 @@ class _PhosphorRevealState extends State<_PhosphorReveal> {
   bool _visible = false;
   int _count = 0;
   Timer? _timer;
-  Timer? _delayTimer;
   bool _started = false;
 
   @override
@@ -1247,13 +1626,7 @@ class _PhosphorRevealState extends State<_PhosphorReveal> {
       _visible = true;
       return;
     }
-    if (widget.delayMs > 0) {
-      _delayTimer = Timer(Duration(milliseconds: widget.delayMs), () {
-        if (mounted) _startStrobe();
-      });
-    } else {
-      _startStrobe();
-    }
+    _startStrobe();
   }
 
   void _startStrobe() {
@@ -1274,7 +1647,7 @@ class _PhosphorRevealState extends State<_PhosphorReveal> {
   @override
   void dispose() {
     _timer?.cancel();
-    _delayTimer?.cancel();
+
     super.dispose();
   }
 
@@ -1285,6 +1658,509 @@ class _PhosphorRevealState extends State<_PhosphorReveal> {
       maintainState: true,
       maintainAnimation: true,
       maintainSize: true,
+      child: widget.child,
+    );
+  }
+}
+
+/// The **unlock stamp** — a reward badge slams down (scale 1.4→1.0 in hard
+/// steps), fires a one-frame amber flash, and pops a 6-spark pixel burst with
+/// a decaying glow flare. The arc's earn beat (NEW LOOT / NEW TITLE / LV),
+/// speaking the same particle language as the ceremony's surge ring. Hidden
+/// (layout reserved) until [delayMs]; reduced motion renders the badge still.
+class _UnlockStamp extends StatefulWidget {
+  const _UnlockStamp({required this.child, this.delayMs = 0});
+
+  final Widget child;
+  final int delayMs;
+
+  @override
+  State<_UnlockStamp> createState() => _UnlockStampState();
+}
+
+class _UnlockStampState extends State<_UnlockStamp>
+    with SingleTickerProviderStateMixin {
+  // Assigned in initState (a `late final _c = …` initializer is lazy — the
+  // reduced-motion dispose crash).
+  late final AnimationController _c;
+  bool _started = false;
+
+  bool get _reduce {
+    final mq = MediaQuery.of(context);
+    return mq.disableAnimations || mq.accessibleNavigation;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 460),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _reduce) return;
+      Future.delayed(Duration(milliseconds: widget.delayMs), () {
+        if (!mounted || _reduce) return;
+        setState(() => _started = true);
+        _c.forward();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_reduce) return widget.child;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) {
+        final t = _c.value;
+        // Stamp: 3 hard scale steps over the first ~25% (1.4 → 1.2 → 1.0).
+        final scale = !_started
+            ? 1.0
+            : t < 0.12
+            ? 1.4
+            : t < 0.25
+            ? 1.2
+            : 1.0;
+        final flashOn = _started && t >= 0.25 && t < 0.34;
+        final glow = _started ? (1 - t).clamp(0.0, 1.0) * 0.45 : 0.0;
+        return Visibility(
+          visible: _started,
+          maintainState: true,
+          maintainAnimation: true,
+          maintainSize: true,
+          child: Stack(
+            fit: StackFit.passthrough,
+            clipBehavior: Clip.none,
+            children: [
+              Transform.scale(
+                scale: scale,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(kCardRadius),
+                    boxShadow: glow > 0.02
+                        ? neonGlow(color: kAmber, opacity: glow, blur: 12)
+                        : const [],
+                  ),
+                  child: child,
+                ),
+              ),
+              if (flashOn)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: kAmber.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(kCardRadius),
+                      ),
+                    ),
+                  ),
+                ),
+              // Spark burst: 6 pixel squares flying outward from the center,
+              // fading with age (the ceremony's particle language).
+              if (_started && t >= 0.25)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _StampSparksPainter(
+                        t: ((t - 0.25) / 0.75).clamp(0.0, 1.0),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+class _StampSparksPainter extends CustomPainter {
+  _StampSparksPainter({required this.t});
+
+  /// Burst progress 0..1 from the stamp's impact frame.
+  final double t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (t <= 0 || t >= 1) return;
+    final paint = Paint()..isAntiAlias = false;
+    final c = size.center(Offset.zero);
+    final dist = 10 + Curves.easeOutCubic.transform(t) * 18;
+    for (var i = 0; i < 6; i++) {
+      final a = (i / 6) * 2 * math.pi - math.pi / 2;
+      // Alternate amber with a hot near-white amber for sparkle variety.
+      final col = i.isEven ? kAmber : Color.lerp(kAmber, kText, 0.55)!;
+      paint.color = col.withValues(alpha: (1 - t).clamp(0.0, 1.0));
+      canvas.drawRect(
+        Rect.fromLTWH(
+          (c.dx + math.cos(a) * dist).roundToDouble(),
+          (c.dy + math.sin(a) * dist * 0.7).roundToDouble(),
+          2,
+          2,
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StampSparksPainter old) => old.t != t;
+}
+
+/// Loot **drops in**: the card falls from ~16px above in hard pixel steps,
+/// lands with a one-frame squash + a tier-colored flash, and kicks up a tiny
+/// dust pair at its bottom edge. Paint-only (translate/scale — the layout slot
+/// is reserved); hidden until [delayMs]; reduced motion renders it settled.
+class _LootDropIn extends StatefulWidget {
+  const _LootDropIn({
+    required this.child,
+    required this.color,
+    this.delayMs = 0,
+  });
+
+  final Widget child;
+  final Color color;
+  final int delayMs;
+
+  @override
+  State<_LootDropIn> createState() => _LootDropInState();
+}
+
+class _LootDropInState extends State<_LootDropIn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c; // assigned in initState (lazy-init trap)
+  bool _started = false;
+
+  bool get _reduce {
+    final mq = MediaQuery.of(context);
+    return mq.disableAnimations || mq.accessibleNavigation;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 480),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _reduce) return;
+      Future.delayed(Duration(milliseconds: widget.delayMs), () {
+        if (!mounted || _reduce) return;
+        setState(() => _started = true);
+        _c.forward();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_reduce) return widget.child;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) {
+        final t = _c.value;
+        // Fall: 4 hard steps down over the first ~35%, then landed.
+        const drop = 16.0;
+        final dy = !_started
+            ? 0.0
+            : t < 0.35
+            ? -drop * (1 - ((t / 0.35) * 4).floor() / 4)
+            : 0.0;
+        final landed = _started && t >= 0.35;
+        // One-frame squash on impact.
+        final squash = landed && t < 0.45 ? 0.94 : 1.0;
+        final flashOn = landed && t < 0.43;
+        return Visibility(
+          visible: _started,
+          maintainState: true,
+          maintainAnimation: true,
+          maintainSize: true,
+          child: Stack(
+            fit: StackFit.passthrough,
+            clipBehavior: Clip.none,
+            children: [
+              Transform.translate(
+                offset: Offset(0, dy),
+                child: Transform(
+                  transform: Matrix4.diagonal3Values(1, squash, 1),
+                  alignment: Alignment.bottomCenter,
+                  child: child,
+                ),
+              ),
+              if (flashOn)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: widget.color.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(kCardRadius),
+                      ),
+                    ),
+                  ),
+                ),
+              // Impact dust: 4 pixel motes kicked out along the bottom edge.
+              if (landed && t < 0.95)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _ImpactDustPainter(
+                        t: ((t - 0.35) / 0.6).clamp(0.0, 1.0),
+                        color: widget.color,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+class _ImpactDustPainter extends CustomPainter {
+  _ImpactDustPainter({required this.t, required this.color});
+
+  final double t;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (t <= 0 || t >= 1) return;
+    final paint = Paint()..isAntiAlias = false;
+    final e = Curves.easeOutCubic.transform(t);
+    final y = size.height - 2 - e * 7;
+    for (var i = 0; i < 4; i++) {
+      final dir = i.isEven ? -1 : 1;
+      final x = size.width / 2 + dir * (14 + (i ~/ 2) * 22 + e * 16);
+      final col = i < 2 ? color : kMutedText;
+      paint.color = col.withValues(alpha: (1 - t) * 0.8);
+      canvas.drawRect(
+        Rect.fromLTWH(x.roundToDouble(), y.roundToDouble(), 2, 2),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ImpactDustPainter old) =>
+      old.t != t || old.color != color;
+}
+
+/// Energy **charges up**: the card powers on in stepped brightness (the CRT
+/// flicker — this is the one card whose nature IS powering on), then confirms
+/// "fully charged" with a double neon blink. Hidden until [delayMs]; reduced
+/// motion renders it charged.
+class _ChargeUpIn extends StatefulWidget {
+  const _ChargeUpIn({required this.child, this.delayMs = 0});
+
+  final Widget child;
+  final int delayMs;
+
+  @override
+  State<_ChargeUpIn> createState() => _ChargeUpInState();
+}
+
+class _ChargeUpInState extends State<_ChargeUpIn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c; // assigned in initState (lazy-init trap)
+  bool _started = false;
+
+  bool get _reduce {
+    final mq = MediaQuery.of(context);
+    return mq.disableAnimations || mq.accessibleNavigation;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 620),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _reduce) return;
+      Future.delayed(Duration(milliseconds: widget.delayMs), () {
+        if (!mounted || _reduce) return;
+        setState(() => _started = true);
+        _c.forward();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_reduce) return widget.child;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) {
+        final t = _c.value;
+        // Charging: brightness steps 0 → .3 → .8 → 1 over the first ~40%.
+        final power = !_started
+            ? 0.0
+            : t < 0.13
+            ? 0.3
+            : t < 0.27
+            ? 0.8
+            : 1.0;
+        // Fully charged: two hard neon blinks once the power settles.
+        final blinkOn =
+            _started && ((t >= 0.55 && t < 0.66) || (t >= 0.78 && t < 0.89));
+        return Visibility(
+          visible: _started,
+          maintainState: true,
+          maintainAnimation: true,
+          maintainSize: true,
+          child: Stack(
+            fit: StackFit.passthrough,
+            children: [
+              Opacity(opacity: power, child: child),
+              if (blinkOn)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: kNeon.withValues(alpha: 0.14),
+                        border: Border.all(color: kNeon, width: 1.2),
+                        borderRadius: BorderRadius.circular(kCardRadius),
+                        boxShadow: neonGlow(opacity: 0.4, blur: 10),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+/// Warmth **kindles**: the card surfaces under a hot amber wash that cools
+/// away while an ember glow flares then settles — heated metal cooling into
+/// place. Hidden until [delayMs]; reduced motion renders it settled.
+class _KindleIn extends StatefulWidget {
+  const _KindleIn({required this.child, this.delayMs = 0});
+
+  final Widget child;
+  final int delayMs;
+
+  @override
+  State<_KindleIn> createState() => _KindleInState();
+}
+
+class _KindleInState extends State<_KindleIn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c; // assigned in initState (lazy-init trap)
+  bool _started = false;
+
+  bool get _reduce {
+    final mq = MediaQuery.of(context);
+    return mq.disableAnimations || mq.accessibleNavigation;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _reduce) return;
+      Future.delayed(Duration(milliseconds: widget.delayMs), () {
+        if (!mounted || _reduce) return;
+        setState(() => _started = true);
+        _c.forward();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_reduce) return widget.child;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) {
+        final t = _c.value;
+        // Quantized cool-down: the amber wash fades in 5 steps; the ember glow
+        // peaks early then dies with the wash.
+        final q = !_started ? 1.0 : ((t * 5).floor() / 5).clamp(0.0, 1.0);
+        final wash = _started ? (1 - q) * 0.30 : 0.0;
+        final glowT = !_started
+            ? 0.0
+            : t < 0.3
+            ? t / 0.3
+            : (1 - (t - 0.3) / 0.7);
+        return Visibility(
+          visible: _started,
+          maintainState: true,
+          maintainAnimation: true,
+          maintainSize: true,
+          child: Stack(
+            fit: StackFit.passthrough,
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(kCardRadius),
+                  boxShadow: glowT > 0.05
+                      ? neonGlow(
+                          color: kAmber,
+                          opacity: glowT * 0.4,
+                          blur: 14,
+                        )
+                      : const [],
+                ),
+                child: Opacity(
+                  opacity: _started ? 0.55 + 0.45 * q : 1.0,
+                  child: child,
+                ),
+              ),
+              if (wash > 0.02)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: kAmber.withValues(alpha: wash),
+                        borderRadius: BorderRadius.circular(kCardRadius),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
       child: widget.child,
     );
   }
@@ -1303,9 +2179,10 @@ class _SecondaryBadges extends StatelessWidget {
       spacing: kSpace2,
       runSpacing: kSpace2,
       children: [
-        // Chips strobe in one-by-one (same idiom as the breakdown rows).
+        // Unlock stamps: each badge slams down with an amber flash + a pixel
+        // spark burst — these are the arc's reward earns, not ordinary chips.
         for (var i = 0; i < badges.length; i++)
-          _PhosphorReveal(delayMs: i * 140, child: _badge(_label(badges[i]))),
+          _UnlockStamp(delayMs: i * 180, child: _badge(_label(badges[i]))),
       ],
     );
   }
@@ -1375,20 +2252,64 @@ class _SupportingStatRow extends StatelessWidget {
   }
 }
 
-class _XpReceiptCard extends StatelessWidget {
-  const _XpReceiptCard({required this.breakdown});
+/// The XP ledger. With [printIn] it enters like a dot-matrix receipt: rows
+/// print one-by-one top-to-bottom (~90ms apart, hard cuts — no fades), and the
+/// TOTAL line lands last with a brief neon flash. The card frame itself is
+/// visible from the start (the paper); only the lines print. Layout is
+/// reserved (`maintainSize`) so the column never shifts. `printIn: false`
+/// (reduced motion) renders the finished receipt.
+class _XpReceiptCard extends StatefulWidget {
+  const _XpReceiptCard({required this.breakdown, this.printIn = false});
 
   final SessionXpBreakdown breakdown;
+  final bool printIn;
+
+  @override
+  State<_XpReceiptCard> createState() => _XpReceiptCardState();
+}
+
+class _XpReceiptCardState extends State<_XpReceiptCard> {
+  int _printed = 0;
+  bool _totalFlash = false;
+  Timer? _timer;
+
+  List<(String, String)> get _rows => [
+    ('BASE', '+${widget.breakdown.baseXP} XP'),
+    ('LCK', XpService.multiplierLabel(widget.breakdown.lckMultiplier)),
+    ('POTION', XpService.multiplierLabel(widget.breakdown.potionMultiplier)),
+    if (widget.breakdown.lootBonusXP > 0)
+      ('CACHE', '+${widget.breakdown.lootBonusXP} XP'),
+    ('TOTAL', '+${widget.breakdown.finalXP} XP'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.printIn) {
+      _printed = _rows.length;
+      return;
+    }
+    _timer = Timer.periodic(const Duration(milliseconds: 90), (t) {
+      if (!mounted) return;
+      setState(() {
+        _printed++;
+        if (_printed >= _rows.length) {
+          t.cancel();
+          _totalFlash = true; // the TOTAL line just landed — flash it once
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final rows = <(String, String)>[
-      ('BASE', '+${breakdown.baseXP} XP'),
-      ('LCK', XpService.multiplierLabel(breakdown.lckMultiplier)),
-      ('POTION', XpService.multiplierLabel(breakdown.potionMultiplier)),
-      if (breakdown.lootBonusXP > 0) ('CACHE', '+${breakdown.lootBonusXP} XP'),
-      ('TOTAL', '+${breakdown.finalXP} XP'),
-    ];
+    final rows = _rows;
     return Container(
       padding: const EdgeInsets.all(kSpace3),
       decoration: BoxDecoration(
@@ -1398,37 +2319,46 @@ class _XpReceiptCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          for (final row in rows)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
-                children: [
-                  Text(
-                    row.$1,
-                    style: const TextStyle(
-                      fontFamily: 'PressStart2P',
-                      fontSize: 8,
-                      color: kMutedText,
+          for (var i = 0; i < rows.length; i++)
+            Visibility(
+              visible: i < _printed,
+              maintainState: true,
+              maintainAnimation: true,
+              maintainSize: true,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Text(
+                      rows[i].$1,
+                      style: const TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 8,
+                        color: kMutedText,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    row.$2,
-                    style: AppFonts.shareTechMono(
-                      color: row.$1 == 'TOTAL' ? kNeon : kText,
-                      fontSize: 12,
-                      fontWeight: row.$1 == 'TOTAL'
-                          ? FontWeight.w700
-                          : FontWeight.w400,
+                    const Spacer(),
+                    _maybeFlashTotal(
+                      isTotal: rows[i].$1 == 'TOTAL',
+                      child: Text(
+                        rows[i].$2,
+                        style: AppFonts.shareTechMono(
+                          color: rows[i].$1 == 'TOTAL' ? kNeon : kText,
+                          fontSize: 12,
+                          fontWeight: rows[i].$1 == 'TOTAL'
+                              ? FontWeight.w700
+                              : FontWeight.w400,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          if (!breakdown.eligibility.eligible) ...[
+          if (!widget.breakdown.eligibility.eligible) ...[
             const SizedBox(height: kSpace2),
             Text(
-              breakdown.eligibility.reason,
+              widget.breakdown.eligibility.reason,
               textAlign: TextAlign.center,
               style: AppFonts.shareTechMono(color: kMutedText, fontSize: 11),
             ),
@@ -1437,6 +2367,18 @@ class _XpReceiptCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _maybeFlashTotal({required bool isTotal, required Widget child}) =>
+      isTotal
+      ? StrobeFlash(
+          trigger: _totalFlash,
+          color: kNeon,
+          opacity: 0.3,
+          toggles: 4,
+          toggleMs: 60,
+          child: child,
+        )
+      : child;
 }
 
 /// The instant Adventure payoff: a workout earned an expedition charge. The
@@ -1600,14 +2542,15 @@ class _CacheDropCard extends StatelessWidget {
         return ('NEW LOOT', drop.itemId ?? 'inventory updated');
     }
   }
-
-  Color _tierColor(LootDropTier tier) => switch (tier) {
-    LootDropTier.common => kText,
-    LootDropTier.uncommon => kNeon,
-    LootDropTier.rare => kCyan,
-    LootDropTier.epic => const Color(0xFFA66BFF),
-  };
 }
+
+/// Loot-tier accent (shared by the card and its drop-in entrance).
+Color _tierColor(LootDropTier tier) => switch (tier) {
+  LootDropTier.common => kText,
+  LootDropTier.uncommon => kNeon,
+  LootDropTier.rare => kCyan,
+  LootDropTier.epic => const Color(0xFFA66BFF),
+};
 
 /// Demoted receipt facts — context, not reward. One thin muted line, low in the
 /// hierarchy. No per-exercise calories; at most one rough total.
@@ -1618,6 +2561,7 @@ class _ReceiptStrip extends StatelessWidget {
     required this.moves,
     required this.estimatedCalories,
     required this.durationLabel,
+    this.typed = false,
   });
 
   final int elapsedSeconds;
@@ -1625,6 +2569,9 @@ class _ReceiptStrip extends StatelessWidget {
   final int moves;
   final int estimatedCalories;
   final String durationLabel;
+
+  /// Type the line out (the text idiom); false renders it finished.
+  final bool typed;
 
   @override
   Widget build(BuildContext context) {
@@ -1635,10 +2582,15 @@ class _ReceiptStrip extends StatelessWidget {
       if (estimatedCalories > 0) '~$estimatedCalories kcal',
     ];
     if (parts.isEmpty) return const SizedBox.shrink();
-    return Text(
-      parts.join('   ·   '),
-      textAlign: TextAlign.center,
-      style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
-    );
+    final text = parts.join('   ·   ');
+    final style = AppFonts.shareTechMono(color: kMutedText, fontSize: 12);
+    return typed
+        ? TypewriterText(
+            text,
+            charMs: 22,
+            style: style,
+            textAlign: TextAlign.center,
+          )
+        : Text(text, textAlign: TextAlign.center, style: style);
   }
 }

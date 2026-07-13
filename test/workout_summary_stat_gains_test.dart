@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/pages/Workout session/workout_summary.dart';
+import 'package:workout_track/services/sfx_service.dart';
 
 /// Regression for the "buried stat gain": when the session's hero outranks the
 /// stat gain (a fresh user's first session levels up), the STR gain must still
@@ -15,7 +16,11 @@ import 'package:workout_track/pages/Workout session/workout_summary.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    SfxService.enabled = false; // no audio plugin in the test env
+  });
+  tearDown(() => SfxService.enabled = true);
 
   testWidgets(
     'a non-statGain hero still renders the STR gain in the STAT GAINS row',

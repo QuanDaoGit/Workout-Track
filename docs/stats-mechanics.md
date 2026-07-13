@@ -22,7 +22,7 @@ Ironbit's visible stat board has three graded capability stats, plus two separat
 
 Workout-output stats start at `10`. LCK starts at `0`.
 
-`DEF` is not a displayed stat anymore. The engine still keeps a hidden legacy `DEF` accumulator so old local snapshots and storage keys decode safely, but it should not appear in radar, detail rows, finish heroes, or product copy.
+`DEF` has been fully removed. The engine no longer accumulates, stores, or deltas it, and it never appears in radar, detail rows, finish heroes, or product copy. Old local snapshots that still carry a `DEF` key decode harmlessly — the key is simply ignored.
 
 ## Radar Readability Rule
 
@@ -117,7 +117,7 @@ strength under the intensity currency while END stays the dominant visible
 axis for leg training — pushing this above ~`0.22x` flips the Tank radar
 identity to STR.
 
-VIT is not fed by any muscle. Hidden legacy DEF still receives pulling/back/arm volume internally for compatibility, but it is not part of the visible stat board.
+VIT is not fed by any muscle. Pulling (back / biceps / traps) volume feeds visible STR at `0.80x`.
 
 ## END Formula
 
@@ -231,7 +231,7 @@ Calibration can seed capability only when it is derived from real logged workout
 
 Current constraints:
 
-- Calibration seed currently applies to the legacy kg-volume seed path (`STR / DEF / AGI`) for compatibility.
+- Calibration seed applies to the kg-volume seed path (`STR / AGI`). Back/biceps primaries return null from the seed mapping (they used to seed the retired `DEF`), so calibration doesn't seed them; their STR contribution comes from actual logged training.
 - END is not seeded, because it is rep-band derived.
 - VIT is not seeded, because it is the recovery meter.
 - The seed composes with real training and is recomputed through the same stat curve.
@@ -247,13 +247,13 @@ Delta rules:
 - STR / AGI / END can appear if the workout affected them.
 - LCK appears only when it increases.
 - VIT is recomputed from recovery state and is not treated as a per-session gain.
-- DEF can still exist in stored internal deltas, but visible UI filters it out.
+- The delta covers `STR / AGI / END` (and LCK when it rises). `DEF` is no longer produced.
 
 This delta drives finish-summary stat gains and recent-session tags.
 
 ## Decay (removed — earned stats are immutable)
 
-Inactivity no longer decays earned stats. `STR`, `AGI`, `END` (and hidden legacy `DEF`) never
+Inactivity no longer decays earned stats. `STR`, `AGI`, `END` never
 decrease once earned. The old loss-framed decay factor (`combat_decay_factor_v1`, ×0.97 per
 unprotected missed training day, floored at half) was **retired**: it punished absence (against the
 anti-guilt mandate) and overstated real detraining, which is gradual.

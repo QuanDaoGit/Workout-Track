@@ -161,8 +161,8 @@ class DemoSeedService {
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
-  // Three rotating full-body-leaning days covering STR (chest/legs/triceps),
-  // DEF (back/biceps), AGI (shoulders/core) and END (reps).
+  // Three rotating full-body-leaning days covering STR (chest/legs/triceps/
+  // back/biceps), AGI (shoulders/core) and END (reps).
   static const _templates = <_DayTemplate>[
     _DayTemplate('Chest', [
       _Move('Barbell_Bench_Press_-_Medium_Grip', 70, 8, 4),

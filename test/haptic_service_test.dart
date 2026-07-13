@@ -86,6 +86,43 @@ void main() {
       await HapticService.instance.success();
     });
 
+    test('levelUp falls back to a double medium impact without a vibrator', () async {
+      // The `vibration` plugin isn't registered in the test env, so
+      // hasVibrator() throws → the fallback (two medium impacts) fires.
+      await HapticService.instance.levelUp();
+      expect(hapticArgs(), <Object?>[
+        'HapticFeedbackType.mediumImpact',
+        'HapticFeedbackType.mediumImpact',
+      ]);
+    });
+
+    test('climbBuzz and levelUp are muted when disabled', () async {
+      HapticService.enabled = false;
+      await HapticService.instance.climbBuzz(durationMs: 800);
+      await HapticService.instance.levelUp();
+      expect(calls, isEmpty);
+    });
+
+    test('landThump falls back to a medium impact without a vibrator', () async {
+      // No vibration plugin in the test env → hasVibrator() throws → fallback.
+      await HapticService.instance.landThump();
+      expect(hapticArgs(), <Object?>['HapticFeedbackType.mediumImpact']);
+    });
+
+    test('flightSwell no-ops without a vibrator; both mute when disabled', () async {
+      await HapticService.instance.flightSwell();
+      expect(
+        calls,
+        isEmpty,
+        reason: 'no impact fallback — the flight swell is optional texture',
+      );
+
+      HapticService.enabled = false;
+      await HapticService.instance.flightSwell();
+      await HapticService.instance.landThump();
+      expect(calls, isEmpty);
+    });
+
     group('fireCoalesced (the broad wrapper layer rate-limit)', () {
       // The singleton carries `_lastCoalescedAt` across tests, so advance the
       // fake clock monotonically (a big step each test) to clear any prior mark.

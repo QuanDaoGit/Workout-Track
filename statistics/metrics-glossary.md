@@ -56,9 +56,20 @@ anonymous counters/enums only** — never bodyweight, name, or exercise content.
 
 **Implemented (pass 1, 2026-06-27):** `onboarding_complete`, `workout_saved` (+params), and
 `first_workout_saved` (lifetime-once, dedupe-on-resave) are wired at their service chokepoints;
-`app_open`/`screen_view`/`session_start` are auto-collected by Firebase. Remaining events
-(`workout_started`, the save-failed/discard/recovery lifecycle, and the engagement events) are
-pending follow-up passes.
+`app_open`/`screen_view`/`session_start` are auto-collected by Firebase.
+
+**Implemented (pass 2, 2026-07-13):** the remaining taxonomy is now wired at its call sites —
+`onboarding_step` (each visual step, `onboarding_flow_page`/`name_screen`/`start_gate_screen`),
+`workout_started` (+`muscle_groups`, at fresh session start in `active_workout`), the workout
+lifecycle (`workout_save_failed` log-then-rethrow in `saveSession`; `workout_discarded` on the
+zero-set and user-discard paths; `incomplete_workout_found` once per launch; `workout_recovered`
+on resume-entry), `rest_action` (`start`/`finish`/`skip`/`adjust`), the engagement events
+(`character_view` on real Items/Labs tab changes, `cosmetic_equipped` at the `equipItem`
+chokepoint, `loot_unlock_viewed` on the summary hero reveal incl. reduced-motion), `consent_changed`
+(both toggles; a **new** facade method), and the `class` / `reduced_motion` user properties.
+Enum param values are centralized in `AnalyticsValue` (`analytics_service.dart`). An explicit
+`app_open` is also emitted on resume — **redundant with Firebase's auto event**; pick one source
+when building DAU dashboards.
 
 † `duration_seconds` is the app's own `actualDurationSeconds` (time credited up to the
 last logged set) — **NOT** Firebase `engagement_time_msec`, which is foreground-only and mis-counts a

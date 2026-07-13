@@ -17,10 +17,6 @@ const double _statValueWidth = 42;
 const double _statValueRankGap = 8;
 const double _statRankWidth = 34;
 
-/// DEF is retired from visible UI but keeps accumulating in the engine for
-/// possible future revival (the spec's "feature flag", local-app form).
-const bool kDefVisible = false;
-
 /// Capability stats — radar triangle + graded D→S detail rows. VIT (recovery)
 /// and LCK (consistency) are different categories, shown as their own rows.
 const List<String> _radarStats = StatRadarRead.visibleStats;

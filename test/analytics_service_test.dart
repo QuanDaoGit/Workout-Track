@@ -110,4 +110,94 @@ void main() {
       expect(sink2.events.where((e) => e.$1 == 'first_workout_saved'), isEmpty);
     });
   });
+
+  group('newly wired taxonomy events forward name + params', () {
+    late _RecordingSink sink;
+    setUp(() async {
+      sink = _RecordingSink();
+      await AnalyticsService.bootstrap(sink: sink);
+    });
+
+    test('workout_started carries muscle_groups, exercise_count, source', () async {
+      await AnalyticsService.instance.logWorkoutStarted(
+        muscleGroups: ['Chest', 'Back'],
+        exerciseCount: 5,
+        source: AnalyticsValue.sourceProgram,
+      );
+      expect(sink.events.single.$1, 'workout_started');
+      expect(sink.events.single.$2, {
+        'muscle_groups': 'Chest,Back',
+        'exercise_count': 5,
+        'source': 'program',
+      });
+    });
+
+    test('consent_changed carries scope + value', () async {
+      await AnalyticsService.instance.logConsentChanged(
+        AnalyticsValue.consentCrash,
+        true,
+      );
+      expect(sink.events.single.$1, 'consent_changed');
+      expect(sink.events.single.$2, {'scope': 'crash', 'value': true});
+    });
+
+    test('enum-param events forward their single param', () async {
+      await AnalyticsService.instance.logRestAction(AnalyticsValue.restSkip);
+      await AnalyticsService.instance.logWorkoutDiscarded(
+        AnalyticsValue.discardUser,
+      );
+      await AnalyticsService.instance.logCharacterView(
+        AnalyticsValue.surfaceProfile,
+      );
+      await AnalyticsService.instance.logCosmeticEquipped(
+        AnalyticsValue.cosmeticFrame,
+      );
+      await AnalyticsService.instance.logOnboardingStep(
+        AnalyticsValue.stepStartGate,
+      );
+      expect(sink.events.map((e) => e.$1).toList(), [
+        'rest_action',
+        'workout_discarded',
+        'character_view',
+        'cosmetic_equipped',
+        'onboarding_step',
+      ]);
+      expect(sink.events[0].$2, {'kind': 'skip'});
+      expect(sink.events[1].$2, {'reason': 'user_discard'});
+      expect(sink.events[2].$2, {'surface': 'profile'});
+      expect(sink.events[3].$2, {'kind': 'frame'});
+      expect(sink.events[4].$2, {'step': 'start_gate'});
+    });
+
+    test('paramless lifecycle + engagement events forward by name', () async {
+      await AnalyticsService.instance.logIncompleteWorkoutFound();
+      await AnalyticsService.instance.logWorkoutRecovered();
+      await AnalyticsService.instance.logLootUnlockViewed();
+      expect(sink.events.map((e) => e.$1).toList(), [
+        'incomplete_workout_found',
+        'workout_recovered',
+        'loot_unlock_viewed',
+      ]);
+    });
+
+    test('setUserProperties forwards class + reduced_motion', () async {
+      await AnalyticsService.instance.setUserProperties(
+        characterClass: 'tank',
+        reducedMotion: true,
+      );
+      expect(sink.userProps, contains(('class', 'tank')));
+      expect(sink.userProps, contains(('reduced_motion', 'true')));
+    });
+
+    test('opted out: none of the new events forward', () async {
+      await AnalyticsService.instance.setAnalyticsOptedOut(true);
+      await AnalyticsService.instance.logRestAction(AnalyticsValue.restStart);
+      await AnalyticsService.instance.logLootUnlockViewed();
+      await AnalyticsService.instance.logConsentChanged(
+        AnalyticsValue.consentAnalytics,
+        false,
+      );
+      expect(sink.events, isEmpty);
+    });
+  });
 }

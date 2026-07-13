@@ -90,8 +90,8 @@ This is what makes the fantasy trusted — wipe a session and everything downstr
 
 There are three visible build-shape stats, plus two status meters. **STR / AGI / END** start at a
 baseline of **10** and cap at **1000**. **VIT** is a 10-100 recovery-balance meter. **LCK** starts
-at **0**, caps at **100**, and drives the XP multiplier. **DEF** is hidden legacy storage only; it
-is not part of the radar, detail rows, finish heroes, or product copy.
+at **0**, caps at **100**, and drives the XP multiplier. (The retired **DEF** stat has been fully
+removed — no accumulator, storage, or delta.)
 
 | Stat | Name | What it represents | How it's produced |
 |---|---|---|---|
@@ -114,8 +114,7 @@ focused training creates a shape without leaving other axes dead:
 | quadriceps, hamstrings, glutes, calves, adductors, abductors | 0.10× | 0.07× | 5.00× |
 | shoulders, abdominals | 0.20× | 1.00× | 1.10× |
 
-Hidden legacy DEF still accumulates pulling/back/arm volume internally for compatibility, but it is
-not displayed.
+Pulling (back / biceps / traps) volume feeds visible **STR** at 0.80×, as shown in the table above.
 
 ### 4.2 The volume → stat curve (diminishing returns)
 
@@ -189,7 +188,7 @@ all stats cap at 1000 (so S leaves headroom). New lifters promote fast; S is a l
 
 ### 4.7 No decay — earned stats are immutable
 
-Inactivity no longer erodes the workout-output stats (**STR, hidden legacy DEF, AGI, END**) — once
+Inactivity no longer erodes the workout-output stats (**STR, AGI, END**) — once
 earned they never decrease. The old loss-framed decay (×0.9 per unprotected missed day, floored at
 half your peak) was **retired**: it punished absence (against the anti-guilt mandate) and overstated
 real detraining, which is gradual. Boot still spends rest-day **shields** to protect the consistency

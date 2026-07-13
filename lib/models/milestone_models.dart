@@ -13,9 +13,8 @@ class MilestoneSnapshot {
     required this.muscleVolumes,
   });
 
-  /// Visible rankable growth stats. DEF is retained only as hidden legacy
-  /// storage, while VIT is recovery state and LCK is a streak multiplier.
-  /// None of those should silently gate visible milestone unlocks.
+  /// Visible rankable growth stats. VIT is recovery state and LCK is a streak
+  /// multiplier — neither should silently gate visible milestone unlocks.
   static const growthStats = ['STR', 'AGI', 'END'];
 
   final Map<String, int> stats;

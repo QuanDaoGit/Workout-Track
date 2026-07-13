@@ -82,7 +82,16 @@ explicit anticipation coil & peak hold; Home room parallax drifts only the soft 
 sprites untouched; the quiz/start-gate/loader BIT was raster (glow-breathe only, plates frozen) → moved to the painted
 `BitMoodCore` so its plates breathe like the cold-open/solution, retiring the raster `BitIdle`; then BIT
 placed on the **quest board** as a single *damped* faced briefing (scroll-not-pin, cheer only on claim) — a
-companion on a surface the user *reads* stays **single-placement + state-reactive**, never pinned/per-row (2026-06).*
+companion on a surface the user *reads* stays **single-placement + state-reactive**, never pinned/per-row (2026-06).
+**A cinematic VIDEO reveal is a sequence, not an autoplay:** CRT power-on → a held **poster** frame (the
+frame-0 bitmap, NOT the raw video surface — frame 0 can decode black pre-`play()`) → an eased picture +
+**audio** ramp-in; the **exit recedes and fuses into the follow-on** (peak-end: the ending dominates
+memory, so invest it *more* than the entry), driven off **video position** not a fixed timer, keeping the
+payoff caption readable *before* the recede. **Audio never slams** — ramp it in (leads the picture, a
+J-cut) + tail it out clamped to 0 *before* the hard asset end (bake fades out of the clip so the app owns
+them). A phase whose exit depends on an animation callback needs a **clock-driven watchdog in the pure
+engine** or it soft-locks. All gated on reduced-motion — omit the animators but **keep the audio fades**
+(a fade isn't "motion") (2026-07, Charge Ritual reel entry/exit).*
 
 ### Contrast by luminance, not hue
 **Rule:** Legibility of particles/text/icons on a fill is driven by **luminance** contrast. On a
@@ -172,18 +181,37 @@ readout" panel above the prompt → field slid under the keyboard until scroll +
 ### Reduced-motion needs a non-motion fallback
 **Rule:** Freezing an animation under `disableAnimations` must leave a **still, legible signal** — a
 label, a static frame, a Semantics announcement — never a dead/ambiguous control. Design the
-no-motion state first, then add motion on top. **Disable an implicit animator by OMITTING it, not by
+no-motion state first, then add motion on top. **For a whole motion *feature* (a video reel, a long
+cinematic), the reduced-motion default is to SKIP it to the still/interactive state — a user-gated or
+reward-framed entry ("YES, see the gift") is NOT consent to long motion; the OS setting outranks the
+framing (Codex high, 2026-07 — the charge-ritual "gift" beat funneled RM users into the 17s reel via
+a START-BOOSTING press until RM was reverted to the still hold).** **Disable an implicit animator by OMITTING it, not by
 zeroing its duration** — an `AnimatedSize` with `Duration.zero` re-dirties itself during layout
 (`RenderAnimatedSize was mutated in its own performLayout` assertion → every test that pumps it throws);
-branch `_reduce ? child : AnimatedSize(child:)` instead. *Seen: collapsible body-map groups crashed all
-meter-row tests under reduced motion until the AnimatedSize was branched out (2026-06).* **The reduced-presentation trigger is the *union*
+branch `_reduce ? child : AnimatedSize(child:)` instead. **A `late final AnimationController = …` that the
+reduced-motion `build()` never reads is lazily constructed inside `dispose()` — an unsafe
+deactivated-ancestor `TickerMode` lookup that throws. "Eager" means the ASSIGNMENT lives in
+`initState` (`late final _c;` declared bare, `_c = AnimationController(…)` in initState) — a
+`late final _c = expr` FIELD INITIALIZER is itself lazy, so writing one with an "eager" comment is
+the same bug (a sibling like `_LevelFloat` only survives because its build always references the
+controller). An entrance/FX WRAPPER inserted around an existing child must also be
+**layout-transparent** — a bare `Stack` shrink-wraps + top-left-pins, yanking centered rows to the
+edge; use `StackFit.passthrough`.** *Seen: collapsible body-map groups crashed all
+meter-row tests under reduced motion until the AnimatedSize was branched out (2026-06); the XP-meter
+`_LevelPunch`/`_BarSurge` juice widgets (early-return `build` under reduced motion) crashed every summary
+test on dispose until their `late final` controllers moved to `initState` (2026-07); SECOND fire:
+ScanWipe/CrtExpand/_SlamIn shipped the initializer form under an "eager" comment and all three crashed
+reduced-motion dispose, and their bare Stacks de-centered the XP label + stat row — caught only by the
+rendered capture (2026-07).* **The reduced-presentation trigger is the *union*
 `disableAnimations || accessibleNavigation` — gate on it consistently across sibling surfaces; a
 screen that checks only `disableAnimations` strands a screen-reader/switch-access user in the full
 cinematic while its neighbours settle (prefer the shared `bool get _reduceMotion` idiom over an
 inline `disableAnimations` check so the gate can't drift).** A **perpetual** full-bleed scene (ambient ticker that
 never settles) must freeze for correctness *elsewhere* too: page-level `pumpAndSettle` tests hang if
 it never stops, and a hero sized by a raw width-ratio overflows short/odd viewports — **clamp the
-ratio**. **An overlay that masks a sprite's stale baked art must follow that sprite in *every* state** — hiding
+ratio** (size it from a `LayoutBuilder`'s available height, **not** `MediaQuery.sizeOf` — which is
+`Size.zero` under a test's `MediaQueryData(...)` override, silently collapsing the hero to 0 while the
+widget test still passes; 2026-07). **An overlay that masks a sprite's stale baked art must follow that sprite in *every* state** — hiding
 it in one state (e.g. a launch recoil transform) re-exposes the old baked layer underneath; give the
 overlay the *same* transform and keep it shown, don't hide it. **A surface is robust only against the
 axes you *prove*:** a dense in-world HUD readout

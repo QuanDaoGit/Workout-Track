@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../models/calibration_quiz_models.dart';
 import '../../models/character_draft.dart';
 import '../../models/resolve_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/body_goal_service.dart';
 import '../../services/calibration_service.dart';
 import '../../services/class_service.dart';
@@ -133,6 +135,11 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
           onCalibrated: (at) => _persistPreClass(pre, at),
           onReveal: (at) {
             _classConfirmedAt = at;
+            unawaited(
+              AnalyticsService.instance.logOnboardingStep(
+                AnalyticsValue.stepClassReveal,
+              ),
+            );
             Navigator.of(context).pushReplacement(
               arcadeRoute(
                 (_) => ClassRevealScreen(
@@ -152,6 +159,13 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   Future<void> _persistPreClass(PreClassAnswers pre, DateTime at) async {
     await BodyGoalService().setGoal(pre.goal);
     await ClassService().selectClass(pre.clazz);
+    // Anonymous segmentation property (assassin/bruiser/tank) — set once the
+    // class is committed.
+    unawaited(
+      AnalyticsService.instance.setUserProperties(
+        characterClass: pre.clazz.name.toLowerCase(),
+      ),
+    );
     await CalibrationService().saveCalibrationInputs(
       bodyweightKg: pre.bodyWeightKg,
       heightCm: pre.heightCm,
@@ -163,6 +177,11 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
 
   // ── Segment B — experience + frequency (after the class) ─────────────────
   void _onClassConfirmed() {
+    unawaited(
+      AnalyticsService.instance.logOnboardingStep(
+        AnalyticsValue.stepCalibrationQuizB,
+      ),
+    );
     // Replace (not push) the class reveal: the calibration is the point of no
     // return, so the reveal must leave the stack. Pushing it left a spent
     // reveal beneath the rest of the flow — backing into it hit a dead CTA.
@@ -215,6 +234,11 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
           result: result,
           onComplete: () async {
             if (!mounted) return;
+            unawaited(
+              AnalyticsService.instance.logOnboardingStep(
+                AnalyticsValue.stepProgramSelection,
+              ),
+            );
             await Navigator.of(context).pushReplacement(
               arcadeRoute(
                 (_) => ProgramSelectionPage(draft: draft),
@@ -248,6 +272,9 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   // scanline, a black hold (the cold open mounts here, dark), then a power-on
   // bloom that the cold open's own entrance rides in on (wordmark first).
   Future<void> _runWelcomeToColdOpen() async {
+    unawaited(
+      AnalyticsService.instance.logOnboardingStep(AnalyticsValue.stepColdOpen),
+    );
     if (_reduceMotion) {
       setState(() => _step = _Step.coldOpen);
       return;
@@ -268,6 +295,9 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   }
 
   Future<void> _runWelcomeToProblem() async {
+    unawaited(
+      AnalyticsService.instance.logOnboardingStep(AnalyticsValue.stepProblem),
+    );
     if (_reduceMotion) {
       setState(() => _step = _Step.problem);
       return;
@@ -293,6 +323,9 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   }
 
   Future<void> _runProblemToSolution(Offset origin) async {
+    unawaited(
+      AnalyticsService.instance.logOnboardingStep(AnalyticsValue.stepSolution),
+    );
     if (_reduceMotion) {
       setState(() => _step = _Step.solution);
       return;
@@ -320,6 +353,11 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
   }
 
   Future<void> _runSolutionHandoff() async {
+    unawaited(
+      AnalyticsService.instance.logOnboardingStep(
+        AnalyticsValue.stepCalibrationQuizA,
+      ),
+    );
     if (_reduceMotion) {
       await _runQuiz();
       return;

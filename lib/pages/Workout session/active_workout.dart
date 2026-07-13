@@ -6,6 +6,7 @@ import '../../theme/app_fonts.dart';
 import '../../data/muscle_groups.dart';
 import '../../models/program_models.dart';
 import '../../models/workout_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/calorie_service.dart';
 import '../../services/haptic_service.dart';
 import '../../services/idle_session_guard.dart';
@@ -151,8 +152,20 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           _loggedSets[log.exerciseId] = [...log.sets, ...log.warmupSets];
         }
       }
+      // A force-killed session was re-entered into the live flow (found →
+      // recovered → saved funnel; `workout_saved` records the persist).
+      unawaited(AnalyticsService.instance.logWorkoutRecovered());
     } else {
       _sessionStartTime = DateTime.now();
+      unawaited(
+        AnalyticsService.instance.logWorkoutStarted(
+          muscleGroups: _targetMuscleGroups,
+          exerciseCount: widget.exercises.length,
+          source: widget.isProgramWorkout
+              ? AnalyticsValue.sourceProgram
+              : AnalyticsValue.sourceFree,
+        ),
+      );
     }
 
     _updateElapsed();
@@ -410,16 +423,29 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     _checkpointInFlight = _checkpoint();
   }
 
+  /// Max time to wait for an in-flight checkpoint before exiting anyway. A hung
+  /// `SharedPreferences` write (rare — Android under memory pressure or during a
+  /// system backup) must not freeze the exit flow. The completed session the
+  /// caller is about to write is the source of truth, not this ongoing
+  /// checkpoint, so timing out here is safe.
+  static const _checkpointDrainTimeout = Duration(seconds: 5);
+
   /// Awaits any in-flight checkpoint write so a stale read-modify-write can't
-  /// land after the caller's final storage write.
+  /// land after the caller's final storage write. Bounded by
+  /// [_checkpointDrainTimeout] so a hung write can't hang the exit.
   Future<void> _drainCheckpoint() async {
     final pending = _checkpointInFlight;
-    if (pending != null) {
-      try {
-        await pending;
-      } catch (_) {
-        // A failed checkpoint must not block exit.
-      }
+    if (pending == null) return;
+    try {
+      await pending.timeout(_checkpointDrainTimeout);
+    } on TimeoutException {
+      // Storage write is hung well past any healthy latency — stop waiting so
+      // the exit UI isn't frozen. We accept the rare RMW-ordering risk this
+      // guard normally prevents: a frozen app is a worse outcome than a
+      // possible stale ongoing row (which the next launch's resume/idle flow
+      // can still surface and let the user discard).
+    } catch (_) {
+      // A failed checkpoint must not block exit.
     }
   }
 
@@ -498,6 +524,11 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     // than prompting over an empty session.
     if (_totalLoggedSets == 0) {
       IdleSessionGuard.instance.release(_sessionId);
+      unawaited(
+        AnalyticsService.instance.logWorkoutDiscarded(
+          AnalyticsValue.discardIdleZeroSets,
+        ),
+      );
       await _discardIdleNoReward();
       return;
     }
@@ -520,6 +551,11 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           autoSavedAfterIdle: true,
         );
       case IdleSessionChoice.discard:
+        unawaited(
+          AnalyticsService.instance.logWorkoutDiscarded(
+            AnalyticsValue.discardUser,
+          ),
+        );
         await _discardIdleNoReward();
       case IdleSessionChoice.resume:
       case null:

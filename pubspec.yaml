@@ -45,6 +45,7 @@ dependencies:
   # Kotlin Gradle Plugin 2.2.20 rejects (sentry-dart #3433; fixed in 9.22.0).
   sentry_flutter: 9.22.0
   url_launcher: ^6.3.2
+  vibration: ^3.2.0
 
 dev_dependencies:
   flutter_test:
@@ -73,12 +74,15 @@ sentry:
   # Obfuscated builds: add --obfuscate --split-debug-info=build/symbols to the
   # flutter build, then the plugin uploads the Dart symbol map too.
 
-# Launcher icon — generated from the bordered tile. The generator already insets
-# the adaptive foreground 16% into the safe zone, so we pass the full tile; the
-# adaptive background matches the tile's own dark bg for a seamless mask.
+# Launcher icon — the BIT pfp (marketing/assets/instagram/identity/pfp-bit.png),
+# exported to a 1024px tile at assets/branding/app_icon.png (pixel-art export:
+# nearest-neighbour x8 then smooth downsample — see the session ceremony docs).
+# Full-bleed art: the adaptive mask crops to the centered BIT core; the
+# background color matches the art's own dark edge (~kBg) for a seamless mask.
 flutter_launcher_icons:
   android: true
-  ios: false
+  ios: true
+  remove_alpha_ios: true
   image_path: "assets/branding/app_icon.png"
   adaptive_icon_background: "#11111F"
   adaptive_icon_foreground: "assets/branding/app_icon.png"
@@ -122,6 +126,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/audio/
+    - assets/onboarding/
     - assets/guild/
     - assets/guild/crest/
     - assets/exercises/demos/

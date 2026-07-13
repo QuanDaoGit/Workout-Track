@@ -36,6 +36,55 @@ class SfxService {
   Future<void> playQuestClaim() =>
       _play('audio/quest_claim_burst.wav', volume: 0.7);
 
+  /// The finish-arc **level-up chime** — the celebratory hit at each level the XP
+  /// bar crosses. The star of the arc's audio, so it sits loudest. A discrete
+  /// reward (like the level-up haptic), it fires even under reduced motion —
+  /// muting is the Sound toggle's job, not reduced-motion's. Source: same CC0
+  /// Juhani Junkala 512-pack as [playQuestClaim] (a fanfare), ships without
+  /// attribution.
+  Future<void> playLevelUp() => _play('audio/level_up.wav', volume: 0.7);
+
+  /// The **"bar running up" riser** — a synthesized chiptune square-wave sweep
+  /// that STEPS up in pitch (C4→C6) as the XP bar climbs, resolving into the
+  /// level chime at the crossing. A generated tone (not a pack sample) so the
+  /// rise is exact and tunable — regenerate via `python ops/gen_xp_riser.py`.
+  /// Accompanies the fill animation, so callers skip it under reduced motion
+  /// (the bar snaps).
+  Future<void> playXpRiser() => _play('audio/xp_riser.wav', volume: 0.6);
+
+  /// A short **rolling tally** for the STAT GAINS count-up (one shot for the
+  /// whole row, not one-per-number — the single player would cut those off, and
+  /// a per-number train would drone). Accompanies the roll, so callers skip it
+  /// under reduced motion (the numbers snap).
+  Future<void> playStatCounter() =>
+      _play('audio/stat_counter.wav', volume: 0.5);
+
+  // ── BIT Session-Complete ceremony micro-cues ───────────────────────────────
+  // Faithful synths of the ceremony handoff's WebAudio tones (gain ratio baked
+  // into the wavs — regenerate via `python ops/gen_ceremony_sfx.py`). All three
+  // accompany the ceremony animation, which never plays under reduced motion.
+
+  /// The quiet **arrival tick** (330 Hz, 35 ms) as BIT appears dormant (t=150ms).
+  Future<void> playCeremonyTick() =>
+      _play('audio/ceremony_tick.wav', volume: 0.7);
+
+  /// The **surge release chime** (660→990 Hz) as BIT bursts into cheer (t=500ms).
+  Future<void> playCeremonyChime() =>
+      _play('audio/ceremony_chime.wav', volume: 0.7);
+
+  /// The **landing impact thud** as BIT slams into its seat (t=2550ms) — a
+  /// sub-bass pitch-drop punch + dust-burst noise (user-directed upgrade of
+  /// the handoff's quiet 210 Hz blip: a strong landing, not a beep).
+  Future<void> playCeremonyLand() =>
+      _play('audio/ceremony_land.wav', volume: 0.8);
+
+  /// The **banked-flight dash fwoosh** (t=1050ms) — a square-wave doppler
+  /// pitch ride (with vibrato) over a quiet noise air-layer, tracking the
+  /// flight's speed curve; authored to fade to silence by 1.40s so the landing
+  /// hit never cuts live energy (Codex F3).
+  Future<void> playCeremonyFlight() =>
+      _play('audio/ceremony_flight.wav', volume: 0.7);
+
   Future<void> _play(String assetPath, {double volume = 1.0}) async {
     if (!enabled) return;
 

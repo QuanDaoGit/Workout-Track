@@ -95,4 +95,56 @@ void main() {
     expect(find.text('LV 2'), findsOneWidget);
     expect(find.text('LEVEL 2'), findsNothing);
   });
+
+  testWidgets('onClimbStart fires once for a single (no-level-up) fill', (
+    tester,
+  ) async {
+    var climbStarts = 0;
+    await tester.pumpWidget(
+      host(
+        XpLevelMeter(
+          oldTotalXP: 15, // level 2 ...
+          newTotalXP: 30, // ... still level 2 → one climbing segment
+          onClimbStart: () => climbStarts++,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(climbStarts, 1);
+  });
+
+  testWidgets('onClimbStart fires per fill segment across level-ups', (
+    tester,
+  ) async {
+    var climbStarts = 0;
+    await tester.pumpWidget(
+      host(
+        XpLevelMeter(
+          oldTotalXP: 0,
+          newTotalXP: 300, // crosses several levels → multiple fill segments
+          onClimbStart: () => climbStarts++,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(climbStarts, greaterThanOrEqualTo(2));
+  });
+
+  testWidgets('onClimbStart does NOT fire under reduced motion (bar snaps)', (
+    tester,
+  ) async {
+    var climbStarts = 0;
+    await tester.pumpWidget(
+      host(
+        XpLevelMeter(
+          oldTotalXP: 15,
+          newTotalXP: 30,
+          onClimbStart: () => climbStarts++,
+        ),
+        reducedMotion: true,
+      ),
+    );
+    await tester.pump();
+    expect(climbStarts, 0);
+  });
 }

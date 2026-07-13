@@ -77,3 +77,12 @@ marketing/assets/promo-videos/
 # Large binaries that don't belong in the repo (e.g. stray installers in screenshots)
 *.exe
 design/screenshots/*.exe
+
+# Playwright MCP scratch output
+.playwright-mcp/
+
+# Large non-shipping media — keep out of git history (referenced only as design
+# source / marketing, never bundled by pubspec). motivational_clips is ~1.9 GB.
+assets/motivational_clips/
+assets/design_handoff_charge_ritual/
+assets/design_handoff_session_ceremony/

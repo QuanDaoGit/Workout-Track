@@ -11,13 +11,13 @@ return, rank aspiration, or recovery protection.
 
 The canonical muscle-group list is **`Chest, Back, Shoulders, Arms, Legs, Core, Full Body`**: seven Title-Case strings. Defined in [lib/data/muscle_groups.dart](../lib/data/muscle_groups.dart). Every UI surface (Start Workout chips, Create Exercise picker, Exercises filter, muscle-balance chart, calorie MET map, class focus mappings) references this single list. `WorkoutSession.muscleGroup` and `Exercise.muscleGroup` are normalized to the canonical form at read-time via `normalizeMuscleGroup(raw)`; no DB rewrite needed.
 
-Detailed muscles in `assets/exercises.json` (chest, lats, biceps, quadriceps, etc.) are mapped to one of the seven canonical buckets via `muscleGroupForDetailed(detailed)`. The detailed-muscle to character-stat weighting stays in `StatEngine`: it operates on detailed muscles, not buckets, to preserve granularity. The visible radar uses `STR / AGI / END`; `DEF` remains only as a hidden legacy accumulator for old local snapshots.
+Detailed muscles in `assets/exercises.json` (chest, lats, biceps, quadriceps, etc.) are mapped to one of the seven canonical buckets via `muscleGroupForDetailed(detailed)`. The detailed-muscle to character-stat weighting stays in `StatEngine`: it operates on detailed muscles, not buckets, to preserve granularity. The visible radar uses `STR / AGI / END`. (The retired `DEF` stat has been fully removed — no accumulator, storage, or delta.)
 
 Adding or removing a bucket requires updating: the `canonicalMuscleGroups` list, the `_detailedToBucket` map, `curated_exercises.dart`, `class_definitions.dart` `musclesForClass`, `StatEngine._fallbackPrimary`, `workout_page.dart` `_muscles` + `_muscleColors`, and `CalorieService._metByMuscleGroup`.
 
 ## Character stats and XP
 
-The visible stat board has three build-shape stats plus two status meters. `STR / AGI / END` are cumulative workout-output stats and start at 10 so a new character has a visible baseline. `VIT` is a 10-100 recovery-balance meter. `LCK` starts at 0 because it is streak-derived. `DEF` is hidden legacy storage only and should not appear in product copy or UI.
+The visible stat board has three build-shape stats plus two status meters. `STR / AGI / END` are cumulative workout-output stats and start at 10 so a new character has a visible baseline. `VIT` is a 10-100 recovery-balance meter. `LCK` starts at 0 because it is streak-derived. (The retired `DEF` stat has been fully removed.)
 
 STR and AGI grow from weighted logged kg-volume by primary muscle. END grows from logged reps, weighted by rep range and muscle:
 

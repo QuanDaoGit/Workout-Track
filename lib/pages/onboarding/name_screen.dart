@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/avatar_spec.dart';
 import '../../models/character.dart';
 import '../../models/character_draft.dart';
 import '../../models/profile_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/character_service.dart';
 import '../../services/profile_service.dart';
 import '../../services/program_service.dart';
@@ -86,6 +89,9 @@ class _NameScreenState extends State<NameScreen>
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
+    unawaited(
+      AnalyticsService.instance.logOnboardingStep(AnalyticsValue.stepNameScreen),
+    );
     if (_reduceMotion) {
       _controller.value = 1;
       return;

@@ -23,7 +23,9 @@ WHAT WAS APPROVED  (role  ->  file)
  7. About setting ................ icon_about.png               (info frame)
  8. Sessions nav tab ............. icon_nav_sessions.png        (battle log, rest)
                                    icon_nav_sessions_active.png (battle log, active)
- 9. Session complete ............. icon_session_complete.png    (medal — victorious)
+ 9. Session complete ............. RETIRED — the medal was replaced by the
+                                   seated BIT companion (session ceremony
+                                   handoff); the PNG was deleted.
 10. Session logged .............. icon_session_logged.png      (check spark)
 11. Next program ................ icon_next_program.png        (signpost)
 
@@ -67,8 +69,8 @@ crisp at any of these. Keep `image-rendering: pixelated` (web) /
  8. SESSIONS NAV TAB — 24px bottom nav. icon_nav_sessions.png at rest,
     icon_nav_sessions_active.png when selected.
 
- 9. SESSION COMPLETE — the hero glyph on the Workout Complete screen.
-    Render large (96–128px), centered above "SESSION COMPLETE".
+ 9. SESSION COMPLETE — retired. The Workout Complete screen now seats the
+    live BIT companion (72px) where the medal glyph used to render.
 
 10. SESSION LOGGED — 16px, leading the "Session logged." confirmation
     on the session summary. Must stay legible small — it's tuned for it.

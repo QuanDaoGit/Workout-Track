@@ -27,6 +27,7 @@ class BitCompanion extends StatefulWidget {
     this.mood = BitMood.neutral,
     this.size = 92,
     this.cheerTick = 0,
+    this.flashTick = 0,
     this.spamRestArmed = true,
     this.onRestEasterEgg,
   });
@@ -40,6 +41,12 @@ class BitCompanion extends StatefulWidget {
   /// the COLLECT cheer. A no-op under reduced motion (the collect routes on
   /// instantly there, so a flash would only flicker).
   final int cheerTick;
+
+  /// Bump this to fire a one-shot cheer **flash only** — bit.js `cheer()`
+  /// (`_cheer = 1`, no orbit): the screen washes white and decays over 650ms.
+  /// The ceremony's touchdown beat (the orbit stays reserved for a press).
+  /// A no-op under reduced motion, like [cheerTick].
+  final int flashTick;
 
   /// Arms the spam-tap easter egg: five rapid taps (≤350ms apart) tire BIT out
   /// — he slumps to a smooth REST pose, sighs once, holds ~3s, then perks back.
@@ -70,6 +77,12 @@ class _BitCompanionState extends State<BitCompanion>
     vsync: this,
     duration: const Duration(milliseconds: 280),
   )..addStatusListener(_onRetractStatus);
+  // One-shot cheer FLASH (no orbit) — bit.js cheer(): value 0→1 over the 650ms
+  // decay window; the painter reads flash intensity as (1 − value).
+  late final AnimationController _flash = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 650),
+  );
   bool _reduce = false;
   late BitMood _mood = widget.mood;
 
@@ -130,6 +143,10 @@ class _BitCompanionState extends State<BitCompanion>
     if (widget.cheerTick != old.cheerTick && !_reduce && !_resting) {
       _fireCheer();
     }
+    // Flash-only trigger (touchdown): the screen wash without the orbit.
+    if (widget.flashTick != old.flashTick && !_reduce && !_resting) {
+      _flash.forward(from: 0);
+    }
   }
 
   @override
@@ -138,6 +155,7 @@ class _BitCompanionState extends State<BitCompanion>
     _idle?.dispose();
     _spin.dispose();
     _retract.dispose();
+    _flash.dispose();
     _restMorph.dispose();
     _time.dispose();
     super.dispose();
@@ -235,6 +253,7 @@ class _BitCompanionState extends State<BitCompanion>
               time: _time,
               spin: _spin,
               retract: _retract,
+              flash: _flash,
               restMorph: _restMorph,
               mood: _mood,
               reduceMotion: _reduce,
@@ -497,6 +516,10 @@ void drawBitGrid(
 }
 
 /// Paint BIT's 10×10 glowing screen-face at native scale [s].
+///
+/// [alpha] dims the whole screen (ramp + scanlines + face) — bit.js's
+/// `drawScreen` `ctx.globalAlpha`, used by the ceremony's anticipation inhale.
+/// The default 1.0 skips the layer entirely (the shipped paths are untouched).
 void drawBitScreen(
   Canvas canvas,
   double s,
@@ -505,8 +528,16 @@ void drawBitScreen(
   List<Color> ramp,
   BitMood mood,
   bool blink,
-  double cheer,
-) {
+  double cheer, {
+  double alpha = 1.0,
+}) {
+  final dimmed = alpha < 1.0;
+  if (dimmed) {
+    canvas.saveLayer(
+      Rect.fromLTWH(oxN * s, oyN * s, 10 * s, 10 * s),
+      Paint()..color = Color.fromRGBO(0, 0, 0, alpha.clamp(0.0, 1.0)),
+    );
+  }
   final paint = Paint()..isAntiAlias = false;
   void px(double x, double y, double w, double h, Color c) {
     paint.color = c;
@@ -537,6 +568,127 @@ void drawBitScreen(
   if (cheer > 0.01) {
     px(0, 0, 10, 10, Color.fromRGBO(242, 255, 255, math.min(0.55, cheer * 0.65)));
   }
+  if (dimmed) canvas.restore();
+}
+
+/// JS `Math.round` (ties toward +∞) — bit.js rounds `sink`/`bob`/`breathe`
+/// this way, and Dart's `.round()` (ties away from zero) diverges on negative
+/// half-values (the anticipation pop makes `sink` negative).
+double _jsRound(double x) => (x + 0.5).floorToDouble();
+
+/// Paint one **ceremony** frame of BIT — the Session-Complete overlay's 200px
+/// instance. A faithful transcription of bit.js `renderInst` for the ceremony's
+/// instance state (`mood:'REST'` at mount, `setMood('CHEER')` at the surge),
+/// driven entirely by the caller's clock so every frame is deterministic:
+///
+/// - [tms] — ceremony clock in ms (drives bob/breathe/glow shimmer).
+/// - [surgedForMs] — ms since the surge (`setMood('CHEER')` at t=500); negative
+///   before it. Derives the 200ms mood-ramp lerp, the face switch at ramp 0.5,
+///   the cheer flash (1 → 0 over 650ms), the plate-spread follow (REST −1 →
+///   CHEER 4, the continuous form of bit.js's `s += (T−s)·dt/120` Euler step),
+///   and the REST droop.
+/// - [antic] — `setAnticipation` value; may be **negative** (the overshoot pop:
+///   BIT rises + plates spread; the glow/screen dims gate on `max(0, antic)`).
+/// - [idleAmp] — `setIdleAmp` 0..1 (0 while dormant, ramped in after the surge).
+/// - [spinT] — `spin(1500)` progress 0..1; eased `easeInOutCubic → 2π` here,
+///   exactly like bit.js (plates land home at 1).
+/// - [blink] — forced blink (the double "sign of life" @380/@455).
+///
+/// Ground glow (bit.js's blurred gradient div) is painted as a radial-gradient
+/// ellipse at the same box (64%×16%, bottom 4%). Scanlines always on ('face'
+/// screen). The caller owns the flight transform (translate/rotate/scale).
+void paintCeremonyBit(
+  Canvas canvas,
+  Size size, {
+  required double tms,
+  required double surgedForMs,
+  required double antic,
+  required double idleAmp,
+  required double spinT,
+  required bool blink,
+}) {
+  final s = size.width / 44.0;
+  final surged = surgedForMs >= 0;
+
+  // Instance state (bit.js updateInst), as pure functions of the clock.
+  final mt = surged ? (surgedForMs / 200).clamp(0.0, 1.0) : 0.0;
+  final cheer = surged ? (1 - surgedForMs / 650).clamp(0.0, 1.0) : 0.0;
+  final spread = surged ? 4 - 5 * math.exp(-surgedForMs / 120) : -1.0;
+  final droop = surged ? 0.0 : 2.0; // _target === 'REST' ? 2 : 0
+  final faceMood = mt >= 0.5 ? BitMood.cheer : BitMood.rest; // _mt >= 0.5
+
+  final restR = _ramps[BitMood.rest]!, cheerR = _ramps[BitMood.cheer]!;
+  final ramp = [
+    for (var i = 0; i < 4; i++) Color.lerp(restR[i], cheerR[i], mt)!,
+  ];
+  final glowCol = Color.lerp(_glow[BitMood.rest], _glow[BitMood.cheer], mt)!;
+
+  // renderInst geometry.
+  final sink = _jsRound(antic * 3);
+  final bob = _jsRound(math.sin(tms / 780) * idleAmp);
+  final breathe = _jsRound(math.sin(tms / 610 + 1.3) * idleAmp);
+  final anticDim = math.max(0.0, antic);
+
+  // Ground glow — bit.js's div: width 64%, height 16%, bottom 4% of the host,
+  // radial gradient glowCol → transparent at 70%, slight blur.
+  final glowBase = surged ? 0.5 : 0.32; // REST base 0.32
+  final glowOp = ((glowBase + 0.16 * math.sin(tms / 780)) * (1 - anticDim * 0.75))
+      .clamp(0.0, 1.0);
+  if (glowOp > 0.01) {
+    final host = size.width;
+    final gw = host * 0.64, gh = host * 0.16;
+    final gc = Offset(host / 2, host * 0.96 - gh / 2);
+    canvas.save();
+    canvas.translate(gc.dx, gc.dy);
+    canvas.scale(1, gh / gw);
+    canvas.drawCircle(
+      Offset.zero,
+      gw / 2,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [glowCol.withValues(alpha: glowOp), const Color(0x00000000)],
+          stops: const [0.0, 0.7],
+        ).createShader(Rect.fromCircle(center: Offset.zero, radius: gw / 2))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0),
+    );
+    canvas.restore();
+  }
+
+  final spreadF = spread + breathe + cheer * 3 - antic * 3;
+  final shake = cheer > 0.02 ? (_noise(tms / 20) - 0.5) * 2.4 * cheer : 0.0;
+  final theta = spinT > 0 ? _easeInOutCubic(spinT.clamp(0.0, 1.0)) * 2 * math.pi : 0.0;
+  final cos = math.cos(theta), sin = math.sin(theta);
+  const gx = 2.0, gy = 2.0;
+  const ocx = gx + 20.0; // GX + CORE_CX
+  final ocy = gy + 20.0 + bob + sink; // GY + CORE_CY + bob + sink
+
+  for (final p in _platesC) {
+    final ex = p.nvx + p.dirX * spreadF;
+    final ey = p.nvy + p.dirY * spreadF;
+    final rvx = ex * cos - ey * sin;
+    final rvy = ex * sin + ey * cos;
+    // bit.js drawGrid rounds its origin (JS Math.round) — chunky cell motion.
+    drawBitGrid(
+      canvas,
+      p.grid,
+      s,
+      _jsRound(ocx + rvx - p.hw + shake),
+      _jsRound(ocy + rvy - p.hh + droop),
+    );
+  }
+  drawBitGrid(canvas, _coreGrid, s, gx + 12, gy + 12 + bob + sink);
+  // Screen: sa = appear² · (1 − max(0,antic)·0.55); appear is 1 here.
+  drawBitScreen(
+    canvas,
+    s,
+    gx + 15,
+    gy + 15 + bob + sink,
+    ramp,
+    faceMood,
+    blink,
+    cheer,
+    alpha: 1 - anticDim * 0.55,
+  );
 }
 
 /// Paint BIT's **idle** sprite (no glow, no spin) at the given [opacity] — the
@@ -587,10 +739,11 @@ class _BitCompanionPainter extends CustomPainter {
     required this.time,
     required this.spin,
     required this.retract,
+    required this.flash,
     required this.restMorph,
     required this.mood,
     required this.reduceMotion,
-  }) : super(repaint: Listenable.merge([time, spin, retract, restMorph]));
+  }) : super(repaint: Listenable.merge([time, spin, retract, flash, restMorph]));
 
   final ValueListenable<double> time;
 
@@ -599,6 +752,11 @@ class _BitCompanionPainter extends CustomPainter {
 
   /// 0→1 right after the orbit; recedes the flared plates home in pixel steps.
   final Animation<double> retract;
+
+  /// 0→1 over the flash-only cheer decay (bit.js `cheer()`); intensity is
+  /// `1 − value` while running, 0 when dismissed — the default state changes
+  /// nothing in the shipped paint.
+  final Animation<double> flash;
 
   /// 0→1 neutral→rest for the spam-tap easter egg — a smooth slump. 0 leaves the
   /// base [mood] untouched (so the cheer orbit renders exactly as before).
@@ -629,9 +787,16 @@ class _BitCompanionPainter extends CustomPainter {
     final bob = reduceMotion ? 0.0 : 1.5 * math.sin(tms / 390);
     final breathe = reduceMotion ? 0 : math.sin(tms / 610 + 1.3).round();
 
-    final cheer = spinning
+    final spinCheer = spinning
         ? (1 - spinT * 950 / 650).clamp(0.0, 1.0)
         : 0.0;
+    // Flash-only cheer (touchdown): full wash at fire, decaying over 650ms.
+    // Dismissed (the shipped default) contributes 0.
+    final flashCheer =
+        (!reduceMotion && flash.status == AnimationStatus.forward)
+        ? (1 - flash.value).clamp(0.0, 1.0)
+        : 0.0;
+    final cheer = math.max(spinCheer, flashCheer);
     final blink = !reduceMotion && (t % 3.4) < 0.11;
     final theta = _easeInOutCubic(spinT) * 2 * math.pi;
     final cos = math.cos(theta), sin = math.sin(theta);

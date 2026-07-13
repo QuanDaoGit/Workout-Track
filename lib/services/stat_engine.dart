@@ -45,12 +45,12 @@ class StatEngine {
   /// rules change cannot read as lost progress.
   static const grandfatherFloorKey = 'combat_stat_floor_v1';
 
-  static const outputStats = ['STR', 'DEF', 'VIT', 'AGI', 'END'];
-  static const stats = ['STR', 'DEF', 'VIT', 'AGI', 'END', 'LCK'];
+  static const outputStats = ['STR', 'VIT', 'AGI', 'END'];
+  static const stats = ['STR', 'VIT', 'AGI', 'END', 'LCK'];
   static const volumeStats = outputStats;
   // VIT is no longer volume-derived — it's the recovery meter, out of the
   // kg-volume set.
-  static const _kgVolumeStats = ['STR', 'DEF', 'AGI'];
+  static const _kgVolumeStats = ['STR', 'AGI'];
   static const baseOutputStatValue = 10;
   static const _enduranceScale = 150.0;
 
@@ -328,9 +328,6 @@ class StatEngine {
         final weights = _visibleWeightsForPrimaryMuscle(primary);
         volumes['STR'] = (volumes['STR'] ?? 0) + volume * weights.strVolume;
         volumes['AGI'] = (volumes['AGI'] ?? 0) + volume * weights.agiVolume;
-        // DEF is retired from visible UI. Keep legacy accumulation only so old
-        // saved stat maps and tests can still decode without changing storage.
-        volumes['DEF'] = (volumes['DEF'] ?? 0) + volume * weights.defVolume;
         endurance += endurancePoints * weights.endurancePoints;
 
         final classBonusStat = _classBonusStatForLog(session, primary);
@@ -379,7 +376,7 @@ class StatEngine {
   }) {
     if (!active) return {};
     final delta = <String, int>{};
-    for (final stat in const ['STR', 'DEF', 'AGI', 'END']) {
+    for (final stat in const ['STR', 'AGI', 'END']) {
       final value = (computed[stat] ?? 0) - (cached[stat] ?? 0);
       if (value != 0) delta[stat] = value;
     }
@@ -530,8 +527,8 @@ class StatEngine {
         agiVolume: 0.12,
         endurancePoints: 1.0,
       ),
-      // Pulling used to disappear into hidden DEF. It now visibly supports STR
-      // while preserving the legacy DEF accumulator for compatibility.
+      // Pulling (back/biceps) visibly supports STR with light AGI support and
+      // normal rep-based END.
       'lats' ||
       'middle back' ||
       'lower back' ||
@@ -540,7 +537,6 @@ class StatEngine {
       'neck' => const _StatWeights(
         strVolume: 0.8,
         agiVolume: 0.12,
-        defVolume: 1.0,
         endurancePoints: 1.0,
       ),
       // Legs should read as durability/work-capacity for Tank. Heavy lower-body
@@ -569,6 +565,13 @@ class StatEngine {
 
   /// Legacy kg-volume mapping used by the calibration seed. Visible radar
   /// shaping uses [_visibleWeightsForPrimaryMuscle].
+  ///
+  /// Back/biceps intentionally fall through to null: they used to seed the
+  /// retired DEF stat, i.e. they were never seeded into a *visible* stat. Their
+  /// STR contribution comes from actual logged training (see the pulling branch
+  /// of [_visibleWeightsForPrimaryMuscle]), not the calibration seed. Mapping
+  /// them to 'STR' would newly credit back calibration into visible STR — a
+  /// deliberate product change, not part of the DEF removal.
   static String? statForPrimaryMuscle(String muscle) {
     return switch (muscle.toLowerCase()) {
       // Legs still have a legacy STR volume bucket here for compatibility.
@@ -583,12 +586,6 @@ class StatEngine {
       'calves' ||
       'adductors' ||
       'abductors' => 'STR',
-      'lats' ||
-      'middle back' ||
-      'lower back' ||
-      'biceps' ||
-      'traps' ||
-      'neck' => 'DEF',
       'shoulders' || 'abdominals' => 'AGI',
       _ => null,
     };
@@ -703,12 +700,10 @@ class _StatWeights {
   const _StatWeights({
     this.strVolume = 0,
     this.agiVolume = 0,
-    this.defVolume = 0,
     this.endurancePoints = 0,
   });
 
   final double strVolume;
   final double agiVolume;
-  final double defVolume;
   final double endurancePoints;
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:vibration/vibration.dart';
 
 /// The semantic intent a surface fires. Lets a widget (e.g. `PixelButton`) take
 /// a single value and defer the actual feel to [HapticService.fire] — so the
@@ -54,6 +55,189 @@ class HapticService {
 
   /// A heavier bump for a destructive / irreversible confirm.
   Future<void> warning() => _fire(HapticFeedback.heavyImpact);
+
+  /// Constant amplitude (1–255) of the XP-bar climb buzz. Moderate so an ~800ms
+  /// sustain reads as "the bar is running up", not an alarm.
+  static const int kClimbBuzzAmplitude = 110;
+
+  /// Whether this device has a vibrator — resolved once, lazily. Only the raw
+  /// `vibration`-driven methods below consult it; the stock impact methods route
+  /// through `HapticFeedback` and never touch it. Null until first checked.
+  static bool? _hasVibrator;
+
+  Future<bool> _ensureVibrator() async {
+    final cached = _hasVibrator;
+    if (cached != null) return cached;
+    try {
+      return _hasVibrator = (await Vibration.hasVibrator()) == true;
+    } catch (_) {
+      return _hasVibrator = false;
+    }
+  }
+
+  /// A **continuous, constant-strength** vibration for [durationMs] — the "bar
+  /// running up" motion (deliberately a short sustain, not the discrete-tick
+  /// house default; a caller opted into it). Unlike the one-shot impact methods
+  /// this drives the raw vibrator (needs the `VIBRATE` permission) so it can hold
+  /// a steady buzz. Gated by [enabled], fails open, and no-ops on a device
+  /// without a vibrator. Reduced-motion callers skip it (it rides the fill
+  /// animation). Cut it early with [stopBuzz]; a fresh call replaces any ongoing
+  /// buzz.
+  Future<void> climbBuzz({
+    required int durationMs,
+    int amplitude = kClimbBuzzAmplitude,
+  }) async {
+    if (!enabled) return;
+    try {
+      if (!await _ensureVibrator()) return;
+      await Vibration.vibrate(duration: durationMs, amplitude: amplitude);
+    } catch (e) {
+      debugPrint('HapticService: climbBuzz failed: $e');
+    }
+  }
+
+  /// Stop any ongoing [climbBuzz] / [flightSwell] immediately.
+  Future<void> stopBuzz() async {
+    try {
+      await Vibration.cancel();
+    } catch (_) {
+      // best effort
+    }
+  }
+
+  /// Whether the vibrator supports per-segment amplitude — resolved once,
+  /// lazily. Gates the shaped [flightSwell]: without amplitude control a long
+  /// intensities pattern collapses into a constant on/off drone (the exact
+  /// thing the intensity doctrine forbids), so those devices fall back to
+  /// discrete pulses instead (Codex F2).
+  static bool? _hasAmplitude;
+
+  Future<bool> _ensureAmplitudeControl() async {
+    final cached = _hasAmplitude;
+    if (cached != null) return cached;
+    try {
+      return _hasAmplitude = (await Vibration.hasAmplitudeControl()) == true;
+    } catch (_) {
+      return _hasAmplitude = false;
+    }
+  }
+
+  /// The ceremony flight's **shaped swell** — a 1.5s amplitude envelope that
+  /// tracks BIT's banked-flight speed curve (soft through the pull-back,
+  /// peaking briefly through the acceleration, decaying into the settle). A
+  /// designed contour, not a drone: it needs real amplitude control, so on
+  /// devices without it the swell degrades to **three discrete pulses**
+  /// (liftoff / apex / approach) rather than 1.5s of constant buzz. Rides the
+  /// flight animation (never fires under reduced motion — the ceremony doesn't
+  /// run there). Cancel with [stopBuzz] on skip/dispose.
+  Future<void> flightSwell() async {
+    if (!enabled) return;
+    try {
+      if (!await _ensureVibrator()) return;
+      if (await _ensureAmplitudeControl()) {
+        // 10 × 150ms segments; intensities follow the flight arc, peak 120.
+        await Vibration.vibrate(
+          pattern: const [0, 150, 0, 150, 0, 150, 0, 150, 0, 150,
+              0, 150, 0, 150, 0, 150, 0, 150, 0, 150],
+          intensities: const [0, 20, 0, 35, 0, 55, 0, 80, 0, 105,
+              0, 120, 0, 100, 0, 70, 0, 40, 0, 20],
+        );
+      } else {
+        // Discrete fallback: liftoff / apex (~750ms) / approach (~1300ms).
+        await Vibration.vibrate(pattern: const [0, 35, 715, 35, 515, 40]);
+      }
+    } catch (e) {
+      debugPrint('HapticService: flightSwell failed: $e');
+    }
+  }
+
+  /// The touchdown **thump** — one firm bump as BIT lands in its seat, synced
+  /// with the landing thud + dust puff. Falls back to a medium impact without a
+  /// raw vibrator (tests / no-vibrator devices).
+  Future<void> landThump() async {
+    if (!enabled) return;
+    try {
+      if (await _ensureVibrator()) {
+        await Vibration.vibrate(duration: 60, amplitude: 165);
+      } else {
+        await HapticFeedback.mediumImpact();
+      }
+    } catch (e) {
+      debugPrint('HapticService: landThump failed: $e');
+    }
+  }
+
+  /// The level-up **stamp** — two firm bumps ~75ms apart (the designed pattern
+  /// this class's doc always anticipated as the [reward] upgrade seam). A
+  /// discrete reward, so like [reward] it may fire even under reduced motion;
+  /// gated only by [enabled]. Falls back to a double medium impact when the raw
+  /// vibrator is unavailable (tests / no-vibrator devices).
+  Future<void> levelUp() async {
+    if (!enabled) return;
+    try {
+      if (await _ensureVibrator()) {
+        // pattern = [waitMs, onMs, waitMs, onMs] → two stamped bumps.
+        await Vibration.vibrate(pattern: const [0, 60, 75, 85]);
+      } else {
+        await HapticFeedback.mediumImpact();
+        await HapticFeedback.mediumImpact();
+      }
+    } catch (e) {
+      debugPrint('HapticService: levelUp failed: $e');
+    }
+  }
+
+  /// The hold-to-boost **rising swell** — ONE pre-baked, gap-free waveform whose
+  /// amplitude climbs floor→near-max over ~1.4s (the pour duration), so it feels
+  /// like power building. Fired once when the pour begins and cancelled with
+  /// [stopBuzz] on every release path (never re-issued per frame: repeatedly
+  /// calling vibrate() cancel-restarts the motor on Android and stutters the
+  /// envelope — research + Codex F4). A *rising* shape reads as "building" and,
+  /// because it keeps changing, dodges the numbing "drone" of a flat buzz. Not
+  /// gated by reduced motion (haptics carry their own toggle); no amplitude
+  /// control degrades to one sustained buzz for the same span.
+  Future<void> boostSwell() async {
+    if (!enabled) return;
+    try {
+      if (!await _ensureVibrator()) return;
+      if (await _ensureAmplitudeControl()) {
+        // 10 gap-free 140ms segments (1400ms) rising 40→230 — a single continuous
+        // buzz that strengthens toward the ignition.
+        await Vibration.vibrate(
+          pattern: const [0, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140],
+          intensities: const [0, 40, 60, 85, 110, 140, 170, 195, 215, 230, 230],
+        );
+      } else {
+        await Vibration.vibrate(duration: 1400);
+      }
+    } catch (e) {
+      debugPrint('HapticService: boostSwell failed: $e');
+    }
+  }
+
+  /// The boost **climax** — the sharp, categorically-different stamp the instant
+  /// the meter hits 100% (ignite): a firm full-amplitude hit + a second "locked
+  /// in" stamp, so the buildup resolves into an *event* (research: the climax
+  /// must feel distinct from the rise). Heavy-impact fallback without a vibrator.
+  Future<void> boostClimax() async {
+    if (!enabled) return;
+    try {
+      if (await _ensureVibrator()) {
+        if (await _ensureAmplitudeControl()) {
+          await Vibration.vibrate(
+            pattern: const [0, 70, 40, 55],
+            intensities: const [255, 210],
+          );
+        } else {
+          await Vibration.vibrate(pattern: const [0, 70, 40, 55]);
+        }
+      } else {
+        await HapticFeedback.heavyImpact();
+      }
+    } catch (e) {
+      debugPrint('HapticService: boostClimax failed: $e');
+    }
+  }
 
   /// Fire the haptic for a semantic [intent]. The dispatch seam shared widgets
   /// (e.g. `PixelButton`) call so a single `HapticIntent` value drives the feel;

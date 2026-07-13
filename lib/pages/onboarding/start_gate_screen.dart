@@ -6,6 +6,7 @@ import '../../data/companion_address.dart';
 import '../../models/avatar_spec.dart';
 import '../../models/character.dart';
 import '../../models/character_class.dart';
+import '../../services/analytics_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/motion/ambient_drift.dart';
@@ -61,6 +62,9 @@ class _StartGateScreenState extends State<StartGateScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(
+      AnalyticsService.instance.logOnboardingStep(AnalyticsValue.stepStartGate),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // TalkBack / reduce-motion users land on the sustained state instantly.

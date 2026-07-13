@@ -26,9 +26,9 @@ enum FinishTier { tier1, tier2, tier3 }
 /// mid/late sessions rarely do.
 const int kFinishTier2GainThreshold = 10;
 
-/// Visible capability stats eligible to be the "largest gain" hero. DEF is
-/// hidden (`kDefVisible=false`), VIT is the recovery meter, LCK is a milestone —
-/// none can headline as a stat gain.
+/// Visible capability stats eligible to be the "largest gain" hero. VIT is the
+/// recovery meter and LCK is a streak multiplier — neither headlines as a stat
+/// gain, so they stay off this list.
 const List<String> kHeroStatCandidates = ['STR', 'AGI', 'END'];
 
 /// One headline or secondary event, with enough raw data for the widget to

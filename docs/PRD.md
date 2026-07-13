@@ -65,7 +65,6 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
   - END grows from logged reps with rep-range and muscle weighting; Tank focus pushes END.
   - VIT is a 10-100 recovery/training-balance meter.
   - LCK equals the current training streak (capped at 100) and drives an award-time XP multiplier.
-  - DEF is hidden legacy compatibility storage only, not a visible stat.
 - [x] Workout-output stats start at 10 (LCK at 0) and are immutable — once earned they never decrease (inactivity no longer decays them; the consistency streak is protected by shields).
 - [x] Stat card on Profile (radar + detail rows); stat delta shown after each completed session.
 - [x] Calibration quiz captures training context; workout-output stats start at 10 until real
@@ -134,7 +133,7 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 - [x] Rest & recovery (`RestService`) — shield charges, recovery XP, rest-day protection.
 - [x] Programs (`ProgramService`) — structured workout programs (PPL, Full Body, Upper/Lower).
 - [x] Onboarding — cinematic sequence: cold open → problem → solution → calibration quiz →
-      avatar → name → class reveal → rank assessed → start gate.
+      avatar → name → class reveal → rank assessed → charge ritual → start gate.
 - [x] Companion mascot **BIT** — an in-world pixel "drone core" that is the system's faceless voice
       through onboarding and **embodies** at the start gate, greeting the user by name for the first
       time ("What should we do first, {name}?"). Subordinate to the user-hero (never on the identity

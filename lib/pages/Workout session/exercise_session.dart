@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../theme/app_fonts.dart';
 
@@ -6,6 +8,7 @@ import '../../models/overload_models.dart';
 import '../../models/program_models.dart';
 import '../../models/unit_models.dart';
 import '../../models/workout_models.dart';
+import '../../services/analytics_service.dart';
 import '../../services/calibration_service.dart';
 import '../../services/haptic_service.dart';
 import '../../services/plate_calculator.dart';
@@ -285,6 +288,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
 
   void _startRest() {
     RestTimerService.instance.start(widget.restSeconds);
+    unawaited(AnalyticsService.instance.logRestAction(AnalyticsValue.restStart));
   }
 
   /// A full authoritative snapshot of committed work for the parent: every valid
