@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../theme/app_fonts.dart';
 
@@ -220,7 +221,10 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     _earnedXP = _baseXP;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (widget.debugShowcase) {
+      // `kDebugMode` const-gates the whole showcase branch so `_loadShowcase`
+      // (and its fixtures) tree-shake out of release builds — the flag is
+      // test-only and true here only under `flutter test` / debug.
+      if (kDebugMode && widget.debugShowcase) {
         _loadShowcase();
       } else {
         _saveAndExit();
