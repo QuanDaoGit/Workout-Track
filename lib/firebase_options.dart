@@ -63,7 +63,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '491486859612',
     projectId: 'ironbit-3aacc',
     storageBucket: 'ironbit-3aacc.firebasestorage.app',
-    iosBundleId: 'com.example.studentTask',
+    iosBundleId: 'com.erik.ironbit',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -72,7 +72,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '491486859612',
     projectId: 'ironbit-3aacc',
     storageBucket: 'ironbit-3aacc.firebasestorage.app',
-    iosBundleId: 'com.example.studentTask',
+    iosBundleId: 'com.erik.ironbit',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
