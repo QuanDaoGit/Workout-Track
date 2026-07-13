@@ -106,7 +106,7 @@ class WorkoutSummaryPage extends StatefulWidget {
   /// Debug-only: skip the real save/recompute and inject a synthetic "everything
   /// fires" finish (multi-level-up hero + stat gains + loot/title + cache +
   /// charge + warm-up) so the full finish arc — and all its new juice — can be
-  /// previewed on demand. Wired behind `kDebugMode` from Profile → Settings.
+  /// previewed on demand. Test-only — no in-app entry point.
   final bool debugShowcase;
 
   @override
