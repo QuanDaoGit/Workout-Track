@@ -86,3 +86,8 @@ design/screenshots/*.exe
 assets/motivational_clips/
 assets/design_handoff_charge_ritual/
 assets/design_handoff_session_ceremony/
+
+# Firebase iOS config — kept out of git; inject it into the Codemagic build (or
+# drop it in locally). The app still initializes Firebase from
+# lib/firebase_options.dart, so a missing plist won't break the build.
+ios/Runner/GoogleService-Info.plist
