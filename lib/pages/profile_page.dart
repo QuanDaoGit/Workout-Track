@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_fonts.dart';
 
@@ -11,6 +13,7 @@ import '../models/loot_item.dart';
 import '../models/unit_models.dart';
 import '../widgets/feature_gate_notice.dart';
 import '../widgets/pixel_button.dart';
+import '../widgets/unlock_ceremony.dart';
 import '../widgets/pixel_loader.dart';
 import '../widgets/session_projection.dart';
 import '../widgets/weekday_picker.dart';
@@ -1679,7 +1682,78 @@ class ProfilePageState extends State<ProfilePage> {
             iconPath: 'assets/icons/control/ui/icon_about.png',
           ),
         ),
+        // Debug-only tooling for the earned feature-unlock ladder — compiled
+        // out of release builds entirely (const kDebugMode gate).
+        if (kDebugMode) ...[
+          const SizedBox(height: 18),
+          const _SectionHeader(title: 'DEBUG'),
+          const SizedBox(height: 10),
+          _SettingsRow(
+            iconPath: 'assets/icons/control/icon_beetle.png',
+            title: 'Unlock Ceremony (single)',
+            subtitle: 'Preview the NEW SYSTEM ONLINE arc for one gate.',
+            onTap: () =>
+                _debugShowUnlockCeremony(const [FeatureGate.guild]),
+          ),
+          _SettingsRow(
+            iconPath: 'assets/icons/control/icon_beetle.png',
+            title: 'Unlock Ceremony (catch-up)',
+            subtitle: 'Preview the coalesced multi-unlock card.',
+            onTap: () => _debugShowUnlockCeremony(const [
+              FeatureGate.quests,
+              FeatureGate.shop,
+              FeatureGate.guild,
+            ]),
+          ),
+          _SettingsRow(
+            iconPath: 'assets/icons/control/icon_beetle.png',
+            title: 'Reset feature unlocks',
+            subtitle:
+                'Re-locks the ladder now; earned gates re-unlock (with '
+                'ceremonies) on the next shell check.',
+            onTap: _debugResetFeatureGates,
+          ),
+        ],
       ],
+    );
+  }
+
+  /// Debug preview only: plays the ceremony overlay without touching gate
+  /// state — GO and LATER both just dismiss (no markCelebrated, no nav).
+  void _debugShowUnlockCeremony(List<FeatureGate> gates) {
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        opaque: false,
+        transitionDuration: kMotionFast,
+        reverseTransitionDuration: kMotionFast,
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            FadeTransition(
+              opacity: animation,
+              child: FeatureUnlockCeremony(
+                gates: gates,
+                onGo: (_) => Navigator.of(context).pop(),
+                onDismiss: () => Navigator.of(context).pop(),
+              ),
+            ),
+      ),
+    );
+  }
+
+  /// Debug: clears `feature_unlocks_v1` (the migration done-key stays set, so
+  /// the seed never re-runs pre-celebrated). Gates read locked immediately;
+  /// any condition already met re-latches on the next shell evaluation — WITH
+  /// its ceremony, which is the point: replay the whole drip on a dev install.
+  Future<void> _debugResetFeatureGates() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(FeatureGateService.storageKey);
+    await FeatureGateService().load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Feature unlocks reset — leave Labs to re-earn them.'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 }
