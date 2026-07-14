@@ -17,7 +17,10 @@ safety? competitor?), not by a post-hoc "that was easy". When unsure, default St
 ### Secondary-source agreement mistaken for saturation
 **Rule:** Don't declare saturation until a **dissent/limitation query** is on record and **≥1 primary
 source** is traced. Echoing secondary sources converge early and hide the contrary evidence, demographic
-limits, and recency shifts that flip the answer. *Seeded 2026-06.*
+limits, and recency shifts that flip the answer. **Phrase dissent queries in the *complainer's*
+vocabulary, not your taxonomy** — a negative only counts after the folk phrasings are tried (users say
+"forced gamification"/"onboarding friction", not "earned progression gate"). *Seeded 2026-06; vocabulary
+clause via Codex, feature-drip review (2026-07).*
 
 ### Blended field missed → wrong sources (and wrong source *type*)
 **Rule:** Most app questions span 2+ fields (a "rewarded warm-up" is exercise-science **and** behavioral
