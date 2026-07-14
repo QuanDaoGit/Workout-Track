@@ -26,6 +26,8 @@ workflows:
     name: iOS – TestFlight
     max_build_duration: 60
     instance_type: mac_mini_m2
+    # The Flutter project lives in app/ (repo root is the IRONBIT container).
+    working_directory: app
     integrations:
       app_store_connect: ironbit_asc      # must match the ASC API key name in Codemagic
     environment:
@@ -49,9 +51,10 @@ workflows:
           flutter build ipa --release \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
-      - build/ios/ipa/*.ipa
+      # Artifact globs are matched from the clone root, so include the app/ prefix.
+      - app/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-      - flutter_drive.log
+      - app/flutter_drive.log
     publishing:
       app_store_connect:
         auth: integration

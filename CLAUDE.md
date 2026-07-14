@@ -4,12 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Workspace Map
 
-The project root wraps the whole product, not just the app code. Each non-code folder has its own
-`CLAUDE.md` (agent brief) + `README.md` — **read a folder's `CLAUDE.md` before working in it.**
+The project root is the **IRONBIT container** — it wraps the whole product, not just the app code.
+**The Flutter app now lives under `app/`** (moved 2026-07-15): run all `flutter`/`dart` commands from
+`app/`, and read paths like `lib/…` / `test/…` below as `app/lib/…` / `app/test/…`. Each non-code
+folder has its own `CLAUDE.md` (agent brief) + `README.md` — **read a folder's `CLAUDE.md` before
+working in it.**
 
 | Folder | Purpose |
 |--------|---------|
-| `lib/` `test/` `android/` `ios/` `assets/` … | The Flutter app (code). Architecture is documented below. |
+| `app/` (`lib/` `test/` `android/` `ios/` `assets/` …) | The Flutter app (code) — the whole project, self-contained. Architecture is documented below (paths relative to `app/`). |
 | `docs/` | Product source of truth — `PRD.md`, `PRODUCT.md`, specs/plans, decisions. |
 | `design/` | Visual identity, UX guidelines, screenshots. Theme *code* truth stays in `lib/theme/tokens.dart`. |
 | `marketing/` | Positioning, copy, campaigns, marketing assets. |
