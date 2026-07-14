@@ -14,6 +14,7 @@ import '../../widgets/motion/phosphor_tap.dart';
 import '../../widgets/pixel_button.dart';
 import '../exercise_history_page.dart';
 import 'start_workout.dart';
+import '../../widgets/arcade_notice.dart';
 
 class SessionDetailPage extends StatefulWidget {
   const SessionDetailPage({super.key, required this.session});
@@ -212,9 +213,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     final w = parseWeightToKg(weightText, Units.weight);
     final r = int.tryParse(repsText);
     if (w == null || w < 0 || r == null || r <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid weight and reps')),
-      );
+      showArcadeNotice(context, 'Enter a valid weight and reps');
       return;
     }
 

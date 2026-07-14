@@ -14,6 +14,7 @@ import '../widgets/pinned_lift_card.dart';
 import '../widgets/pixel_loader.dart';
 import '../widgets/strength_roster_row.dart';
 import 'exercise_history_page.dart';
+import '../widgets/arcade_notice.dart';
 
 /// The "all lifts" strength roster — the secondary completeness net behind the
 /// body-map dossier (Concept #1). Reworked into a **visual roster**: each lift is
@@ -116,14 +117,9 @@ class _StrengthIndexPageState extends State<StrengthIndexPage>
     final result = await _pins.toggle(t.exerciseId);
     if (!mounted) return;
     if (result == PinResult.atCapacity) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${PinnedLiftsService.maxPins} pins max — unpin one first',
-          ),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
+      showArcadeNotice(
+        context,
+        '${PinnedLiftsService.maxPins} pins max — unpin one first',
       );
       return;
     }

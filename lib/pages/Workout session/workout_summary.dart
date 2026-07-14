@@ -53,6 +53,7 @@ import '../../widgets/typewriter_text.dart';
 import '../../widgets/xp_level_meter.dart';
 import '../onboarding/rank_assessed_page.dart';
 import 'program_completion_reveal.dart';
+import '../../widgets/arcade_notice.dart';
 
 class WorkoutSummaryPage extends StatefulWidget {
   const WorkoutSummaryPage({
@@ -470,9 +471,7 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
     if (_saving || _saved) return;
 
     if (_totalSets == 0 && !widget.isAbandoned) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Save at least one set first.')),
-      );
+      showArcadeNotice(context, 'Save at least one set first.');
       return;
     }
 

@@ -9,6 +9,7 @@ import '../theme/tokens.dart';
 import '../widgets/motion/arcade_text_field.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_button.dart';
+import '../widgets/arcade_notice.dart';
 
 /// Result returned from GoalSelectionPage.
 class GoalSelectionResult {
@@ -90,9 +91,7 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
       final parsed = parseWeightToKg(_weightController.text, Units.weight);
       if (parsed == null || !isPlausibleWeightKg(parsed)) {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enter a valid target weight, or skip.')),
-        );
+        showArcadeNotice(context, 'Enter a valid target weight, or skip.');
         return;
       }
       weight = parsed;

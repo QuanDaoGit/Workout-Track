@@ -13,6 +13,7 @@ import '../widgets/adventure/route_diorama.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/pixel_loader.dart';
 import 'expedition_report_page.dart';
+import '../widgets/arcade_notice.dart';
 
 /// The Adventure area (v3): a console **stage-select**. Three framed route
 /// backdrops stack vertically. With a charge you tap one to arm it (it dims,
@@ -97,16 +98,7 @@ class _AdventurePageState extends State<AdventurePage> {
       _showBreakdown = false;
     });
     if (expedition == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'CANNOT DISPATCH RIGHT NOW',
-            style: AppFonts.shareTechMono(color: kBg, fontSize: 11),
-          ),
-          backgroundColor: kAmber,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      showArcadeNotice(context, 'CANNOT DISPATCH RIGHT NOW');
     }
     await _load();
   }

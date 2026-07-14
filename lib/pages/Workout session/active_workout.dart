@@ -27,6 +27,7 @@ import '../../widgets/rest_break_panel.dart';
 import '../../widgets/strobe_flash.dart';
 import 'exercise_session.dart';
 import 'workout_summary.dart';
+import '../../widgets/arcade_notice.dart';
 
 enum _ExerciseStatus { notStarted, inProgress, done }
 
@@ -366,9 +367,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   }) async {
     _updateElapsed();
     if (_totalLoggedSets == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Save at least one set before finishing.')),
-      );
+      showArcadeNotice(context, 'Save at least one set before finishing.');
       return;
     }
     _leaving = true;

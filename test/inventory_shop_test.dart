@@ -133,11 +133,15 @@ void main() {
     expect(find.byKey(const ValueKey('gem_pack_demo_500')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('gem_pack_demo_500')));
+    // The arcade notice is ticker-driven and auto-dismisses, so assert it
+    // mid-lifecycle with bounded pumps — pumpAndSettle would outlive it.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('+500 GEMS'), findsOneWidget);
     await tester.pumpAndSettle();
 
     expect(await GemService().balance(), 500);
     expect(find.text('500'), findsOneWidget);
-    expect(find.text('+500 GEMS'), findsOneWidget);
   });
 
   testWidgets('insufficient buy opens gem store without granting item', (
@@ -154,9 +158,12 @@ void main() {
     await tester.ensureVisible(_buyButton(150));
     await tester.pumpAndSettle();
     await tester.tap(_buyButton(150));
+    // Assert the ticker-driven notice mid-lifecycle (see the top-up test).
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Not enough gems'), findsOneWidget);
     await tester.pumpAndSettle();
 
-    expect(find.text('Not enough gems'), findsOneWidget);
     expect(find.text('GEM STORE'), findsOneWidget);
     expect(await GemService().balance(), 0);
 

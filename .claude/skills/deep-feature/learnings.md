@@ -292,6 +292,13 @@ reads **stale across tests** — passes in isolation, fails in-suite; fix by `cl
 setMockInitialValues. (c) Two `pumpWidget`s in one widget test **collide** when the page keeps
 tickers/timers alive — **one pump per test**; and drive an async-pref-gated assertion through a path the
 page *awaits* (an init seed, e.g. `initialMuscleGroups`) rather than a fire-and-forget tap, so the read
-fully settles before the assertion (a lingering async fires during teardown). *Seen: Simple Mode —
+fully settles before the assertion (a lingering async fires during teardown). (d) A **transient overlay's lifetime dictates its test idiom**: a dart:async-`Timer`-held transient
+leaks as a "pending timer" at teardown, so prefer ONE AnimationController spanning in→hold→out — but
+that ticker lifecycle means `pumpAndSettle` runs the transient to completion and **the assertion must
+happen mid-lifecycle with bounded pumps** (and the first pump after a `forward(from:)` is the ticker's
+zero-frame — budget the segment's duration *after* it); never short-circuit the subtree at opacity 0,
+or bare-`pump()` assertions across the suite find nothing. *Seen: Simple Mode —
 `_SelectionCheckbox` controller moved to `initState`; prefs leak cleared + instance-seeded; curated-skip
-driven via the awaited entry seed; two-state tests split to single-pump (2026-06).*
+driven via the awaited entry seed; two-state tests split to single-pump (2026-06); the arcade notice —
+two shop tests asserted after `pumpAndSettle` and found nothing, the bare-pump contract broke on an
+opacity-0 `SizedBox.shrink`, and a dismiss test missed the ticker zero-frame (2026-07).*

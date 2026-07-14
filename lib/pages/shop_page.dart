@@ -15,6 +15,7 @@ import '../widgets/motion/hold_depress.dart';
 import '../widgets/motion/phosphor_tap.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/loot_avatar_frame.dart';
+import '../widgets/arcade_notice.dart';
 
 enum _ShopFilter { all, affordable }
 
@@ -220,9 +221,7 @@ class _ShopPageState extends State<ShopPage> {
                   if (!canBuy) {
                     if (ctx.mounted) Navigator.of(ctx).pop();
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Not enough gems')),
-                    );
+                    showArcadeNotice(context, 'Not enough gems');
                     // Demo top-up is a dev-only affordance; gems stay
                     // earned-only in release builds.
                     if (kDebugMode) await _openGemStore();
@@ -233,9 +232,7 @@ class _ShopPageState extends State<ShopPage> {
                   } on StateError catch (error) {
                     if (ctx.mounted) Navigator.of(ctx).pop();
                     if (!mounted) return;
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(error.message)));
+                    showArcadeNotice(context, error.message);
                     return;
                   }
                   if (ctx.mounted) Navigator.of(ctx).pop();
@@ -329,9 +326,7 @@ class _ShopPageState extends State<ShopPage> {
     if (!_reduceMotion) {
       setState(() => _walletPulseSerial++);
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('+${pack.amount} GEMS')));
+    showArcadeNotice(context, '+${pack.amount} GEMS');
   }
 
   Future<void> _showPurchaseReveal(LootItem item) async {

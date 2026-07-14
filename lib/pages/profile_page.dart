@@ -73,6 +73,7 @@ import 'inventory_page.dart';
 import 'log_weight_page.dart';
 import 'shop_page.dart';
 import 'workout_page.dart';
+import '../widgets/arcade_notice.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, this.onProfileChanged});
@@ -1748,12 +1749,9 @@ class ProfilePageState extends State<ProfilePage> {
     await prefs.remove(FeatureGateService.storageKey);
     await FeatureGateService().load();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Feature unlocks reset — leave Labs to re-earn them.'),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
-      ),
+    showArcadeNotice(
+      context,
+      'Feature unlocks reset — leave Labs to re-earn them.',
     );
   }
 }

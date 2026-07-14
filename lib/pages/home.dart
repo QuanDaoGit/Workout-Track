@@ -43,6 +43,7 @@ import '../widgets/arcade_card.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
 import '../widgets/active_session_found_dialog.dart';
+import '../widgets/arcade_notice.dart';
 import '../widgets/feature_gate_notice.dart';
 import '../widgets/home_section_header.dart';
 import '../widgets/last_session_tag.dart';
@@ -775,16 +776,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _showArcadeSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: AppFonts.shareTechMono(color: kBg, fontSize: 11),
-        ),
-        backgroundColor: kAmber,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    showArcadeNotice(context, message);
   }
 
   Widget _homeCard({
@@ -1154,9 +1146,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         .toList();
     if (!mounted) return;
     if (exercises.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not load workout exercises.')),
-      );
+      showArcadeNotice(context, 'Could not load workout exercises.');
       return;
     }
 
@@ -1830,9 +1820,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       nextUp: _programNextUp(progress, todayWorkoutPending: false),
       primaryLabel: 'KEEP RESTING',
       onPrimary: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Recovery day in progress.')),
-        );
+        showArcadeNotice(context, 'Recovery day in progress.');
       },
       secondaryLabel: 'TRAIN ANYWAY',
       onSecondary: () => _startWorkout(

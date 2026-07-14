@@ -146,13 +146,17 @@ changes state) instead. *Seen: the "READY · TAP TRAIN" hint bar removed; cue mo
 caption TRAIN→START (2026-06).*
 
 ### Transient feedback must not block the action area
-**Rule:** A bottom `SnackBar` used as action-confirmation on a form/list whose **primary controls are
-also bottom-anchored** (the next input, +ADD, Finish/CTA) **obscures and blocks taps** on them for its
-whole duration — worse with the keyboard up. Keep such a notice **brief + `SnackBarBehavior.floating`**
-or fold the cue onto a top/inline surface (an existing status bar) rather than a fresh overlay; in widget
-tests it silently steals the next bottom tap (use a tall surface or wait it out). *Seen: a "Rest timer
-started" SnackBar covered +ADD SET and broke a row-add test → floating + 1s + a tall test surface; the
-canonical rest cue stays the top rest bar (2026-06).*
+**Rule:** The canonical transient notice is the ONE shared center-screen overlay
+(`showArcadeNotice`) — never a per-surface SnackBar (three styles had grown for one concept). Its
+mechanics are the reusable pattern: content in `IgnorePointer`; the tap-anywhere-dismiss observer is
+a full-screen `Listener(behavior: translucent)` — translucent **receives every pointer event while
+returning FALSE from hit-testing**, so overlay entries/routes beneath still get the same tap
+(dismissal is observation, never consumption; the notice can't block or steal any tap — a bottom
+SnackBar over bottom-anchored controls did both). Non-stacking (new replaces current). *Seen: a
+"Rest timer started" SnackBar covered +ADD SET and broke a row-add test (2026-06); the user flagged
+bottom placement + no in/out motion → all 18 snack sites migrated to the CRT center notice, and a
+global-pointer-route dismiss variant proved flaky in tests where the translucent Listener is exact
+(2026-07).*
 
 ### Sibling field baseline alignment vs decoration asymmetry
 **Rule:** Two fields in one row mis-align when only one carries a prefix/suffix `Icon`: Flutter's

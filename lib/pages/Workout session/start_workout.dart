@@ -32,6 +32,7 @@ import '../../widgets/pixel_loader.dart';
 import '../../widgets/target_body_preview.dart';
 import '../../widgets/warmup_sheet.dart';
 import 'active_workout.dart';
+import '../../widgets/arcade_notice.dart';
 
 /// Builds a program-mode [StartWorkoutPage] for [day]: the day's target groups
 /// and prescribed lifts pre-filled and pre-selected, muscle focus locked. Shared
@@ -593,9 +594,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
         .toList();
 
     if (exercises.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not resume active session.')),
-      );
+      showArcadeNotice(context, 'Could not resume active session.');
       return;
     }
 

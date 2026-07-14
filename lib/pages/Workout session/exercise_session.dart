@@ -25,6 +25,7 @@ import '../../widgets/pixel_button.dart';
 import '../../widgets/plate_calculator_sheet.dart';
 import '../../widgets/rest_timer_bar.dart';
 import '../../widgets/strobe_flash.dart';
+import '../../widgets/arcade_notice.dart';
 
 /// Height of the weight field's plate-calculator `suffixIcon` box. A `suffixIcon`
 /// makes the `InputDecorator` size its input row to the icon (taller than the
@@ -324,8 +325,10 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     final w = parseWeightToKg(row.weight.text, Units.weight);
     final r = int.tryParse(row.reps.text);
     if (w == null || w < 0 || r == null || r <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fill in weight and reps before saving')),
+      showArcadeNotice(
+        context,
+        'Fill in weight and reps before saving',
+        duration: ArcadeNoticeDuration.short,
       );
       return;
     }
@@ -383,21 +386,12 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     _emitCommitted();
   }
 
-  /// A brief, non-stacking confirmation/heads-up (replaces any current one so
-  /// rapid logging never queues a backlog of toasts).
+  /// A brief, non-stacking confirmation/heads-up (the shared notice replaces
+  /// any current one, so rapid logging never queues a backlog of toasts; the
+  /// short hold keeps the rest-start / guard cue out of the way).
   void _quickNotice(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          // Floating + brief so the rest-start / guard cue does not sit over the
-          // set rows or the +ADD SET / Finish controls for long.
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(milliseconds: 1000),
-        ),
-      );
+    showArcadeNotice(context, message, duration: ArcadeNoticeDuration.short);
   }
 
   /// Shown when a user taps a set whose turn has not come (a later set before
@@ -625,8 +619,10 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
       final w = parseWeightToKg(row.weight.text, Units.weight);
       final r = int.tryParse(row.reps.text);
       if (w == null || w < 0 || r == null || r <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fill in all sets before finishing')),
+        showArcadeNotice(
+          context,
+          'Fill in all sets before finishing',
+          duration: ArcadeNoticeDuration.short,
         );
         return;
       }
