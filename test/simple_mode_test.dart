@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workout_track/models/calibration_quiz_models.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/pages/Workout session/exercise_session.dart';
 import 'package:workout_track/pages/Workout session/start_workout.dart';
@@ -153,6 +154,15 @@ void main() {
     expect(await SimpleModeService().isEnabled(), isTrue);
     await SimpleModeService().setEnabled(false);
     expect(await SimpleModeService().isEnabled(), isFalse);
+  });
+
+  test('simpleModeDefaultForExperience: two highest tiers default to Compact', () {
+    // Onboarding pre-selection: novice/beginner keep the guidance; intermediate/
+    // advanced default to Compact (Simple Mode ON). Mirrors the reel gate's cut.
+    expect(simpleModeDefaultForExperience(Experience.novice), isFalse);
+    expect(simpleModeDefaultForExperience(Experience.beginner), isFalse);
+    expect(simpleModeDefaultForExperience(Experience.intermediate), isTrue);
+    expect(simpleModeDefaultForExperience(Experience.advanced), isTrue);
   });
 
   testWidgets('warm-up advisory card shows when Simple Mode OFF', (

@@ -1,5 +1,18 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/calibration_quiz_models.dart';
+
+/// The recommended Simple Mode default for a self-reported [Experience], used to
+/// pre-select the onboarding guidance step (`reminders_primer_page.dart`). The
+/// two highest tiers default to Compact (Simple Mode ON — pre-workout
+/// scaffolding hidden); novice/beginner default to OFF (extra suggestions
+/// shown). It is only a *pre-selection*: the user sees it, can flip it in one
+/// tap, and can change it anytime in Settings — so a weak self-report never
+/// silently reduces the experience (the choice is always visible + reversible,
+/// and an un-shown/killed onboarding fails safe to OFF).
+bool simpleModeDefaultForExperience(Experience exp) =>
+    exp == Experience.intermediate || exp == Experience.advanced;
+
 /// "Simple Mode" — an opt-in umbrella toggle in Profile → Settings for
 /// experienced users who want to just-train: it strips the *pre-workout
 /// scaffolding* (warm-up advisory card, the TRY/suggested-load prompt, the

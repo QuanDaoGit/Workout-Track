@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import '../../models/avatar_spec.dart';
 import '../../models/calibration_quiz_models.dart';
 import '../../models/character.dart';
+import '../../services/haptic_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/notification_settings_service.dart';
+import '../../services/simple_mode_service.dart';
+import '../../services/unit_settings_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_route.dart';
@@ -45,6 +48,55 @@ class RemindersPrimerPage extends StatefulWidget {
 
 class _RemindersPrimerPageState extends State<RemindersPrimerPage> {
   bool _busy = false;
+
+  // The onboarding "guidance" preference — the visible on/off for the existing
+  // Simple Mode (key `simple_mode_enabled_v1`). Pre-selected from the user's
+  // self-reported experience (intermediate/advanced → Compact/ON). It is a
+  // *reversible preference*, never a mode fork: it writes the one Simple Mode
+  // key that Settings also owns.
+  late bool _compact = simpleModeDefaultForExperience(
+    widget.character.calibration.exp,
+  );
+  bool _previewExpanded = false;
+  // Guards the one-time persist of the derived default (see [initState]).
+  bool _guidanceSeeded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Persist the derived default the moment the guidance card is DISPLAYED —
+    // deliberately NOT at the earlier character-commit (Codex F1: never persist
+    // a first-workout reduction before the user has seen the choice). The primer
+    // is the single mandatory funnel screen every new user passes through, so
+    // the card is always shown here; a kill before this point leaves Simple Mode
+    // OFF — the fail-safe direction (more guidance, never silently less).
+    // Persisting here (and on every flip) also makes SimpleModeService the
+    // single source of truth (Codex F2): the shown selection always equals the
+    // stored value.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _seedGuidanceDefault());
+  }
+
+  Future<void> _seedGuidanceDefault() async {
+    if (_guidanceSeeded || !mounted) return;
+    _guidanceSeeded = true;
+    await SimpleModeService().setEnabled(_compact);
+  }
+
+  Future<void> _setCompact(bool value) async {
+    if (_compact == value) return;
+    // An explicit pick supersedes the post-frame seed and writes immediately —
+    // the guidance commits by its OWN control, decoupled from TURN ON / NOT NOW
+    // (Codex F4: those stay purely the notification decision).
+    _guidanceSeeded = true;
+    setState(() => _compact = value);
+    HapticService.instance.selection();
+    await SimpleModeService().setEnabled(value);
+  }
+
+  void _togglePreview() {
+    HapticService.instance.selection();
+    setState(() => _previewExpanded = !_previewExpanded);
+  }
 
   Future<void> _turnOn() async {
     if (_busy) return;
@@ -107,61 +159,99 @@ class _RemindersPrimerPageState extends State<RemindersPrimerPage> {
           children: [
             const Positioned.fill(child: IgnorePointer(child: AmbientDrift())),
             SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  kSpace4,
-                  kSpace5,
-                  kSpace4,
-                  kSpace4,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: kSpace4),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
+                children: [
+                  // Scrolling content — the guidance card + its expandable
+                  // preview can grow, so the reminder actions stay pinned in a
+                  // footer below rather than being pushed off small screens.
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(
+                        kSpace4,
+                        kSpace5,
+                        kSpace4,
+                        kSpace4,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const SizedBox(height: kSpace4),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const BitMoodCore(
+                                pose: BitPose.neutral,
+                                reveal: 1,
+                                size: 56,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: BitSpeechBubble(
+                                  text:
+                                      'Want a heads-up on your training days? '
+                                      'A quiet nudge — nothing else.',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: kSpace5),
+                          _ScheduleCard(days: days, timeLabel: timeLabel),
+                          const SizedBox(height: kSpace3),
+                          Text(
+                            'On your device only. No account, never shared. '
+                            'Change the time or turn it off anytime in Settings.',
+                            style: AppFonts.shareTechMono(
+                              color: kMutedText,
+                              fontSize: 12,
+                              height: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: kSpace5),
+                          // A separate, self-contained preference (Codex F4): its
+                          // own titled card, committed by its own controls — the
+                          // reminder buttons below never touch it.
+                          _GuidanceCard(
+                            compact: _compact,
+                            onChanged: _setCompact,
+                            previewExpanded: _previewExpanded,
+                            onTogglePreview: _togglePreview,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Pinned reminder footer — TURN ON / NOT NOW are the ONLY
+                  // notification actions (kept distinct from the guidance card).
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(
+                      kSpace4,
+                      kSpace3,
+                      kSpace4,
+                      kSpace4,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: kBg,
+                      border: Border(top: BorderSide(color: kBorder)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const BitMoodCore(
-                          pose: BitPose.neutral,
-                          reveal: 1,
-                          size: 56,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: BitSpeechBubble(
-                            text:
-                                'Want a heads-up on your training days? '
-                                'A quiet nudge — nothing else.',
+                        Semantics(
+                          button: true,
+                          label: 'Turn on training reminders',
+                          child: PixelButton(
+                            label: 'TURN ON',
+                            minHeight: 56,
+                            onPressed: _busy ? null : _turnOn,
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        _NotNowButton(enabled: !_busy, onTap: _notNow),
                       ],
                     ),
-                    const SizedBox(height: kSpace5),
-                    _ScheduleCard(days: days, timeLabel: timeLabel),
-                    const SizedBox(height: kSpace3),
-                    Text(
-                      'On your device only. No account, never shared. '
-                      'Change the time or turn it off anytime in Settings.',
-                      style: AppFonts.shareTechMono(
-                        color: kMutedText,
-                        fontSize: 12,
-                        height: 1.5,
-                      ),
-                    ),
-                    const Spacer(),
-                    Semantics(
-                      button: true,
-                      label: 'Turn on training reminders',
-                      child: PixelButton(
-                        label: 'TURN ON',
-                        minHeight: 56,
-                        onPressed: _busy ? null : _turnOn,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _NotNowButton(enabled: !_busy, onTap: _notNow),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -311,6 +401,406 @@ class _NotNowButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The onboarding "guidance" preference — a self-contained card that flips the
+/// existing Simple Mode on/off. Pre-selected from experience, committed by its
+/// own radio options (never by the reminder buttons), with a tappable "see the
+/// difference" preview and a reversibility line pointing to Settings. Not a
+/// mode fork: it writes the one `simple_mode_enabled_v1` key Settings owns.
+class _GuidanceCard extends StatelessWidget {
+  const _GuidanceCard({
+    required this.compact,
+    required this.onChanged,
+    required this.previewExpanded,
+    required this.onTogglePreview,
+  });
+
+  final bool compact;
+  final ValueChanged<bool> onChanged;
+  final bool previewExpanded;
+  final VoidCallback onTogglePreview;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: kCard,
+        border: Border.all(color: kBorder),
+        borderRadius: BorderRadius.circular(kCardRadius),
+      ),
+      padding: const EdgeInsets.all(kSpace4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const ImageIcon(
+                AssetImage('assets/icons/control/icon_visibility_off.png'),
+                size: 16,
+                color: kMutedText,
+              ),
+              const SizedBox(width: kSpace2),
+              Text(
+                'WORKOUT GUIDANCE',
+                style: AppFonts.shareTechMono(
+                  color: kMutedText,
+                  fontSize: 11,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: kSpace3),
+          Text(
+            'How much on-screen help during a workout? '
+            'We picked one from your experience — change it anytime.',
+            style: AppFonts.shareTechMono(
+              color: kMutedText,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: kSpace3),
+          _GuidanceOption(
+            label: 'COMPACT',
+            hint: 'Just your sets — no tips or suggestions.',
+            selected: compact,
+            onTap: () => onChanged(true),
+          ),
+          const SizedBox(height: kSpace2),
+          _GuidanceOption(
+            label: 'EXTRA SUGGESTIONS',
+            hint: 'Warm-up tips and suggested weights shown.',
+            selected: !compact,
+            onTap: () => onChanged(false),
+          ),
+          const SizedBox(height: kSpace3),
+          _SeeDifferenceToggle(
+            expanded: previewExpanded,
+            onTap: onTogglePreview,
+          ),
+          _GuidancePreview(compact: compact, expanded: previewExpanded),
+          const SizedBox(height: kSpace2),
+          Text(
+            'Change anytime in Settings › Simple Mode.',
+            style: AppFonts.shareTechMono(color: kDim, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One radio-style guidance option (single-select). Full-width so long labels
+/// never overflow; taps route through [HoldDepress] (the selection tick fires
+/// once, on an actual change, from the owning state).
+class _GuidanceOption extends StatelessWidget {
+  const _GuidanceOption({
+    required this.label,
+    required this.hint,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String hint;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = selected ? kNeon : kMutedText;
+    return Semantics(
+      inMutuallyExclusiveGroup: true,
+      selected: selected,
+      button: true,
+      label: '$label. $hint',
+      excludeSemantics: true,
+      child: HoldDepress(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(kCardRadius),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: kSpace3,
+            vertical: kSpace3,
+          ),
+          decoration: BoxDecoration(
+            color: selected ? kSurface2 : kCard,
+            border: Border.all(
+              color: selected ? kNeon : kBorder,
+              width: selected ? 1.4 : 1,
+            ),
+            borderRadius: BorderRadius.circular(kCardRadius),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                selected
+                    ? Icons.radio_button_checked_sharp
+                    : Icons.radio_button_unchecked_sharp,
+                size: 18,
+                color: accent,
+              ),
+              const SizedBox(width: kSpace3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontFamily: 'PressStart2P',
+                        fontSize: 10,
+                        color: selected ? kNeon : kText,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      hint,
+                      style: AppFonts.shareTechMono(
+                        color: kMutedText,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The user-triggered "peek" affordance — reveals the swapping preview mock.
+class _SeeDifferenceToggle extends StatelessWidget {
+  const _SeeDifferenceToggle({required this.expanded, required this.onTap});
+
+  final bool expanded;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      excludeSemantics: true,
+      label: expanded ? 'Hide preview' : 'See the difference',
+      child: HoldDepress(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(kCardRadius),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: kSpace2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                expanded ? 'HIDE PREVIEW' : 'SEE THE DIFFERENCE',
+                style: const TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 9,
+                  color: kMutedText,
+                  height: 1.3,
+                ),
+              ),
+              const SizedBox(width: kSpace2),
+              Icon(
+                expanded ? Icons.expand_less_sharp : Icons.expand_more_sharp,
+                size: 16,
+                color: kMutedText,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The revealed preview — an illustrative workout card that swaps between the
+/// two guidance states. Reduced motion shows/hides without the size tween.
+class _GuidancePreview extends StatelessWidget {
+  const _GuidancePreview({required this.compact, required this.expanded});
+
+  final bool compact;
+  final bool expanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final revealed = Padding(
+      padding: const EdgeInsets.only(top: kSpace3),
+      child: _PreviewWorkoutCard(compact: compact),
+    );
+    if (MediaQuery.of(context).disableAnimations) {
+      return expanded ? revealed : const SizedBox.shrink();
+    }
+    return AnimatedSize(
+      duration: kMotionPop,
+      curve: kMotionCurve,
+      alignment: Alignment.topCenter,
+      child: expanded
+          ? revealed
+          : const SizedBox(width: double.infinity, height: 0),
+    );
+  }
+}
+
+/// A static mock of the exercise screen, mirroring the real `_WarmupCard` /
+/// `_TryLine` vocabulary so the peek reads true to what Simple Mode hides.
+class _PreviewWorkoutCard extends StatelessWidget {
+  const _PreviewWorkoutCard({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = Units.weight.label;
+    return Semantics(
+      label: compact
+          ? 'Preview: a compact workout screen — the exercise and your sets only.'
+          : 'Preview: a workout screen with a warm-up tip and a suggested weight.',
+      excludeSemantics: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(kSpace3),
+        decoration: BoxDecoration(
+          color: kBg,
+          border: Border.all(color: kBorderDark),
+          borderRadius: BorderRadius.circular(kCardRadius),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'BENCH PRESS',
+              style: TextStyle(
+                fontFamily: 'PressStart2P',
+                fontSize: 9,
+                color: kText,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: kSpace3),
+            if (!compact) ...[
+              const _PreviewWarmup(),
+              const SizedBox(height: kSpace2),
+            ],
+            _PreviewSetRow(index: 1, value: '60 $unit  ×  8'),
+            const SizedBox(height: kSpace2),
+            _PreviewSetRow(index: 2, value: '60 $unit  ×  8'),
+            if (!compact) ...[
+              const SizedBox(height: kSpace3),
+              _PreviewTry(text: 'TRY: 62.5 $unit × 8'),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The mock warm-up row (mirrors `_WarmupCard`'s amber "W" chip + label).
+class _PreviewWarmup extends StatelessWidget {
+  const _PreviewWarmup();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 24,
+          height: 20,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: kAmber.withValues(alpha: 0.7)),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(
+            'W',
+            style: AppFonts.shareTechMono(fontSize: 10, color: kAmber),
+          ),
+        ),
+        const SizedBox(width: kSpace3),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Warm up',
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 7,
+                  color: kMutedText,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                'Empty bar  ×  8',
+                style: AppFonts.shareTechMono(fontSize: 13, color: kMutedText),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The mock "TRY:" suggestion chip (mirrors `_TryLine`).
+class _PreviewTry extends StatelessWidget {
+  const _PreviewTry({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = kNeon.withValues(alpha: 0.7);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withValues(alpha: 0.6)),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          text,
+          style: AppFonts.shareTechMono(
+            fontSize: 11,
+            color: color,
+            letterSpacing: 0.8,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewSetRow extends StatelessWidget {
+  const _PreviewSetRow({required this.index, required this.value});
+
+  final int index;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          'SET $index',
+          style: AppFonts.shareTechMono(fontSize: 11, color: kMutedText),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: AppFonts.shareTechMono(fontSize: 13, color: kText),
+        ),
+      ],
     );
   }
 }
