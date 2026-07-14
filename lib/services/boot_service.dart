@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'class_migration_service.dart';
+import 'feature_gate_service.dart';
 import 'haptic_service.dart';
 import 'haptic_settings_service.dart';
 import 'migration_service.dart';
@@ -36,6 +37,11 @@ class BootService {
       await MigrationService.runWeekdayAnchoredScheduleOnce();
       await MigrationService.runStatsRecomputeIfRulesChanged();
       await MigrationService.runDecayRemovalOnce();
+      // Grandfather existing installs into the feature-unlock ladder, then
+      // seed the sync gate snapshot BEFORE the shell's first frame so the nav
+      // never flashes a wrong lock state (Codex P4).
+      await MigrationService.runFeatureGateSeedOnce();
+      await FeatureGateService().load();
       await StatEngine().processMissedTrainingDays();
       await ClassMigrationService().migrateIfNeeded();
       SfxService.enabled = await SoundSettingsService().isEnabled();

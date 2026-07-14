@@ -9,6 +9,7 @@ import '../models/body_metrics_models.dart';
 import '../models/weight_trend.dart';
 import '../models/loot_item.dart';
 import '../models/unit_models.dart';
+import '../widgets/feature_gate_notice.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/pixel_loader.dart';
 import '../widgets/session_projection.dart';
@@ -26,6 +27,7 @@ import '../services/analytics_service.dart';
 import '../services/body_goal_service.dart';
 import '../services/body_metrics_service.dart';
 import '../services/calibration_service.dart';
+import '../services/feature_gate_service.dart';
 import '../services/class_service.dart';
 import '../services/notification_service.dart';
 import '../services/notification_settings_service.dart';
@@ -306,6 +308,10 @@ class ProfilePageState extends State<ProfilePage> {
   LootItem? get _equippedFrame => _equippedLoot[LootCategory.avatarFrame];
 
   Future<void> _openInventory() async {
+    if (!FeatureGateService.isUnlockedSync(FeatureGate.inventory)) {
+      showFeatureLockedNotice(context, FeatureGate.inventory);
+      return;
+    }
     await Navigator.of(context).push(
       arcadeRoute((_) => const InventoryPage(), motion: ArcadeRouteMotion.fade),
     );
@@ -314,6 +320,10 @@ class ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _openShop() async {
+    if (!FeatureGateService.isUnlockedSync(FeatureGate.shop)) {
+      showFeatureLockedNotice(context, FeatureGate.shop);
+      return;
+    }
     await Navigator.of(context).push(
       arcadeRoute((_) => const ShopPage(), motion: ArcadeRouteMotion.fade),
     );

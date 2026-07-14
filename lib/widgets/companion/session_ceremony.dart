@@ -79,15 +79,15 @@ const Color _scrimOuter = Color(0xFF07070F);
 const List<Color> _amberSparks = [
   Color(0xFFFFD21F),
   Color(0xFFFFEC8C),
-  Color(0xFFFFA500),
+  kAmberDark,
 ];
 const List<Color> _dustColors = [
   Color(0xFF17D6CC),
   Color(0xFF3A5A78),
-  Color(0xFF45437A),
+  kBorderVariant,
 ];
 const List<Color> _puffColors = [
-  Color(0xFF45437A),
+  kBorderVariant,
   Color(0xFF17D6CC),
   Color(0xFF6E6E92),
 ];
@@ -646,7 +646,7 @@ class _CeremonyBackdropPainter extends CustomPainter {
           ..shader = RadialGradient(
             colors: [
               kAmber.withValues(alpha: 0.5 * floodOp),
-              const Color(0xFFFFA500).withValues(alpha: 0.12 * floodOp),
+              kAmberDark.withValues(alpha: 0.12 * floodOp),
               const Color(0x00000000),
             ],
             stops: const [0.0, 0.42, 0.68],

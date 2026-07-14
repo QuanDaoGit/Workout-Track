@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/workout_models.dart';
 import '../services/analytics_service.dart';
 import '../services/exercise_catalog_service.dart';
+import '../services/feature_gate_service.dart';
 import '../services/haptic_service.dart';
 import '../services/idle_session_guard.dart';
 import '../services/loot_drop_service.dart';
@@ -19,11 +20,14 @@ import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
+import '../widgets/feature_gate_notice.dart';
 import '../widgets/idle_session_dialog.dart';
 import '../widgets/train_nav_button.dart';
+import '../widgets/unlock_ceremony.dart';
 import 'Workout session/active_workout.dart';
 import 'Workout session/start_workout.dart';
 import 'Workout session/workout_summary.dart';
+import 'adventure_page.dart';
 import 'guild_page.dart';
 import 'home.dart';
 import 'inventory_page.dart';
@@ -59,6 +63,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   bool _showingIdleReveal = false;
   bool _hasUnviewedLootDrops = false;
   bool _trainTapInFlight = false;
+  bool _showingUnlockCeremony = false;
   // Pre-start exercise-selection draft (in-shell). Survives tab nav, not kill.
   final WorkoutDraftController _draft = WorkoutDraftController();
   bool _viewingSelection = false;
@@ -89,20 +94,26 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     _draft.addListener(_onDraftChanged);
     _loadOngoingSession();
     _loadLootBadge();
+    FeatureGateService.revision.addListener(_onGateRevision);
     _dockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_ongoingSession != null && mounted) setState(() {});
       _loadOngoingSession();
+      // Cheap sync check: catches the summary's popUntil-to-root return,
+      // which has no pop callback to re-arm the reveal (Codex P1/P6 path).
+      _showUnlockCeremonyIfNeeded();
     });
     _storageSubscription = WorkoutStorageService.changes.listen((_) {
       if (!mounted) return;
       setState(() => _ongoingSession = null);
       _reloadQuestAwarePages();
+      unawaited(_evaluateGates());
     });
     _reportIncompleteWorkoutIfFound();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _reportAccessibilityProps();
       _showExpiredPausedSummaryIfNeeded();
       _showIdleRevealIfNeeded();
+      unawaited(_evaluateGates());
     });
     if (widget.openWorkoutStarterOnLaunch) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _openFirstSession());
@@ -150,12 +161,93 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    FeatureGateService.revision.removeListener(_onGateRevision);
     _restNotifCoordinator.detach();
     _dockTimer?.cancel();
     _storageSubscription?.cancel();
     _draft.removeListener(_onDraftChanged);
     _draft.dispose();
     super.dispose();
+  }
+
+  void _onGateRevision() {
+    if (mounted) setState(() {});
+  }
+
+  /// Re-evaluates the earned gates (cheap reads of existing stores) and then
+  /// tries to drain the ceremony queue. Runs at every shell arming site —
+  /// boot frame, app resume, pushed-surface return, workout saves — so a
+  /// gem-only or loot-only earn (a quest claim on a pushed page) still lands
+  /// its unlock on the very next shell return (Codex P1).
+  Future<void> _evaluateGates() async {
+    await FeatureGateService().evaluate();
+    if (!mounted) return;
+    _showUnlockCeremonyIfNeeded();
+  }
+
+  /// Drains the persisted pending-ceremony queue: one takeover per shell-
+  /// current window; multiple pending gates coalesce into a single catch-up
+  /// card (Codex F6). Suppressed while the selection draft or a live session
+  /// is up — the retry sites (dock tick, resume, push-return) re-attempt.
+  void _showUnlockCeremonyIfNeeded() {
+    if (_showingUnlockCeremony || !mounted) return;
+    if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    if (_viewingSelection || _ongoingSession != null) return;
+    final pending = FeatureGateService.pendingCeremoniesSync();
+    if (pending.isEmpty) return;
+    _showingUnlockCeremony = true;
+    Navigator.of(context)
+        .push(
+          PageRouteBuilder<void>(
+            opaque: false,
+            transitionDuration: kMotionFast,
+            reverseTransitionDuration: kMotionFast,
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                FadeTransition(
+              opacity: animation,
+              child: FeatureUnlockCeremony(
+                gates: pending,
+                onGo: (gate) => _settleUnlockCeremony(pending, goTo: gate),
+                onDismiss: () => _settleUnlockCeremony(pending),
+              ),
+            ),
+          ),
+        )
+        .then((_) {
+          _showingUnlockCeremony = false;
+        });
+  }
+
+  /// Codex P6 ordering: commit the celebration, dismiss the overlay, then
+  /// navigate through the same guarded entries as a manual tap.
+  Future<void> _settleUnlockCeremony(
+    List<FeatureGate> gates, {
+    FeatureGate? goTo,
+  }) async {
+    await FeatureGateService().markCelebrated(gates);
+    for (final gate in gates) {
+      unawaited(
+        AnalyticsService.instance.logFeatureUnlockCeremony(
+          gate.name,
+          gate == goTo ? 'go' : (goTo == null ? 'later' : 'later_other'),
+        ),
+      );
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    if (goTo == null) return;
+    switch (goTo) {
+      case FeatureGate.quests:
+        _pushQuests();
+      case FeatureGate.shop:
+        _openShop();
+      case FeatureGate.guild:
+        this.goTo(AppDestination.guild);
+      case FeatureGate.inventory:
+        this.goTo(AppDestination.inventory);
+      case FeatureGate.adventure:
+        _pushAdventure();
+    }
   }
 
   void _onDraftChanged() {
@@ -204,6 +296,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       _reportAccessibilityProps();
       _showExpiredPausedSummaryIfNeeded();
       _showIdleRevealIfNeeded();
+      unawaited(_evaluateGates());
     }
   }
 
@@ -229,9 +322,29 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     );
   }
 
+  /// The earned gate guarding a destination, or null for the always-open ones.
+  static FeatureGate? _gateFor(AppDestination destination) {
+    return switch (destination) {
+      AppDestination.inventory => FeatureGate.inventory,
+      AppDestination.guild => FeatureGate.guild,
+      AppDestination.home || AppDestination.labs => null,
+    };
+  }
+
   /// Switch the active destination. Semantic (not index-based) so callers never
   /// couple to a numeric slot — remapping the bar can't silently misroute.
+  /// Locked destinations no-op with the invitation notice — no tab switch, no
+  /// analytics, no reload/setActive side effects (Codex P5).
   void goTo(AppDestination destination) {
+    final gate = _gateFor(destination);
+    if (gate != null && !FeatureGateService.isUnlockedSync(gate)) {
+      showFeatureLockedNotice(context, gate);
+      return;
+    }
+    _goToUnlocked(destination);
+  }
+
+  void _goToUnlocked(AppDestination destination) {
     // Character-attachment signal: only a *real* tab change into Items/Labs (not
     // a re-tap or a rebuild) counts as deliberately visiting the character.
     final isChange = destination != _destination;
@@ -495,11 +608,27 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   }
 
   void _openShop() {
+    if (!FeatureGateService.isUnlockedSync(FeatureGate.shop)) {
+      showFeatureLockedNotice(context, FeatureGate.shop);
+      return;
+    }
     _pushFaded((_) => const ShopPage());
   }
 
   void _pushQuests() {
+    if (!FeatureGateService.isUnlockedSync(FeatureGate.quests)) {
+      showFeatureLockedNotice(context, FeatureGate.quests);
+      return;
+    }
     _pushFaded((_) => QuestsPage(onQuestChanged: _reloadQuestAwarePages));
+  }
+
+  void _pushAdventure() {
+    if (!FeatureGateService.isUnlockedSync(FeatureGate.adventure)) {
+      showFeatureLockedNotice(context, FeatureGate.adventure);
+      return;
+    }
+    _pushFaded((_) => const AdventurePage());
   }
 
   void _pushLogs() {
@@ -518,6 +647,9 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     _reloadQuestAwarePages();
     _showExpiredPausedSummaryIfNeeded();
     _showIdleRevealIfNeeded();
+    // A pushed page can earn a gate (a quest claim mints the first gems) —
+    // re-evaluate on every return so the unlock lands now, not next workout.
+    unawaited(_evaluateGates());
   }
 
   /// Center Train action. Re-reads session state at tap time (Codex #2):
@@ -753,6 +885,10 @@ class _BottomNavBar extends StatelessWidget {
                 label: 'Items',
                 active: destination == AppDestination.inventory,
                 showBadge: showLootBadge,
+                lockedGate:
+                    FeatureGateService.isUnlockedSync(FeatureGate.inventory)
+                    ? null
+                    : FeatureGate.inventory,
                 onTap: () => onSelect(AppDestination.inventory),
               ),
               Expanded(
@@ -766,6 +902,9 @@ class _BottomNavBar extends StatelessWidget {
                 iconPath: 'assets/icons/control/ui/icon_nav_guild.png',
                 label: 'Guild',
                 active: destination == AppDestination.guild,
+                lockedGate: FeatureGateService.isUnlockedSync(FeatureGate.guild)
+                    ? null
+                    : FeatureGate.guild,
                 onTap: () => onSelect(AppDestination.guild),
               ),
               _NavItem(
@@ -784,6 +923,11 @@ class _BottomNavBar extends StatelessWidget {
 
 /// One corner destination: pixel icon + label, neon when active, with an
 /// optional amber badge dot (the loot drop signal, relocated to Inventory).
+/// A [lockedGate] renders the earned-unlock locked state: dimmed to the
+/// app's locked vocabulary (muted, no glyph swap), still visible — the gap
+/// between "I can see it" and "I can't open it yet" is the anticipation hook.
+/// The tap stays live (it shows the invitation notice via the shell's guard),
+/// and the Semantics announce the unlock condition, not a bare "disabled".
 class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.iconPath,
@@ -791,44 +935,57 @@ class _NavItem extends StatelessWidget {
     required this.active,
     required this.onTap,
     this.showBadge = false,
+    this.lockedGate,
   });
 
   final String iconPath;
   final String label;
   final bool active;
   final bool showBadge;
+  final FeatureGate? lockedGate;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     // Active tab is identity-white, not neon: neon is reserved for the single
     // hero — the center Train keycap — so the primary action can't be confused
-    // with the "you are here" selection state.
-    final color = active ? kText : kMutedText;
+    // with the "you are here" selection state. Locked recedes below muted.
+    final locked = lockedGate != null;
+    final color = locked ? kDim : (active ? kText : kMutedText);
+    final item = Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _LootBadgeIcon(
+          showBadge: showBadge && !locked,
+          child: ImageIcon(AssetImage(iconPath), size: 22, color: color),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'PressStart2P',
+            fontSize: 7,
+            color: color,
+          ),
+        ),
+      ],
+    );
     return Expanded(
       // Nav choice → the canonical arcade tap wrapper carries the `selection`
       // tick (no inline HapticService call, no Material InkWell ripple).
       child: ArcadeTap(
         haptic: HapticIntent.selection,
         onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _LootBadgeIcon(
-              showBadge: showBadge,
-              child: ImageIcon(AssetImage(iconPath), size: 22, color: color),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'PressStart2P',
-                fontSize: 7,
-                color: color,
-              ),
-            ),
-          ],
-        ),
+        child: locked
+            ? Semantics(
+                button: true,
+                label:
+                    '$label — locked. '
+                    '${featureGateSpecs[lockedGate!]!.lockedNotice}.',
+                excludeSemantics: true,
+                child: item,
+              )
+            : item,
       ),
     );
   }

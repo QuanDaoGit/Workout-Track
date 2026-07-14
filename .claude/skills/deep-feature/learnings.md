@@ -26,6 +26,11 @@ resume vs repeat vs history), pin a once-only precedence + a "user touched it �
 and test every path. A **delayed UI commit** (a hold/debounce "land" timer) must be a **cancellable owned
 `Timer`**, never a bare `await Future.delayed` — cancel it on Back + dispose and **step-guard its callback**
 (`_step` unchanged), or the awaited delay races back-nav and reacts/advances for a question no longer up.
+A derived default that **REDUCES** the experience (hides features / strips scaffolding) must persist
+**only once the choice is visibly shown/confirmable** — never at an earlier silent commit — and its
+unset/killed state must **fail toward the FULLER** experience, never the reduced one (a reduction the
+user never saw is a hidden-state hazard; make the store the single source of truth so shown==stored;
+Codex 2026-07-14).
 **Two persisted models of one concept** (a calendar-weekday schedule vs a sequence cursor) must reconcile
 behind **one pure resolver consumed by both** — never let each consumer recompute the shared truth
 (precedence drifts apart), and never let a live re-projection re-classify a *past* period that drives
@@ -50,8 +55,14 @@ between-exercise rest takeover scoped via `_restAfterFinish` + suppress-on-last 
 
 ### Legacy-data cliffs
 **Rule:** A new nullable field used in a threshold/comparison must define the null (legacy) case
-explicitly — default to "never triggers" — with a legacy-fixture test. *Seen: null `lastActivityAt` would
-time out every old session; warm-up `warmup` key → false (2026-06).*
+explicitly — default to "never triggers" — with a legacy-fixture test. **And a migration that
+grandfathers existing users into a new GATING system must grant unconditionally, never by replaying
+the new conditions over old data** — the evidence shape the condition needs (a ledger entry, a
+normalized record) may simply not exist for a legit legacy user, silently locking them out of a
+surface they already had; test the sparse-legacy-data rows explicitly. *Seen: null `lastActivityAt`
+would time out every old session; warm-up `warmup` key → false (2026-06); feature-unlock seeding by
+condition-replay would have hidden the Shop from a 10-workout user with an empty gem ledger — Codex
+flipped it to latch-all-for-legacy (2026-07).*
 
 ### Settlement/presentation coupling
 **Rule:** When a reward resolves on a later surface, settle the data (award, persist, mark unviewed)

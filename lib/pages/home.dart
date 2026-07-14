@@ -18,6 +18,7 @@ import '../models/workout_models.dart';
 import '../services/adventure_service.dart';
 import '../services/bit_advice_service.dart';
 import '../services/calorie_service.dart';
+import '../services/feature_gate_service.dart';
 import '../services/haptic_service.dart';
 import '../services/class_service.dart';
 import '../services/exercise_catalog_service.dart';
@@ -42,6 +43,7 @@ import '../widgets/arcade_card.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
 import '../widgets/active_session_found_dialog.dart';
+import '../widgets/feature_gate_notice.dart';
 import '../widgets/home_section_header.dart';
 import '../widgets/last_session_tag.dart';
 import '../widgets/motion/crt_breathe.dart';
@@ -244,6 +246,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _adviceLine = bitRoomRegularAdvice[_regularAdviceIndex];
     }
     WidgetsBinding.instance.addObserver(this);
+    // The earned-unlock gates flip mid-session (a ceremony on the shell) —
+    // rebuild so the quest card / wall board / expedition section power on the
+    // moment their gate opens, not on the next data reload.
+    FeatureGateService.revision.addListener(_onGateRevision);
     _scrollController.addListener(
       () => _roomScroll.value = _scrollController.offset,
     );
@@ -330,12 +336,22 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    FeatureGateService.revision.removeListener(_onGateRevision);
     _expeditionReturnTimer?.cancel();
     _scrollController.dispose();
     _roomScroll.dispose();
     _storageSubscription?.cancel();
     super.dispose();
   }
+
+  void _onGateRevision() {
+    if (mounted) setState(() {});
+  }
+
+  bool get _questsUnlocked =>
+      FeatureGateService.isUnlockedSync(FeatureGate.quests);
+  bool get _adventureUnlocked =>
+      FeatureGateService.isUnlockedSync(FeatureGate.adventure);
 
   Future<void> _loadData() async {
     final all = await WorkoutStorageService().getSessions();
@@ -631,6 +647,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _openAdventure() {
+    if (!_adventureUnlocked) {
+      showFeatureLockedNotice(context, FeatureGate.adventure);
+      return;
+    }
     Navigator.of(context)
         .push(
           arcadeRoute(
@@ -648,6 +668,9 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   /// The room's dock view-model, derived fresh from the authoritative service
   /// state (never cached) so the pad can't disagree with the report flow.
   RoomAdventureView? _buildRoomAdventure() {
+    // Locked expedition system → the bare dormant pad (no meter, no
+    // affordance); the pad's dormant tap shows the invitation notice.
+    if (!_adventureUnlocked) return null;
     final state = _adventureState;
     if (state == null) return null;
     final now = DateTime.now();
@@ -683,7 +706,8 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       adviceLine: _adviceLine,
       routeName: route.name,
       backInHours: backInHours,
-      claimableCount: _questClaimable,
+      // A locked quest board must never draw a BIT nudge toward it.
+      claimableCount: _questsUnlocked ? _questClaimable : 0,
     );
     _lastVoiceKind = voice.kind;
     _lastVoicePendingId = pendingId;
@@ -1409,6 +1433,54 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // ── Weekly Quests card ─────────────────────────────────────────────────────
 
   Widget _buildWeeklyQuestsCard() {
+    if (!_questsUnlocked) {
+      // The earned-unlock locked card: receded, all cells dark, the invitation
+      // line where the count would be. The tap routes through the shell's
+      // guard (→ the floating notice), so the card never feels dead.
+      return ArcadeTap(
+        onTap: widget.onViewQuests,
+        haptic: HapticIntent.selection,
+        borderRadius: BorderRadius.circular(4),
+        child: Semantics(
+          button: true,
+          label:
+              'Weekly quests — locked. '
+              '${featureGateSpecs[FeatureGate.quests]!.lockedNotice}.',
+          excludeSemantics: true,
+          child: _homeCard(
+            background: kCard,
+            backgroundAlpha: 0.6,
+            borderColor: kBorder,
+            borderAlpha: 0.45,
+            padding: const EdgeInsets.all(kSpace3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'WEEKLY QUESTS',
+                  style: TextStyle(
+                    fontFamily: 'PressStart2P',
+                    fontSize: 8,
+                    color: kDim,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ArcadeBar.segments(
+                  litCells: 0,
+                  totalCells: _weeklyQuestTotal,
+                  height: 10,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  featureGateSpecs[FeatureGate.quests]!.lockedNotice,
+                  style: const TextStyle(fontSize: 12, color: kMutedText),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return ArcadeTap(
       onTap: widget.onViewQuests,
       haptic: HapticIntent.selection,
@@ -2192,10 +2264,22 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 onDispatchTap: _onPadDispatch,
                 onStatusTap: _openAdventure,
                 onCollect: () => _maybeRevealExpeditionReport(fromUserTap: true),
-                questWeeklyFilled: _weeklyQuestCompleted,
-                questWeeklyTotal: _weeklyQuestTotal,
-                questClaimable: _questClaimable,
+                questWeeklyFilled: _questsUnlocked ? _weeklyQuestCompleted : 0,
+                questWeeklyTotal: _questsUnlocked ? _weeklyQuestTotal : 0,
+                questClaimable: _questsUnlocked ? _questClaimable : 0,
                 onViewQuests: widget.onViewQuests,
+                questBoardPowered: _questsUnlocked,
+                questBoardOfflineLabel:
+                    'Quest board, offline. '
+                    '${featureGateSpecs[FeatureGate.quests]!.lockedNotice}.',
+                onDormantPadTap: _adventureUnlocked
+                    ? null
+                    : () =>
+                          showFeatureLockedNotice(context, FeatureGate.adventure),
+                dormantPadLabel: _adventureUnlocked
+                    ? null
+                    : 'Expedition pad, offline. '
+                          '${featureGateSpecs[FeatureGate.adventure]!.lockedNotice}.',
               ),
             ),
             SliverPadding(
@@ -2233,7 +2317,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       stats: _lastSessionStats,
                     ),
                   ],
-                  if (_adventureState != null) ...[
+                  // The expedition section appears only once the system is
+                  // earned — the room's dormant pad is the locked-state teaser
+                  // (a full locked card here would just be day-0 clutter).
+                  if (_adventureState != null && _adventureUnlocked) ...[
                     const SizedBox(height: kSectionGap),
                     HomeSectionHeader(
                       title: 'EXPEDITION',
@@ -2262,7 +2349,10 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   HomeSectionHeader(
                     title: 'QUESTS',
                     actionLabel: 'DETAILS >',
-                    onAction: widget.onViewQuests,
+                    // Locked: the header stays (the section keeps its name on
+                    // the map) but the details link hides — a link into a
+                    // locked page would be a dead end.
+                    onAction: _questsUnlocked ? widget.onViewQuests : null,
                   ),
                   _buildWeeklyQuestsCard(),
                   const SizedBox(height: kSpace5),

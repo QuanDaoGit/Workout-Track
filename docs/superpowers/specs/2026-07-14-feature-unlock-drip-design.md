@@ -16,14 +16,17 @@ Make Ironbit feel more game-like than a normal app by pacing the meta surfaces a
 
 ## The ladder (v1)
 
-**Never gated:** Home, TRAIN + entire session flow, Logs/history, XP/stats/level, BIT + home room, **Quests** (activation hook; source of first gems/loot), Labs/Profile (settings/units/avatar always reachable). Strength surfaces stay open (naturally data-gated).
+**Never gated:** Home, TRAIN + entire session flow, Logs/history, XP/stats/level, BIT + home room, Labs/Profile (settings/units/avatar always reachable). Strength surfaces stay open (naturally data-gated). The Home **"FIRST QUEST" mission panel stays live** — it is the day-0 workout *launcher* (the thing that earns the first unlock), not the quest system.
 
 | Order | Feature | Unlock condition | Typically lands |
 |---|---|---|---|
-| 1 | **Shop** (push from Home) | first gems earned (gem ledger non-empty) | workout 1 (first quest claim) |
-| 2 | **Guild** (tab) | 3 completed workouts | ~week 1 |
-| 3 | **Inventory / Items** (tab) | first loot earned (owned non-default loot) | ~workout 4 (first frame) |
-| 4 | **Adventure** (home-room expedition pad) | 5 completed workouts | ~week 2 |
+| 1 | **Quests** (Home weekly card + room wall board + push) | 1 completed workout | workout 1 — *(user directive 2026-07-14: the board stays off/no-effect until the first workout, then turns on — with the Show Up quest already claimable, so its first frame is a lit win that chains into first gems → Shop)* |
+| 2 | **Shop** (push from Home) | first gems earned (gem ledger non-empty) | workout 1–2 (first quest claim) |
+| 3 | **Guild** (tab) | 3 completed workouts | ~week 1 |
+| 4 | **Inventory / Items** (tab) | first loot earned (owned non-default loot) | ~workout 4 (first frame) |
+| 5 | **Adventure** (home-room expedition pad) | 5 completed workouts | ~week 2 |
+
+Quest-gate presentation: the Home Weekly Quests card renders dormant (dim, invitation copy, tap → notice); the room wall quest board renders unpowered with **no effect** (no breathing/claimable tint; its claimable state is naturally impossible pre-workout-1); `_pushQuests` guards. The quest system still *evaluates* silently from history (a completed workout 1 credits Show Up before the board turns on — the unlock reveals an already-lit board, never wipes progress).
 
 - "Completed workouts" uses the same completed-sessions bar as frames/guild level (non-abandoned, real working set).
 - Thresholds are **constants, not architecture** — tunable if instrumentation later disagrees.
@@ -55,9 +58,26 @@ Free by construction: existing users' conditions all evaluate as met on first la
 ## Risks carried from research (Codex findings)
 
 - **F1 (high):** games/companion-app precedent (Finch, Habitica, Duolingo, Pokémon GO) is hypothesis-grade for a *tracker* — a locked tab may read as missing capability. Mitigation: prototype/sanity check that the locked state reads as "earnable", not "broken", before full commitment.
-- **F2 (high):** ~75% week-1 churn → gated features must not be activation drivers (they aren't: XP/quests/BIT stay day-1) and the ladder must be front-loaded (it is: resolves in ~2 weeks of real use). Per-gate funnel targets once instrumented (see-locked → unlock → revisit).
+- **F2 (high):** ~75% week-1 churn → gated features must not be activation drivers (XP/stats/level/BIT and the FIRST QUEST mission launcher stay day-1; the quest *board* gates at workout 1, inside the first session, and its unlock reveals an already-claimable win) and the ladder must be front-loaded (it is: resolves in ~2 weeks of real use). Per-gate funnel targets once instrumented (see-locked → unlock → revisit).
 - **F3:** visible-locked, thresholds, and ceremony are experiment parameters, not proven design — keep them constants/tunable.
 - **F4:** anti-guilt copy audit on every locked/countdown string; count-based no-deadline gates only; preview/reveal escape hatch is a fallback if the prototype check fails.
+
+## Codex reviews during /deep-feature (opinion + plan, both *needs-attention*, all folded in)
+
+Opinion review (8): serialized whole-transaction evaluation (not just a write lock); corrupt-blob
+recovery must NOT auto-burn ceremonies (re-latch, let the ceremony replay once, coalescing caps
+spam); WS1+WS2 ship together (gating enabled only with the ceremony present); explicit migration
+provenance + test matrix; centralized guarded navigation; coalesce pending ceremonies; per-gate
+`emittedAt` analytics marker; keep Shop at first-gems (intent call — early density is the hook).
+
+Plan review (7): evaluate at **every shell arming site** (boot/resume/push-return/saves) so
+gem/loot-only earns land without a workout event; **grandfather = ALL gates latched
+unconditionally** for legacy users (condition-based seeding could retroactively lock a sparse-data
+user out); a gated-page constructor allowlist test blocks bypass routes; `BootService` seeds the
+snapshot pre-first-frame (unloaded snapshot fails toward unlocked); accepted mount-time work on
+always-mounted locked tabs (analytics/setActive only fire via the guarded `goTo`); GO ordering =
+markCelebrated → dismiss → guarded nav; `feature_locked_viewed` debounced once per gate per shell
+session.
 
 ## Workstreams
 

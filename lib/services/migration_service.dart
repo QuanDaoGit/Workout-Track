@@ -10,7 +10,9 @@ import '../models/program_models.dart';
 import 'body_metrics_service.dart';
 import 'calibration_service.dart';
 import 'character_service.dart';
+import 'feature_gate_service.dart';
 import 'loot_service.dart';
+import 'onboarding_service.dart';
 import 'profile_service.dart';
 import 'program_service.dart';
 import 'stat_engine.dart';
@@ -348,6 +350,45 @@ class MigrationService {
     }
 
     await prefs.setBool(_weekdayAnchoredScheduleDoneKey, true);
+  }
+
+  static const _featureGateSeedDoneKey = 'migration_v_feature_gate_seed_done';
+
+  /// Grandfathers existing installs into the earned feature-unlock ladder.
+  ///
+  /// Legacy invariant (Codex P2): a user who could reach Shop/Guild/Items/
+  /// Quests/Adventure before this release must NEVER lose access — so a legacy
+  /// user (onboarding complete OR any stored session, however sparse the rest
+  /// of their data) gets **every** gate latched unconditionally, with the
+  /// celebration + analytics stamps set (zero locks, zero ceremonies, zero
+  /// synthetic events on upgrade). A genuinely fresh install matches neither
+  /// signal and starts with the empty map — the ladder — instead. One-shot.
+  static Future<void> runFeatureGateSeedOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_featureGateSeedDoneKey) == true) return;
+
+    final onboarded = await OnboardingService().isComplete();
+    final hasAnySession = _hasAnyStoredSession(prefs);
+    if (onboarded || hasAnySession) {
+      await FeatureGateService().evaluate(seedPreCelebrated: true);
+    }
+
+    await prefs.setBool(_featureGateSeedDoneKey, true);
+  }
+
+  /// ANY stored session (even partial/abandoned) marks a pre-feature install —
+  /// broader than [_hasCompletedSessions] on purpose: the grandfather test is
+  /// "did this install exist before the ladder", not "did they earn anything".
+  static bool _hasAnyStoredSession(SharedPreferences prefs) {
+    final raw = prefs.getString('workout_sessions');
+    if (raw == null || raw.isEmpty) return false;
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is List && decoded.isNotEmpty;
+    } catch (_) {
+      // Unreadable history on upgrade — grandfather rather than lock out.
+      return true;
+    }
   }
 
   /// Seeds the weekly-reward anchor for the decoupled weight-log cadence. Before

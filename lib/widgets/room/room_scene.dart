@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../../data/bit_room_copy.dart';
 import '../../models/adventure_models.dart' show AdventurePhase;
+import '../../services/haptic_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../companion/bit_companion.dart';
@@ -119,6 +120,10 @@ class HomeRoomScene extends StatefulWidget {
     this.questWeeklyTotal = 0,
     this.questClaimable = 0,
     this.onViewQuests,
+    this.questBoardPowered = true,
+    this.questBoardOfflineLabel,
+    this.onDormantPadTap,
+    this.dormantPadLabel,
   });
 
   /// The exact height to render at (measured by the caller from the viewport).
@@ -163,6 +168,20 @@ class HomeRoomScene extends StatefulWidget {
 
   /// Tap on the wall board (or BIT's claimable line) → open the Quests page.
   final VoidCallback? onViewQuests;
+
+  /// False = the earned-unlock locked state: the wall board renders dark/off
+  /// (no bar, no pip, no claim cue). The tap still routes to [onViewQuests]
+  /// (the shell's gate shows the invitation notice).
+  final bool questBoardPowered;
+
+  /// Screen-reader label for the unpowered board (the unlock condition).
+  final String? questBoardOfflineLabel;
+
+  /// When [adventure] is withheld because the expedition system is still
+  /// locked, the bare pad becomes a notice tap target with [dormantPadLabel]
+  /// as its accessible name. Null = the plain pre-load bare pad (no target).
+  final VoidCallback? onDormantPadTap;
+  final String? dormantPadLabel;
 
   /// Floor below which the composition would crush — the caller should not pass
   /// less, but we guard internally too.
@@ -444,6 +463,13 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
       return 2 * math.sin(((e - 350) / 170) * math.pi) * kx;
     }
     return 0.0;
+  }
+
+  /// The bare pad tapped while the expedition system is still locked — a
+  /// glance-tick + the shell's invitation notice, never a dead tap.
+  void _onDormantPadTap() {
+    HapticService.instance.selection();
+    widget.onDormantPadTap?.call();
   }
 
   void _onPadTap() {
@@ -778,6 +804,10 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
                     filled: widget.questWeeklyFilled,
                     ready: widget.questClaimable,
                     onTap: widget.onViewQuests,
+                    powered: widget.questBoardPowered,
+                    semanticsLabel: widget.questBoardPowered
+                        ? null
+                        : widget.questBoardOfflineLabel,
                   ),
                 ),
 
@@ -823,11 +853,17 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
                   width: padW,
                   height: padH,
                   child: Semantics(
-                    button: adv != null,
-                    label: adv == null ? null : _padSemantics(adv),
+                    button: adv != null || widget.onDormantPadTap != null,
+                    label: adv != null
+                        ? _padSemantics(adv)
+                        : widget.dormantPadLabel,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: adv == null ? null : _onPadTap,
+                      onTap: adv != null
+                          ? _onPadTap
+                          : (widget.onDormantPadTap == null
+                                ? null
+                                : _onDormantPadTap),
                       child: AnimatedBuilder(
                         animation:
                             _launch ?? const AlwaysStoppedAnimation<double>(0),

@@ -59,12 +59,19 @@ class QuestBoardPainter extends CustomPainter {
     required this.filled,
     required this.ready,
     required this.glow,
+    this.powered = true,
   });
 
   final int total;
   final int filled;
   final int ready;
   final double glow;
+
+  /// False = the earned-unlock locked state: the crate hangs on the wall but
+  /// its screen is dark — no scanlines, no title/bar/pip, no claim cue; just a
+  /// single dim standby cell so it reads "off", never "broken". Static by
+  /// construction (reduced-motion identical).
+  final bool powered;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -110,10 +117,38 @@ class QuestBoardPainter extends CustomPainter {
     cham(1, 2, w - 2, h - 4, kSurface2, 2); // surface-2 face (leaves 1px lit top)
     rc(2, h - 3, w - 4, 1, _qbEmboss); // thin bottom emboss shade
 
+    // ── flush-mount bolts (the only chrome) — shared by both power states ──
+    void bolt(double x, double y) {
+      const sz = 6.0;
+      cham(x, y, sz, sz, _qbBoltDk, 2);
+      cham(x + 1, y + 1, sz - 2, sz - 2, kBorderVariant, 2);
+      cham(x + 1, y + 2, sz - 2, sz - 3, kSurface2, 2);
+      rc(x + 2, y + 2, 3, 3, _qbEmboss);
+      rc(x + 2, y + 2, 3, 1, _qbBoltDk);
+      rc(x + 2, y + 2, 1, 3, _qbBoltDk);
+      rc(x + 4, y + 3, 1, 2, kBorderVariant);
+    }
+
+    void bolts() {
+      bolt(0, 0);
+      bolt(w - 6, 0);
+      bolt(0, h - 6);
+      bolt(w - 6, h - 6);
+    }
+
     // ── recessed screen ──
     cham(sx, sy, sw, sh, _qbScrEdge, 3);
     cham(sx + 1, sy + 1, sw - 2, sh - 2, _qbScr, 3);
     rc(sx + 3, sy + 1, sw - 6, 1, _qbScrTop);
+
+    if (!powered) {
+      // Dark screen + one dim standby cell (bottom-right) — off, not broken.
+      rc(sx + sw - 7, sy + sh - 7, 2, 2, _qbCellOff);
+      bolts();
+      canvas.restore();
+      return;
+    }
+
     p.color = _qbScan; // static dim scanlines (powered, calm)
     for (var yy = sy + 3; yy < sy + sh - 1; yy += 3) {
       canvas.drawRect(Rect.fromLTWH(sx + 2, yy, sw - 4, 1), p);
@@ -230,29 +265,18 @@ class QuestBoardPainter extends CustomPainter {
       edge(5, 0.05 + 0.09 * g);
     }
 
-    // ── flush-mount bolts (the only chrome) ──
-    void bolt(double x, double y) {
-      const sz = 6.0;
-      cham(x, y, sz, sz, _qbBoltDk, 2);
-      cham(x + 1, y + 1, sz - 2, sz - 2, kBorderVariant, 2);
-      cham(x + 1, y + 2, sz - 2, sz - 3, kSurface2, 2);
-      rc(x + 2, y + 2, 3, 3, _qbEmboss);
-      rc(x + 2, y + 2, 3, 1, _qbBoltDk);
-      rc(x + 2, y + 2, 1, 3, _qbBoltDk);
-      rc(x + 4, y + 3, 1, 2, kBorderVariant);
-    }
-
-    bolt(0, 0);
-    bolt(w - 6, 0);
-    bolt(0, h - 6);
-    bolt(w - 6, h - 6);
+    bolts();
 
     canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant QuestBoardPainter old) =>
-      old.total != total || old.filled != filled || old.ready != ready || old.glow != glow;
+      old.total != total ||
+      old.filled != filled ||
+      old.ready != ready ||
+      old.glow != glow ||
+      old.powered != powered;
 }
 
 /// The wall fixture: a [QuestBoardPainter] at [width]×[height] (keep 9:10), with
@@ -269,6 +293,7 @@ class QuestBoard extends StatefulWidget {
     required this.ready,
     this.onTap,
     this.semanticsLabel,
+    this.powered = true,
   });
 
   final double width;
@@ -278,6 +303,9 @@ class QuestBoard extends StatefulWidget {
   final int ready;
   final VoidCallback? onTap;
   final String? semanticsLabel;
+
+  /// False = the locked/dark screen (see [QuestBoardPainter.powered]).
+  final bool powered;
 
   @override
   State<QuestBoard> createState() => _QuestBoardState();
@@ -338,7 +366,7 @@ class _QuestBoardState extends State<QuestBoard> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    final claim = widget.ready > 0;
+    final claim = widget.ready > 0 && widget.powered;
     final label = widget.semanticsLabel ?? _label();
     final Widget content = CustomPaint(
       size: Size(widget.width, widget.height),
@@ -347,6 +375,7 @@ class _QuestBoardState extends State<QuestBoard> with SingleTickerProviderStateM
         filled: widget.filled,
         ready: widget.ready,
         glow: claim ? _g : 0.0,
+        powered: widget.powered,
       ),
     );
     final Widget board = widget.onTap != null

@@ -76,6 +76,19 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
 - [x] Class is persisted on each `WorkoutSession` at save time so later switching never rewrites history.
 
 ### Supporting systems
+- [x] Earned feature unlocks (`FeatureGateService`) — **the app assembles itself as you train.**
+      Meta surfaces gate behind earned milestones (Quests @ 1 completed workout — the board stays
+      off/no-effect until then, and turns on with the first Show Up reward already claimable; Shop @
+      first gems; Guild @ 3 workouts; Items @ first non-default loot; Adventure @ 5 workouts). The
+      tool core (Home, TRAIN/logging, Logs, XP/stats/level, BIT, Labs) is never gated, and the day-0
+      FIRST QUEST mission launcher stays live (it earns the first unlock). Locked surfaces stay
+      **visible** (dimmed nav, dormant cards, an unpowered wall board/pad) with invitation-framed
+      copy — never debt/countdown framing; nothing expires or re-locks (unlocks are latched forever).
+      Each unlock plays the standardized **NEW SYSTEM ONLINE** ceremony on the shell (BIT-hosted,
+      skippable, reduced-motion-safe; multiple pending unlocks coalesce into one catch-up card).
+      Existing installs are grandfathered fully unlocked with no ceremonies. Design + evidence:
+      `docs/superpowers/specs/2026-07-14-feature-unlock-drip-design.md`, `research/insights.md`
+      (2026-07-14 entry).
 - [x] XP & levels (`XpService`), threshold leveling, LCK multiplier.
 - [x] Quests (`QuestService`) — auto-evaluated from workout history; no manual-confirm quests. A
       **rotating pool** surfaces a fresh deterministic set each period (3 daily / 5 weekly, each anchored

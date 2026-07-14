@@ -137,6 +137,23 @@ class AnalyticsService {
 
   Future<void> logLootUnlockViewed() => _log('loot_unlock_viewed');
 
+  // ── Earned feature-unlock funnel (see-locked → unlock → ceremony) ─────────
+
+  /// Lifetime-once per gate by construction: FeatureGateService emits this only
+  /// inside the committed latch transaction (its persisted emittedAt marker is
+  /// the dedup), and the legacy migration seed never routes through it.
+  Future<void> logFeatureUnlocked(String gate) =>
+      _log('feature_unlocked', {'gate': gate});
+
+  /// A locked entry point was tapped (the floating notice was shown). Callers
+  /// debounce to once per gate per shell session.
+  Future<void> logFeatureLockedViewed(String gate) =>
+      _log('feature_locked_viewed', {'gate': gate});
+
+  /// Unlock-ceremony outcome. `outcome` ∈ {go, later, skip}.
+  Future<void> logFeatureUnlockCeremony(String gate, String outcome) =>
+      _log('feature_unlock_ceremony', {'gate': gate, 'outcome': outcome});
+
   /// Anonymous segmentation only (no identifiers).
   Future<void> setUserProperties({
     String? characterClass,

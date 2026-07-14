@@ -44,9 +44,12 @@ and drifts when the token changes. At finish-time grep for **every colour spelli
 `Color.fromRGBO`/`fromARGB`, named `Colors.x`, *and* token refs (`kCyan`) — not one; ripgrep has **no
 negative lookahead**, so write plain alternations (a `(?!…)` clause silently matches nothing). Add a
 shared token/const if no shade fits, don't inline. *(Procedural sprite-engine palettes — `_metal`,
-`TIERS`, `RAMPS` — are the documented raw-`Color` exception.)* *Seen: `Color(0x0A00FF9C)` vs
+`TIERS`, `RAMPS` — are the documented raw-`Color` exception — but the exception covers only NON-token
+art hexes: a literal whose value IS a token (`0xFFFFA500` = kAmberDark) must still be the token, even
+inside an art palette; `color_hygiene_test` polices exactly this.)* *Seen: `Color(0x0A00FF9C)` vs
 `kNeon.withValues(0.04)` (2026-06); a BIT recolour grepped only `kCyan` and missed the boot UI's
-`Color.fromRGBO(94,232,255)` cyan lamps (2026-06).*
+`Color.fromRGBO(94,232,255)` cyan lamps (2026-06); the session + unlock ceremonies' spark/dust
+palettes inlined kAmberDark/kBorderVariant values until the hygiene test flagged both (2026-07).*
 
 ### Motion salience & organic timing
 **Rule:** Distraction ≈ velocity × contrast × size × count — match the dials to the role: focal events
