@@ -60,6 +60,7 @@ class QuestBoardPainter extends CustomPainter {
     required this.ready,
     required this.glow,
     this.powered = true,
+    this.lockGlow = 0.30,
   });
 
   final int total;
@@ -68,10 +69,14 @@ class QuestBoardPainter extends CustomPainter {
   final double glow;
 
   /// False = the earned-unlock locked state: the crate hangs on the wall but
-  /// its screen is dark — no scanlines, no title/bar/pip, no claim cue; just a
-  /// single dim standby cell so it reads "off", never "broken". Static by
-  /// construction (reduced-motion identical).
+  /// its screen is dark — no scanlines, no title/bar/pip, no claim cue. A dim
+  /// pixel padlock sits on the dark screen (something is WAITING, not broken),
+  /// its brightness driven by [lockGlow].
   final bool powered;
+
+  /// Padlock brightness 0..1 — a slow, low flicker from the host widget
+  /// (static ~0.30 under reduced motion). Only consulted when unpowered.
+  final double lockGlow;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -142,8 +147,22 @@ class QuestBoardPainter extends CustomPainter {
     rc(sx + 3, sy + 1, sw - 6, 1, _qbScrTop);
 
     if (!powered) {
-      // Dark screen + one dim standby cell (bottom-right) — off, not broken.
-      rc(sx + sw - 7, sy + sh - 7, 2, 2, _qbCellOff);
+      // Dark screen + a dim pixel padlock breathing in low light — the locked
+      // board reads "sealed, waiting", never dead. One small slow element
+      // (ambient salience: every dial low).
+      final a = lockGlow.clamp(0.0, 1.0);
+      final lock = bitGlow.withValues(alpha: a);
+      // Shackle: a 4-connected 1-unit arch (x 29..37, y 26..33).
+      rc(30, 26, 7, 1, lock); // top bar
+      rc(29, 27, 1, 6, lock); // left leg
+      rc(37, 27, 1, 6, lock); // right leg
+      // Body: chamfered 12×10 plate (x 27..39, y 33..43).
+      cham(27, 33, 13, 10, lock, 1);
+      // Lit top edge — the one luminance accent on the plate.
+      rc(28, 33, 11, 1, bitGlow.withValues(alpha: (a + 0.10).clamp(0.0, 1.0)));
+      // Keyhole punched back to the screen dark.
+      rc(32, 36, 3, 2, _qbScr);
+      rc(33, 38, 1, 3, _qbScr);
       bolts();
       canvas.restore();
       return;
@@ -276,7 +295,8 @@ class QuestBoardPainter extends CustomPainter {
       old.filled != filled ||
       old.ready != ready ||
       old.glow != glow ||
-      old.powered != powered;
+      old.powered != powered ||
+      old.lockGlow != lockGlow;
 }
 
 /// The wall fixture: a [QuestBoardPainter] at [width]×[height] (keep 9:10), with
@@ -332,24 +352,47 @@ class _QuestBoardState extends State<QuestBoard> with SingleTickerProviderStateM
   @override
   void didUpdateWidget(QuestBoard old) {
     super.didUpdateWidget(old);
-    if (old.ready != widget.ready) _sync();
+    if (old.ready != widget.ready || old.powered != widget.powered) _sync();
   }
 
-  // Only loop when there is actually something to animate (claimable + motion).
+  // Only loop when there is something to animate: the claimable amber breathe
+  // (powered) or the padlock's low flicker (unpowered) — plus motion enabled.
   void _sync() {
-    final shouldAnim = !_reduce && widget.ready > 0;
+    final shouldAnim =
+        !_reduce && (widget.powered ? widget.ready > 0 : true);
     if (shouldAnim) {
       if (!_ticker.isActive) _ticker.start();
     } else {
       if (_ticker.isActive) _ticker.stop();
-      final next = widget.ready > 0 ? 0.6 : 0.0;
+      final next = !widget.powered
+          ? _kLockStatic
+          : (widget.ready > 0 ? 0.6 : 0.0);
       if (_g != next) setState(() => _g = next);
     }
   }
 
   void _tick(Duration elapsed) {
     final t = elapsed.inMicroseconds / 1e6;
-    setState(() => _g = 0.5 + 0.5 * math.sin(t * 2.25));
+    setState(() {
+      _g = widget.powered
+          ? 0.5 + 0.5 * math.sin(t * 2.25)
+          : _lockFlicker(t);
+    });
+  }
+
+  /// Static padlock brightness (reduced motion / ticker off).
+  static const double _kLockStatic = 0.30;
+
+  /// The padlock's low-light life: a slow ~7s breathe between 0.20 and 0.32
+  /// with a rare brief glint — subtle enough to sit in peripheral vision
+  /// without nagging (ambient salience: slow, dim, small, one element).
+  double _lockFlicker(double t) {
+    final breathe = 0.5 + 0.5 * math.sin(t * 0.9);
+    var a = 0.20 + 0.12 * breathe;
+    // Two incommensurate sines cross this threshold only for brief moments a
+    // few times a minute — the occasional "still alive" glint.
+    if (math.sin(t * 5.7) * math.sin(t * 1.31) > 0.985) a += 0.18;
+    return a;
   }
 
   @override
@@ -376,6 +419,7 @@ class _QuestBoardState extends State<QuestBoard> with SingleTickerProviderStateM
         ready: widget.ready,
         glow: claim ? _g : 0.0,
         powered: widget.powered,
+        lockGlow: widget.powered ? 0.0 : _g,
       ),
     );
     final Widget board = widget.onTap != null
