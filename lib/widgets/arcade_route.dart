@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
 
-enum ArcadeRouteMotion { panel, flow, reveal, fade }
+enum ArcadeRouteMotion { panel, flow, reveal, fade, powerOn }
 
 Route<T> arcadeRoute<T>(
   WidgetBuilder builder, {
@@ -22,6 +22,9 @@ Route<T> arcadeRoute<T>(
       }
       if (motion == ArcadeRouteMotion.fade) {
         return _phosphorDissolve(animation, child, spec);
+      }
+      if (motion == ArcadeRouteMotion.powerOn) {
+        return _powerOnTransition(animation, child);
       }
       return _crtSignalTransition(animation, child, spec);
     },
@@ -68,7 +71,101 @@ _CrtRouteSpec _specFor(ArcadeRouteMotion motion) {
       sweepStrength: 0.08,
       edgeStrength: 0.08,
     ),
+    // The Start Gate "powers on" from black: a dot expands to a horizontal beam,
+    // then blooms vertically to the full screen. Deliberately SHORT — it's the
+    // quick resolve after the longer power-off collapse on the outgoing screen
+    // (Charge Ritual ignition). Starts from black so the collapse→route seam is
+    // dark-to-dark (no flash).
+    ArcadeRouteMotion.powerOn => const _CrtRouteSpec(
+      forward: Duration(milliseconds: 380),
+      reverse: Duration(milliseconds: 200),
+      accent: kNeon,
+      bandCount: 0,
+      tearCount: 0,
+      sweepStrength: 0,
+      edgeStrength: 0,
+    ),
   };
+}
+
+/// CRT power-on: from black, a dot → horizontal beam (the tube firing) → a
+/// vertical bloom that opens the incoming page from its centre line. Paired with
+/// the Charge Ritual's power-off collapse; both meet at near-black.
+Widget _powerOnTransition(Animation<double> animation, Widget child) {
+  final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+  return AnimatedBuilder(
+    animation: curved,
+    child: child,
+    builder: (context, child) {
+      final t = curved.value.clamp(0.0, 1.0).toDouble();
+      // The picture blooms open (a horizontal band growing to full height) after
+      // the beam has drawn its line.
+      final open = ((t - 0.15) / 0.85).clamp(0.0, 1.0).toDouble();
+      return ColoredBox(
+        color: kBg,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipPath(clipper: _VBandClipper(open), child: child!),
+            if (t < 0.55)
+              IgnorePointer(
+                child: CustomPaint(
+                  painter: _PowerOnBeamPainter(t),
+                  size: Size.infinite,
+                ),
+              ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+/// Clips to a centred horizontal band of height `open * h` (full width) — the
+/// vertical bloom from a line to the full frame.
+class _VBandClipper extends CustomClipper<Path> {
+  const _VBandClipper(this.open);
+  final double open;
+
+  @override
+  Path getClip(Size size) {
+    if (open >= 0.999) return Path()..addRect(Offset.zero & size);
+    final bandH = (size.height * open).clamp(2.0, size.height);
+    final top = (size.height - bandH) / 2;
+    return Path()..addRect(Rect.fromLTWH(0, top, size.width, bandH));
+  }
+
+  @override
+  bool shouldReclip(covariant _VBandClipper old) => old.open != open;
+}
+
+/// The power-on beam: a bright centre line that first expands horizontally
+/// (dot → full width) then fades as the picture blooms.
+class _PowerOnBeamPainter extends CustomPainter {
+  const _PowerOnBeamPainter(this.t);
+  final double t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final alpha = (1 - (t / 0.5)).clamp(0.0, 1.0);
+    if (alpha <= 0) return;
+    final beamW = (t / 0.18).clamp(0.0, 1.0) * size.width;
+    final rect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: beamW,
+      height: 3,
+    );
+    canvas.drawRect(rect, Paint()..color = kText.withValues(alpha: alpha));
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..color = kNeon.withValues(alpha: alpha * 0.5)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PowerOnBeamPainter old) => old.t != t;
 }
 
 Widget _crtSignalTransition(

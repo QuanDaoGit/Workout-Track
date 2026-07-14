@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import '../../models/avatar_spec.dart';
 import '../../models/character.dart';
 import '../../services/haptic_service.dart';
+import '../../services/sfx_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_bar.dart';
@@ -53,6 +54,11 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
   static const double _beatC = 0.72; // ease-in starts; play()+beginReel() here
   static const double _dimBrightness = 0.30; // held-frame dim level
   static const double _audioTailMs = 550; // reel-end audio fade window
+  // BIT dialogue timing (narrates alongside the reel)
+  static const int _kMessageStartMs =
+      4000; // reel pos where coach's message begins
+  static const double _kHoldThankYouMs =
+      3800; // thank-you dwell: type-out (~0.7s) + ~3s read → boost cue (tap skips)
   // exit sub-ranges
   static const double _exFreeze = 0.14; // hold the final frame
   static const double _exRecedeEnd = 0.60; // picture -> scrim done
@@ -69,6 +75,11 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
   bool _playStarted = false; // guards the one-shot play()+beginReel()
   bool _exitStarted = false;
   double _lastVolume = -1; // throttle setVolume() calls
+  double?
+  _holdStartMs; // pausable wall-clock ms stamped when the hold gate lands
+  bool _boostCued =
+      false; // latched once the boost cue / pour begins (never un-cues)
+  bool _thankYouSkipped = false; // tap-to-skip the thank-you read dwell
 
   final ValueNotifier<int> _pump = ValueNotifier<int>(0);
 
@@ -82,10 +93,14 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     vsync: this,
     duration: const Duration(milliseconds: _exitMs),
   );
-  late final AnimationController _ignition = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 560),
-  );
+  // Full-screen CRT power-off collapse at ignition — the LONGER half of the
+  // asymmetric power-cycle (the Start Gate's `powerOn` route is the shorter
+  // half). Its own controller so no other effect inherits this timing.
+  // Assigned in initState (NOT a `late final = …` initializer): the reduced-motion
+  // path never reads it, so a lazy field would first construct in dispose() — the
+  // deactivated-TickerMode crash. `_entry`/`_exit` are safe only because the
+  // reduced-motion branch reads their `.value`.
+  late final AnimationController _collapse;
 
   ChargeRitualPhase _prevPhase = ChargeRitualPhase.preroll;
   bool _routed = false;
@@ -101,7 +116,15 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     super.initState();
     // Preroll is user-gated by the "START BOOSTING" press — disable the auto
     // watchdog (the always-available skip is the escape, so it can't soft-lock).
-    _engine = ChargeRitualEngine(prerollMs: 600000);
+    _engine = ChargeRitualEngine(
+      prerollMs: 600000,
+      fillMs: 3000, // ~3s cinematic hold-to-charge (was 1.4s)
+      autoFillMs: 3000, // the accessible tap path matches the 3s build
+    );
+    _collapse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
     _ticker = createTicker(_onTick)..start();
   }
 
@@ -136,7 +159,9 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
       // them (setLooping/_exit/_entry) would throw across the async gap.
       if (!mounted || _video != controller) return;
       await controller.setLooping(false);
-      await controller.setVolume(0); // ramps up in Beat C; device volume governs
+      await controller.setVolume(
+        0,
+      ); // ramps up in Beat C; device volume governs
       if (!mounted || _video != controller) return;
       final dur = controller.value.duration;
       if (dur > Duration.zero) _engine.reelMs = dur.inMilliseconds.toDouble();
@@ -196,6 +221,21 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     _applyVolume();
     final phase = _engine.phase;
 
+    // First frame the hold gate is reached (reel end, failed preroll, or the
+    // reduced-motion cold-open) — stamp the pausable clock so the post-reel BIT
+    // dialogue advances thank-you → boost off a dwell, not the typewriter. A
+    // standalone guard (not the _exitStarted edges below) so reduced motion,
+    // where _exitStarted is already true, still captures it.
+    if (phase == ChargeRitualPhase.hold && _holdStartMs == null) {
+      _holdStartMs = _elapsedMs;
+    }
+    // Latch the boost cue once the pour begins, so an early pour that drains
+    // back to hold (hold ⇄ pouring) never regresses BIT to the thank-you line.
+    if (phase == ChargeRitualPhase.pouring ||
+        phase == ChargeRitualPhase.ignited) {
+      _boostCued = true;
+    }
+
     // Strong rising hold-boost buzz — fired ONCE as a pre-baked shaped envelope
     // when the pour begins. Re-issuing vibrate() every frame risks a stuttery
     // cancel/restart on Android, so we play one rising waveform and cut it the
@@ -203,9 +243,15 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     if (phase == ChargeRitualPhase.pouring &&
         _prevPhase != ChargeRitualPhase.pouring) {
       HapticService.instance.boostSwell();
+      SfxService.instance.playBoostCharge();
     } else if (phase != ChargeRitualPhase.pouring &&
         _prevPhase == ChargeRitualPhase.pouring) {
       HapticService.instance.stopBuzz();
+      // Only a drain-back (pouring→hold) is a release; pouring→ignited plays the
+      // ignite cue from _onIgnited instead.
+      if (phase == ChargeRitualPhase.hold) {
+        SfxService.instance.playBoostRelease();
+      }
     }
 
     if (_prevPhase != phase) {
@@ -257,7 +303,8 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
           : (remain / _audioTailMs).clamp(0.0, 1.0);
       target = inFactor * outFactor;
     }
-    if ((target - _lastVolume).abs() > 0.02 || (target == 0 && _lastVolume != 0)) {
+    if ((target - _lastVolume).abs() > 0.02 ||
+        (target == 0 && _lastVolume != 0)) {
       _lastVolume = target;
       v.setVolume(target);
     }
@@ -267,12 +314,13 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     // The charge climax — a firm stamp distinct from the rising hold buzz.
     HapticService.instance.stopBuzz();
     HapticService.instance.boostClimax();
+    SfxService.instance.playBoostIgnite();
     _video?.pause();
     if (_reduceMotion) {
       _goToGate(ArcadeRouteMotion.fade);
     } else {
-      _ignition.forward(from: 0).whenComplete(() {
-        if (mounted) _goToGate(ArcadeRouteMotion.reveal);
+      _collapse.forward(from: 0).whenComplete(() {
+        if (mounted) _goToGate(ArcadeRouteMotion.powerOn);
       });
     }
   }
@@ -303,6 +351,14 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
   void _keycapUp() {
     _engine.endHold();
     HapticService.instance.stopBuzz();
+  }
+
+  // Tap the BIT area during the post-reel thank-you read to skip its dwell and
+  // jump to the boost cue (the "finish instantly when the user taps" path).
+  void _skipThankYouRead() {
+    if (_thankYouSkipped) return;
+    setState(() => _thankYouSkipped = true);
+    HapticService.instance.selection();
   }
 
   void _tapComplete() {
@@ -342,7 +398,7 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     _video?.dispose();
     _entry.dispose();
     _exit.dispose();
-    _ignition.dispose();
+    _collapse.dispose();
     _pump.dispose();
     super.dispose();
   }
@@ -352,26 +408,47 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     return PopScope(
       canPop: false,
       child: Scaffold(
-        body: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              center: Alignment(0, -0.75),
-              radius: 1.3,
-              colors: [kBgGradientTop, kBg, kBgGradientBottom],
-              stops: [0, 0.55, 1],
-            ),
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(kSpace4),
-              child: LayoutBuilder(
-                builder: (context, constraints) => AnimatedBuilder(
-                  animation: Listenable.merge([_pump, _entry, _exit, _ignition]),
-                  builder: (context, _) => _composition(constraints.maxHeight),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0, -0.75),
+                  radius: 1.3,
+                  colors: [kBgGradientTop, kBg, kBgGradientBottom],
+                  stops: [0, 0.55, 1],
+                ),
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(kSpace4),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => AnimatedBuilder(
+                      animation: Listenable.merge([_pump, _entry, _exit]),
+                      builder: (context, _) =>
+                          _composition(constraints.maxHeight),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+            // Full-screen CRT power-off collapse at ignition (the longer half of
+            // the asymmetric power-cycle; the Start Gate powers on via the route).
+            if (!_reduceMotion)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _collapse,
+                    builder: (context, _) => _collapse.value <= 0
+                        ? const SizedBox.shrink()
+                        : CustomPaint(
+                            painter: _PowerCyclePainter(_collapse.value),
+                          ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -380,7 +457,8 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
   Widget _composition(double availableHeight) {
     final phase = _engine.phase;
     final charge = _engine.charge;
-    final reelDone = phase == ChargeRitualPhase.hold ||
+    final reelDone =
+        phase == ChargeRitualPhase.hold ||
         phase == ChargeRitualPhase.pouring ||
         phase == ChargeRitualPhase.ignited;
     final pouring = phase == ChargeRitualPhase.pouring;
@@ -395,7 +473,7 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     final powerOn = (entryV / _beatA).clamp(0.0, 1.0);
     final entryBrightness = entryV >= _beatC
         ? _dimBrightness +
-            (1 - _dimBrightness) * ((entryV - _beatC) / (1 - _beatC))
+              (1 - _dimBrightness) * ((entryV - _beatC) / (1 - _beatC))
         : _dimBrightness;
 
     // Exit: recede scrim + staggered prompt reveal.
@@ -409,22 +487,38 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
 
     // Held frame revealed + playback not yet started → the flickering "START
     // BOOSTING" gate (the reel plays only on this press).
-    final boostReady = !_reduceMotion &&
+    final boostReady =
+        !_reduceMotion &&
         !_playStarted &&
         phase == ChargeRitualPhase.preroll &&
         entryV >= _beatC &&
         (_video?.value.isInitialized ?? false);
 
+    // BIT narrates alongside the reel: intro/message split by video position,
+    // post-reel thank-you → boost by a clock dwell. pouring/ignited keep priority
+    // (charge feedback). [boost]/[BOOSTING] render amber + shaky.
+    final videoPosMs = _video?.value.position.inMilliseconds ?? 0;
+    final holdElapsedMs = _elapsedMs - (_holdStartMs ?? _elapsedMs);
+    // Boost cue = the dwell elapsed OR a pour has begun (latched) — so a release
+    // back to hold before the dwell keeps the boost copy, never the thank-you.
+    final boostCued =
+        _boostCued || _thankYouSkipped || holdElapsedMs >= _kHoldThankYouMs;
+    final bitHyped = ignited || pouring || (reelDone && boostCued);
     final bitLine = ignited
-        ? "charged. let's move, [warrior]."
+        ? "fully charged. let's keep moving."
         : pouring
-        ? 'steady... pouring it in.'
+        ? '[BOOSTING]'
         : reelDone
-        ? 'now [hold]. let me pour it in.'
-        : 'we do this together, recruit.';
+        ? (boostCued
+              ? "alright warrior, let's [boost] this up and start strong."
+              : 'thank you for the message, coach.')
+        : (videoPosMs < _kMessageStartMs
+              ? 'say hi to our coach, jack mercer.'
+              : "let's listen to his message together.");
 
     return Semantics(
-      label: 'Charging your first session. Hold the button, or tap, to complete.',
+      label:
+          'Charging your first session. Hold the button, or tap, to complete.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -435,7 +529,8 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
               constraints: BoxConstraints(maxHeight: availableHeight * 0.36),
               child: _ReelMonitor(
                 video: _video,
-                showVideo: !_reduceMotion &&
+                showVideo:
+                    !_reduceMotion &&
                     _playStarted &&
                     (_video?.value.isInitialized ?? false),
                 reduceMotion: _reduceMotion,
@@ -448,29 +543,35 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
                 pausable: phase == ChargeRitualPhase.reel,
                 onTapPause: _togglePause,
                 muted: _muted,
-                onToggleMute: (!_reduceMotion && phase == ChargeRitualPhase.reel)
+                onToggleMute:
+                    (!_reduceMotion && phase == ChargeRitualPhase.reel)
                     ? _toggleMute
                     : null,
               ),
             ),
           ),
           const SizedBox(height: kSpace4),
-          _PowerZone(
-            charge: charge,
-            accent: accent,
-            pouring: pouring,
-            reelDone: reelDone,
-            clock: _animClock,
-            reduceMotion: _reduceMotion,
-            bitLine: bitLine,
-            bitPose: ignited ? BitPose.cheer : BitPose.neutral,
+          // Custom skip-read hit-area (armed only during the thank-you dwell); fires
+          // a selection tick in _skipThankYouRead. // haptic-ok: not a primary control
+          GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: (reelDone && !boostCued) ? _skipThankYouRead : null,
+            child: _PowerZone(
+              charge: charge,
+              accent: accent,
+              pouring: pouring,
+              reelDone: reelDone,
+              clock: _animClock,
+              reduceMotion: _reduceMotion,
+              bitLine: bitLine,
+              bitPose: bitHyped ? BitPose.cheer : BitPose.neutral,
+            ),
           ),
           const Spacer(),
           _ActionZone(
             phase: phase,
             boostReady: boostReady,
             onStartBoost: _startBoost,
-            ignition: _reduceMotion ? 0 : _ignition.value,
             onDown: _keycapDown,
             onUp: _keycapUp,
             onTapComplete: _tapComplete,
@@ -552,8 +653,9 @@ class _ReelMonitor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ar =
-        showVideo ? video!.value.aspectRatio : 4 / 3; // matches the 4:3 reel
+    final ar = showVideo
+        ? video!.value.aspectRatio
+        : 4 / 3; // matches the 4:3 reel
     return Container(
       decoration: BoxDecoration(
         boxShadow: [
@@ -603,9 +705,7 @@ class _ReelMonitor extends StatelessWidget {
               // Beat A — CRT power-on (shutters open from a center scanline).
               if (!reduceMotion && powerOn < 1)
                 IgnorePointer(
-                  child: CustomPaint(
-                    painter: _MonitorPowerOnPainter(powerOn),
-                  ),
+                  child: CustomPaint(painter: _MonitorPowerOnPainter(powerOn)),
                 ),
               // Exit — the picture recedes into the scrim (the "exhale").
               if (exitFade > 0)
@@ -896,8 +996,9 @@ class _PourStreamPainter extends CustomPainter {
       final a = (math.sin(t * math.pi)).clamp(0.0, 1.0);
       if (a <= 0.02) continue;
       final sz = 4.0 + (i % 2) * 2.0;
-      paint.color = (i % 3 == 2 ? const Color(0xFF7FFFCD) : kNeon)
-          .withValues(alpha: a);
+      paint.color = (i % 3 == 2 ? const Color(0xFF7FFFCD) : kNeon).withValues(
+        alpha: a,
+      );
       canvas.drawRect(Rect.fromLTWH(x, y, sz, sz), paint);
     }
   }
@@ -912,7 +1013,6 @@ class _ActionZone extends StatelessWidget {
     required this.phase,
     required this.boostReady,
     required this.onStartBoost,
-    required this.ignition,
     required this.onDown,
     required this.onUp,
     required this.onTapComplete,
@@ -921,7 +1021,6 @@ class _ActionZone extends StatelessWidget {
   final ChargeRitualPhase phase;
   final bool boostReady;
   final VoidCallback onStartBoost;
-  final double ignition;
   final VoidCallback onDown;
   final VoidCallback onUp;
   final VoidCallback onTapComplete;
@@ -932,23 +1031,15 @@ class _ActionZone extends StatelessWidget {
       return _StartBoostButton(onPressed: onStartBoost);
     }
     if (phase == ChargeRitualPhase.ignited) {
-      return SizedBox(
-        height: 84,
-        child: Center(
-          child: ignition > 0
-              ? CustomPaint(
-                  size: const Size(120, 84),
-                  painter: _IgnitionPainter(ignition),
-                )
-              : const SizedBox.shrink(),
-        ),
-      );
+      // The full-screen power-cycle collapse overlay owns the ignition visual
+      // now; keep the zone's height so the layout doesn't jump under it.
+      return const SizedBox(height: 84);
     }
 
     // Gate opens only once the reel is done (hold/pouring) — disabled through
     // the preroll cinematic + the reel.
-    final ready = phase == ChargeRitualPhase.hold ||
-        phase == ChargeRitualPhase.pouring;
+    final ready =
+        phase == ChargeRitualPhase.hold || phase == ChargeRitualPhase.pouring;
     return Column(
       children: [
         _HoldKeycap(enabled: ready, onDown: onDown, onUp: onUp),
@@ -1054,114 +1145,208 @@ class _HoldKeycap extends StatefulWidget {
   State<_HoldKeycap> createState() => _HoldKeycapState();
 }
 
-class _HoldKeycapState extends State<_HoldKeycap> {
+class _HoldKeycapState extends State<_HoldKeycap>
+    with SingleTickerProviderStateMixin {
   bool _held = false;
+  // A slow breathing halo (glow only, never the geometry — doctrine forbids a
+  // scale-pulse) that lures the press while the keycap is armed. Created eagerly
+  // in initState so a dispose-before-first-build can't lazy-create it mid-teardown.
+  late final AnimationController _pulse;
 
   bool get _reduce {
     final m = MediaQuery.of(context);
     return m.disableAnimations || m.accessibleNavigation;
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncPulse(); // _reduce reads MediaQuery
+  }
+
+  @override
+  void didUpdateWidget(covariant _HoldKeycap old) {
+    super.didUpdateWidget(old);
+    _syncPulse(); // `enabled` flips via prop → no didChangeDependencies
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  // Breathe only while armed, at rest, and motion is allowed; otherwise sit at a
+  // steady base glow (a still, legible "ready" signal under reduced motion).
+  void _syncPulse() {
+    if (widget.enabled && !_reduce && !_held) {
+      if (!_pulse.isAnimating) _pulse.repeat(reverse: true);
+    } else {
+      _pulse.stop();
+      _pulse.value = 0;
+    }
+  }
+
   void _down() {
     if (!widget.enabled) return;
     setState(() => _held = true);
+    _syncPulse();
     widget.onDown();
   }
 
   void _up() {
     if (!_held) return;
     setState(() => _held = false);
+    _syncPulse();
     widget.onUp();
   }
 
   @override
   Widget build(BuildContext context) {
-    final enabled = widget.enabled;
-    final label = enabled ? 'HOLD TO CHARGE UP' : 'BIT IS CHARGING YOU…';
-    final held = _held && !_reduce;
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      label: 'Hold to charge up',
-      child: Listener(
-        // haptic-ok: sustained press-and-hold charge gesture (not a tap); the
-        // pour-start tick fires in the parent's _keycapDown.
-        onPointerDown: enabled ? (_) => _down() : null,
-        onPointerUp: (_) => _up(),
-        onPointerCancel: (_) => _up(),
-        child: AnimatedContainer(
-          duration: kMotionFast,
-          curve: kMotionCurve,
-          height: 48,
-          alignment: Alignment.center,
-          transform: Matrix4.translationValues(0, held ? 2 : 0, 0),
-          decoration: BoxDecoration(
-            color: enabled ? kNeon : kBorderDark,
-            borderRadius: BorderRadius.circular(kCardRadius),
-            border: Border(
-              bottom: BorderSide(
-                color: kBlack.withValues(alpha: enabled ? 0.35 : 0.25),
-                width: held ? 1 : 3,
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, _) {
+        final enabled = widget.enabled;
+        final label = enabled ? 'HOLD TO CHARGE UP' : 'BIT IS CHARGING YOU…';
+        final held = _held && !_reduce;
+        final glow = held
+            ? neonGlow(color: kNeon, opacity: 0.75, blur: 20)
+            : enabled
+            ? neonGlow(
+                color: kNeon,
+                opacity: 0.18 + 0.34 * _pulse.value,
+                blur: 14 + 10 * _pulse.value,
+              )
+            : null;
+        return Semantics(
+          button: true,
+          enabled: enabled,
+          label: 'Hold to charge up',
+          child: Listener(
+            // haptic-ok: sustained press-and-hold charge gesture (not a tap); the
+            // pour-start tick fires in the parent's _keycapDown.
+            onPointerDown: enabled ? (_) => _down() : null,
+            onPointerUp: (_) => _up(),
+            onPointerCancel: (_) => _up(),
+            child: AnimatedContainer(
+              duration: kMotionFast,
+              curve: kMotionCurve,
+              height: 48,
+              alignment: Alignment.center,
+              transform: Matrix4.translationValues(0, held ? 2 : 0, 0),
+              decoration: BoxDecoration(
+                color: enabled ? kNeon : kBorderDark,
+                borderRadius: BorderRadius.circular(kCardRadius),
+                border: Border(
+                  bottom: BorderSide(
+                    color: kBlack.withValues(alpha: enabled ? 0.35 : 0.25),
+                    width: held ? 1 : 3,
+                  ),
+                ),
+                boxShadow: glow,
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'PressStart2P',
+                  fontSize: 10,
+                  letterSpacing: 1.5,
+                  color: enabled ? kBg : kDim,
+                ),
               ),
             ),
-            boxShadow: held
-                ? neonGlow(color: kNeon, opacity: 0.75, blur: 20)
-                : null,
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontFamily: 'PressStart2P',
-              fontSize: 10,
-              letterSpacing: 1.5,
-              color: enabled ? kBg : kDim,
-            ),
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
-class _IgnitionPainter extends CustomPainter {
-  _IgnitionPainter(this.p);
+/// The full-screen CRT power-off collapse at ignition (`p`: 0→1 over ~700ms):
+/// an overload flash (amber→white) → the picture darkens to near-black while a
+/// bright phosphor band squashes vertically to a line → the line contracts
+/// horizontally to a dot → the dot winks out. Ends at near-black (`kBg`) so the
+/// handoff to the Start Gate's `powerOn` route is dark-to-dark (no flash). Only
+/// painted under full motion (the reduced path routes with a plain fade).
+class _PowerCyclePainter extends CustomPainter {
+  const _PowerCyclePainter(this.p);
   final double p; // 0..1
 
-  static const _dirs = [
-    Offset(1, 0),
-    Offset(-1, 0),
-    Offset(0, 1),
-    Offset(0, -1),
-    Offset(1, 1),
-    Offset(1, -1),
-    Offset(-1, 1),
-    Offset(-1, -1),
-  ];
+  static double _lerp(double a, double b, double t) => a + (b - a) * t;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
+    final w = size.width, h = size.height;
+    final center = Offset(w / 2, h / 2);
     final paint = Paint()..isAntiAlias = false;
 
-    final flash = ((1 - p / 0.4).clamp(0.0, 1.0)) * 0.5;
+    // 1 · overload flash (amber → white), a quick pulse at the very start.
+    final flash = p < 0.06 ? p / 0.06 : (1 - (p - 0.06) / 0.10).clamp(0.0, 1.0);
     if (flash > 0) {
+      final c = Color.lerp(kAmber, kText, (p / 0.16).clamp(0.0, 1.0))!;
       canvas.drawRect(
         Offset.zero & size,
-        paint..color = kNeon.withValues(alpha: flash),
+        paint..color = c.withValues(alpha: flash * 0.9),
       );
     }
-    final shard = Curves.easeOut.transform(p);
-    for (final d in _dirs) {
-      final a = (1 - p).clamp(0.0, 1.0);
-      if (a <= 0) continue;
-      final pos = center + Offset(d.dx * 58, d.dy * 44) * shard;
-      paint.color = kNeon.withValues(alpha: a);
-      canvas.drawRect(Rect.fromCenter(center: pos, width: 6, height: 6), paint);
+
+    // 2 · scrim: the picture darkens to near-black as it collapses.
+    final scrim = ((p - 0.12) / 0.4).clamp(0.0, 1.0);
+    if (scrim > 0) {
+      canvas.drawRect(
+        Offset.zero & size,
+        Paint()..color = kBg.withValues(alpha: scrim),
+      );
+    }
+
+    // 3 · the bright collapsing phosphor: full band → thin line → dot → wink.
+    if (p >= 0.12) {
+      double bandH, bandW, glow;
+      if (p < 0.55) {
+        final t = Curves.easeIn.transform((p - 0.12) / 0.43);
+        bandH = _lerp(h, 3, t);
+        bandW = w;
+        // A dim wash while wide → concentrates to a bright line as it collapses
+        // (avoids a full-screen bright flash early on).
+        glow = _lerp(0.12, 1.0, t);
+      } else if (p < 0.8) {
+        final t = Curves.easeIn.transform((p - 0.55) / 0.25);
+        bandH = 3;
+        bandW = _lerp(w, 3, t);
+        glow = 1;
+      } else {
+        bandH = 3;
+        bandW = 3;
+        glow = (1 - (p - 0.8) / 0.2).clamp(0.0, 1.0);
+      }
+      if (glow > 0) {
+        final rect = Rect.fromCenter(
+          center: center,
+          width: bandW,
+          height: bandH,
+        );
+        canvas.drawRect(rect, Paint()..color = kText.withValues(alpha: glow));
+        canvas.drawRect(
+          rect,
+          Paint()
+            ..color = kNeon.withValues(alpha: glow * 0.5)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
+        );
+      }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _IgnitionPainter old) => old.p != p;
+  bool shouldRepaint(covariant _PowerCyclePainter old) => old.p != p;
 }
 
 // ── skip ─────────────────────────────────────────────────────────────────────

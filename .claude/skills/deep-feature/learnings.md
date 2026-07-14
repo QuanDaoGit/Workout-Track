@@ -46,7 +46,12 @@ between-set vs between-exercise rest, both on `RestTimerService`) means a takeov
 **only on the singleton's *active* state** fires in the wrong phase — scope it with a per-phase flag set
 where *that* phase's source starts, and **"suppress" the view by cancelling the SOURCE, not hiding it**
 (a hidden-but-live source leaks into a later surface — an orphan rest into the summary/next workout); test
-the sibling-phase path explicitly (it is the regression). *Seen: zero-set idle reveal; a 280 ms select-hold
+the sibling-phase path explicitly (it is the regression). **A milestone gated on an elapsed-time DWELL**
+(show line B after 2.2 s on a phase) that a **reversible sub-phase can re-enter before the dwell** (hold⇄pour:
+an early pour then release drains back to the same phase with `elapsed < dwell`) **regresses** to line A on
+re-entry — a monotonic clock alone can't hold it. **Latch** the milestone the first time it's reached via
+**ANY** path (the dwell OR the earlier user action that implies it), never un-latch; the composed test is
+`_latched || elapsed >= dwell`. Prove it red-green with the early-action-then-reverse path (it's the regression). *Seen: zero-set idle reveal; a 280 ms select-hold
 reacted on the wrong question after a Back; the weekday-anchored schedule unified
 RestService×ProgramService via one `ScheduleResolver` + frozen `scheduleByWeekKey`; decay removed
 (factor frozen + un-decay delta suppressed) + XP re-curved to √ with a no-loss-boundary proof; a

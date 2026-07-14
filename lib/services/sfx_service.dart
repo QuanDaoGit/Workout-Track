@@ -27,6 +27,18 @@ class SfxService {
 
   AudioPlayer? _current;
 
+  /// Dedicated channel for the Charge Ritual boost cues, so the general
+  /// single-player [_play] (e.g. a next-screen sound during the transition)
+  /// can't cut the ignite mid-flight. The riser → ignite still resolve on THIS
+  /// channel (ignite replaces the riser here); a general SFX leaves it alone.
+  AudioPlayer? _boost;
+
+  /// Test seam: invoked with the asset path on every play attempt, BEFORE the
+  /// [enabled] gate, so a test can assert which cues fire on which edge with no
+  /// real audio. Install in setUp, clear in tearDown — never left set in prod.
+  @visibleForTesting
+  static void Function(String cue)? debugOnPlay;
+
   /// The quest-claim burst sound — a soft "power blip" fired at the claim impact
   /// (t0), synced with the card's flash/shard burst. Source: Juhani Junkala's
   /// "512 Sound Effects (8-bit style)" pack (`sfx_sounds_powerup15`, low-passed),
@@ -93,7 +105,53 @@ class SfxService {
   Future<void> playCeremonyFlight() =>
       _play('audio/ceremony_flight.wav', volume: 0.7);
 
+  // ── Charge Ritual boost cues (dedicated channel) ────────────────────────────
+  // Hybrid V2 riser + E2 boom/whoosh ignition, auditioned & selected; synthesized
+  // via `python ops/gen_boost_sfx.py`. Fire on the pour-start / ignition / release
+  // phase edges. Skipped by the `enabled` gate + reduced-SFX like every cue.
+
+  /// The ~3s hold-to-charge **riser** — a detuned-saw glide + rising energy
+  /// sweep, starting on pour-start (hold OR the accessible auto-fill tap).
+  Future<void> playBoostCharge() =>
+      _playBoost('audio/boost_charge.wav', volume: 0.65);
+
+  /// The **ignition** at 100% — a sub-bass boom + a descending power-cycle
+  /// whoosh (voiced to the CRT collapse). Replaces the riser on the boost
+  /// channel (the resolve).
+  Future<void> playBoostIgnite() =>
+      _playBoost('audio/boost_ignite.wav', volume: 0.7);
+
+  /// The short descending **power-down** blip when the hold is released before
+  /// 100% (the pour drains back).
+  Future<void> playBoostRelease() =>
+      _playBoost('audio/boost_release.wav', volume: 0.55);
+
+  Future<void> _playBoost(String assetPath, {double volume = 1.0}) async {
+    debugOnPlay?.call(assetPath);
+    if (!enabled) return;
+    // Claim the channel SYNCHRONOUSLY (create + assign before any await) so a
+    // rapid re-trigger sees THIS player as its `previous` and stops it — no
+    // null-window where two fire-and-forget boost cues can overlap (Codex review).
+    final player = AudioPlayer()..setReleaseMode(ReleaseMode.release);
+    final previous = _boost;
+    _boost = player;
+    if (previous != null) {
+      try {
+        await previous.stop();
+        await previous.dispose();
+      } catch (_) {
+        // best effort
+      }
+    }
+    try {
+      await player.play(AssetSource(assetPath), volume: volume);
+    } catch (e) {
+      debugPrint('SfxService: failed to play $assetPath: $e');
+    }
+  }
+
   Future<void> _play(String assetPath, {double volume = 1.0}) async {
+    debugOnPlay?.call(assetPath);
     if (!enabled) return;
 
     // Interrupt + release any chime still playing.
@@ -120,10 +178,13 @@ class SfxService {
   }
 
   Future<void> dispose() async {
-    final player = _current;
+    final current = _current;
+    final boost = _boost;
     _current = null;
+    _boost = null;
     try {
-      await player?.dispose();
+      await current?.dispose();
+      await boost?.dispose();
     } catch (_) {
       // ignore
     }

@@ -94,7 +94,17 @@ payoff caption readable *before* the recede. **Audio never slams** — ramp it i
 J-cut) + tail it out clamped to 0 *before* the hard asset end (bake fades out of the clip so the app owns
 them). A phase whose exit depends on an animation callback needs a **clock-driven watchdog in the pure
 engine** or it soft-locks. All gated on reduced-motion — omit the animators but **keep the audio fades**
-(a fade isn't "motion") (2026-07, Charge Ritual reel entry/exit).*
+(a fade isn't "motion") (2026-07, Charge Ritual reel entry/exit).* **A cross-SCREEN cinematic handoff
+(outgoing collapse → incoming reveal — a CRT power-cycle) must meet at a MATCHED seam:** end the collapse
+at near-black and start the reveal's route from the same near-black (`ColoredBox(kBg)`) so no flash frame
+shows between the two routes; a **shrinking bright element must CONCENTRATE** — dim while large → bright as
+it thins to a line/dot — never a solid full-screen bright fill (max size×contrast reads as a screen
+*flash*, not a collapse). **Asymmetric timing is a legitimate cinematic override** (a longer power-*off*
+collapse than power-*on*, against the usual "exits faster") when the user asks for weight. Each concurrent
+effect gets its **own controller** (a reused one couples its timing onto unrelated readers), and a cue that
+must survive the route (the ignition SFX) needs its **own audio channel**, not the shared single-player a
+next-screen sound would cut. *(2026-07, Charge Ritual power-cycle climax — Codex plan review + a golden
+caught the solid-bright-fill flash.)*
 
 ### Contrast by luminance, not hue
 **Rule:** Legibility of particles/text/icons on a fill is driven by **luminance** contrast. On a
