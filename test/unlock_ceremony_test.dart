@@ -8,11 +8,13 @@ Widget _host(
   bool reduceMotion = false,
   Size size = const Size(400, 800),
 }) {
+  // Deliberately NO Scaffold/Material: production mounts the ceremony on a
+  // bare transparent PageRouteBuilder, so the widget's own Material wrapper
+  // must be the only one — a regression re-paints the yellow no-Material
+  // underline in the goldens (caught on-device 2026-07-14).
   return MediaQuery(
     data: MediaQueryData(size: size, disableAnimations: reduceMotion),
-    child: MaterialApp(
-      home: Scaffold(body: SizedBox.expand(child: child)),
-    ),
+    child: MaterialApp(home: SizedBox.expand(child: child)),
   );
 }
 

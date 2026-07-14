@@ -352,6 +352,13 @@ class _FeatureUnlockCeremonyState extends State<FeatureUnlockCeremony>
   @override
   Widget build(BuildContext context) {
     final specs = _specs;
+    // The ceremony rides a bare transparent PageRouteBuilder — without a
+    // Material ancestor every Text paints the yellow no-Material debug
+    // underline on device (invisible in goldens, whose host adds a Scaffold).
+    return Material(type: MaterialType.transparency, child: _buildStage(specs));
+  }
+
+  Widget _buildStage(List<FeatureGateSpec> specs) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
