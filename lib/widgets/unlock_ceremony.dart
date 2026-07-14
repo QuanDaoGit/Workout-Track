@@ -185,7 +185,9 @@ class _FeatureUnlockCeremonyState extends State<FeatureUnlockCeremony>
     if (t >= _kSurgeMs) {
       _once('surge', () {
         _burst();
-        SfxService.instance.playCeremonyChime();
+        // The dedicated victory fanfare — not the session ceremony's chime
+        // (a two-tone blip that read as "a beep, not victorious").
+        SfxService.instance.playUnlockFanfare();
         HapticService.instance.success();
       });
     }

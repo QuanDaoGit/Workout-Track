@@ -78,6 +78,14 @@ class SfxService {
   Future<void> playCeremonyLand() =>
       _play('audio/ceremony_land.wav', volume: 0.8);
 
+  /// The **feature-unlock fanfare** — the NEW SYSTEM ONLINE victory hit at the
+  /// unlock ceremony's surge (t=500ms): a power-on riser into a rising C-major
+  /// arpeggio resolving on a held C6+G5 chord with a sparkle. Synthesized
+  /// (regenerate via `python ops/gen_unlock_sfx.py`); replaced the borrowed
+  /// session-ceremony chime, which read as "a beep, not victorious".
+  Future<void> playUnlockFanfare() =>
+      _play('audio/unlock_fanfare.wav', volume: 0.75);
+
   /// The **banked-flight dash fwoosh** (t=1050ms) — a square-wave doppler
   /// pitch ride (with vibrato) over a quiet noise air-layer, tracking the
   /// flight's speed curve; authored to fade to silence by 1.40s so the landing
