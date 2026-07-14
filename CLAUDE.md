@@ -46,6 +46,9 @@ working in it.**
 
 ## Commands
 
+> **Run all of these from `app/`** (the Flutter project root): `cd app` first. Paths below
+> (`test/…`, `lib/…`) are relative to `app/`.
+
 ```bash
 flutter pub get          # Install/update dependencies
 flutter run              # Run on connected device/emulator

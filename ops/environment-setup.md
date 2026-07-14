@@ -3,7 +3,7 @@
 > Seed document. Keep these steps runnable; update when the toolchain changes.
 
 ## Prerequisites
-- Flutter SDK (matching [pubspec.yaml](../pubspec.yaml) `environment: sdk` constraint).
+- Flutter SDK (matching [pubspec.yaml](../app/pubspec.yaml) `environment: sdk` constraint).
 - Android toolchain (Android Studio / SDK) — the app is **Android-first**.
 - A device or emulator.
 

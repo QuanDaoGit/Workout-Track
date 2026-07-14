@@ -83,10 +83,9 @@ design/screenshots/*.exe
 
 # Large non-shipping media — keep out of git history (referenced only as design
 # source / marketing, never bundled by pubspec). motivational_clips is ~1.9 GB.
-# (These two are still parked at the repo-root assets/ pending relocation to
-# marketing/ + design/; the app's own assets moved to app/assets/.)
-assets/motivational_clips/
-assets/design_handoff_charge_ritual/
+# Relocated out of the app to their taxonomy homes (marketing/ + design/).
+marketing/motivational_clips/
+design/design_handoff_charge_ritual/
 app/assets/design_handoff_session_ceremony/
 
 # Firebase iOS config — kept out of git; inject it into the Codemagic build (or

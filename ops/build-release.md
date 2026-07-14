@@ -9,7 +9,7 @@ flutter test            # all tests pass
 ```
 
 ## Versioning
-- Single source: [pubspec.yaml](../pubspec.yaml) → `version: x.y.z+build`.
+- Single source: [pubspec.yaml](../app/pubspec.yaml) → `version: x.y.z+build`.
 - Bump `x.y.z` for user-facing releases; bump `+build` for every store upload.
 - Record the human changelog in [../app-management/releases/vX.Y.Z.md](../app-management/).
 

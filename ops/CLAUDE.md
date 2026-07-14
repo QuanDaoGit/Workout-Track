@@ -15,7 +15,7 @@ Document the reproducible mechanics: dev environment setup, build/release comman
 ## Source-of-truth pointers
 - Commands & gates: the root [CLAUDE.md](../CLAUDE.md) "Commands" section is authoritative; mirror,
   don't contradict it.
-- Version: [pubspec.yaml](../pubspec.yaml) (`version: x.y.z+build`).
+- Version: [pubspec.yaml](../app/pubspec.yaml) (`version: x.y.z+build`).
 - Release notes (human changelog) live in [../app-management/releases/](../app-management/).
 
 ## Non-negotiable gates (from the root working rules)
