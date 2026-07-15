@@ -61,3 +61,24 @@ workflows:
         submit_to_testflight: true         # auto-submit the build to TestFlight
         # No beta_groups here = the build lands in TestFlight for your internal
         # testers (you) to install via the TestFlight app once processed.
+
+  # ── FREE smoke test: does the app even COMPILE on iOS? ────────────────────────
+  # Needs NO Apple Developer account, NO signing, NO Firebase — just Codemagic.
+  # RUN THIS ONE FIRST (pick it in "Start your first build") to shake out any
+  # CocoaPods/plugin issues before you buy the $99 membership and wire TestFlight.
+  ios-smoke-unsigned:
+    name: iOS – compile smoke test (unsigned)
+    max_build_duration: 45
+    instance_type: mac_mini_m2
+    working_directory: app
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build unsigned iOS (generates configs, runs pod install, xcodebuild)
+        script: flutter build ios --release --no-codesign
+    artifacts:
+      - /tmp/xcodebuild_logs/*.log
