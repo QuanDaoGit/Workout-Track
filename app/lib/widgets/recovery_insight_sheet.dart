@@ -81,7 +81,7 @@ class RecoveryInsightSheetContent extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const BitMoodCore(size: 72),
+              const BitMoodCore(size: 72, reveal: 1),
               const SizedBox(width: kSpace2),
               Expanded(
                 child: BitSpeechBubble(

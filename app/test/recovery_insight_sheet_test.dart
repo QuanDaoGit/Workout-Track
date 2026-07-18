@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:workout_track/data/recovery_insights.dart';
 import 'package:workout_track/services/recovery_insight_service.dart';
+import 'package:workout_track/widgets/companion/bit_mood_core.dart';
 import 'package:workout_track/widgets/recovery_insight_sheet.dart';
 
 void main() {
@@ -30,6 +31,9 @@ void main() {
     expect(find.text('SLEEP'), findsNothing);
     expect(find.bySemanticsLabel('sleep'), findsOneWidget);
     expect(find.byType(ImageIcon), findsOneWidget);
+    // BIT must render FACED (app doctrine: never faceless after onboarding).
+    final bit = tester.widget<BitMoodCore>(find.byType(BitMoodCore));
+    expect(bit.reveal, 1);
     expect(find.text('CLOSE'), findsOneWidget);
     expect(find.text(kRecoveryInsightWrapLine), findsNothing);
   });
