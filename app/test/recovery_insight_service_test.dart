@@ -50,6 +50,20 @@ void main() {
     expect(again.insight.id, pick.insight.id);
   });
 
+  test('a different pick on an already-committed day is ignored', () async {
+    final day = DateTime(2026, 7, 18);
+    final service = serviceAt(day);
+    final pick = await service.peekToday();
+    await service.commitShown(pick);
+    // Forge a different pick (any other pool entry) and try to commit it.
+    final other = recoveryInsights.firstWhere((i) => i.id != pick.insight.id);
+    await service
+        .commitShown(RecoveryInsightPick(insight: other, poolWrapped: false));
+    final again = await service.peekToday();
+    expect(again.insight.id, pick.insight.id,
+        reason: 'the first commit of the day must win');
+  });
+
   test('pick is deterministic for a fixed day key', () async {
     final day = DateTime(2026, 7, 18);
     final a = await shownAt(day);
