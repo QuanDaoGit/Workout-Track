@@ -16,6 +16,7 @@ import '../../services/progression_settings_service.dart';
 import '../../services/simple_mode_service.dart';
 import '../../services/progressive_overload_service.dart';
 import '../../services/rest_timer_service.dart';
+import '../../services/sfx_service.dart';
 import '../../services/unit_settings_service.dart';
 import '../../services/warmup_calculator.dart';
 import '../../theme/tokens.dart';
@@ -380,6 +381,9 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
     });
     // Every logged set ticks; a PR already fired the stronger reward() above.
     if (!isPR) HapticService.instance.selection();
+    // The audio beat of the core loop — one neutral "logged." per set, PR or
+    // not (the service's 1s cooldown absorbs correction bursts).
+    SfxService.instance.playSetLogged();
     _startRest();
     if (widget.restSeconds > 0) _quickNotice('Rest timer started');
     // Persist the now-committed snapshot to the parent (durable checkpoint).

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 
@@ -104,6 +106,209 @@ class SfxService {
   /// hit never cuts live energy (Codex F3).
   Future<void> playCeremonyFlight() =>
       _play('audio/ceremony_flight.wav', volume: 0.7);
+
+  // ── Interaction tier — the pooled low-latency micro channel ────────────────
+  // Unlike the ceremony channel above (one player, interrupt-on-play), these
+  // fire through per-asset [AudioPool]s in [PlayerMode.lowLatency] so a tick
+  // can never cut a playing fanfare and tap-to-sound stays tight. Assets are
+  // authored to a loudness ladder (tap 0.10 < warn 0.20 < set-log 0.22 <
+  // rest 0.30 < ceremony 0.32 peaks — `ops/gen_ui_sfx.py`), so everything
+  // plays at full volume and the hierarchy is baked in.
+
+  /// Extra gate for the broad tap-tick layer only (the Settings "UI sounds"
+  /// sub-toggle, `UiSoundSettingsService`, default on). Core-loop sounds
+  /// (set-log / rest-end / warning) ride the master [enabled] alone.
+  static bool uiSoundsEnabled = true;
+
+  /// Injectable clock for the per-class cooldowns (mirrors
+  /// `HapticService.nowProvider` so tests advance time deterministically).
+  static DateTime Function() nowProvider = DateTime.now;
+
+  /// Test seam: invoked with the asset path for every sound that passes its
+  /// gates/cooldowns, *before* the platform call (which has no implementation
+  /// in widget tests) — so tests assert plays without the plugin.
+  @visibleForTesting
+  static void Function(String assetPath)? onPlayForTest;
+
+  /// Broad-layer rate limit: a machine-gunned button can't stack ticks.
+  static const Duration uiTapCooldown = Duration(milliseconds: 60);
+
+  /// Burst guard for rapid sequential logging (corrections / warm-ups
+  /// back-to-back) — variants alone don't prevent fatigue (Codex).
+  static const Duration setLoggedCooldown = Duration(milliseconds: 1000);
+
+  DateTime? _lastUiTapAt;
+  DateTime? _lastSetLoggedAt;
+  int _tapVariant = 0;
+  int _setLoggedVariant = 0;
+
+  static const List<String> _uiAssets = [
+    'audio/ui_tap_1.wav',
+    'audio/ui_tap_2.wav',
+    'audio/ui_tap_3.wav',
+    'audio/set_logged_1.wav',
+    'audio/set_logged_2.wav',
+    'audio/set_logged_3.wav',
+    'audio/ui_warn.wav',
+    'audio/rest_go.wav',
+  ];
+
+  final Map<String, Future<AudioPool>> _poolFutures = {};
+  final Set<String> _deadPools = {};
+
+  /// Route ALL app audio into a mix-with-others sonification context.
+  ///
+  /// audioplayers' Android default is `AUDIOFOCUS_GAIN` + `USAGE_MEDIA` — every
+  /// sound requests full audio focus, which can PAUSE the user's own
+  /// music/podcast mid-workout (the exact bug Hevy shipped and fixed in
+  /// 1.26.11). `audioFocus: none` mixes instead of stealing;
+  /// sonification/assistanceSonification declares "short UI feedback, not a
+  /// media session". Global on purpose: the latent defect lives on the
+  /// *ceremony* channel too. Called once at boot; fail-open (no plugin in
+  /// widget tests).
+  /// True under `flutter test`. Touching audioplayers AT ALL in that env is
+  /// unsafe — constructing an [AudioPlayer] (which [AudioPool.create] does
+  /// internally) kicks off an *unawaited, memoized* global-init future inside
+  /// the package whose MissingPluginException escapes any try/catch and fails
+  /// the surrounding test zone (and, once memoized, hangs awaits from other
+  /// zones). So in tests the platform layer is skipped entirely — the
+  /// [onPlayForTest] recorder, which fires after all gates, IS the observable
+  /// playback contract.
+  static final bool _isFlutterTest = () {
+    try {
+      return Platform.environment.containsKey('FLUTTER_TEST');
+    } catch (_) {
+      return false;
+    }
+  }();
+
+  Future<void> applyGlobalAudioContext() async {
+    if (_isFlutterTest) return;
+    try {
+      await AudioPlayer.global.setAudioContext(
+        AudioContext(
+          android: const AudioContextAndroid(
+            contentType: AndroidContentType.sonification,
+            usageType: AndroidUsageType.assistanceSonification,
+            audioFocus: AndroidAudioFocus.none,
+          ),
+          iOS: AudioContextIOS(
+            category: AVAudioSessionCategory.ambient,
+            options: const {AVAudioSessionOptions.mixWithOthers},
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('SfxService: applyGlobalAudioContext failed: $e');
+    }
+  }
+
+  /// Pre-create the micro pools so the first tap doesn't pay pool-construction
+  /// latency. Fire-and-forget from boot (never awaited on the splash path);
+  /// every per-asset failure is swallowed and the pool marked dead so playback
+  /// degrades to silence, never a throw into boot.
+  Future<void> warmUpUiPools() async {
+    if (_isFlutterTest) return;
+    for (final asset in _uiAssets) {
+      try {
+        await _pool(asset);
+      } catch (e) {
+        _poolFutures.remove(asset);
+        _deadPools.add(asset);
+        debugPrint('SfxService: pool warm-up failed for $asset: $e');
+      }
+    }
+  }
+
+  Future<AudioPool> _pool(String asset) =>
+      // `??=` with a synchronous RHS is race-free: two rapid first taps share
+      // one create future instead of building two pools.
+      _poolFutures[asset] ??= AudioPool.create(
+        source: AssetSource(asset),
+        maxPlayers: 2,
+        playerMode: PlayerMode.lowLatency,
+      );
+
+  Future<void> _playPooled(String asset) async {
+    onPlayForTest?.call(asset);
+    if (_isFlutterTest || _deadPools.contains(asset)) return;
+    try {
+      final pool = await _pool(asset);
+      await pool.start();
+    } catch (e) {
+      // Non-essential: degrade this asset to silence (test env / device audio
+      // failure) rather than ever surfacing to the caller.
+      _poolFutures.remove(asset);
+      _deadPools.add(asset);
+      debugPrint('SfxService: pooled play failed for $asset: $e');
+    }
+  }
+
+  /// The **PixelButton press tick** ("keycap rise", G5→C6, 34ms) — the broad
+  /// UI layer. Gated on the master Sound toggle AND the "UI sounds"
+  /// sub-toggle; rate-limited; rotates 3 pre-rendered variants (audio fatigues
+  /// faster than visuals on repeat).
+  Future<void> playUiTap() {
+    if (!enabled || !uiSoundsEnabled) return Future<void>.value();
+    final now = nowProvider();
+    final last = _lastUiTapAt;
+    if (last != null && now.difference(last) < uiTapCooldown) {
+      return Future<void>.value();
+    }
+    _lastUiTapAt = now;
+    _tapVariant = _tapVariant % 3 + 1;
+    return _playPooled('audio/ui_tap_$_tapVariant.wav');
+  }
+
+  /// The **set-logged confirm** ("checkmark", C5→G5, 130ms) — the core-loop
+  /// beat, deliberately neutral (celebration stays with the PR/reward class).
+  /// Master toggle only; 1s cooldown absorbs correction bursts; 3 variants.
+  Future<void> playSetLogged() {
+    if (!enabled) return Future<void>.value();
+    final now = nowProvider();
+    final last = _lastSetLoggedAt;
+    if (last != null && now.difference(last) < setLoggedCooldown) {
+      return Future<void>.value();
+    }
+    _lastSetLoggedAt = now;
+    _setLoggedVariant = _setLoggedVariant % 3 + 1;
+    return _playPooled('audio/set_logged_$_setLoggedVariant.wav');
+  }
+
+  /// The **destructive-confirm buzz** (E5→A4 descending, 125ms) — fires with
+  /// the warning haptic on delete/discard/reset commits. Descends where
+  /// confirms rise, so it can never be mistaken for one. Rare by design.
+  Future<void> playUiWarn() {
+    if (!enabled) return Future<void>.value();
+    return _playPooled('audio/ui_warn.wav');
+  }
+
+  /// The **rest-end "ready-go"** (G5→C6 chorus, 450ms) — the one functional
+  /// cue: fires when a watched rest elapses live. Best-effort over the user's
+  /// own music (we mix, never duck); the rest-end notification remains the
+  /// reliable backgrounded path. Call sites dedupe via the live-finish guard +
+  /// `RestTimerService.cancel()`.
+  Future<void> playRestGo() {
+    if (!enabled) return Future<void>.value();
+    return _playPooled('audio/rest_go.wav');
+  }
+
+  /// Restore every static + instance mutable knob this service exposes —
+  /// cooldown stamps, variant cursors, injected clock, test recorder, pool
+  /// caches — so one test's state can't silence or redirect the next (Codex).
+  @visibleForTesting
+  void resetForTest() {
+    enabled = true;
+    uiSoundsEnabled = true;
+    nowProvider = DateTime.now;
+    onPlayForTest = null;
+    _lastUiTapAt = null;
+    _lastSetLoggedAt = null;
+    _tapVariant = 0;
+    _setLoggedVariant = 0;
+    _poolFutures.clear();
+    _deadPools.clear();
+  }
 
   // ── Charge Ritual boost cues (dedicated channel) ────────────────────────────
   // Hybrid V2 riser + E2 boom/whoosh ignition, auditioned & selected; synthesized

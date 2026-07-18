@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/analytics_service.dart';
 import '../services/haptic_service.dart';
 import '../services/rest_timer_service.dart';
+import '../services/sfx_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
 import 'companion/bit_mood_core.dart';
@@ -57,6 +58,11 @@ class _RestBreakPanelState extends State<RestBreakPanel> {
         if (DateTime.now().difference(snap.endsAt) <
             const Duration(seconds: 3)) {
           HapticService.instance.success();
+          // The audible "go" beside the haptic. Exactly-once across the two
+          // rest surfaces: Dart's event loop serialises the tickers and
+          // cancel() below nulls the snapshot synchronously, so whichever
+          // ticker runs first consumes the finish.
+          SfxService.instance.playRestGo();
           // A rest that elapsed naturally while the user watched it (a stale
           // backgrounded expiry is intentionally excluded).
           unawaited(

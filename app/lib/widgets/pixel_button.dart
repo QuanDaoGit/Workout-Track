@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/haptic_service.dart';
+import '../services/sfx_service.dart';
 import '../theme/tokens.dart';
 import 'motion/power_on.dart';
 import 'pixel_loader.dart';
@@ -27,6 +28,12 @@ class PixelButton extends StatefulWidget {
   /// ([HapticIntent.success]/[HapticIntent.warning]/…) for a meaningful action.
   final HapticIntent haptic;
 
+  /// Whether the press also plays its intent-mapped UI sound (tap/selection →
+  /// the keycap tick, warning → the destructive buzz; success/reward/none stay
+  /// silent — those moments own their audio). Set false on a button whose
+  /// handler triggers dedicated audio, so a tick never stacks under it.
+  final bool sound;
+
   /// Secondary style: filled blue-grey (`kBorderVariant`) with a white label,
   /// no glow. Use for dismiss/secondary actions (CLOSE, CANCEL). Neon is
   /// reserved for primary actions.
@@ -47,6 +54,7 @@ class PixelButton extends StatefulWidget {
     this.disabledBorderColor,
     this.powerOn = false,
     this.haptic = HapticIntent.tap,
+    this.sound = true,
   });
 
   @override
@@ -101,6 +109,23 @@ class _PixelButtonState extends State<PixelButton> {
     // Tactile feedback at the press, synced with the flash. Fire-and-forget and
     // self-guarded (mute toggle / fail-open) inside the service.
     HapticService.instance.fire(widget.haptic);
+    if (widget.sound) {
+      // The audio twin of the haptic, same beat: light intents get the keycap
+      // tick, warning gets the buzz. success/reward stay silent here — their
+      // moments carry dedicated sounds (set-log, ceremonies) and a tick under
+      // them would stack.
+      switch (widget.haptic) {
+        case HapticIntent.tap:
+        case HapticIntent.selection:
+          SfxService.instance.playUiTap();
+        case HapticIntent.warning:
+          SfxService.instance.playUiWarn();
+        case HapticIntent.none:
+        case HapticIntent.success:
+        case HapticIntent.reward:
+          break;
+      }
+    }
     widget.onPressed!.call();
   }
 

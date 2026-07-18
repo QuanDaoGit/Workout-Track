@@ -308,6 +308,9 @@ class QuestsPageState extends State<QuestsPage> {
                         label: 'CLAIM ALL',
                         fullWidth: false,
                         minHeight: 36,
+                        // The claim handler plays the quest-claim burst — a tap
+                        // tick underneath it would stack (keep the tap haptic).
+                        sound: false,
                         onPressed: _claimAll,
                       ),
                     ],

@@ -5,6 +5,7 @@ import '../theme/app_fonts.dart';
 
 import '../services/haptic_service.dart';
 import '../services/rest_timer_service.dart';
+import '../services/sfx_service.dart';
 import '../theme/tokens.dart';
 import 'arcade_bar.dart';
 
@@ -35,6 +36,9 @@ class _RestTimerBarState extends State<RestTimerBar>
         if (DateTime.now().difference(snap.endsAt) <
             const Duration(seconds: 3)) {
           HapticService.instance.success();
+          // The audible "go" beside the haptic — same exactly-once contract
+          // (serialised tickers + the synchronous cancel() below).
+          SfxService.instance.playRestGo();
         }
         RestTimerService.instance.cancel();
         if (_expanded) _expanded = false;

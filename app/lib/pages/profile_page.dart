@@ -41,6 +41,7 @@ import '../services/haptic_settings_service.dart';
 import '../services/sfx_service.dart';
 import '../services/simple_mode_service.dart';
 import '../services/sound_settings_service.dart';
+import '../services/ui_sound_settings_service.dart';
 import '../services/stat_engine.dart';
 import '../services/loot_service.dart';
 import '../services/unit_settings_service.dart';
@@ -100,6 +101,7 @@ class ProfilePageState extends State<ProfilePage> {
   bool _progressionEnabled = true;
   bool _simpleMode = false;
   bool _soundEnabled = true;
+  bool _uiSoundsEnabled = true;
   bool _hapticsEnabled = true;
   bool _restAlertEnabled = true;
   bool _trainingReminderEnabled = false;
@@ -163,6 +165,7 @@ class ProfilePageState extends State<ProfilePage> {
     final progressionEnabled = await ProgressionSettingsService().isEnabled();
     final simpleModeEnabled = await SimpleModeService().isEnabled();
     final soundEnabled = await SoundSettingsService().isEnabled();
+    final uiSoundsEnabled = await UiSoundSettingsService().isEnabled();
     final hapticsEnabled = await HapticSettingsService().isEnabled();
     final restAlertEnabled = await NotificationSettingsService()
         .isRestTimerAlertEnabled();
@@ -211,6 +214,7 @@ class ProfilePageState extends State<ProfilePage> {
       _progressionEnabled = progressionEnabled;
       _simpleMode = simpleModeEnabled;
       _soundEnabled = soundEnabled;
+      _uiSoundsEnabled = uiSoundsEnabled;
       _hapticsEnabled = hapticsEnabled;
       _restAlertEnabled = restAlertEnabled;
       _trainingReminderEnabled = trainingReminderEnabled;
@@ -450,6 +454,16 @@ class ProfilePageState extends State<ProfilePage> {
     SfxService.enabled = value;
     if (!mounted) return;
     setState(() => _soundEnabled = value);
+  }
+
+  Future<void> _toggleUiSounds(bool value) async {
+    await UiSoundSettingsService().setEnabled(value);
+    SfxService.uiSoundsEnabled = value;
+    // Turning ON: audition the tick immediately (the row's own tap happened
+    // while the layer was still off), mirroring the haptics-toggle pattern.
+    if (value) SfxService.instance.playUiTap();
+    if (!mounted) return;
+    setState(() => _uiSoundsEnabled = value);
   }
 
   Future<void> _toggleHaptics(bool value) async {
@@ -1582,6 +1596,20 @@ class ProfilePageState extends State<ProfilePage> {
               : 'Muted — no sound effects.',
           value: _soundEnabled,
           onChanged: _toggleSound,
+        ),
+        _SettingsToggleRow(
+          // Reuses the Sound icon for now — a bespoke "tick" pixel icon is a
+          // flagged follow-up (no other sound asset exists in control/).
+          iconPath: 'assets/icons/control/icon_sound.png',
+          title: 'UI sounds',
+          subtitle: !_soundEnabled
+              ? 'Off while Sound is off.'
+              : _uiSoundsEnabled
+              ? 'Buttons play a soft arcade tick.'
+              : 'Off — buttons stay silent.',
+          value: _uiSoundsEnabled,
+          onChanged: _toggleUiSounds,
+          enabled: _soundEnabled,
         ),
         _SettingsToggleRow(
           iconPath: 'assets/icons/control/ui/sound-haptic-ring.png',

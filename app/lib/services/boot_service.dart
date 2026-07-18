@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'class_migration_service.dart';
@@ -10,6 +12,7 @@ import 'onboarding_service.dart';
 import 'sfx_service.dart';
 import 'sound_settings_service.dart';
 import 'stat_engine.dart';
+import 'ui_sound_settings_service.dart';
 import 'unit_settings_service.dart';
 
 /// Runs the app's one-time launch work and resolves the first-screen decision.
@@ -45,7 +48,14 @@ class BootService {
       await StatEngine().processMissedTrainingDays();
       await ClassMigrationService().migrateIfNeeded();
       SfxService.enabled = await SoundSettingsService().isEnabled();
+      SfxService.uiSoundsEnabled = await UiSoundSettingsService().isEnabled();
       HapticService.enabled = await HapticSettingsService().isEnabled();
+      // Route ALL app audio into a mix-with-others sonification context (never
+      // steal focus from the user's own music) and pre-warm the micro-SFX
+      // pools. The warm-up is deliberately un-awaited: it's a latency
+      // optimization, not boot work — and it swallows per-asset failures.
+      await SfxService.instance.applyGlobalAudioContext();
+      unawaited(SfxService.instance.warmUpUiPools());
       await Units.load();
       // Local-notification plumbing (timezone DB + channels). No permission ask
       // here — that happens contextually. Defensive: never blocks the splash.
