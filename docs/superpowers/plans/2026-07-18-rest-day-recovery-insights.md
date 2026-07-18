@@ -51,6 +51,11 @@ void main() {
     }
   });
 
+  test('every category has an icon (and no orphan icon entries)', () {
+    expect(kRecoveryInsightCategoryIcons.keys.toSet(),
+        kRecoveryInsightCategories.toSet());
+  });
+
   test('guardrails: no streak/guilt/body framing anywhere in the pool', () {
     // The spec bans copy that frames rest as risk, debt, or body outcome.
     const banned = [
@@ -108,8 +113,18 @@ class RecoveryInsight {
   final String text;
 }
 
-/// The allowed category tags (the sheet renders these uppercased).
+/// The allowed category tags (the sheet renders these uppercased) and each
+/// one's pixel icon (existing `assets/icons/control/` art, tinted at render;
+/// `icon_bed.png` was extracted from the bed-frame sheet in `design/icons/`).
 const kRecoveryInsightCategories = ['sleep', 'fuel', 'adaptation', 'mobility', 'mind'];
+
+const Map<String, String> kRecoveryInsightCategoryIcons = {
+  'sleep': 'assets/icons/control/icon_bed.png',
+  'fuel': 'assets/icons/control/icon_meat.png',
+  'adaptation': 'assets/icons/control/icon_stat.png',
+  'mobility': 'assets/icons/control/icon_boots.png',
+  'mind': 'assets/icons/control/icon_brain.png',
+};
 
 const List<RecoveryInsight> recoveryInsights = [
   // -- adaptation: what rest actually does ---------------------------------
@@ -630,14 +645,18 @@ void main() {
         ),
       );
 
-  testWidgets('renders the insight text, category tag, and close button',
+  testWidgets('renders the insight text, category icon, and close button',
       (tester) async {
     await tester.pumpWidget(host(
         const RecoveryInsightPick(insight: insight, poolWrapped: false)));
     await tester.pumpAndSettle(const Duration(seconds: 4));
     expect(
         find.textContaining('deep sleep', findRichText: true), findsOneWidget);
-    expect(find.text('SLEEP'), findsOneWidget);
+    // Icon-only category marker: no visible tag text, but the category is
+    // still announced to screen readers via its Semantics label.
+    expect(find.text('SLEEP'), findsNothing);
+    expect(find.bySemanticsLabel('sleep'), findsOneWidget);
+    expect(find.byType(ImageIcon), findsOneWidget);
     expect(find.text('CLOSE'), findsOneWidget);
     expect(find.text(kRecoveryInsightWrapLine), findsNothing);
   });
@@ -724,11 +743,16 @@ class RecoveryInsightSheetContent extends StatelessWidget {
                   ),
                 ),
               ),
-              Text(
-                insight.category.toUpperCase(),
-                style: AppFonts.shareTechMono(
-                  color: kMutedText,
-                  fontSize: 12,
+              // Icon-only category marker — the glyphs are self-explanatory
+              // (bed/meat/bars/boots/brain); the category name survives as the
+              // screen-reader label only.
+              Semantics(
+                label: insight.category,
+                child: ImageIcon(
+                  AssetImage(kRecoveryInsightCategoryIcons[insight.category] ??
+                      'assets/icons/control/icon_stat.png'),
+                  size: 18,
+                  color: kRecoveryAccent,
                 ),
               ),
             ],

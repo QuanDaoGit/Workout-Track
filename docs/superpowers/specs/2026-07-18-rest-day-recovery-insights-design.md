@@ -57,7 +57,7 @@ Selection logic, pure and injectable (`nowProvider` for tests):
 
 A bottom sheet in the calm recovery register (cyan `kRecoveryAccent`, `ArcadeCard` idiom):
 - A faced `BitMoodCore` (neutral, idle float), the canonical `BitSpeechBubble` carrying the insight text.
-- A small category tag (e.g. `SLEEP`) in ShareTechMono, muted.
+- An icon-only category marker: an 18px pixel icon per category (sleep `icon_bed.png` from the design/icons bed-frame sheet, fuel `icon_meat.png`, adaptation `icon_stat.png`, mobility `icon_boots.png`, mind `icon_brain.png`), cyan-tinted, no visible text; the category name is the icon's Semantics label.
 - One dismiss affordance. No secondary actions in v1.
 - Reduced motion: static BIT, no entrance animation. Screen reader: the insight text is the semantics source.
 
