@@ -24,10 +24,13 @@
 
 ```dart
 // app/test/recovery_insights_content_test.dart
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:workout_track/data/recovery_insights.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('pool is big enough for months of rest days', () {
     expect(recoveryInsights.length, greaterThanOrEqualTo(30));
   });
@@ -56,6 +59,15 @@ void main() {
         kRecoveryInsightCategories.toSet());
   });
 
+  // Codex F8: a typo'd or undeclared asset path fails at runtime when the
+  // sheet opens; loading every icon here catches it at test time instead.
+  test('every category icon asset exists in the bundle', () async {
+    for (final path in kRecoveryInsightCategoryIcons.values) {
+      final data = await rootBundle.load(path);
+      expect(data.lengthInBytes, greaterThan(0), reason: path);
+    }
+  });
+
   test('guardrails: no streak/guilt/body framing anywhere in the pool', () {
     // The spec bans copy that frames rest as risk, debt, or body outcome.
     const banned = [
@@ -66,6 +78,10 @@ void main() {
       "don't skip",
       'lose momentum',
       'fall behind',
+      // Codex F7: prescriptive-language markers — advice stays descriptive,
+      // never a directive or a medical prescription.
+      'you should',
+      'you must',
     ];
     for (final i in recoveryInsights) {
       final t = i.text.toLowerCase();
@@ -96,6 +112,16 @@ Expected: FAIL (compile error, `package:workout_track/data/recovery_insights.dar
 /// accurate mainstream recovery science, body-neutral (no weight/calorie
 /// framing), BIT's voice (short, warm, a little wry), never a training nudge
 /// and never guilt. 1-3 sentences.
+///
+/// Review checklist for every new/edited line (Codex F7 — the test can only
+/// catch markers, a human catches meaning):
+/// - No universal medical claims ("X cures/prevents Y"); describe, don't
+///   prescribe (no "you should/must" — mechanically banned).
+/// - No supplement recommendations; conditional framing only (see
+///   `creatine_everyday`: "If you take creatine...").
+/// - Hedge mixed-evidence topics explicitly (see `foam_rolling`: "the
+///   science is mixed on why").
+/// - Body-neutral: no body-composition, appearance, or weight framing.
 class RecoveryInsight {
   const RecoveryInsight({
     required this.id,
@@ -366,10 +392,17 @@ git commit -m "feat: recovery-insight content pool + invariant tests"
 - Create: `app/lib/services/recovery_insight_service.dart`
 - Test: `app/test/recovery_insight_service_test.dart`
 
-**Behavior contract (from the spec):**
-- Same day, reopened: same insight.
-- New day: deterministic pick (FNV-1a of the day key) from the *unseen* set; recorded as seen.
-- Unseen set empty at pick time: clear the seen set, pick from the full pool, and flag the pick `poolWrapped: true` for that whole day (the sheet shows the honest wrap line once per wrap day).
+**Behavior contract (from the spec + Codex F1):**
+- The API is split so a pick can't burn before it renders: `peekToday()` is a
+  pure read (deterministic candidate, persists nothing); `commitShown(pick)`
+  records it, is idempotent per day, and is called by the opener only after the
+  sheet route is pushed. A kill between peek and commit costs nothing — the
+  same candidate resolves again next open.
+- Same day, re-peeked after a commit: same insight.
+- New day: deterministic candidate (FNV-1a of the day key) from the *unseen* set.
+- Unseen set empty at peek time: candidate comes from the full pool with
+  `poolWrapped: true`; the commit then clears the seen set (the sheet shows the
+  honest wrap line all wrap day).
 - Corrupt stored JSON: reset to empty state, never crash.
 
 - [ ] **Step 1: Write the failing service tests**
@@ -391,26 +424,54 @@ void main() {
   RecoveryInsightService serviceAt(DateTime now) =>
       RecoveryInsightService(nowProvider: () => now);
 
-  test('same day returns the same insight on reopen', () async {
+  /// Peek + commit in one step — the "user opened the sheet" simulation.
+  Future<RecoveryInsightPick> shownAt(DateTime now) async {
+    final service = serviceAt(now);
+    final pick = await service.peekToday();
+    await service.commitShown(pick);
+    return pick;
+  }
+
+  test('peek alone consumes nothing (Codex F1: no burn before render)',
+      () async {
     final day = DateTime(2026, 7, 18, 9);
-    final first = await serviceAt(day).insightForToday();
+    final a = await serviceAt(day).peekToday();
+    final b = await serviceAt(day).peekToday();
+    expect(b.insight.id, a.insight.id);
+    // Nothing persisted: the state key is still absent.
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(RecoveryInsightService.stateKey), isNull);
+  });
+
+  test('same day returns the same insight on reopen after a commit', () async {
+    final first = await shownAt(DateTime(2026, 7, 18, 9));
     final second =
-        await serviceAt(DateTime(2026, 7, 18, 21)).insightForToday();
+        await serviceAt(DateTime(2026, 7, 18, 21)).peekToday();
     expect(second.insight.id, first.insight.id);
     expect(first.poolWrapped, isFalse);
   });
 
+  test('commit is idempotent per day (double-tap safe)', () async {
+    final day = DateTime(2026, 7, 18);
+    final service = serviceAt(day);
+    final pick = await service.peekToday();
+    await service.commitShown(pick);
+    await service.commitShown(pick);
+    final again = await service.peekToday();
+    expect(again.insight.id, pick.insight.id);
+  });
+
   test('pick is deterministic for a fixed day key', () async {
     final day = DateTime(2026, 7, 18);
-    final a = await serviceAt(day).insightForToday();
+    final a = await shownAt(day);
     SharedPreferences.setMockInitialValues({});
-    final b = await serviceAt(day).insightForToday();
+    final b = await shownAt(day);
     expect(b.insight.id, a.insight.id);
   });
 
   test('a new day advances to an unseen insight', () async {
-    final first = await serviceAt(DateTime(2026, 7, 18)).insightForToday();
-    final second = await serviceAt(DateTime(2026, 7, 20)).insightForToday();
+    final first = await shownAt(DateTime(2026, 7, 18));
+    final second = await shownAt(DateTime(2026, 7, 20));
     expect(second.insight.id, isNot(first.insight.id));
   });
 
@@ -419,7 +480,7 @@ void main() {
     final seen = <String>{};
     var day = DateTime(2026, 1, 1);
     for (var i = 0; i < recoveryInsights.length; i++) {
-      final pick = await serviceAt(day).insightForToday();
+      final pick = await shownAt(day);
       expect(pick.poolWrapped, isFalse,
           reason: 'day $i wrapped before exhaustion');
       expect(seen.add(pick.insight.id), isTrue,
@@ -427,14 +488,13 @@ void main() {
       day = day.add(const Duration(days: 1));
     }
     // Pool exhausted: the next day wraps, flags it, and starts a fresh cycle.
-    final wrapped = await serviceAt(day).insightForToday();
+    final wrapped = await shownAt(day);
     expect(wrapped.poolWrapped, isTrue);
     // Reopening the wrap day keeps the flag (the sheet line stays honest).
-    final reopened = await serviceAt(day).insightForToday();
+    final reopened = await serviceAt(day).peekToday();
     expect(reopened.poolWrapped, isTrue);
     // The day after the wrap is a normal fresh-cycle day again.
-    final after =
-        await serviceAt(day.add(const Duration(days: 1))).insightForToday();
+    final after = await shownAt(day.add(const Duration(days: 1)));
     expect(after.poolWrapped, isFalse);
     expect(after.insight.id, isNot(wrapped.insight.id));
   });
@@ -442,7 +502,7 @@ void main() {
   test('corrupt stored state resets cleanly instead of crashing', () async {
     SharedPreferences.setMockInitialValues(
         {RecoveryInsightService.stateKey: 'not json {{{'});
-    final pick = await serviceAt(DateTime(2026, 7, 18)).insightForToday();
+    final pick = await shownAt(DateTime(2026, 7, 18));
     expect(recoveryInsights.map((i) => i.id), contains(pick.insight.id));
   });
 
@@ -452,7 +512,7 @@ void main() {
       RecoveryInsightService.stateKey:
           '{"seenIds":["ghost_id"],"lastShownId":"ghost_id","lastShownDayKey":"2026-07-18","lastShownWrapped":false}',
     });
-    final pick = await serviceAt(DateTime(2026, 7, 18)).insightForToday();
+    final pick = await shownAt(DateTime(2026, 7, 18));
     expect(recoveryInsights.map((i) => i.id), contains(pick.insight.id));
   });
 }
@@ -472,6 +532,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/recovery_insights.dart';
+import 'json_safe.dart';
+import 'keyed_lock.dart';
 
 /// One resolved rest-day briefing: the insight to show today, plus whether
 /// today is the day the pool wrapped (the sheet shows the honest refresher
@@ -497,12 +559,53 @@ class RecoveryInsightService {
 
   final DateTime Function() _nowProvider;
 
-  Future<RecoveryInsightPick> insightForToday() async {
-    final prefs = await SharedPreferences.getInstance();
-    final state = _loadState(prefs);
-    final dayKey = _dayKey(_nowProvider());
+  /// Resolves today's briefing WITHOUT consuming it (Codex F1: a pick must
+  /// never burn before the sheet actually renders). Pure read — deterministic
+  /// for a given day + stored state, so repeated peeks agree.
+  Future<RecoveryInsightPick> peekToday() {
+    return prefsWriteLock.synchronized(stateKey, () async {
+      final prefs = await SharedPreferences.getInstance();
+      return _resolve(_loadState(prefs), _dayKey(_nowProvider()));
+    });
+  }
 
-    // Same day, reopened: return the already-shown insight unchanged.
+  /// Records [pick] as today's shown insight. The opener calls this right
+  /// after the sheet route is pushed. Idempotent per day (a double-tap or
+  /// reopen commits once); a kill between peek and commit costs nothing —
+  /// the same candidate resolves again next open. The read-modify-write runs
+  /// inside [prefsWriteLock] (per the deep-feature learnings: a prefs RMW is
+  /// not atomic, and both recovery cards can trigger this concurrently).
+  Future<void> commitShown(RecoveryInsightPick pick) {
+    return prefsWriteLock.synchronized(stateKey, () async {
+      final prefs = await SharedPreferences.getInstance();
+      final state = _loadState(prefs);
+      final dayKey = _dayKey(_nowProvider());
+      final alreadyShown = state.lastShownDayKey == dayKey &&
+          state.lastShownId != null &&
+          _byId(state.lastShownId!) != null;
+      if (alreadyShown) return;
+
+      // A wrap commit starts the fresh cycle; a normal commit extends it.
+      final seen = pick.poolWrapped
+          ? <String>{}
+          : state.seenIds.where((id) => _byId(id) != null).toSet();
+      seen.add(pick.insight.id);
+      await prefs.setString(
+        stateKey,
+        jsonEncode({
+          'seenIds': seen.toList(),
+          'lastShownId': pick.insight.id,
+          'lastShownDayKey': dayKey,
+          'lastShownWrapped': pick.poolWrapped,
+        }),
+      );
+    });
+  }
+
+  /// The shared pick logic: same committed day => the stored insight; else a
+  /// deterministic candidate from the unseen set (full pool + wrap flag when
+  /// exhausted). Persists nothing.
+  RecoveryInsightPick _resolve(_InsightState state, String dayKey) {
     if (state.lastShownDayKey == dayKey && state.lastShownId != null) {
       final shown = _byId(state.lastShownId!);
       if (shown != null) {
@@ -514,29 +617,18 @@ class RecoveryInsightService {
       // The stored id left the pool (content edit); fall through to a pick.
     }
 
-    var seen = state.seenIds.where((id) => _byId(id) != null).toSet();
-    var unseen =
-        recoveryInsights.where((i) => !seen.contains(i.id)).toList();
+    final seen = state.seenIds.where((id) => _byId(id) != null).toSet();
+    var unseen = recoveryInsights.where((i) => !seen.contains(i.id)).toList();
     var wrapped = false;
     if (unseen.isEmpty) {
       // Every insight has been shown: restart the cycle honestly.
-      seen = <String>{};
       unseen = List.of(recoveryInsights);
       wrapped = true;
     }
-
-    final pick = unseen[_seed(dayKey) % unseen.length];
-    seen.add(pick.id);
-    await prefs.setString(
-      stateKey,
-      jsonEncode({
-        'seenIds': seen.toList(),
-        'lastShownId': pick.id,
-        'lastShownDayKey': dayKey,
-        'lastShownWrapped': wrapped,
-      }),
+    return RecoveryInsightPick(
+      insight: unseen[_seed(dayKey) % unseen.length],
+      poolWrapped: wrapped,
     );
-    return RecoveryInsightPick(insight: pick, poolWrapped: wrapped);
   }
 
   RecoveryInsight? _byId(String id) {
@@ -562,20 +654,22 @@ class RecoveryInsightService {
   }
 
   _InsightState _loadState(SharedPreferences prefs) {
-    final raw = prefs.getString(stateKey);
-    if (raw == null) return const _InsightState();
+    // json_safe convention: a corrupt/malformed blob degrades to first-run
+    // state (the pool just restarts) instead of throwing on the home path.
+    final map = safeDecodeMap(prefs.getString(stateKey), debugLabel: stateKey);
+    if (map == null) return const _InsightState();
     try {
-      final map = jsonDecode(raw) as Map<String, dynamic>;
       return _InsightState(
         seenIds: [
-          for (final id in (map['seenIds'] as List? ?? const [])) id as String,
+          for (final id in (map['seenIds'] as List? ?? const []))
+            id.toString(),
         ],
         lastShownId: map['lastShownId'] as String?,
         lastShownDayKey: map['lastShownDayKey'] as String?,
         lastShownWrapped: map['lastShownWrapped'] as bool? ?? false,
       );
     } catch (_) {
-      // Corrupt blob: reset rather than crash; the pool just restarts.
+      // Schema-drifted field types: reset rather than crash.
       return const _InsightState();
     }
   }
@@ -833,12 +927,17 @@ import '../widgets/recovery_insight_sheet.dart';
 Place it next to the other mission-card handlers (e.g. just after `_buildProgramRecoveryMissionPanel`):
 
 ```dart
-  /// The recovery cards' primary action: resolve today's briefing (async,
-  /// per-day stable) then present BIT's sheet. No reward, no streak, no nudge.
+  /// The recovery cards' primary action: peek today's briefing (async, pure
+  /// read), present BIT's sheet, then commit it as shown only once the route
+  /// is pushed (Codex F1: never burn an insight the user never saw). No
+  /// reward, no streak, no nudge.
   Future<void> _openRecoveryInsight() async {
-    final pick = await RecoveryInsightService().insightForToday();
+    final service = RecoveryInsightService();
+    final pick = await service.peekToday();
     if (!mounted) return;
-    await showRecoveryInsightSheet(context, pick);
+    final sheet = showRecoveryInsightSheet(context, pick);
+    unawaited(service.commitShown(pick));
+    await sheet;
   }
 ```
 
@@ -907,9 +1006,13 @@ Run the app (`flutter run`) with a program whose today is a REST day (or use
 the demo seed: `flutter run --dart-define=SEED_DEMO=intermediate`, then set the
 device date or pick a program state where today is REST). On Home:
 1. The recovery card shows RECOVERY BRIEFING as the blue primary.
-2. Tapping opens the sheet: BIT + typewriter insight + category tag + CLOSE.
+2. Tapping opens the sheet: BIT + typewriter insight + category icon + CLOSE.
 3. Close, reopen: the same insight (per-day stability).
 4. Check theme coherence: cyan accent, PressStart2P header, 4px radii, sharp look.
+5. Codex F4 — narrow-device fit: verify the RECOVERY BRIEFING label at a 360dp
+   width (emulator or `flutter run` with a small window) and at enlarged text
+   scale. If it overflows or wraps, shorten the label to `BRIEFING` (both
+   cards) — do not shrink the font below PixelButton's default.
 
 - [ ] **Step 2: Fix anything off, re-verify, commit any fixes**
 
