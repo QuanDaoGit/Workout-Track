@@ -114,16 +114,16 @@ const kRecoveryInsightCategories = ['sleep', 'fuel', 'adaptation', 'mobility', '
 const List<RecoveryInsight> recoveryInsights = [
   // -- adaptation: what rest actually does ---------------------------------
   RecoveryInsight(
-    id: 'rebuild_crew',
+    id: 'rest_is_recovery',
     category: 'adaptation',
     text:
-        'Training breaks you down. Rest is when the rebuild happens. Today the construction crew is on site.',
+        'Training breaks you down. Rest is when the recovery happens.',
   ),
   RecoveryInsight(
     id: 'doms_is_adaptation',
     category: 'adaptation',
     text:
-        "Sore two days after a session? That's DOMS. It's adaptation working, not damage.",
+        "Sore two days after a session? That's DOMS, delayed onset muscle soreness. It's adaptation working, not damage.",
   ),
   RecoveryInsight(
     id: 'supercompensation',
@@ -135,7 +135,7 @@ const List<RecoveryInsight> recoveryInsights = [
     id: 'nervous_system_rest',
     category: 'adaptation',
     text:
-        'Rest repairs more than muscle. Your nervous system recovers too, and it controls how hard you can push.',
+        'Rest repairs more than muscle. Your nervous system recovers too, and it controls how hard you can push next time.',
   ),
   RecoveryInsight(
     id: 'tendons_slower',
@@ -159,7 +159,7 @@ const List<RecoveryInsight> recoveryInsights = [
     id: 'growth_between',
     category: 'adaptation',
     text:
-        'The gym sends the signal. The growth happens between sessions. Today is the between.',
+        'The gym sends the signal to your muscle. The actual growth happens when you rest properly. Make the most of your rest.',
   ),
   // -- sleep ----------------------------------------------------------------
   RecoveryInsight(
@@ -172,7 +172,7 @@ const List<RecoveryInsight> recoveryInsights = [
     id: 'growth_hormone_sleep',
     category: 'sleep',
     text:
-        'Your body releases most of its growth hormone in the first hours of deep sleep. Free gains, no equipment.',
+        'Your body releases most of its growth hormone in the first hours of deep sleep. Absolutely free gains.',
   ),
   RecoveryInsight(
     id: 'sleep_strength_link',
@@ -195,8 +195,7 @@ const List<RecoveryInsight> recoveryInsights = [
   RecoveryInsight(
     id: 'naps_count',
     category: 'sleep',
-    text:
-        'A 20-minute nap genuinely helps recovery. Short and early beats long and late.',
+    text: 'A 20-minute nap genuinely helps recovery.',
   ),
   RecoveryInsight(
     id: 'sleep_debt',
@@ -208,13 +207,13 @@ const List<RecoveryInsight> recoveryInsights = [
   RecoveryInsight(
     id: 'protein_rest_days',
     category: 'fuel',
-    text: 'Protein still matters on rest days. The rebuild needs materials.',
+    text: 'Protein still matters on rest days. The recovery still needs fuel.',
   ),
   RecoveryInsight(
     id: 'protein_spread',
     category: 'fuel',
     text:
-        'Spreading protein across the day works better than one giant serving. The crew likes steady deliveries.',
+        'Spreading protein across the day works better than one giant serving. Your muscle loves steady deliveries.',
   ),
   RecoveryInsight(
     id: 'hydration_repair',
@@ -232,7 +231,7 @@ const List<RecoveryInsight> recoveryInsights = [
     id: 'no_perfect_meal',
     category: 'fuel',
     text:
-        "There's no magic recovery meal. Regular food, enough protein, enough water. Boring works.",
+        "There's no magic recovery meal. Regular food, enough protein, enough water. Just same old works.",
   ),
   RecoveryInsight(
     id: 'creatine_everyday',
@@ -244,7 +243,7 @@ const List<RecoveryInsight> recoveryInsights = [
     id: 'alcohol_repair',
     category: 'fuel',
     text:
-        'Alcohol slows muscle repair and shallows your sleep. A light hand tonight keeps the rebuild on schedule.',
+        'Alcohol slows muscle repair and shallows your sleep. A light hand tonight keeps the recovery on schedule.',
   ),
   // -- mobility & light movement -------------------------------------------
   RecoveryInsight(
@@ -257,13 +256,13 @@ const List<RecoveryInsight> recoveryInsights = [
     id: 'active_vs_couch',
     category: 'mobility',
     text:
-        'Gentle movement on rest days often beats full couch mode. Easy is the key word.',
+        'Gentle movement on rest days often beats full couch mode. Staying active is the key.',
   ),
   RecoveryInsight(
     id: 'stretching_when',
     category: 'mobility',
     text:
-        'Rest days are a great slot for relaxed stretching. No clock, no targets, just range.',
+        'Great time for some relaxed stretching. No time and target, just you and your mind.',
   ),
   RecoveryInsight(
     id: 'stiffness_morning',
@@ -281,13 +280,13 @@ const List<RecoveryInsight> recoveryInsights = [
     id: 'easy_cardio_ok',
     category: 'mobility',
     text:
-        'An easy bike ride or swim can aid recovery, as long as it stays conversational. If you can chat, you can recover.',
+        'An easy bike ride or swim can aid recovery, as long as it stays at conversational pace. Pushing yourself too hard may inhibit recovery.',
   ),
   RecoveryInsight(
     id: 'foam_rolling',
     category: 'mobility',
     text:
-        'Foam rolling may ease soreness for a while. The science is mixed on why, but if it feels good, it counts.',
+        'Foam rolling may ease soreness for a while. The science is mixed on why, but if it feels good, it works.',
   ),
   // -- mind -----------------------------------------------------------------
   RecoveryInsight(
@@ -306,7 +305,7 @@ const List<RecoveryInsight> recoveryInsights = [
     id: 'boredom_normal',
     category: 'mind',
     text:
-        "Feeling restless on a rest day is a good sign. It means the habit took. The rest still counts.",
+        'Feeling restless on a rest day is a good sign. It means the habit is forming.',
   ),
   RecoveryInsight(
     id: 'long_game',
@@ -324,13 +323,7 @@ const List<RecoveryInsight> recoveryInsights = [
     id: 'breathing_switch',
     category: 'mind',
     text:
-        'A few slow breaths flip your nervous system into repair mode. Longer out than in is the trick.',
-  ),
-  RecoveryInsight(
-    id: 'trust_the_plan',
-    category: 'mind',
-    text:
-        'The plan already includes today. Resting on schedule IS following the program.',
+        'A few slow breaths flip your nervous system into repair mode. Inhale deeply, exhale slowly.',
   ),
 ];
 ```
