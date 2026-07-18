@@ -751,6 +751,9 @@ void main() {
     expect(find.text('SLEEP'), findsNothing);
     expect(find.bySemanticsLabel('sleep'), findsOneWidget);
     expect(find.byType(ImageIcon), findsOneWidget);
+    // BIT must render FACED (app doctrine: never faceless after onboarding).
+    final bit = tester.widget<BitMoodCore>(find.byType(BitMoodCore));
+    expect(bit.reveal, 1);
     expect(find.text('CLOSE'), findsOneWidget);
     expect(find.text(kRecoveryInsightWrapLine), findsNothing);
   });
@@ -855,7 +858,9 @@ class RecoveryInsightSheetContent extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const BitMoodCore(size: 72),
+              // reveal: 1 — BIT is faced everywhere post-onboarding (doctrine:
+              // "never faceless again"); the default reveal: 0 draws no face.
+              const BitMoodCore(size: 72, reveal: 1),
               const SizedBox(width: kSpace2),
               Expanded(
                 child: BitSpeechBubble(
