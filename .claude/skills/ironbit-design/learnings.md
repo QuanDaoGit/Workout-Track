@@ -338,6 +338,17 @@ flat list to a tap-your-body dossier (Concept #1) but a body-only browser droppe
 lifts + the "all lifts" intent → kept a secondary "ALL LIFTS" net, each lift filed under its primary
 muscle once (Codex, 2026-06).*
 
+### Progressive-disclosure widget defaults at new call sites
+**Rule:** A shared widget whose constructor DEFAULTS to its pre-reveal/dormant state (`BitMoodCore`
+`reveal: 0` = faceless) silently renders that dormant state at every new call site that forgets the
+live-state param — and nothing fails: analyze is clean, layout tests pass, only the pixels are wrong.
+When adding any new surface hosting such a widget, (1) copy the param set from an existing
+post-onboarding call site, not from the constructor signature, and (2) pin the live-state param in the
+surface's widget test (`tester.widget<T>(...).reveal == 1`) so a regression can't slip back. Applies to
+any staged-reveal/poweredness prop (`reveal`, `powered`, `unlocked`). *Seen: the rest-day Recovery
+Briefing sheet shipped `BitMoodCore(size: 72)` from plan code — faceless BIT on every rest day, caught
+only by a reviewer diffing against the 10 existing `reveal: 1` call sites (2026-07-18).*
+
 ### Domain jargon vs the plain verdict
 **Rule:** A surface driven by a computed metric must show the **plain-language verdict**, never the
 engine's internal units. The science (MEV/MAV, e1RM, percentile, kg-volume) *drives the math* but is

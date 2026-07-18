@@ -144,6 +144,12 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
       window) rewards the act of checking in.
 - [x] Progressive overload (`ProgressiveOverloadService`) — plate-true ±2.5 kg suggestions, kind-aware.
 - [x] Rest & recovery (`RestService`) — shield charges, recovery XP, rest-day protection.
+- [x] Rest-day Recovery Briefing (`RecoveryInsightService`, 2026-07-18) — both Home recovery cards'
+      primary opens a BIT-voiced bottom sheet with one rotating recovery insight per rest day
+      (35-entry pool in `data/recovery_insights.dart`, deterministic unseen-first rotation, honest
+      wrap line). Research-grounded (SDT competence > rewards): deliberately NO XP/gems/streak and
+      no guilt or train-nudge copy — rest stays protected. Spec + plan:
+      `docs/superpowers/specs/2026-07-18-rest-day-recovery-insights-design.md`.
 - [x] Programs (`ProgramService`) — structured workout programs (PPL, Full Body, Upper/Lower).
 - [x] Onboarding — cinematic sequence: cold open → problem → solution → calibration quiz →
       avatar → name → class reveal → rank assessed → charge ritual → start gate.
