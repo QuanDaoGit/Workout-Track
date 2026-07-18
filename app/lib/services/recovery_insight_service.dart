@@ -6,13 +6,20 @@ import '../data/recovery_insights.dart';
 import 'json_safe.dart';
 import 'keyed_lock.dart';
 
-/// One resolved rest-day briefing: the insight to show today, plus whether
-/// today is the day the pool wrapped (the sheet shows the honest refresher
-/// line only on a wrap day).
+/// One resolved rest-day briefing: the insight to show today, whether today is
+/// the day the pool wrapped (the sheet shows the honest refresher line only on
+/// a wrap day), and the calendar day the pick was resolved FOR ([dayKey]) — the
+/// commit files under this day, not a re-read clock, so a peek→commit that
+/// straddles midnight can't mislabel the day (and repeat the insight tomorrow).
 class RecoveryInsightPick {
-  const RecoveryInsightPick({required this.insight, required this.poolWrapped});
+  const RecoveryInsightPick({
+    required this.insight,
+    required this.poolWrapped,
+    required this.dayKey,
+  });
   final RecoveryInsight insight;
   final bool poolWrapped;
+  final String dayKey;
 }
 
 /// Rotates BIT's rest-day recovery briefings ([recoveryInsights]).
@@ -40,17 +47,20 @@ class RecoveryInsightService {
     });
   }
 
-  /// Records [pick] as today's shown insight. The opener calls this right
-  /// after the sheet route is pushed. Idempotent per day (a double-tap or
-  /// reopen commits once); a kill between peek and commit costs nothing —
-  /// the same candidate resolves again next open. The read-modify-write runs
-  /// inside [prefsWriteLock] (per the deep-feature learnings: a prefs RMW is
-  /// not atomic, and both recovery cards can trigger this concurrently).
+  /// Records [pick] as the shown insight for [RecoveryInsightPick.dayKey] —
+  /// the day the pick was resolved for, NOT a fresh clock read, so a commit
+  /// that lands just past midnight still files under the day the user actually
+  /// saw. The opener calls this right after the sheet route is pushed.
+  /// Idempotent per day (a double-tap or reopen commits once); a kill between
+  /// peek and commit costs nothing — the same candidate resolves again next
+  /// open. The read-modify-write runs inside [prefsWriteLock] (per the
+  /// deep-feature learnings: a prefs RMW is not atomic, and both recovery
+  /// cards can trigger this concurrently).
   Future<void> commitShown(RecoveryInsightPick pick) {
     return prefsWriteLock.synchronized(stateKey, () async {
       final prefs = await SharedPreferences.getInstance();
       final state = _loadState(prefs);
-      final dayKey = _dayKey(_nowProvider());
+      final dayKey = pick.dayKey;
       final alreadyShown = state.lastShownDayKey == dayKey &&
           state.lastShownId != null &&
           _byId(state.lastShownId!) != null;
@@ -83,6 +93,7 @@ class RecoveryInsightService {
         return RecoveryInsightPick(
           insight: shown,
           poolWrapped: state.lastShownWrapped,
+          dayKey: dayKey,
         );
       }
       // The stored id left the pool (content edit); fall through to a pick.
@@ -99,6 +110,7 @@ class RecoveryInsightService {
     return RecoveryInsightPick(
       insight: unseen[_seed(dayKey) % unseen.length],
       poolWrapped: wrapped,
+      dayKey: dayKey,
     );
   }
 

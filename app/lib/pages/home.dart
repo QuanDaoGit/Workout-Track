@@ -1830,17 +1830,36 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  /// Reentrancy guard for [_openRecoveryInsight]: the async peek before the
+  /// route push leaves a window where a fast double-tap would stack two sheets.
+  bool _recoveryInsightOpening = false;
+
   /// The recovery cards' primary action: peek today's briefing (async, pure
   /// read), present BIT's sheet, then commit it as shown only once the route
   /// is pushed (Codex F1: never burn an insight the user never saw). No
   /// reward, no streak, no nudge.
   Future<void> _openRecoveryInsight() async {
-    final service = RecoveryInsightService();
-    final pick = await service.peekToday();
-    if (!mounted) return;
-    final sheet = showRecoveryInsightSheet(context, pick);
-    unawaited(service.commitShown(pick));
-    await sheet;
+    if (_recoveryInsightOpening) return;
+    _recoveryInsightOpening = true;
+    try {
+      final service = RecoveryInsightService();
+      final pick = await service.peekToday();
+      if (!mounted) return;
+      final sheet = showRecoveryInsightSheet(context, pick);
+      // Fire-and-forget, but contained: a failed commit must never surface as
+      // an unhandled error on the home path — the same pick just re-resolves
+      // next open.
+      unawaited(() async {
+        try {
+          await service.commitShown(pick);
+        } catch (e) {
+          debugPrint('RecoveryInsight: commit failed (re-resolves next open): $e');
+        }
+      }());
+      await sheet;
+    } finally {
+      _recoveryInsightOpening = false;
+    }
   }
 
   /// Goal-gradient meter for the active arc: a real progress bar + honest

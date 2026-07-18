@@ -23,8 +23,11 @@ Future<void> showRecoveryInsightSheet(
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: kCard,
+    // Scroll-controlled + scrollable body so a large accessibility text scale
+    // grows the sheet instead of overflowing it (the warmup_sheet pattern).
+    isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(kCardRadius)),
     ),
     builder: (context) => RecoveryInsightSheetContent(pick: pick),
   );
@@ -40,7 +43,7 @@ class RecoveryInsightSheetContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final insight = pick.insight;
-    return Padding(
+    return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         20,
         18,
@@ -84,10 +87,7 @@ class RecoveryInsightSheetContent extends StatelessWidget {
               const BitMoodCore(size: 72, reveal: 1),
               const SizedBox(width: kSpace2),
               Expanded(
-                child: BitSpeechBubble(
-                  text: insight.text,
-                  semanticsLabel: insight.text,
-                ),
+                child: BitSpeechBubble(text: insight.text),
               ),
             ],
           ),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/data/recovery_insights.dart';
@@ -57,11 +59,45 @@ void main() {
     await service.commitShown(pick);
     // Forge a different pick (any other pool entry) and try to commit it.
     final other = recoveryInsights.firstWhere((i) => i.id != pick.insight.id);
-    await service
-        .commitShown(RecoveryInsightPick(insight: other, poolWrapped: false));
+    await service.commitShown(RecoveryInsightPick(
+        insight: other, poolWrapped: false, dayKey: pick.dayKey));
     final again = await service.peekToday();
     expect(again.insight.id, pick.insight.id,
         reason: 'the first commit of the day must win');
+  });
+
+  test('pick carries the day it was resolved for', () async {
+    final pick = await serviceAt(DateTime(2026, 7, 18, 23, 59)).peekToday();
+    expect(pick.dayKey, '2026-07-18');
+  });
+
+  test('midnight straddle: commit files under the peeked day, not the clock',
+      () async {
+    // Peek just before midnight; the commit lands just after it (the sheet
+    // was pushed at 23:59, commitShown resolved at 00:00).
+    final pick = await serviceAt(DateTime(2026, 7, 18, 23, 59)).peekToday();
+    final afterMidnight = serviceAt(DateTime(2026, 7, 19, 0, 1));
+    await afterMidnight.commitShown(pick);
+    // The new day is NOT the committed day — it resolves a fresh insight
+    // (no repeat-day), and the straddled insight is spent, never re-picked.
+    final nextDay = await afterMidnight.peekToday();
+    expect(nextDay.dayKey, '2026-07-19');
+    expect(nextDay.insight.id, isNot(pick.insight.id),
+        reason: 'a commit landing past midnight must not relabel the pick '
+            'as today\'s and repeat it');
+  });
+
+  test('midnight straddle keeps commit idempotence', () async {
+    final pick = await serviceAt(DateTime(2026, 7, 18, 23, 59)).peekToday();
+    final afterMidnight = serviceAt(DateTime(2026, 7, 19, 0, 1));
+    await afterMidnight.commitShown(pick);
+    await afterMidnight.commitShown(pick); // double-tap across the boundary
+    final prefs = await SharedPreferences.getInstance();
+    final stored = jsonDecode(prefs.getString(RecoveryInsightService.stateKey)!)
+        as Map<String, dynamic>;
+    expect(stored['lastShownDayKey'], '2026-07-18');
+    // Still exactly one seen id — the second commit was a no-op.
+    expect(stored['seenIds'], [pick.insight.id]);
   });
 
   test('pick is deterministic for a fixed day key', () async {
