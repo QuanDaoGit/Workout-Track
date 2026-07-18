@@ -29,6 +29,7 @@ import '../services/profile_service.dart';
 import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
 import '../services/quest_service.dart';
+import '../services/recovery_insight_service.dart';
 import '../services/rest_service.dart';
 import '../services/stat_engine.dart';
 import '../services/workout_defaults_service.dart';
@@ -57,6 +58,7 @@ import '../widgets/pixel_loader.dart';
 import '../widgets/program_path_hud.dart';
 import '../widgets/pulse_color_text.dart';
 import '../widgets/radar_stat_icon.dart';
+import '../widgets/recovery_insight_sheet.dart';
 import '../widgets/room/expedition_dispatch_sheet.dart';
 import '../widgets/room/room_scene.dart';
 import '../widgets/screen_shake.dart';
@@ -1818,16 +1820,27 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ],
       ),
       nextUp: _programNextUp(progress, todayWorkoutPending: false),
-      primaryLabel: 'KEEP RESTING',
-      onPrimary: () {
-        showArcadeNotice(context, 'Recovery day in progress.');
-      },
+      primaryLabel: 'RECOVERY BRIEFING',
+      onPrimary: _openRecoveryInsight,
       secondaryLabel: 'TRAIN ANYWAY',
       onSecondary: () => _startWorkout(
         trainAnyway: false,
         advanceProgramRestDayOnCompletion: true,
       ),
     );
+  }
+
+  /// The recovery cards' primary action: peek today's briefing (async, pure
+  /// read), present BIT's sheet, then commit it as shown only once the route
+  /// is pushed (Codex F1: never burn an insight the user never saw). No
+  /// reward, no streak, no nudge.
+  Future<void> _openRecoveryInsight() async {
+    final service = RecoveryInsightService();
+    final pick = await service.peekToday();
+    if (!mounted) return;
+    final sheet = showRecoveryInsightSheet(context, pick);
+    unawaited(service.commitShown(pick));
+    await sheet;
   }
 
   /// Goal-gradient meter for the active arc: a real progress bar + honest
@@ -1977,6 +1990,8 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ],
       ),
+      primaryLabel: 'RECOVERY BRIEFING',
+      onPrimary: _openRecoveryInsight,
       secondaryLabel: 'Train anyway',
       onSecondary: () => _startWorkout(trainAnyway: false),
     );
