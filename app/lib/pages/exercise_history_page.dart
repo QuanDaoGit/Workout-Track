@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 
 import '../models/unit_models.dart';
 import '../models/workout_models.dart';
+import '../services/haptic_service.dart';
 import '../services/progressive_overload_service.dart';
+import '../services/ui_sound.dart';
 import '../services/unit_settings_service.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/app_fonts.dart';
@@ -282,6 +284,8 @@ class _HistoryEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return HoldDepress(
       onTap: () => onOpen(entry.session),
+      haptic: HapticIntent.selection,
+      sound: UiSound.tick,
       borderRadius: BorderRadius.circular(kCardRadius),
       child: Card(
         child: Padding(

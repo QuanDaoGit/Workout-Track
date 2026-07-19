@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import '../services/haptic_service.dart';
+import 'arcade_filled.dart';
 import '../theme/app_fonts.dart';
 
 import '../theme/tokens.dart';
@@ -83,7 +85,7 @@ class _TypeAgreeDialogState extends State<TypeAgreeDialog> {
         ],
       ),
       actions: [
-        TextButton(
+        ArcadeTextButton(
           onPressed: () => Navigator.pop(context, false),
           child: Text(
             'CANCEL',
@@ -94,6 +96,8 @@ class _TypeAgreeDialogState extends State<TypeAgreeDialog> {
           label: 'CONFIRM',
           color: _isMatch ? kDanger : kMutedText,
           powerOn: true,
+          // A type-AGREE confirm is the app's heaviest destructive commit.
+          haptic: HapticIntent.warning,
           onPressed: _isMatch ? () => Navigator.pop(context, true) : null,
         ),
       ],

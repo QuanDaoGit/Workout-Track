@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../services/haptic_service.dart';
+import '../../services/sfx_service.dart';
+import '../../services/ui_sound.dart';
 import '../../theme/tokens.dart';
 
 class PhosphorTap extends StatefulWidget {
@@ -17,6 +19,7 @@ class PhosphorTap extends StatefulWidget {
     this.borderRadius = const BorderRadius.all(Radius.circular(kCardRadius)),
     this.behavior = HitTestBehavior.opaque,
     this.haptic = HapticIntent.none,
+    this.sound,
   });
 
   final Widget child;
@@ -27,6 +30,10 @@ class PhosphorTap extends StatefulWidget {
   final double opacity;
   final BorderRadius borderRadius;
   final HitTestBehavior behavior;
+
+  /// Opt-in kit sound on a committed tap (SFX v2). Explicit per site — never
+  /// derived from [haptic]. Defaults to silent.
+  final UiSound? sound;
 
   /// Opt-in tactile tick on a committed tap, routed through the rate-limited
   /// [HapticService.fireCoalesced] so the broad layer stays a *tick*, never a
@@ -80,6 +87,8 @@ class _PhosphorTapState extends State<PhosphorTap> {
           ? null
           : () {
               HapticService.instance.fireCoalesced(widget.haptic);
+              final s = widget.sound;
+              if (s != null) SfxService.instance.playUi(s);
               tap();
             },
       onLongPress: longPress,

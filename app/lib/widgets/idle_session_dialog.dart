@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/haptic_service.dart';
 import '../theme/tokens.dart';
 import 'arcade_dialog_button_column.dart';
+import 'arcade_filled.dart';
 
 /// What the user chose on the idle-session reveal.
 enum IdleSessionChoice { save, resume, discard }
@@ -43,16 +44,16 @@ Future<IdleSessionChoice?> showIdleSessionDialog(
           ArcadeDialogButtonColumn(
             children: [
               if (hasSets)
-                FilledButton(
+                ArcadeFilled(
+                  haptic: HapticIntent.success,
                   onPressed: () {
-                    HapticService.instance.success();
                     Navigator.of(ctx).pop(IdleSessionChoice.save);
                   },
                   child: const Text('SAVE & FINISH'),
                 ),
-              FilledButton(
+              ArcadeFilled(
+                haptic: HapticIntent.selection,
                 onPressed: () {
-                  HapticService.instance.selection();
                   Navigator.of(ctx).pop(IdleSessionChoice.resume);
                 },
                 style: hasSets
@@ -64,9 +65,9 @@ Future<IdleSessionChoice?> showIdleSessionDialog(
                     : null,
                 child: Text(resumeLabel),
               ),
-              FilledButton(
+              ArcadeFilled(
+                haptic: HapticIntent.warning,
                 onPressed: () {
-                  HapticService.instance.warning();
                   Navigator.of(ctx).pop(IdleSessionChoice.discard);
                 },
                 style: FilledButton.styleFrom(

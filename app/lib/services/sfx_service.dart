@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 
+import 'ui_sound.dart';
+
 /// The app's sound effects. Intentionally tiny: fire-and-forget one-shots, every
 /// call guarded so audio is never load-bearing.
 ///
@@ -137,21 +139,15 @@ class SfxService {
   /// back-to-back) — variants alone don't prevent fatigue (Codex).
   static const Duration setLoggedCooldown = Duration(milliseconds: 1000);
 
-  DateTime? _lastUiTapAt;
-  DateTime? _lastSetLoggedAt;
-  int _tapVariant = 0;
-  int _setLoggedVariant = 0;
+  /// The arbiter window (Codex, SFX v2): after any non-micro role fires
+  /// (warn / skip / rest / signature), micro ticks are suppressed briefly so
+  /// one gesture never stacks a tick under its louder sound.
+  static const Duration microSuppress = Duration(milliseconds: 80);
 
-  static const List<String> _uiAssets = [
-    'audio/ui_tap_1.wav',
-    'audio/ui_tap_2.wav',
-    'audio/ui_tap_3.wav',
-    'audio/set_logged_1.wav',
-    'audio/set_logged_2.wav',
-    'audio/set_logged_3.wav',
-    'audio/ui_warn.wav',
-    'audio/rest_go.wav',
-  ];
+  DateTime? _lastMicroAt;
+  DateTime? _lastNonMicroAt;
+  final Map<UiSound, DateTime> _lastConfirmAt = {};
+  final Map<UiSound, int> _variantCursor = {};
 
   final Map<String, Future<AudioPool>> _poolFutures = {};
   final Set<String> _deadPools = {};
@@ -209,7 +205,8 @@ class SfxService {
   /// degrades to silence, never a throw into boot.
   Future<void> warmUpUiPools() async {
     if (_isFlutterTest) return;
-    for (final asset in _uiAssets) {
+    final assets = kUiSoundSpecs.values.expand((s) => s.assets);
+    for (final asset in assets) {
       try {
         await _pool(asset);
       } catch (e) {
@@ -244,54 +241,54 @@ class SfxService {
     }
   }
 
-  /// The **PixelButton press tick** ("keycap rise", G5→C6, 34ms) — the broad
-  /// UI layer. Gated on the master Sound toggle AND the "UI sounds"
-  /// sub-toggle; rate-limited; rotates 3 pre-rendered variants (audio fatigues
-  /// faster than visuals on repeat).
-  Future<void> playUiTap() {
-    if (!enabled || !uiSoundsEnabled) return Future<void>.value();
+  /// Play a kit sound by ROLE — the single entry point for the interaction
+  /// tier (SFX v2). Applies the spec's gates (master / sub-toggle), the
+  /// cooldown class, the arbiter (non-micro suppresses micro for
+  /// [microSuppress]), and variant rotation. See `ui_sound.dart` for the
+  /// registry + the grammar.
+  Future<void> playUi(UiSound sound) {
+    final spec = kUiSoundSpecs[sound]!;
+    if (!enabled) return Future<void>.value();
+    if (spec.subToggle && !uiSoundsEnabled) return Future<void>.value();
     final now = nowProvider();
-    final last = _lastUiTapAt;
-    if (last != null && now.difference(last) < uiTapCooldown) {
-      return Future<void>.value();
+    switch (spec.cooldown) {
+      case UiSoundCooldown.micro:
+        final lastMicro = _lastMicroAt;
+        if (lastMicro != null && now.difference(lastMicro) < uiTapCooldown) {
+          return Future<void>.value();
+        }
+        final lastLoud = _lastNonMicroAt;
+        if (lastLoud != null && now.difference(lastLoud) < microSuppress) {
+          // A louder role just fired for this gesture — the tick yields.
+          return Future<void>.value();
+        }
+        _lastMicroAt = now;
+      case UiSoundCooldown.confirm:
+        final last = _lastConfirmAt[sound];
+        if (last != null && now.difference(last) < setLoggedCooldown) {
+          return Future<void>.value();
+        }
+        _lastConfirmAt[sound] = now;
+        _lastNonMicroAt = now;
+      case UiSoundCooldown.none:
+        _lastNonMicroAt = now;
     }
-    _lastUiTapAt = now;
-    _tapVariant = _tapVariant % 3 + 1;
-    return _playPooled('audio/ui_tap_$_tapVariant.wav');
+    final idx = (_variantCursor[sound] ?? 0) % spec.assets.length;
+    _variantCursor[sound] = idx + 1;
+    return _playPooled(spec.assets[idx]);
   }
 
-  /// The **set-logged confirm** ("checkmark", C5→G5, 130ms) — the core-loop
-  /// beat, deliberately neutral (celebration stays with the PR/reward class).
-  /// Master toggle only; 1s cooldown absorbs correction bursts; 3 variants.
-  Future<void> playSetLogged() {
-    if (!enabled) return Future<void>.value();
-    final now = nowProvider();
-    final last = _lastSetLoggedAt;
-    if (last != null && now.difference(last) < setLoggedCooldown) {
-      return Future<void>.value();
-    }
-    _lastSetLoggedAt = now;
-    _setLoggedVariant = _setLoggedVariant % 3 + 1;
-    return _playPooled('audio/set_logged_$_setLoggedVariant.wav');
-  }
+  // Thin named delegates — existing call sites and tests stay stable.
+  Future<void> playUiTap() => playUi(UiSound.tick);
+  Future<void> playSetLogged() => playUi(UiSound.setLogged);
+  Future<void> playUiWarn() => playUi(UiSound.warn);
 
-  /// The **destructive-confirm buzz** (E5→A4 descending, 125ms) — fires with
-  /// the warning haptic on delete/discard/reset commits. Descends where
-  /// confirms rise, so it can never be mistaken for one. Rare by design.
-  Future<void> playUiWarn() {
-    if (!enabled) return Future<void>.value();
-    return _playPooled('audio/ui_warn.wav');
-  }
-
-  /// The **rest-end "ready-go"** (G5→C6 chorus, 450ms) — the one functional
-  /// cue: fires when a watched rest elapses live. Best-effort over the user's
-  /// own music (we mix, never duck); the rest-end notification remains the
-  /// reliable backgrounded path. Call sites dedupe via the live-finish guard +
-  /// `RestTimerService.cancel()`.
-  Future<void> playRestGo() {
-    if (!enabled) return Future<void>.value();
-    return _playPooled('audio/rest_go.wav');
-  }
+  /// Between-EXERCISE rest elapsed (the full ready-go chorus). The
+  /// between-SET surface plays [UiSound.restGoSet] instead — the weaker
+  /// sibling. Both best-effort over the user's own music; the rest-end
+  /// notification remains the reliable backgrounded path; call sites dedupe
+  /// via the live-finish guard + `RestTimerService.cancel()`.
+  Future<void> playRestGo() => playUi(UiSound.restGoExercise);
 
   /// Restore every static + instance mutable knob this service exposes —
   /// cooldown stamps, variant cursors, injected clock, test recorder, pool
@@ -302,10 +299,10 @@ class SfxService {
     uiSoundsEnabled = true;
     nowProvider = DateTime.now;
     onPlayForTest = null;
-    _lastUiTapAt = null;
-    _lastSetLoggedAt = null;
-    _tapVariant = 0;
-    _setLoggedVariant = 0;
+    _lastMicroAt = null;
+    _lastNonMicroAt = null;
+    _lastConfirmAt.clear();
+    _variantCursor.clear();
     _poolFutures.clear();
     _deadPools.clear();
   }

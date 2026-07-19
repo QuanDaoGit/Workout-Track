@@ -6,6 +6,7 @@ import '../models/unit_models.dart';
 import '../services/body_goal_service.dart';
 import '../services/unit_settings_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/arcade_filled.dart';
 import '../widgets/motion/arcade_text_field.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_button.dart';
@@ -57,14 +58,14 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
           style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
         ),
         actions: [
-          TextButton(
+          ArcadeTextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'CANCEL',
               style: AppFonts.shareTechMono(color: kMutedText),
             ),
           ),
-          FilledButton(
+          ArcadeFilled(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text(
               'CONFIRM',
@@ -215,7 +216,7 @@ class _GoalSelectionPageState extends State<GoalSelectionPage> {
           ),
           const SizedBox(height: 8),
           Center(
-            child: TextButton(
+            child: ArcadeTextButton(
               onPressed: _saving ? null : () => _saveAndReturn(skip: true),
               child: Text(
                 'SKIP',

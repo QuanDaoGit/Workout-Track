@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../services/haptic_service.dart';
 import '../services/pinned_lifts_service.dart';
 import '../services/strength_trend_service.dart';
+import '../services/ui_sound.dart';
 import '../services/unit_settings_service.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
+import '../widgets/arcade_filled.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/motion/arcade_text_field.dart';
@@ -184,7 +186,7 @@ class _StrengthIndexPageState extends State<StrengthIndexPage>
                     prefixIcon: const Icon(Icons.search_sharp, color: kMutedText),
                     suffixIcon: _query.isEmpty
                         ? null
-                        : IconButton(
+                        : ArcadeIconButton(
                             tooltip: 'Clear search',
                             onPressed: () {
                               _searchController.clear();
@@ -423,6 +425,8 @@ class _Chip extends StatelessWidget {
       label: label,
       child: HoldDepress(
         onTap: onTap,
+        haptic: HapticIntent.selection,
+        sound: UiSound.select,
         borderRadius: BorderRadius.circular(kCardRadius),
         child: Container(
           alignment: Alignment.center,

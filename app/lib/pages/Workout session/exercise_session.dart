@@ -17,9 +17,11 @@ import '../../services/simple_mode_service.dart';
 import '../../services/progressive_overload_service.dart';
 import '../../services/rest_timer_service.dart';
 import '../../services/sfx_service.dart';
+import '../../services/ui_sound.dart';
 import '../../services/unit_settings_service.dart';
 import '../../services/warmup_calculator.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/arcade_filled.dart';
 import '../../widgets/exercise_demo_cabinet.dart';
 import '../../widgets/motion/arcade_text_field.dart';
 import '../../widgets/pixel_button.dart';
@@ -400,7 +402,13 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
 
   /// Shown when a user taps a set whose turn has not come (a later set before
   /// the current one is logged) — the sequential-logging guard.
-  void _warnLogPrevious() => _quickNotice('Save your previous set first');
+  void _warnLogPrevious() {
+    // An invalid action gets the warn buzz (never the confirm tick) beside its
+    // notice; the arbiter keeps the notice's own blip from stacking under it.
+    HapticService.instance.fireCoalesced(HapticIntent.selection);
+    SfxService.instance.playUi(UiSound.warn);
+    _quickNotice('Save your previous set first');
+  }
 
   void _unlockSet(int index) {
     // Re-editing an earlier set re-gates the rows below it; drop focus/keyboard
@@ -416,7 +424,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
   void _removeSet(int index) {
     if (index <= 0 || index >= _rows.length) return;
     if (_lockedSets.contains(index)) return;
-    HapticService.instance.warning(); // destructive: a set row is removed
+    // Destructive warning haptic now owned by the remove button's wrapper.
     setState(() {
       _rows[index].dispose();
       _rows.removeAt(index);
@@ -533,7 +541,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
         ],
         Align(
           alignment: Alignment.centerLeft,
-          child: TextButton.icon(
+          child: ArcadeTextButton(
             onPressed: _addWarmupRow,
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -541,14 +549,20 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               foregroundColor: kAmber,
             ),
-            icon: const Icon(Icons.add_sharp, size: 16, color: kAmber),
-            label: Text(
-              'WARM-UP SET',
-              style: AppFonts.shareTechMono(
-                fontSize: 11,
-                color: kAmber,
-                letterSpacing: 1.2,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.add_sharp, size: 16, color: kAmber),
+                const SizedBox(width: 8),
+                Text(
+                  'WARM-UP SET',
+                  style: AppFonts.shareTechMono(
+                    fontSize: 11,
+                    color: kAmber,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -781,7 +795,7 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
 
                     SizedBox(
                       width: 132,
-                      child: FilledButton(
+                      child: ArcadeFilled(
                         onPressed: _addSet,
                         style: FilledButton.styleFrom(
                           backgroundColor: kCard,
@@ -907,12 +921,14 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                                     ),
                                     showDuration: const Duration(seconds: 2),
                                   ),
-                                  child: IconButton(
+                                  child: ArcadeIconButton(
                                     tooltip: 'Plate calculator',
                                     padding: EdgeInsets.zero,
                                     // Pin the rendered height to the constant the
                                     // reps spacer matches (density-proof).
-                                    visualDensity: VisualDensity.standard,
+                                    style: IconButton.styleFrom(
+                                      visualDensity: VisualDensity.standard,
+                                    ),
                                     constraints: const BoxConstraints(
                                       minWidth: 28,
                                       minHeight: _kSetFieldSuffixExtent,
@@ -1033,8 +1049,9 @@ class _ExerciseSessionPageState extends State<ExerciseSessionPage> {
                       width: 32,
                       height: 48,
                       child: (!isLocked && index >= 1)
-                          ? IconButton(
+                          ? ArcadeIconButton(
                               tooltip: 'Remove set',
+                              haptic: HapticIntent.warning,
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                               icon: const Icon(
@@ -1105,6 +1122,7 @@ class _SaveSetButton extends StatelessWidget {
       enabled: enabled,
       label: semanticsLabel,
       excludeSemantics: true,
+      // button-ok: owns its beat via _logSet (set-logged confirm + selection/reward haptic)
       child: FilledButton(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
@@ -1193,7 +1211,7 @@ class _WarmupCard extends StatelessWidget {
             ),
           ),
           if (onPlateCalc != null)
-            IconButton(
+            ArcadeIconButton(
               tooltip: 'Plate calculator',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -1209,7 +1227,7 @@ class _WarmupCard extends StatelessWidget {
             const SizedBox(width: kSpace2),
             SizedBox(
               height: 32,
-              child: FilledButton(
+              child: ArcadeFilled(
                 onPressed: onLog,
                 style: FilledButton.styleFrom(
                   backgroundColor: kCard,
@@ -1296,8 +1314,9 @@ class _WarmupSetRow extends StatelessWidget {
         SizedBox(
           width: 48,
           height: 48,
-          child: IconButton(
+          child: ArcadeIconButton(
             tooltip: 'Remove warm-up set',
+            haptic: HapticIntent.warning,
             padding: EdgeInsets.zero,
             icon: const Icon(Icons.close_sharp, color: kMutedText, size: 20),
             onPressed: onRemove,

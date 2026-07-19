@@ -15,9 +15,11 @@ import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
 import '../services/rest_notification_coordinator.dart';
 import '../services/rest_timer_service.dart';
+import '../services/ui_sound.dart';
 import '../services/workout_draft_controller.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/arcade_filled.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
 import '../widgets/feature_gate_notice.dart';
@@ -830,7 +832,7 @@ class _SelectionHeader extends StatelessWidget {
               ),
             ),
           ),
-          IconButton(
+          ArcadeIconButton(
             onPressed: onCancel,
             icon: const Icon(Icons.close_sharp, color: kMutedText),
             tooltip: 'Discard',
@@ -975,6 +977,7 @@ class _NavItem extends StatelessWidget {
       // tick (no inline HapticService call, no Material InkWell ripple).
       child: ArcadeTap(
         haptic: HapticIntent.selection,
+        sound: UiSound.select,
         onTap: onTap,
         child: locked
             ? Semantics(

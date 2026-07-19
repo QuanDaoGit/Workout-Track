@@ -3,9 +3,13 @@ import 'package:flutter/services.dart';
 import '../theme/app_fonts.dart';
 
 import '../models/unit_models.dart';
+import '../services/haptic_service.dart';
 import '../services/plate_calculator.dart';
+import '../services/sfx_service.dart';
+import '../services/ui_sound.dart';
 import '../services/unit_settings_service.dart';
 import '../theme/tokens.dart';
+import 'arcade_filled.dart';
 import 'motion/arcade_text_field.dart';
 import 'motion/phosphor_tap.dart';
 
@@ -305,7 +309,7 @@ class _PlateCalculatorSheetState extends State<PlateCalculatorSheet> {
           style: AppFonts.shareTechMono(color: kMutedText, fontSize: 12),
         ),
       const SizedBox(height: kSpace4),
-      FilledButton(
+      ArcadeFilled(
         onPressed: target == null
             ? null
             : () => Navigator.of(context).pop(displayToKg(target, unit)),
@@ -352,6 +356,8 @@ class _PlateCalculatorSheetState extends State<PlateCalculatorSheet> {
                 _stack.clear();
                 _removingIds.clear();
               }),
+              haptic: HapticIntent.selection,
+              sound: UiSound.select,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: kSpace2,
@@ -430,7 +436,7 @@ class _PlateCalculatorSheetState extends State<PlateCalculatorSheet> {
         ),
       ),
       const SizedBox(height: kSpace4),
-      FilledButton(
+      ArcadeFilled(
         onPressed: () =>
             Navigator.of(context).pop(displayToKg(total, unit)),
         child: const Text('USE WEIGHT'),
@@ -519,6 +525,8 @@ class _ModeSegmentLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return PhosphorTap(
       onTap: onTap,
+      haptic: HapticIntent.selection,
+      sound: UiSound.select,
       child: Center(
         child: AnimatedDefaultTextStyle(
           duration: reduceMotion ? Duration.zero : kMotionPop,
@@ -545,6 +553,8 @@ class _PlateChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return PhosphorTap(
       onTap: onTap,
+      haptic: HapticIntent.selection,
+      sound: UiSound.select,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
@@ -712,6 +722,8 @@ class _BarChip extends StatelessWidget {
       excludeSemantics: true,
       child: PhosphorTap(
         onTap: onTap,
+        haptic: HapticIntent.selection,
+        sound: UiSound.select,
         child: Container(
           constraints: const BoxConstraints(minHeight: 46),
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
@@ -936,9 +948,16 @@ class _AnimatedPlate extends StatelessWidget {
         ),
       );
     }
+    // haptic-ok: micro plate hit-area (8-14px sprites); feedback fired inline.
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: removing ? null : onTap,
+      onTap: removing
+          ? null
+          : () {
+              HapticService.instance.fireCoalesced(HapticIntent.selection);
+              SfxService.instance.playUi(UiSound.select);
+              onTap();
+            },
       child: Container(
         // Small plates render 8-14px wide; keep them tappable. Transparent
         // paint makes the whole hit area itself hit-testable.

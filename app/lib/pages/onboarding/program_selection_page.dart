@@ -5,6 +5,8 @@ import '../../models/calibration_quiz_models.dart';
 import '../../models/character_draft.dart';
 import '../../models/program_models.dart';
 import '../../services/exercise_catalog_service.dart';
+import '../../services/haptic_service.dart';
+import '../../services/ui_sound.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_route.dart';
@@ -294,6 +296,8 @@ class _ProgramSelectionCard extends StatelessWidget {
       label: '${program.name} program',
       child: HoldDepress(
         onTap: onTap,
+        haptic: HapticIntent.selection,
+        sound: UiSound.select,
         borderRadius: BorderRadius.circular(kCardRadius),
         child: AnimatedContainer(
           duration: MediaQuery.of(context).disableAnimations
@@ -582,6 +586,8 @@ class _TrainingDaysSummary extends StatelessWidget {
       label: 'Training days, ${_weekdaysLabel(weekdays)}, edit',
       child: HoldDepress(
         onTap: onTap,
+        haptic: HapticIntent.selection,
+        sound: UiSound.tick,
         borderRadius: BorderRadius.circular(kCardRadius),
         child: Container(
           padding: const EdgeInsets.symmetric(

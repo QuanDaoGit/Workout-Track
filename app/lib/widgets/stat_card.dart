@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'arcade_filled.dart';
 import '../theme/app_fonts.dart';
 
 import '../models/stat_radar_read.dart';
@@ -131,7 +132,7 @@ class _StatCardState extends State<StatCard> {
           ],
         ),
         actions: [
-          TextButton(
+          ArcadeTextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text(
               'OK',

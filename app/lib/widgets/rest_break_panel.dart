@@ -6,6 +6,7 @@ import '../services/analytics_service.dart';
 import '../services/haptic_service.dart';
 import '../services/rest_timer_service.dart';
 import '../services/sfx_service.dart';
+import '../services/ui_sound.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
 import 'companion/bit_mood_core.dart';
@@ -163,6 +164,7 @@ class _RestBreakPanelState extends State<RestBreakPanel> {
                 child: _AdjustButton(
                   label: '−15s',
                   semanticLabel: 'Subtract 15 seconds of rest',
+                  sound: UiSound.stepDown,
                   onTap: () {
                     RestTimerService.instance.adjust(-15);
                     unawaited(
@@ -178,6 +180,7 @@ class _RestBreakPanelState extends State<RestBreakPanel> {
                 child: _AdjustButton(
                   label: '+15s',
                   semanticLabel: 'Add 15 seconds of rest',
+                  sound: UiSound.stepUp,
                   onTap: () {
                     RestTimerService.instance.adjust(15);
                     unawaited(
@@ -193,9 +196,11 @@ class _RestBreakPanelState extends State<RestBreakPanel> {
           const SizedBox(height: kSpace2),
           SizedBox(
             width: double.infinity,
+            // button-ok: owns its beat — the skip release, not the generic tick
             child: FilledButton(
               onPressed: () {
                 HapticService.instance.tap(); // skip the rest, back to logging
+                SfxService.instance.playUi(UiSound.skip);
                 unawaited(
                   AnalyticsService.instance.logRestAction(
                     AnalyticsValue.restSkip,
@@ -234,9 +239,11 @@ class _AdjustButton extends StatelessWidget {
   const _AdjustButton({
     required this.label,
     required this.semanticLabel,
+    required this.sound,
     required this.onTap,
   });
 
+  final UiSound sound;
   final String label;
   final String semanticLabel;
   final VoidCallback onTap;
@@ -247,10 +254,12 @@ class _AdjustButton extends StatelessWidget {
       button: true,
       label: semanticLabel,
       excludeSemantics: true,
+      // button-ok: stepper owns its beat (coalesced haptic + directional pip)
       child: FilledButton(
         onPressed: () {
           // Coalesced so a fast ±15s tap-storm stays a tick, not a buzz.
           HapticService.instance.fireCoalesced(HapticIntent.selection);
+          SfxService.instance.playUi(sound);
           onTap();
         },
         style: FilledButton.styleFrom(

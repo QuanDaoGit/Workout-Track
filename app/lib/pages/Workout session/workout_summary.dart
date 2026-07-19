@@ -36,6 +36,7 @@ import '../../services/xp_boost_service.dart';
 import '../../services/xp_service.dart';
 import '../../data/companion_address.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/arcade_filled.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/companion/bit_companion.dart';
 import '../../widgets/companion/bit_sprite.dart' show BitMood;
@@ -772,14 +773,14 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
             style: AppFonts.shareTechMono(color: kText, fontSize: 13),
           ),
           actions: [
-            TextButton(
+            ArcadeTextButton(
               onPressed: () async {
                 await service.dismissOptInPrompt();
                 if (context.mounted) Navigator.of(context).pop();
               },
               child: const Text('NOT NOW'),
             ),
-            TextButton(
+            ArcadeTextButton(
               onPressed: () async {
                 await service.acceptOptInPrompt();
                 if (context.mounted) Navigator.of(context).pop();
@@ -1150,10 +1151,10 @@ class _WorkoutSummaryPageState extends State<WorkoutSummaryPage> {
                         const SizedBox(height: kSpace4),
                         _RevealBeat(
                           delayMs: 80,
-                          child: FilledButton(
+                          child: ArcadeFilled(
+                            haptic: HapticIntent.selection,
                             onPressed: _saved
                                 ? () {
-                                    HapticService.instance.selection();
                                     _goHome();
                                   }
                                 : null,

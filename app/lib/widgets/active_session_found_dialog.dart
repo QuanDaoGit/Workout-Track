@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../services/haptic_service.dart';
 import '../theme/tokens.dart';
 import 'arcade_dialog_button_column.dart';
+import 'arcade_filled.dart';
 
 enum ActiveSessionAction { continueOld, endOldAndStartNew }
 
@@ -20,12 +22,13 @@ Future<ActiveSessionAction?> showActiveSessionFoundDialog(
           const SizedBox(height: 16),
           ArcadeDialogButtonColumn(
             children: [
-              FilledButton(
+              ArcadeFilled(
                 onPressed: () =>
                     Navigator.of(ctx).pop(ActiveSessionAction.continueOld),
                 child: const Text('CONTINUE OLD'),
               ),
-              FilledButton(
+              ArcadeFilled(
+                haptic: HapticIntent.warning,
                 onPressed: () => Navigator.of(
                   ctx,
                 ).pop(ActiveSessionAction.endOldAndStartNew),
@@ -35,7 +38,7 @@ Future<ActiveSessionAction?> showActiveSessionFoundDialog(
                 ),
                 child: const Text('END OLD & START NEW'),
               ),
-              FilledButton(
+              ArcadeFilled(
                 onPressed: () => Navigator.of(ctx).pop(),
                 style: FilledButton.styleFrom(
                   backgroundColor: kBorderVariant,

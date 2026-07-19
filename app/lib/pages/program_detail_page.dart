@@ -10,7 +10,10 @@ import '../services/exercise_catalog_service.dart';
 import '../services/haptic_service.dart';
 import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
+import '../services/ui_sound.dart';
 import '../theme/tokens.dart';
+import '../widgets/arcade_filled.dart';
+import '../widgets/arcade_tap.dart';
 import '../widgets/pixel_button.dart';
 import '../widgets/program_day_card.dart';
 import '../widgets/program_path_hud.dart';
@@ -360,8 +363,9 @@ class _ProgramDetailPageState extends State<ProgramDetailPage> {
                   ),
                 const SizedBox(height: kSpace4),
                 if (_isActive)
-                  FilledButton(
+                  ArcadeFilled(
                     onPressed: _quitProgram,
+                    haptic: HapticIntent.warning,
                     style: FilledButton.styleFrom(
                       backgroundColor: kDanger,
                       foregroundColor: kWhite,
@@ -512,8 +516,10 @@ class _SwapOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return ArcadeTap(
       onTap: onTap,
+      haptic: HapticIntent.selection,
+      sound: UiSound.tick,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: kSpace3, vertical: 12),
         decoration: BoxDecoration(

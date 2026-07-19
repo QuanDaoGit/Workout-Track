@@ -14,11 +14,14 @@ import '../../services/notification_service.dart';
 import '../../services/ongoing_program_swap_service.dart';
 import '../../services/program_service.dart';
 import '../../services/rest_timer_service.dart';
+import '../../services/sfx_service.dart';
+import '../../services/ui_sound.dart';
 import '../../services/workout_storage_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_dialog_button_column.dart';
 import '../../widgets/idle_session_dialog.dart';
 import '../../widgets/arcade_bar.dart';
+import '../../widgets/arcade_filled.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/arcade_tap.dart';
 import '../../widgets/blinking_colon.dart';
@@ -714,7 +717,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
             const SizedBox(height: 16),
             ArcadeDialogButtonColumn(
               children: [
-                FilledButton(
+                ArcadeFilled(
                   onPressed: () => Navigator.of(ctx).pop(),
                   style: FilledButton.styleFrom(
                     backgroundColor: kBorderVariant,
@@ -723,9 +726,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                   ),
                   child: const Text('KEEP TRAINING'),
                 ),
-                FilledButton(
+                ArcadeFilled(
+                  haptic: HapticIntent.warning,
                   onPressed: () {
-                    HapticService.instance.warning();
                     Navigator.of(ctx).pop();
                     _abandonAndShowSummary();
                   },
@@ -759,7 +762,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
               'Saved until midnight. If not resumed, it ends early with time-only XP.',
             ),
             const SizedBox(height: 16),
-            FilledButton(
+            ArcadeFilled(
               onPressed: () {
                 Navigator.of(ctx).pop();
                 _pauseAndQuit();
@@ -768,7 +771,8 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
             ),
             const SizedBox(height: 12),
             Align(
-              child: FilledButton(
+              child: ArcadeFilled(
+                haptic: HapticIntent.warning,
                 onPressed: () {
                   Navigator.of(ctx).pop();
                   _showAbandonDialog();
@@ -903,9 +907,14 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       ),
     );
     if (onToggle == null) return card;
+    // haptic-ok: custom full-card hit area; feedback fired inline on tap.
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onToggle,
+      onTap: () {
+        HapticService.instance.fireCoalesced(HapticIntent.selection);
+        SfxService.instance.playUi(UiSound.tick);
+        onToggle();
+      },
       child: card,
     );
   }
@@ -917,9 +926,14 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     BuildContext context, {
     required VoidCallback onToggle,
   }) {
+    // haptic-ok: custom full-card hit area; feedback fired inline on tap.
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onToggle,
+      onTap: () {
+        HapticService.instance.fireCoalesced(HapticIntent.selection);
+        SfxService.instance.playUi(UiSound.tick);
+        onToggle();
+      },
       child: Card(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -975,7 +989,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          leading: IconButton(
+          leading: ArcadeIconButton(
             tooltip: 'Return home',
             onPressed: _savePartialAndQuit,
             icon: Transform.scale(
@@ -991,7 +1005,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           actions: [
             Padding(
               padding: const EdgeInsets.fromLTRB(0, 8, 16, 8),
-              child: FilledButton(
+              child: ArcadeFilled(
                 onPressed: _confirmEndEarly,
                 style: FilledButton.styleFrom(
                   backgroundColor: kDanger,
@@ -1092,6 +1106,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                                 child: ArcadeTap(
                                   onTap: () => _openExercise(exercise),
                                   haptic: HapticIntent.selection,
+                                  sound: UiSound.tick,
                                   borderRadius: BorderRadius.circular(4),
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(

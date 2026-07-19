@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import '../models/avatar_spec.dart';
 import '../services/haptic_service.dart';
 import '../services/profile_service.dart';
+import '../services/ui_sound.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
+import '../widgets/arcade_filled.dart';
 import '../widgets/avatar/ironbit_avatar.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/motion/phosphor_tap.dart';
@@ -86,15 +88,13 @@ class _AvatarCustomizerPageState extends State<AvatarCustomizerPage> {
           style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
         ),
         actions: [
-          TextButton(
+          ArcadeTextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('KEEP EDITING'),
           ),
-          TextButton(
-            onPressed: () {
-              HapticService.instance.warning();
-              Navigator.of(ctx).pop(true);
-            },
+          ArcadeTextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            haptic: HapticIntent.warning,
             child: const Text('DISCARD'),
           ),
         ],
@@ -122,7 +122,7 @@ class _AvatarCustomizerPageState extends State<AvatarCustomizerPage> {
         backgroundColor: kBg,
         appBar: AppBar(
           title: const Text('EDIT AVATAR'),
-          leading: IconButton(
+          leading: ArcadeIconButton(
             key: const ValueKey('avatar_customizer_back'),
             icon: const Icon(Icons.chevron_left_sharp, size: 28),
             onPressed: _handleBack,
@@ -346,6 +346,8 @@ class _OptionChip extends StatelessWidget {
       child: PhosphorTap(
         child: HoldDepress(
           onTap: onTap,
+          haptic: HapticIntent.selection,
+          sound: UiSound.select,
           borderRadius: BorderRadius.circular(kCardRadius),
           child: AnimatedContainer(
             duration: reduceMotion ? Duration.zero : kMotionFast,

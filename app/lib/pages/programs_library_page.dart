@@ -5,6 +5,7 @@ import '../data/programs_library.dart';
 import '../models/program_models.dart';
 import '../services/haptic_service.dart';
 import '../services/program_service.dart';
+import '../services/ui_sound.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_bar.dart';
 import '../widgets/arcade_route.dart';
@@ -249,6 +250,8 @@ class _ProgramCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return HoldDepress(
       onTap: onTap,
+      haptic: HapticIntent.selection,
+      sound: UiSound.tick,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.all(kSpace4),

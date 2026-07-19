@@ -6,10 +6,14 @@ import '../data/exercise_demos.dart';
 import '../models/workout_models.dart';
 import '../services/custom_exercise_service.dart';
 import '../services/favorite_service.dart';
+import '../services/haptic_service.dart';
+import '../services/ui_sound.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/arcade_filled.dart';
 import '../widgets/arcade_image_filter.dart';
 import '../widgets/arcade_route.dart';
+import '../widgets/arcade_tap.dart';
 import '../widgets/exercise_demo_cabinet.dart';
 import '../widgets/exercise_demo_player.dart';
 import '../widgets/level_badge.dart';
@@ -118,15 +122,16 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
           style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
         ),
         actions: [
-          TextButton(
+          ArcadeTextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'CANCEL',
               style: AppFonts.shareTechMono(color: kMutedText),
             ),
           ),
-          FilledButton(
+          ArcadeFilled(
             onPressed: () => Navigator.of(ctx).pop(true),
+            haptic: HapticIntent.warning,
             style: FilledButton.styleFrom(
               backgroundColor: kDanger,
               shape: RoundedRectangleBorder(
@@ -164,7 +169,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
             SliverAppBar(
               expandedHeight: 260,
               pinned: true,
-              leading: IconButton(
+              leading: ArcadeIconButton(
                 onPressed: () => Navigator.of(context).pop(),
                 icon: Transform.scale(
                   scaleX: -1,
@@ -415,8 +420,9 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    FilledButton(
+                    ArcadeFilled(
                       onPressed: () => _confirmDelete(context, exercise),
+                      haptic: HapticIntent.warning,
                       style: FilledButton.styleFrom(
                         backgroundColor: kDanger,
                         minimumSize: const Size(double.infinity, 44),
@@ -479,11 +485,12 @@ class _BouncingFavoriteIconState extends State<_BouncingFavoriteIcon>
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    return ArcadeIconButton(
       onPressed: () {
         _controller.forward(from: 0);
         widget.onToggle();
       },
+      haptic: HapticIntent.selection,
       icon: ScaleTransition(
         scale: _scale,
         child: ImageIcon(
@@ -509,8 +516,10 @@ class _ExpandDemoPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return ArcadeTap(
       onTap: onTap,
+      haptic: HapticIntent.selection,
+      sound: UiSound.tick,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.all(6),

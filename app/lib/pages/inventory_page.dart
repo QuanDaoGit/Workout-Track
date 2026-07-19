@@ -5,8 +5,10 @@ import '../data/loot_registry.dart';
 import '../models/loot_item.dart';
 import '../services/haptic_service.dart';
 import '../services/loot_service.dart';
+import '../services/ui_sound.dart';
 import '../services/unit_settings_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/arcade_filled.dart';
 import '../widgets/motion/hold_depress.dart';
 import '../widgets/pixel_button.dart';
 
@@ -68,7 +70,7 @@ class InventoryPageState extends State<InventoryPage> {
           style: AppFonts.shareTechMono(fontSize: 14, color: kMutedText),
         ),
         actions: [
-          TextButton(
+          ArcadeTextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'CANCEL',
@@ -267,6 +269,7 @@ class _NoTitleRow extends StatelessWidget {
       child: HoldDepress(
         onTap: onTap,
         haptic: HapticIntent.selection,
+        sound: UiSound.select,
         borderRadius: BorderRadius.circular(4),
         child: Container(
           padding: const EdgeInsets.all(kSpace3),
@@ -328,6 +331,7 @@ class _LootGridTile extends StatelessWidget {
     return HoldDepress(
       onTap: onTap,
       haptic: HapticIntent.selection,
+      sound: UiSound.select,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.all(6),
@@ -423,6 +427,7 @@ class _TitleLootRow extends StatelessWidget {
       child: HoldDepress(
         onTap: onTap,
         haptic: HapticIntent.selection,
+        sound: UiSound.select,
         borderRadius: BorderRadius.circular(4),
         child: Container(
           padding: const EdgeInsets.all(kSpace3),

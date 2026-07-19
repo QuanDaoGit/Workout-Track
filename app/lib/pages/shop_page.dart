@@ -5,8 +5,10 @@ import '../data/loot_registry.dart';
 import '../models/avatar_spec.dart';
 import '../models/loot_item.dart';
 import '../services/gem_service.dart';
+import '../services/haptic_service.dart';
 import '../services/loot_service.dart';
 import '../services/profile_service.dart';
+import '../services/ui_sound.dart';
 import '../services/unit_settings_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
@@ -507,6 +509,8 @@ class _WalletPill extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
               child: HoldDepress(
                 onTap: onAdd,
+                haptic: HapticIntent.selection,
+                sound: UiSound.tick,
                 borderRadius: BorderRadius.circular(4),
                 child: Container(
                   key: const ValueKey('shop_wallet_plus'),
@@ -581,6 +585,8 @@ class _FilterChipButton extends StatelessWidget {
       borderRadius: radius,
       child: HoldDepress(
         onTap: onTap,
+        haptic: HapticIntent.selection,
+        sound: UiSound.select,
         borderRadius: radius,
         child: AnimatedContainer(
           duration: MediaQuery.of(context).disableAnimations
@@ -738,6 +744,8 @@ class _ShopItemCard extends StatelessWidget {
       borderRadius: radius,
       child: HoldDepress(
         onTap: onTap,
+        haptic: HapticIntent.selection,
+        sound: UiSound.tick,
         borderRadius: radius,
         child: Stack(
           children: [
@@ -1160,6 +1168,8 @@ class _GemPackCard extends StatelessWidget {
       borderRadius: radius,
       child: HoldDepress(
         onTap: onTap,
+        haptic: HapticIntent.selection,
+        sound: UiSound.tick,
         borderRadius: radius,
         child: Container(
           key: ValueKey('gem_pack_${pack.id}'),

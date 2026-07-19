@@ -14,6 +14,7 @@ import '../../services/unit_settings_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_chip.dart';
+import '../../widgets/arcade_filled.dart';
 import '../../widgets/companion/bit_mood_core.dart';
 import '../../widgets/companion/bit_speech_bubble.dart';
 import '../../widgets/motion/arcade_text_field.dart';
@@ -549,7 +550,7 @@ class _QuestionScaffoldState extends State<_QuestionScaffold> {
                       : Semantics(
                           button: true,
                           label: 'Back',
-                          child: IconButton(
+                          child: ArcadeIconButton(
                             icon: const Icon(
                               Icons.chevron_left_sharp,
                               color: kText,

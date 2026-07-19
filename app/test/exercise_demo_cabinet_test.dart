@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 import 'package:workout_track/data/exercise_demos.dart';
 import 'package:workout_track/services/workout_defaults_service.dart';
+import 'package:workout_track/widgets/arcade_tap.dart';
 import 'package:workout_track/widgets/exercise_demo_cabinet.dart';
 
 import 'helpers/fake_video_platform.dart';
@@ -39,10 +40,10 @@ void main() {
     expect(find.text('LOOP'), findsOneWidget);
     expect(find.text('HIDE'), findsOneWidget);
     // Opens paused: no play() on mount, and the strip shows the play control
-    // (the stage also shows the big glyph, so scope to the InkWell button).
+    // (the stage also shows the big glyph, so scope to the ArcadeTap button).
     expect(fake.log, isNot(contains('play')));
     expect(
-      find.widgetWithIcon(InkWell, Icons.play_arrow_sharp),
+      find.widgetWithIcon(ArcadeTap, Icons.play_arrow_sharp),
       findsOneWidget,
     );
     expect(find.byIcon(Icons.pause_sharp), findsNothing);
@@ -57,9 +58,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 100));
 
-    // Opens paused → strip shows a play control (scope to the InkWell button;
+    // Opens paused → strip shows a play control (scope to the ArcadeTap button;
     // the stage shows its own glyph too).
-    final stripPlay = find.widgetWithIcon(InkWell, Icons.play_arrow_sharp);
+    final stripPlay = find.widgetWithIcon(ArcadeTap, Icons.play_arrow_sharp);
     expect(stripPlay, findsOneWidget);
 
     await tester.tap(stripPlay);
@@ -73,7 +74,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(fake.log, contains('pause'));
     expect(
-      find.widgetWithIcon(InkWell, Icons.play_arrow_sharp),
+      find.widgetWithIcon(ArcadeTap, Icons.play_arrow_sharp),
       findsOneWidget,
     );
 
@@ -184,7 +185,7 @@ void main() {
 
       // The cabinet opens paused; start it so the fullscreen handoff has
       // playback to pause on the way in and resume on the way back.
-      await tester.tap(find.widgetWithIcon(InkWell, Icons.play_arrow_sharp));
+      await tester.tap(find.widgetWithIcon(ArcadeTap, Icons.play_arrow_sharp));
       await tester.pump(const Duration(milliseconds: 100));
       fake.log.clear();
 

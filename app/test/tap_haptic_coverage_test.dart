@@ -90,7 +90,56 @@ void main() {
           '${violations.join('\n  ')}',
     );
   });
+
+  test('no bare FilledButton/TextButton bypasses the sound-kit wrappers', () {
+    // SFX v2: the raw Material buttons were the silent-bypass class that made
+    // the soundscape feel piecemeal — ArcadeFilled / ArcadeTextButton wire
+    // commit-time haptic + kit sound. Escapes: `// button-ok: <reason>` on the
+    // line or the line above (a button whose handler owns its beat, e.g. the
+    // SAVE-set button), the wrapper file itself, and [_buttonBaseline]
+    // (SHRINK-ONLY — never add a file).
+    final violations = <String>[];
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final rel = entity.path.replaceAll('\\', '/');
+      if (rel == 'lib/widgets/arcade_filled.dart' ||
+          _buttonBaseline.contains(rel)) {
+        continue;
+      }
+      final source = entity.readAsStringSync();
+      final code = _blankCommentsAndStrings(source);
+      final lines = source.split('\n');
+      for (final m in RegExp(
+        r'(?<![A-Za-z0-9_$.])(?:FilledButton|TextButton)(?:\.icon)?\s*\(',
+      ).allMatches(code)) {
+        final lineIdx = '\n'.allMatches(source.substring(0, m.start)).length;
+        final line = lines[lineIdx];
+        // Skip non-constructor uses (styleFrom, themes, type annotations).
+        if (line.contains('.styleFrom') ||
+            line.contains('ThemeData') ||
+            line.contains('ButtonTheme')) {
+          continue;
+        }
+        final ok =
+            line.contains('button-ok') ||
+            (lineIdx > 0 && lines[lineIdx - 1].contains('button-ok'));
+        if (!ok) violations.add('$rel:${lineIdx + 1}');
+      }
+    }
+    expect(
+      violations,
+      isEmpty,
+      reason:
+          'These raw FilledButton/TextButton presses have no haptic and no kit '
+          'sound. Use ArcadeFilled / ArcadeTextButton (feedback auto-wires), '
+          'or mark `// button-ok: <reason>` when the handler owns its beat:\n  '
+          '${violations.join('\n  ')}',
+    );
+  });
 }
+
+/// Pre-existing raw-button files tolerated until migrated. SHRINK-ONLY.
+const Set<String> _buttonBaseline = {};
 
 bool _markedOk(List<String> lines, int lineIdx) =>
     lines[lineIdx].contains('haptic-ok') ||

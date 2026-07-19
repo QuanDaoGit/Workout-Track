@@ -4,6 +4,7 @@ import '../data/muscle_groups.dart';
 import '../data/warmup_routines.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
+import 'arcade_filled.dart';
 
 /// Optional general (pre-session) mobility guide: a brief, muscle-tailored RAMP
 /// routine. Pure reference — unrewarded (the rewarded warm-up is the warm-up
@@ -103,7 +104,7 @@ class WarmupSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: kSpace4),
-            FilledButton(
+            ArcadeFilled(
               onPressed: () => Navigator.of(context).pop(true),
               child: const Text('GOT IT'),
             ),

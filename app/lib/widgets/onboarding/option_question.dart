@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../services/haptic_service.dart';
+import '../../services/ui_sound.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../motion/hold_depress.dart';
@@ -136,6 +137,7 @@ class _OptionCard extends StatelessWidget {
       child: HoldDepress(
         onTap: onTap,
         haptic: HapticIntent.selection,
+        sound: UiSound.select,
         borderRadius: BorderRadius.circular(4),
         child: AnimatedOpacity(
           duration: duration,

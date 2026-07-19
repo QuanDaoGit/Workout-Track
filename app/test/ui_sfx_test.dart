@@ -7,6 +7,7 @@ import 'package:workout_track/services/exercise_kind_cache.dart';
 import 'package:workout_track/services/haptic_service.dart';
 import 'package:workout_track/services/rest_timer_service.dart';
 import 'package:workout_track/services/sfx_service.dart';
+import 'package:workout_track/services/ui_sound.dart';
 import 'package:workout_track/services/ui_sound_settings_service.dart';
 import 'package:workout_track/widgets/pixel_button.dart';
 
@@ -101,6 +102,54 @@ void main() {
     });
   });
 
+  group('SFX v2 kit (registry + arbiter)', () {
+    test('select rotates its 3 variants through the micro class', () async {
+      for (var i = 0; i < 4; i++) {
+        await SfxService.instance.playUi(UiSound.select);
+        advance(const Duration(milliseconds: 100));
+      }
+      expect(played, [
+        'audio/ui_select_1.wav',
+        'audio/ui_select_2.wav',
+        'audio/ui_select_3.wav',
+        'audio/ui_select_1.wav',
+      ]);
+    });
+
+    test('arbiter: a louder role suppresses micro ticks for 80ms', () async {
+      await SfxService.instance.playUi(UiSound.warn);
+      advance(const Duration(milliseconds: 40));
+      await SfxService.instance.playUi(UiSound.tick); // suppressed
+      advance(const Duration(milliseconds: 100));
+      await SfxService.instance.playUi(UiSound.tick); // allowed
+      expect(played, ['audio/ui_warn.wav', 'audio/ui_tap_1.wav']);
+    });
+
+    test('sub-toggle gates the UI tier but never the core-loop roles',
+        () async {
+      SfxService.uiSoundsEnabled = false;
+      await SfxService.instance.playUi(UiSound.select);
+      await SfxService.instance.playUi(UiSound.toggleOn);
+      await SfxService.instance.playUi(UiSound.notice);
+      await SfxService.instance.playUi(UiSound.skip);
+      await SfxService.instance.playUi(UiSound.restGoSet);
+      expect(played, ['audio/ui_skip.wav', 'audio/rest_go_set.wav']);
+    });
+
+    test('the two rest surfaces play their own tiers', () async {
+      await SfxService.instance.playUi(UiSound.restGoSet);
+      await SfxService.instance.playRestGo(); // between-exercise delegate
+      expect(played, ['audio/rest_go_set.wav', 'audio/rest_go.wav']);
+    });
+
+    test('toggle pair carries state direction', () async {
+      await SfxService.instance.playUi(UiSound.toggleOn);
+      advance(const Duration(milliseconds: 100));
+      await SfxService.instance.playUi(UiSound.toggleOff);
+      expect(played, ['audio/ui_toggle_on.wav', 'audio/ui_toggle_off.wav']);
+    });
+  });
+
   group('UiSoundSettingsService', () {
     test('defaults on, persists a flip', () async {
       expect(await UiSoundSettingsService().isEnabled(), isTrue);
@@ -141,10 +190,11 @@ void main() {
       expect(played, ['audio/ui_warn.wav']);
     });
 
-    testWidgets('success/none intents stay silent (their moments own audio)',
+    testWidgets('success now ticks too (SFX v2: no dead keys); none stays silent',
         (tester) async {
       await pumpButton(tester, haptic: HapticIntent.success);
-      expect(played, isEmpty);
+      expect(played, ['audio/ui_tap_1.wav']);
+      played.clear();
       await pumpButton(tester, haptic: HapticIntent.none);
       expect(played, isEmpty);
     });

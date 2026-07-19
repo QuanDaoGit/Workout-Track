@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import '../widgets/arcade_filled.dart';
 import '../theme/app_fonts.dart';
 
 import '../data/muscle_groups.dart';
@@ -232,7 +233,7 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
           ),
           const SizedBox(height: 8),
           Center(
-            child: TextButton(
+            child: ArcadeTextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
                 'CANCEL',

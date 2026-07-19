@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../services/haptic_service.dart';
+import '../../services/sfx_service.dart';
+import '../../services/ui_sound.dart';
 import '../../theme/tokens.dart';
 
 class HoldDepress extends StatefulWidget {
@@ -13,6 +15,7 @@ class HoldDepress extends StatefulWidget {
     this.borderRadius = const BorderRadius.all(Radius.circular(kCardRadius)),
     this.behavior = HitTestBehavior.opaque,
     this.haptic = HapticIntent.none,
+    this.sound,
   });
 
   final Widget child;
@@ -25,6 +28,11 @@ class HoldDepress extends StatefulWidget {
   /// Opt-in tactile tick on a committed tap, via the rate-limited
   /// [HapticService.fireCoalesced]. Defaults to silent ([HapticIntent.none]).
   final HapticIntent haptic;
+
+  /// Opt-in kit sound on a committed tap (SFX v2). Explicit per site — never
+  /// derived from [haptic] (a tactile intent isn't automatically an audible
+  /// one, per the Codex review). Defaults to silent.
+  final UiSound? sound;
 
   @override
   State<HoldDepress> createState() => _HoldDepressState();
@@ -55,6 +63,8 @@ class _HoldDepressState extends State<HoldDepress> {
       onTap: widget.enabled && widget.onTap != null
           ? () {
               HapticService.instance.fireCoalesced(widget.haptic);
+              final s = widget.sound;
+              if (s != null) SfxService.instance.playUi(s);
               widget.onTap!();
             }
           : null,

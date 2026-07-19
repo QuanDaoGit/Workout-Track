@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
 import '../models/unit_models.dart';
+import '../services/haptic_service.dart';
 import '../services/strength_trend_service.dart';
 import '../services/unit_settings_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
+import '../services/ui_sound.dart';
 import 'lift_icon.dart';
 import 'motion/hold_depress.dart';
 
@@ -73,6 +75,8 @@ class PinnedLiftCard extends StatelessWidget {
         onLongPress: onUnpin,
         child: HoldDepress(
           onTap: onTap,
+          haptic: HapticIntent.selection,
+          sound: UiSound.tick,
           borderRadius: BorderRadius.circular(kCardRadius),
         child: Container(
           padding: const EdgeInsets.all(kSpace3),

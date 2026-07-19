@@ -41,6 +41,7 @@ import '../services/haptic_settings_service.dart';
 import '../services/sfx_service.dart';
 import '../services/simple_mode_service.dart';
 import '../services/sound_settings_service.dart';
+import '../services/ui_sound.dart';
 import '../services/ui_sound_settings_service.dart';
 import '../services/stat_engine.dart';
 import '../services/loot_service.dart';
@@ -53,6 +54,7 @@ import '../services/xp_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_bar.dart';
 import '../widgets/arcade_badge.dart';
+import '../widgets/arcade_filled.dart';
 import '../widgets/identity_stamp_line.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/lck_buff_badge.dart';
@@ -270,6 +272,7 @@ class ProfilePageState extends State<ProfilePage> {
       child: HoldDepress(
         onTap: _openAvatarCustomizer,
         haptic: HapticIntent.selection,
+        sound: UiSound.tick,
         borderRadius: BorderRadius.circular(4),
         child: Stack(
           children: [
@@ -1078,13 +1081,9 @@ class ProfilePageState extends State<ProfilePage> {
       ),
       RespecAvailability.available => ('CHANGE CLASS', true),
     };
-    return TextButton(
-      onPressed: enabled
-          ? () {
-              HapticService.instance.selection();
-              _openRespec();
-            }
-          : null,
+    return ArcadeTextButton(
+      haptic: HapticIntent.selection,
+      onPressed: enabled ? _openRespec : null,
       style: TextButton.styleFrom(
         foregroundColor: kNeon,
         disabledForegroundColor: kMutedText,
@@ -1147,15 +1146,16 @@ class ProfilePageState extends State<ProfilePage> {
           ),
         ),
         actions: [
-          TextButton(
+          ArcadeTextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: Text(
               'CANCEL',
               style: AppFonts.shareTechMono(color: kMutedText),
             ),
           ),
-          TextButton(
+          ArcadeTextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
+            haptic: HapticIntent.warning,
             child: Text(
               'CONFIRM',
               style: AppFonts.shareTechMono(
@@ -1192,6 +1192,7 @@ class ProfilePageState extends State<ProfilePage> {
       child: HoldDepress(
         onTap: _openInventory,
         haptic: HapticIntent.selection,
+        sound: UiSound.tick,
         borderRadius: BorderRadius.circular(4),
         child: Container(
           width: double.infinity,
@@ -1255,6 +1256,7 @@ class ProfilePageState extends State<ProfilePage> {
       child: HoldDepress(
         onTap: _openShop,
         haptic: HapticIntent.selection,
+        sound: UiSound.tick,
         borderRadius: BorderRadius.circular(4),
         child: Container(
           width: double.infinity,
@@ -1373,6 +1375,7 @@ class ProfilePageState extends State<ProfilePage> {
           HoldDepress(
             onTap: _changeGoal,
             haptic: HapticIntent.selection,
+            sound: UiSound.tick,
             borderRadius: BorderRadius.circular(4),
             child: Row(
               children: [
@@ -2202,8 +2205,17 @@ class _DefaultStepButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // button-ok: stepper owns its beat — a coalesced tick + directional pip.
     return FilledButton(
-      onPressed: onPressed,
+      onPressed: onPressed == null
+          ? null
+          : () {
+              HapticService.instance.fireCoalesced(HapticIntent.selection);
+              SfxService.instance.playUi(
+                icon == Icons.remove_sharp ? UiSound.stepDown : UiSound.stepUp,
+              );
+              onPressed!();
+            },
       style: FilledButton.styleFrom(
         backgroundColor: onPressed == null ? kBorderDark : kNeon,
         foregroundColor: onPressed == null ? kDim : kBg,
@@ -2262,6 +2274,7 @@ class _ProfileTabs extends StatelessWidget {
                         child: PhosphorTap(
                           onTap: () => onSelect(i),
                           haptic: HapticIntent.selection,
+                          sound: UiSound.select,
                           borderRadius: BorderRadius.circular(4),
                           child: Center(
                             child: Text(
@@ -2531,6 +2544,7 @@ class _SettingsRow extends StatelessWidget {
       child: HoldDepress(
         onTap: onTap,
         haptic: HapticIntent.selection,
+        sound: UiSound.tick,
         borderRadius: BorderRadius.circular(4),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -2639,6 +2653,11 @@ class _SettingsToggleRow extends StatelessWidget {
                 onChanged: enabled
                     ? (v) {
                         HapticService.instance.selection();
+                        // State direction you can hear: on rises, off falls
+                        // (SFX v2 toggle pair, one wiring site for every row).
+                        SfxService.instance.playUi(
+                          v ? UiSound.toggleOn : UiSound.toggleOff,
+                        );
                         onChanged(v);
                       }
                     : null,
@@ -2730,6 +2749,7 @@ class _RespecOption extends StatelessWidget {
     return HoldDepress(
       onTap: () => Navigator.of(context).pop(cls),
       haptic: HapticIntent.selection,
+      sound: UiSound.select,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         key: ValueKey('profile_respec_option_${cls.name}'),

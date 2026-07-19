@@ -6,10 +6,14 @@ import '../data/adventure_routes.dart';
 import '../models/adventure_models.dart';
 import '../services/adventure_service.dart';
 import '../utils/iso_week.dart';
+import '../services/haptic_service.dart';
+import '../services/sfx_service.dart';
 import '../services/stat_engine.dart';
+import '../services/ui_sound.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
 import '../widgets/adventure/route_diorama.dart';
+import '../widgets/arcade_filled.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/pixel_loader.dart';
 import 'expedition_report_page.dart';
@@ -249,7 +253,7 @@ class _AdventurePageState extends State<AdventurePage> {
       children: [
         SizedBox(
           width: double.infinity,
-          child: FilledButton(
+          child: ArcadeFilled(
             onPressed: (ui.canDispatch && !_busy) ? () => _dispatch(route) : null,
             child: Text('GO ON ADVENTURE · ${route.name}'),
           ),
@@ -264,7 +268,7 @@ class _AdventurePageState extends State<AdventurePage> {
           ),
         ],
         const SizedBox(height: kSpace1),
-        TextButton(
+        ArcadeTextButton(
           onPressed: _busy
               ? null
               : () => setState(() {
@@ -315,8 +319,15 @@ class _RouteBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final tappable = onTap != null &&
         (role == _TileRole.selectable || role == _TileRole.armed);
+    // haptic-ok: feedback fired inline below (arm/disarm select tick)
     return GestureDetector(
-      onTap: tappable ? onTap : null,
+      onTap: tappable
+          ? () {
+              HapticService.instance.fireCoalesced(HapticIntent.selection);
+              SfxService.instance.playUi(UiSound.select);
+              onTap!();
+            }
+          : null,
       child: SizedBox(
         height: 132,
         child: Stack(
@@ -452,7 +463,7 @@ class _RouteBackdrop extends StatelessWidget {
             ),
           ),
           const SizedBox(height: kSpace2),
-          FilledButton(
+          ArcadeFilled(
             onPressed: onCollect,
             child: const Text('COLLECT'),
           ),
@@ -482,8 +493,13 @@ class _RouteBackdrop extends StatelessWidget {
     ),
   );
 
+  // haptic-ok: feedback fired inline below (breakdown toggle tick)
   Widget _detailToggle() => GestureDetector(
-    onTap: onToggleBreakdown,
+    onTap: () {
+      HapticService.instance.fireCoalesced(HapticIntent.selection);
+      SfxService.instance.playUi(UiSound.tick);
+      onToggleBreakdown();
+    },
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [

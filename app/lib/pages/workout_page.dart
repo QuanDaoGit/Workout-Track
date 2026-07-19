@@ -17,12 +17,15 @@ import '../services/exercise_catalog_service.dart';
 import '../services/favorite_service.dart';
 import '../services/progressive_overload_service.dart';
 import '../services/rest_service.dart';
+import '../services/haptic_service.dart';
+import '../services/ui_sound.dart';
 import '../services/unit_settings_service.dart';
 import '../services/weekly_goal_service.dart';
 import '../services/workout_metric_service.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_chip.dart';
+import '../widgets/arcade_filled.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/calendar_day_marker.dart';
 import '../widgets/exercise_card.dart';
@@ -651,6 +654,8 @@ class _LogsTabState extends State<_LogsTab> {
                       () => _sessionsShown =
                           min(_sessionsShown + 5, _browsable.length),
                     ),
+                    haptic: HapticIntent.selection,
+                    sound: UiSound.tick,
                     borderRadius: BorderRadius.circular(4),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: kSpace2),
@@ -665,6 +670,8 @@ class _LogsTabState extends State<_LogsTab> {
                   PhosphorTap(
                     onTap: () =>
                         setState(() => _sessionsShown = _sessionsInitial),
+                    haptic: HapticIntent.selection,
+                    sound: UiSound.tick,
                     borderRadius: BorderRadius.circular(4),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: kSpace2),
@@ -851,6 +858,8 @@ class _LogsTabState extends State<_LogsTab> {
           // ── Records ────────────────────────────────────────────────────
           PhosphorTap(
             onTap: () => setState(() => _showRecords = !_showRecords),
+            haptic: HapticIntent.selection,
+            sound: UiSound.tick,
             borderRadius: BorderRadius.circular(4),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -969,6 +978,8 @@ class _LogsTabState extends State<_LogsTab> {
                 ),
                 PhosphorTap(
                   onTap: _editGoal,
+                  haptic: HapticIntent.selection,
+                  sound: UiSound.tick,
                   borderRadius: BorderRadius.circular(4),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -1026,6 +1037,8 @@ class _LogsTabState extends State<_LogsTab> {
                 ),
                 PhosphorTap(
                   onTap: _openFullMonth,
+                  haptic: HapticIntent.selection,
+                  sound: UiSound.tick,
                   borderRadius: BorderRadius.circular(4),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -1156,6 +1169,8 @@ class _WeekStrip extends StatelessWidget {
 
     return HoldDepress(
       onTap: () => onSelectDay(day),
+      haptic: HapticIntent.selection,
+      sound: UiSound.select,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 2),
@@ -1439,6 +1454,8 @@ class _SubTabSegment extends StatelessWidget {
     return Expanded(
       child: PhosphorTap(
         onTap: onTap,
+        haptic: HapticIntent.selection,
+        sound: UiSound.select,
         borderRadius: BorderRadius.circular(4),
         child: Center(
           child: AnimatedDefaultTextStyle(
@@ -1480,6 +1497,8 @@ class _SessionListTile extends StatelessWidget {
     final sessionVolume = volume;
     return HoldDepress(
       onTap: onTap,
+      haptic: HapticIntent.selection,
+      sound: UiSound.tick,
       borderRadius: BorderRadius.circular(4),
       child: Card(
         clipBehavior: Clip.antiAlias,
@@ -1638,6 +1657,8 @@ class _ExerciseTrendCard extends StatelessWidget {
     if (onTap == null) return card;
     return HoldDepress(
       onTap: onTap!,
+      haptic: HapticIntent.selection,
+      sound: UiSound.tick,
       borderRadius: BorderRadius.circular(kCardRadius),
       child: card,
     );
@@ -1788,7 +1809,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
             prefixIcon: const Icon(Icons.search_sharp, color: kMutedText),
             suffixIcon: _query.isEmpty
                 ? null
-                : IconButton(
+                : ArcadeIconButton(
                     tooltip: 'Clear search',
                     onPressed: () {
                       _searchController.clear();
@@ -1833,7 +1854,7 @@ class _ExercisesTabState extends State<_ExercisesTab>
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: SizedBox(
             height: 36,
-            child: FilledButton.icon(
+            child: ArcadeFilled.icon(
               onPressed: () async {
                 final created = await Navigator.push<bool>(
                   context,

@@ -6,6 +6,7 @@ import '../theme/app_fonts.dart';
 import '../services/haptic_service.dart';
 import '../services/rest_timer_service.dart';
 import '../services/sfx_service.dart';
+import '../services/ui_sound.dart';
 import '../theme/tokens.dart';
 import 'arcade_bar.dart';
 
@@ -37,8 +38,10 @@ class _RestTimerBarState extends State<RestTimerBar>
             const Duration(seconds: 3)) {
           HapticService.instance.success();
           // The audible "go" beside the haptic — same exactly-once contract
-          // (serialised tickers + the synchronous cancel() below).
-          SfxService.instance.playRestGo();
+          // (serialised tickers + the synchronous cancel() below). This is the
+          // between-SET surface, so it plays the WEAKER rest sibling; the
+          // between-exercise takeover plays the full ready-go chorus.
+          SfxService.instance.playUi(UiSound.restGoSet);
         }
         RestTimerService.instance.cancel();
         if (_expanded) _expanded = false;
@@ -183,8 +186,13 @@ class _ExpandedRestBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
+            // haptic-ok: fires its own beat inline — the skip release + tap.
             GestureDetector(
-              onTap: RestTimerService.instance.cancel,
+              onTap: () {
+                HapticService.instance.tap();
+                SfxService.instance.playUi(UiSound.skip);
+                RestTimerService.instance.cancel();
+              },
               child: Container(
                 constraints: const BoxConstraints(minHeight: 36),
                 alignment: Alignment.center,

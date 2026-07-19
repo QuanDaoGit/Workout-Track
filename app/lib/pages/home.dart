@@ -32,6 +32,7 @@ import '../services/quest_service.dart';
 import '../services/recovery_insight_service.dart';
 import '../services/rest_service.dart';
 import '../services/stat_engine.dart';
+import '../services/ui_sound.dart';
 import '../services/workout_defaults_service.dart';
 import '../services/workout_storage_service.dart';
 import '../services/xp_boost_service.dart';
@@ -40,6 +41,7 @@ import '../theme/tokens.dart';
 import '../widgets/adventure/adventure_card.dart';
 import '../widgets/arcade_dialog_button_column.dart';
 import '../widgets/arcade_bar.dart';
+import '../widgets/arcade_filled.dart';
 import '../widgets/arcade_card.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
@@ -974,7 +976,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           if (secondaryLabel != null && onSecondary != null) ...[
             const SizedBox(height: kSpace2),
             Center(
-              child: TextButton(
+              child: ArcadeTextButton(
                 style: TextButton.styleFrom(
                   minimumSize: const Size(44, 44),
                   foregroundColor: kMutedText,
@@ -1432,6 +1434,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return ArcadeTap(
         onTap: widget.onViewQuests,
         haptic: HapticIntent.selection,
+        sound: UiSound.tick,
         borderRadius: BorderRadius.circular(4),
         child: Semantics(
           button: true,
@@ -1476,6 +1479,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return ArcadeTap(
       onTap: widget.onViewQuests,
       haptic: HapticIntent.selection,
+      sound: UiSound.tick,
       borderRadius: BorderRadius.circular(4),
       child: _homeCard(
         background: kCard,
@@ -1703,6 +1707,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         child: HoldDepress(
           onTap: () => _startWorkout(),
           haptic: HapticIntent.selection,
+          sound: UiSound.tick,
           borderRadius: BorderRadius.circular(kCardRadius),
           child: card,
         ),
@@ -2209,6 +2214,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           child: HoldDepress(
             onTap: _startFirstWorkout,
             haptic: HapticIntent.selection,
+            sound: UiSound.tick,
             borderRadius: BorderRadius.circular(kCardRadius),
             child: card,
           ),
@@ -2228,6 +2234,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         child: HoldDepress(
           onTap: onOpenLog,
           haptic: HapticIntent.selection,
+          sound: UiSound.tick,
           borderRadius: BorderRadius.circular(kCardRadius),
           child: card,
         ),
@@ -2641,6 +2648,7 @@ class HomeLevelStrip extends StatelessWidget {
       child: ArcadeTap(
         onTap: onTap,
         haptic: HapticIntent.selection,
+        sound: UiSound.tick,
         borderRadius: BorderRadius.circular(kCardRadius),
         child: strip,
       ),
@@ -2837,6 +2845,7 @@ class _HomeHudMetric extends StatelessWidget {
         child: HoldDepress(
           onTap: onTap,
           haptic: HapticIntent.selection,
+          sound: UiSound.tick,
           borderRadius: BorderRadius.circular(kCardRadius),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

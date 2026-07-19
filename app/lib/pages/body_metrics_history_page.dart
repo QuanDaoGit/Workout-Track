@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_fonts.dart';
 
 import '../models/body_metrics_models.dart';
+import '../services/haptic_service.dart';
+import '../widgets/arcade_filled.dart';
 import '../models/unit_models.dart';
 import '../services/body_metrics_service.dart';
 import '../services/unit_settings_service.dart';
@@ -54,14 +56,15 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
           style: AppFonts.shareTechMono(color: kText, fontSize: 13),
         ),
         actions: [
-          TextButton(
+          ArcadeTextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'CANCEL',
               style: AppFonts.shareTechMono(color: kMutedText),
             ),
           ),
-          FilledButton(
+          ArcadeFilled(
+            haptic: HapticIntent.warning,
             onPressed: () => Navigator.of(ctx).pop(true),
             style: FilledButton.styleFrom(
               backgroundColor: kDanger,
@@ -139,14 +142,14 @@ class _BodyMetricsHistoryPageState extends State<BodyMetricsHistoryPage> {
               ],
             ),
             actions: [
-              TextButton(
+              ArcadeTextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
                 child: Text(
                   'CANCEL',
                   style: AppFonts.shareTechMono(color: kMutedText),
                 ),
               ),
-              FilledButton(
+              ArcadeFilled(
                 onPressed: () {
                   final kg = parseWeightToKg(controller.text, Units.weight);
                   if (kg == null || !isPlausibleWeightKg(kg)) {

@@ -110,19 +110,20 @@ class _PixelButtonState extends State<PixelButton> {
     // self-guarded (mute toggle / fail-open) inside the service.
     HapticService.instance.fire(widget.haptic);
     if (widget.sound) {
-      // The audio twin of the haptic, same beat: light intents get the keycap
-      // tick, warning gets the buzz. success/reward stay silent here — their
-      // moments carry dedicated sounds (set-log, ceremonies) and a tick under
-      // them would stack.
+      // The audio twin of the haptic, same beat: every committing press ticks
+      // — including success/reward buttons (SFX v2: a silent press reads as a
+      // dead key; any ceremony audio starts later, and the arbiter keeps a
+      // tick from stacking under a louder role). warning gets the buzz; none
+      // = the handler owns the beat.
       switch (widget.haptic) {
         case HapticIntent.tap:
         case HapticIntent.selection:
+        case HapticIntent.success:
+        case HapticIntent.reward:
           SfxService.instance.playUiTap();
         case HapticIntent.warning:
           SfxService.instance.playUiWarn();
         case HapticIntent.none:
-        case HapticIntent.success:
-        case HapticIntent.reward:
           break;
       }
     }

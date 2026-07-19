@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../services/sfx_service.dart';
+import '../services/ui_sound.dart';
 import '../theme/tokens.dart';
 import 'companion/bit_core_engine.dart' show bitGlow;
 
@@ -40,6 +42,8 @@ void showArcadeNotice(
 }) {
   final overlay = Overlay.of(context, rootOverlay: true);
   if (_current?.mounted ?? false) _current!.remove();
+  // The plate's CRT power-on, heard — a quiet notification blip (SFX v2).
+  SfxService.instance.playUi(UiSound.notice);
   late final OverlayEntry entry;
   entry = OverlayEntry(
     builder: (_) => _ArcadeNoticePlate(

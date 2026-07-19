@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/haptic_service.dart';
+import '../services/ui_sound.dart';
 import '../theme/tokens.dart';
 import 'motion/hold_depress.dart';
 
@@ -18,6 +19,7 @@ class ArcadeChip extends StatefulWidget {
     this.selectedColor = kNeon,
     this.unselectedTextColor = kMutedText,
     this.haptic = HapticIntent.selection,
+    this.sound = UiSound.select,
   });
 
   final String label;
@@ -30,6 +32,11 @@ class ArcadeChip extends StatefulWidget {
   /// subtlest `selectionClick`, rate-limited. Pass [HapticIntent.none] where a
   /// handler already fires its own (avoids a double-tick).
   final HapticIntent haptic;
+
+  /// The chip's structural kit sound (SFX v2): the "data zip" select — the
+  /// border double-blink made audible. Pass null where a handler owns the
+  /// audio beat.
+  final UiSound? sound;
   @override
   State<ArcadeChip> createState() => _ArcadeChipState();
 }
@@ -86,6 +93,7 @@ class _ArcadeChipState extends State<ArcadeChip> {
     return HoldDepress(
       onTap: widget.onTap,
       haptic: widget.haptic,
+      sound: widget.sound,
       borderRadius: BorderRadius.circular(4),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),

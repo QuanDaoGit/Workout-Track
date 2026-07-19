@@ -11,7 +11,9 @@ import '../../models/workout_models.dart';
 import '../../services/calorie_service.dart';
 import '../../services/exercise_catalog_service.dart';
 import '../../services/favorite_service.dart';
+import '../../services/haptic_service.dart';
 import '../../services/program_service.dart';
+import '../../services/ui_sound.dart';
 import '../../services/workout_defaults_service.dart';
 import '../../services/workout_draft_controller.dart';
 import '../../services/simple_mode_service.dart';
@@ -20,6 +22,7 @@ import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/active_session_found_dialog.dart';
 import '../../widgets/arcade_chip.dart';
+import '../../widgets/arcade_filled.dart';
 import '../../widgets/arcade_image_filter.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/exercise_card.dart';
@@ -96,7 +99,7 @@ Future<bool> showStartWorkoutConfirmDialog(BuildContext context) async {
         style: AppFonts.shareTechMono(fontSize: 14, color: kMutedText),
       ),
       actions: [
-        TextButton(
+        ArcadeTextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
           child: Text(
             'CANCEL',
@@ -993,7 +996,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
             ),
             if (hasFilter) ...[
               const SizedBox(width: kSpace2),
-              TextButton(
+              ArcadeTextButton(
                 onPressed: () => setState(() {
                   _levelFilter = null;
                   _showFavoritesOnly = false;
@@ -1160,7 +1163,7 @@ class _StartWorkoutPageState extends State<StartWorkoutPage> {
                   ),
                 ),
                 const SizedBox(height: kSpace3),
-                FilledButton.icon(
+                ArcadeFilled.icon(
                   onPressed: () async {
                     final next = await _toggleFavoriteExercise(exercise);
                     if (context.mounted) {
@@ -1240,6 +1243,8 @@ class _WarmupStartCard extends StatelessWidget {
       label: 'Warm-up guide — optional pre-session mobility routine',
       child: PhosphorTap(
         onTap: onTap,
+        haptic: HapticIntent.selection,
+        sound: UiSound.tick,
         child: Container(
           padding: const EdgeInsets.all(kSpace3),
           decoration: BoxDecoration(
@@ -1339,14 +1344,14 @@ class _LoadoutActions extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
+        ArcadeIconButton(
           constraints: const BoxConstraints(),
           padding: const EdgeInsets.symmetric(horizontal: 6),
           onPressed: onReplace,
           tooltip: 'Replace',
           icon: const Icon(Icons.swap_horiz_sharp, size: 20, color: kNeon),
         ),
-        IconButton(
+        ArcadeIconButton(
           constraints: const BoxConstraints(),
           padding: const EdgeInsets.symmetric(horizontal: 6),
           onPressed: onRemove,

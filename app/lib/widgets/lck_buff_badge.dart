@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'arcade_filled.dart';
 
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
@@ -108,7 +109,7 @@ class LckBuffBadge extends StatelessWidget {
           ),
         ),
         actions: [
-          TextButton(
+          ArcadeTextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text(
               'OK',

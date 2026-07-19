@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../data/exercise_demos.dart';
+import '../services/haptic_service.dart';
+import '../services/sfx_service.dart';
+import '../services/ui_sound.dart';
 import '../services/workout_defaults_service.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
+import 'arcade_filled.dart';
 import 'arcade_route.dart';
+import 'arcade_tap.dart';
 import 'exercise_demo_player.dart';
 
 /// A neon-framed "demo cabinet" that shows an exercise's looping form demo.
@@ -253,8 +258,10 @@ class _StripButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return ArcadeTap(
       onTap: onTap,
+      haptic: HapticIntent.selection,
+      sound: UiSound.tick,
       borderRadius: BorderRadius.circular(4),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -422,10 +429,15 @@ class _ExerciseDemoFullscreenState extends State<_ExerciseDemoFullscreen> {
       body: Stack(
         children: [
           // Backdrop: tapping anywhere outside the clip dismisses.
+          // haptic-ok: full-bleed backdrop dismiss; feedback fired inline.
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => Navigator.of(context).maybePop(),
+              onTap: () {
+                HapticService.instance.fireCoalesced(HapticIntent.selection);
+                SfxService.instance.playUi(UiSound.tick);
+                Navigator.of(context).maybePop();
+              },
             ),
           ),
           // The clip, sized to its own aspect ratio so backdrop taps around it
@@ -466,7 +478,7 @@ class _ExerciseDemoFullscreenState extends State<_ExerciseDemoFullscreen> {
           Positioned(
             top: MediaQuery.of(context).padding.top + kSpace2,
             right: kSpace3,
-            child: IconButton(
+            child: ArcadeIconButton(
               icon: const Icon(Icons.close_sharp, color: kText, size: 28),
               onPressed: () => Navigator.of(context).maybePop(),
             ),

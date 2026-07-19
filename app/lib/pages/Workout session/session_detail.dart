@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../models/unit_models.dart';
 import '../../models/workout_models.dart';
+import '../../services/haptic_service.dart';
 import '../../services/stat_engine.dart';
 import '../../services/unit_settings_service.dart';
 import '../../services/workout_storage_service.dart';
 import '../../services/xp_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/arcade_filled.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/motion/arcade_text_field.dart';
 import '../../widgets/motion/phosphor_tap.dart';
@@ -82,14 +84,15 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
           style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
         ),
         actions: [
-          TextButton(
+          ArcadeTextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'CANCEL',
               style: AppFonts.shareTechMono(color: kMutedText),
             ),
           ),
-          FilledButton(
+          ArcadeFilled(
+            haptic: HapticIntent.warning,
             onPressed: () => Navigator.of(ctx).pop(true),
             style: FilledButton.styleFrom(
               backgroundColor: kDanger,
@@ -182,14 +185,14 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
           ],
         ),
         actions: [
-          TextButton(
+          ArcadeTextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(
               'CANCEL',
               style: AppFonts.shareTechMono(color: kMutedText),
             ),
           ),
-          FilledButton(
+          ArcadeFilled(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text(
               'SAVE',
@@ -291,7 +294,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
       appBar: AppBar(
         title: Text(_fmtDate(session.date)),
         actions: [
-          IconButton(
+          ArcadeIconButton(
             tooltip: 'Delete session',
             onPressed: _confirmDelete,
             icon: const Icon(Icons.delete_sharp, color: kDanger, size: 20),
