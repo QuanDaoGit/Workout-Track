@@ -1825,7 +1825,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ],
       ),
       nextUp: _programNextUp(progress, todayWorkoutPending: false),
-      primaryLabel: 'RECOVERY BRIEFING',
+      primaryLabel: 'RESTING...',
       onPrimary: _openRecoveryInsight,
       secondaryLabel: 'TRAIN ANYWAY',
       onSecondary: () => _startWorkout(
@@ -2014,7 +2014,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ],
       ),
-      primaryLabel: 'RECOVERY BRIEFING',
+      primaryLabel: 'RESTING...',
       onPrimary: _openRecoveryInsight,
       secondaryLabel: 'Train anyway',
       onSecondary: () => _startWorkout(trainAnyway: false),

@@ -58,7 +58,7 @@ class RecoveryInsightSheetContent extends StatelessWidget {
             children: [
               const Expanded(
                 child: Text(
-                  'RECOVERY BRIEFING',
+                  'RESTING TIPS',
                   style: TextStyle(
                     fontFamily: 'PressStart2P',
                     fontSize: 11,
