@@ -67,7 +67,7 @@ void main() {
   });
 
   testWidgets(
-      'ordering contract: RECOVERY BRIEFING writes no state until the sheet '
+      'ordering contract: RESTING... writes no state until the sheet '
       'route is pushed', (tester) async {
     // A rest-day Home: one completed session in the past (not a new user), and
     // a rest schedule whose only training weekday is NOT today — so today is a
@@ -125,7 +125,7 @@ void main() {
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
-    final button = find.text('RECOVERY BRIEFING');
+    final button = find.text('RESTING...');
     for (var i = 0; i < 30 && button.evaluate().isEmpty; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
