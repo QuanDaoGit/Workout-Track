@@ -5,6 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../../services/haptic_service.dart';
+import '../../services/sfx_service.dart';
+import '../../services/ui_sound.dart';
 import 'bit_sprite.dart' show BitMood;
 
 /// BIT as the room's living companion — a fully-painted, animated port of the
@@ -163,6 +166,10 @@ class _BitCompanionState extends State<BitCompanion>
 
   void _onTap() {
     if (_resting) return; // poking a tired BIT does nothing until he recovers
+    // BIT's press signature — a spoken "bi-di-bip?" (a character response, not
+    // a UI click), beside a light poke haptic. A resting BIT stays silent.
+    HapticService.instance.fireCoalesced(HapticIntent.selection);
+    SfxService.instance.playUi(UiSound.bitChirp);
     if (widget.spamRestArmed) {
       final now = DateTime.now().millisecondsSinceEpoch;
       _spamTaps = (now - _lastTapMs <= _spamGapMs) ? _spamTaps + 1 : 1;

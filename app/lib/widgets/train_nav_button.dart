@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../services/haptic_service.dart';
+import '../services/sfx_service.dart';
+import '../services/ui_sound.dart';
 import '../theme/app_fonts.dart';
 import '../theme/tokens.dart';
 
@@ -144,11 +146,19 @@ class _TrainNavButtonState extends State<TrainNavButton>
       // haptic-ok: wrappers don't expose those; fires HapticService.tap() inline.
       child: GestureDetector(
         onTap: () {
-          // The hero action gets a light press tap (the keystone bar's lone CTA).
+          // The hero action gets a light press tap (the keystone bar's lone CTA)
+          // + part 2 of its "heavy keycap" signature — the dyad ENGAGE at
+          // commit (part 1, the thunk, fired at tap-down). One owner: no
+          // generic tick on the hero key.
           HapticService.instance.tap();
+          SfxService.instance.playUi(UiSound.trainUp);
           widget.onTap();
         },
-        onTapDown: (_) => setState(() => _pressed = true),
+        onTapDown: (_) {
+          // Signature part 1: the felt down-thunk, synced with the keycap sink.
+          SfxService.instance.playUi(UiSound.trainDown);
+          setState(() => _pressed = true);
+        },
         onTapUp: (_) => setState(() => _pressed = false),
         onTapCancel: () => setState(() => _pressed = false),
         behavior: HitTestBehavior.opaque,

@@ -8,6 +8,8 @@ import 'package:flutter/scheduler.dart';
 import '../../data/bit_room_copy.dart';
 import '../../models/adventure_models.dart' show AdventurePhase;
 import '../../services/haptic_service.dart';
+import '../../services/sfx_service.dart';
+import '../../services/ui_sound.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../companion/bit_companion.dart';
@@ -324,6 +326,9 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
 
   void _playLaunch() {
     _launchSeed++; // fresh deterministic particle set for this launch
+    // The launch whoosh rides the send-off animation (its rising doppler is
+    // authored to the pad recoil's timing).
+    SfxService.instance.playUi(UiSound.padDispatch);
     // BIT is visibly launching — clear any prior ignition so this send-off
     // restarts the empty-dock → flicker beat cleanly.
     _igniteTimer?.cancel();
@@ -394,6 +399,11 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
   /// `_collecting`; reduced motion routes immediately.
   void _startCollect() {
     if (_collecting) return; // guard double-tap during the dissolve
+    // The haul signature — chunky thunk + bright tail — owns this gesture
+    // (no generic tick), beside the reward haptic. Plays under reduced motion
+    // too (sound is not vestibular; the collect still happens).
+    HapticService.instance.reward();
+    SfxService.instance.playUi(UiSound.haulCollect);
     if (_reduce) {
       widget.onCollect?.call();
       return;
@@ -478,14 +488,21 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
     // A waiting haul always collects, whatever the (already-settled) phase is —
     // the single guard so a settled idle+haul can't fall through to dispatch.
     if (adv.haulReady) {
-      _startCollect();
+      _startCollect(); // owns its audio (the haul signature)
       return;
     }
     switch (adv.phase) {
       case AdventurePhase.idle:
-        widget.onDispatchTap?.call();
       case AdventurePhase.out:
-        widget.onStatusTap?.call();
+        // The pad's press signature — "prime", the dispatch whoosh's little
+        // sibling (one owner per gesture; collect owns its own audio).
+        HapticService.instance.fireCoalesced(HapticIntent.selection);
+        SfxService.instance.playUi(UiSound.padTap);
+        if (adv.phase == AdventurePhase.idle) {
+          widget.onDispatchTap?.call();
+        } else {
+          widget.onStatusTap?.call();
+        }
       case AdventurePhase.returned:
         _startCollect();
     }
@@ -556,7 +573,17 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
           label: line.semanticsLabel,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: widget.onViewQuests,
+            onTap: widget.onViewQuests == null
+                ? null
+                : () {
+                    // Tapping BIT's spoken line IS talking to BIT — his chirp
+                    // answers, then the board opens.
+                    HapticService.instance.fireCoalesced(
+                      HapticIntent.selection,
+                    );
+                    SfxService.instance.playUi(UiSound.bitChirp);
+                    widget.onViewQuests!();
+                  },
             child: ExcludeSemantics(
               child: BitSpeechBubble(
                 text: line.text ?? '',
@@ -803,7 +830,21 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
                     total: widget.questWeeklyTotal,
                     filled: widget.questWeeklyFilled,
                     ready: widget.questClaimable,
-                    onTap: widget.onViewQuests,
+                    onTap: widget.onViewQuests == null
+                        ? null
+                        : () {
+                            // The board's press signature — "degauss wake", a
+                            // CRT powering on — only when the screen actually
+                            // wakes (the locked board's notice carries its own
+                            // blip instead).
+                            HapticService.instance.fireCoalesced(
+                              HapticIntent.selection,
+                            );
+                            if (widget.questBoardPowered) {
+                              SfxService.instance.playUi(UiSound.boardTap);
+                            }
+                            widget.onViewQuests!();
+                          },
                     powered: widget.questBoardPowered,
                     semanticsLabel: widget.questBoardPowered
                         ? null

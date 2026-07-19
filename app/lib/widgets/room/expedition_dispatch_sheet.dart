@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import '../../services/haptic_service.dart';
+import '../arcade_filled.dart';
 
 import '../../data/adventure_routes.dart';
 import '../../services/adventure_service.dart';
@@ -123,8 +125,12 @@ class _DispatchSheetState extends State<_DispatchSheet> {
               const SizedBox(height: kSpace2),
               SizedBox(
                 height: kButtonHeight,
-                child: FilledButton(
+                child: ArcadeFilled(
                   onPressed: _busy ? null : _send,
+                  // The launch whoosh (padDispatch, fired by the room's
+                  // send-off animation) owns this commit's audio — no tick.
+                  haptic: HapticIntent.success,
+                  sound: false,
                   child: Text(_busy ? 'SENDING…' : 'SEND BIT · ${route.name}'),
                 ),
               ),
