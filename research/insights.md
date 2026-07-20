@@ -2,6 +2,39 @@
 
 > Seed document. Tag every item `[validated]`, `[assumption]`, or `[risk]`. Pre-launch = mostly assumptions.
 
+### Micro-interaction motion — zoom-to-fixture navigation + companion haptics: concurrency over serial, duration bands, vestibular gate (2026-07-20)
+Feeds the shipped home-room micro-interactions (board camera dolly / pad focus-push / BIT purr /
+press-light; spec `docs/superpowers/specs/2026-07-20-home-room-micro-interactions-design.md`).
+**Codex evidence-review run** (verdict *needs-attention* — flagged daily-repetition tolerance,
+two-target overgeneralization, the lap-robot→phone bridge, and missing low-end-Android perf; all
+resolved into the design). Extends [[haptics-v2]] (reuse: the JCR ~400ms reward-duration peak +
+no-drone + pulse-train doctrine were NOT re-researched).
+- `[validated]` **Container-transform element→page continuity** (a tapped element visibly becoming
+  the destination) is design-system canon (Material container transform; the canonical case is a
+  two-element card→detail — the quest-board→page pair maps exactly). Claim deliberately NARROW:
+  legibility/satisfaction of the transition, not large-space wayfinding (Codex: the orientation
+  literature is about big information spaces — don't overclaim it for one fixed room).
+- `[validated, primary]` **Click-response delay is the fluency killer** (IJHCS 2024, Vol 186
+  103257, abstract-grade: perceived fluency falls as click→response delay rises) → motion must
+  START on tap; never run a zoom serially before a push. Resolution shipped: zoom + push start the
+  same tick, the route holds its reveal through the travel beat. Nav-transition duration bands:
+  Material 300ms standard / practitioner 200–300ms / <100ms imperceptible.
+- `[validated, CONTRARY — load-bearing]` **NN/g: repeated animations turn annoying by ~the third
+  viewing; auto-animations are hated (~92%)** — the sanctioned category is user-triggered feedback
+  at short duration. Resolution: total time-to-page stays ≈ the old fade (+~90ms), user-triggered
+  only, and the trim axis cut ambient candidates (overscroll stir, time-of-day tint) entirely.
+- `[validated]` **Zoom/scale is a named WCAG 2.3.3 vestibular trigger** (W3C Understanding; ~35% of
+  adults 40+ with vestibular disorder history) → reduced-motion must fall back to the exact
+  pre-feature behavior; modest magnitude (~1.12) lowers risk for everyone.
+- `[validated, precedent]` Close-up/examine zoom on room objects is established adventure-game
+  grammar (Adventure Creator canonical close-up tutorials; Gone Home examine mode) — genre-native
+  for a diegetic room, not a novel gesture.
+- `[assumption]` **Tactile aliveness → companion attachment on a phone motor.** The Haptic
+  Creature program (Yohanan & MacLean; Sefidgar et al., n=38) shows the *animated* (breathing)
+  robot — not its mere presence — lowered respiration/heart-rate/anxiety and raised valence; the
+  bridge from a furry lap robot to a 280ms phone-motor purr is an inference. The purr's defensible
+  core is the [[haptics-v2]] duration mechanics + Finch/Duolingo unified-channel practice.
+
 ### Progressive feature unlocking (workout-count feature drip) — directionally right for the GAME-LIKE goal, but precedent is hypothesis-grade for a TRACKER; gate meta surfaces only, never the tool core (2026-07-14)
 Should meta features (Guild, Adventure, Shop, strength index…) unlock at workout-count milestones (3 → guild, 5 → X…), each with a standard unlock ceremony? Deep tier (core-loop/progression). **Codex evidence-review run (prompt-only, verdict *needs-attention* → 4 findings, all folded in — it downgraded the precedent transfer, forced the activation-vs-gating split, downgraded visible-locked to a hypothesis, and demanded an anti-guilt copy audit).** Builds on [[reward-economy]] (deterministic unlocks = right base), the S-curve richness finding, and "creative features: DEFER — fix core first" (a re-pacing of EXISTING features passes that bar; new surfaces don't).
 - `[validated, precedent — but hypothesis-grade for transfer]` Progressive revelation is the universal mobile-game onboarding pattern, and the *gamified-wellness* comparables run the exact proposed mechanic: **Finch** stages unlocks by adventure count (stages at 7/22/42/67 adventures; shops unlock progressively; seasonal events after day 3) ([Finch wiki](https://finch.fandom.com/wiki/Stages_of_Growth)), **Habitica** unlocks drops/pets at level 3 explicitly "to help new players become used to the game" ([Habitica FAQ](https://habitica.fandom.com/wiki/FAQ)), **Duolingo** gates leaderboards behind 10 lessons, **Pokémon GO** gates gyms/raids at level 5. **Codex F1 (high): this is games/companion-apps evidence, NOT tracker evidence** — Ironbit's primary job is logging; a first-session user may read locked surfaces as *missing capability*, not progression. Treat transfer as a **hypothesis needing a first-session prototype check**, not established.

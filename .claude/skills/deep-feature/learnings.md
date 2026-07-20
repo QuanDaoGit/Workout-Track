@@ -311,8 +311,16 @@ leaks as a "pending timer" at teardown, so prefer ONE AnimationController spanni
 that ticker lifecycle means `pumpAndSettle` runs the transient to completion and **the assertion must
 happen mid-lifecycle with bounded pumps** (and the first pump after a `forward(from:)` is the ticker's
 zero-frame — budget the segment's duration *after* it); never short-circuit the subtree at opacity 0,
-or bare-`pump()` assertions across the suite find nothing. *Seen: Simple Mode —
+or bare-`pump()` assertions across the suite find nothing. (e) A test that mounts a HEAVY page whose
+init runs many real-async service reads through a **process-wide keyed lock** (`prefsWriteLock`) gets
+**one scenario per FILE**: the first test's teardown can kill a future *inside* a lock's critical
+section, stranding the static chain so every later same-process test that loads the page hangs on its
+loading gate (passes alone, deadlocks in-suite — nothing to do with prefs values); and wait for such a
+page via a **bounded poll-pump for a real widget** (`for … if (find.byType(X).isEmpty) runAsync(50ms)+pump`),
+never one fixed delay. *Seen: Simple Mode —
 `_SelectionCheckbox` controller moved to `initState`; prefs leak cleared + instance-seeded; curated-skip
 driven via the awaited entry seed; two-state tests split to single-pump (2026-06); the arcade notice —
 two shop tests asserted after `pumpAndSettle` and found nothing, the bare-pump contract broke on an
-opacity-0 `SizedBox.shrink`, and a dismiss test missed the ticker zero-frame (2026-07).*
+opacity-0 `SizedBox.shrink`, and a dismiss test missed the ticker zero-frame (2026-07); the room-camera
+HomePage tests deadlocked in-suite via a stranded KeyedLock until split one-per-file + poll-pumped
+(2026-07).*

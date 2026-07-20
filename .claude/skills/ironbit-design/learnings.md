@@ -71,7 +71,13 @@ don't pick a louder shape. **Scroll/parallax on a pixel diorama:** drift only th
 layers** — fractionally translating a *crisp sprite* shimmers it (same grid-break as a non-integer
 upscale); keep sprites at scroll rate, clip + over-paint (a wall-colour underlay) so the drift never
 exposes a gap, and **gate the whole effect off under reduced motion** (WCAG 2.3.3 — it's a delight, not
-usability). **A user-triggered content/layout change MUST animate the transition** (show-more/less,
+usability). **A camera ZOOM over a pixel diorama scales the rendered RASTER layer** (`Transform.scale`
++ `filterQuality` around a `RepaintBoundary` — the compositor samples the painted frame, a photographic
+move), never the widget geometry (per-sprite fractional re-render = the same shimmer); keep magnitude
+modest (~1.1), land exactly on identity at rest (scale ≤ 1 returns the child untransformed so goldens/
+reduced-motion stay byte-identical), and make the zoom-into-a-page transition a **composition contract**:
+the incoming route must hold fully invisible through the travel beat (an Interval reveal gate) or the
+route fade swallows the zoom into a wobble (2026-07, room camera dolly — Codex). **A user-triggered content/layout change MUST animate the transition** (show-more/less,
 expand/collapse, filter, paginate → `AnimatedSize` / `AnimatedCrossFade` / `AnimatedSwitcher`), never
 snap — the motion *is* the feedback that the tap registered; an instant content jump reads as broken /
 unresponsive. This is a floor, not a flourish (distinct from ambient decoration, which stays restrained);

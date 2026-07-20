@@ -150,6 +150,16 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
       wrap line). Research-grounded (SDT competence > rewards): deliberately NO XP/gems/streak and
       no guilt or train-nudge copy — rest stays protected. Spec + plan:
       `docs/superpowers/specs/2026-07-18-rest-day-recovery-insights-design.md`.
+- [x] Home-room micro-interactions (2026-07-20) — a two-tier camera grammar makes the room feel
+      physical at the moment of interaction: the wall quest board's tap **dollies the camera into
+      the board** (280ms raster-layer zoom while the quest route holds back, then CRT-reveals over
+      it; the pop plays a 190ms pull-back settle), the pad's dispatch tap plays a subtle 1.05
+      **focus-push** under the sheet, pressing BIT fires a shaped ~280ms haptic **purr**
+      (`HapticService.bitPurr`, drone-safe fallbacks), and board + pad answer pointer-down with a
+      paint-level **press-light**. All user-triggered feedback, never ambient decoration; reduced
+      motion keeps today's exact behavior (the purr stays — action-tied, own toggle). Deliberately
+      trimmed by adversarial review: no overscroll stir, no time-of-day tint, gaze deferred. Spec:
+      `docs/superpowers/specs/2026-07-20-home-room-micro-interactions-design.md`.
 - [x] Programs (`ProgramService`) — structured workout programs (PPL, Full Body, Upper/Lower).
 - [x] Onboarding — cinematic sequence: cold open → problem → solution → calibration quiz →
       avatar → name → class reveal → rank assessed → charge ritual → start gate.
