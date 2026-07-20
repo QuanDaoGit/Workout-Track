@@ -4,7 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
 
-enum ArcadeRouteMotion { panel, flow, reveal, fade, powerOn }
+enum ArcadeRouteMotion { panel, flow, reveal, fade, powerOn, dolly }
+
+/// The dolly route's timings — exported because the Home room's camera dolly
+/// and its cover-reset must stay in lockstep with the route transition.
+const int kDollyForwardMs = 280;
+const int kDollyReverseMs = 190;
 
 Route<T> arcadeRoute<T>(
   WidgetBuilder builder, {
@@ -25,6 +30,9 @@ Route<T> arcadeRoute<T>(
       }
       if (motion == ArcadeRouteMotion.powerOn) {
         return _powerOnTransition(animation, child);
+      }
+      if (motion == ArcadeRouteMotion.dolly) {
+        return _dollyReveal(animation, child, spec);
       }
       return _crtSignalTransition(animation, child, spec);
     },
@@ -85,7 +93,46 @@ _CrtRouteSpec _specFor(ArcadeRouteMotion motion) {
       sweepStrength: 0,
       edgeStrength: 0,
     ),
+    // The quest-board camera dolly's receive: the incoming page holds fully
+    // back through the travel beat (the Home room visibly dollies alone under
+    // a transparent route), then the CRT-signal bands sweep it in over the
+    // zoomed room. On the reverse the page clears out early, so the room's
+    // pull-back settle owns the tail of the pop.
+    ArcadeRouteMotion.dolly => const _CrtRouteSpec(
+      forward: Duration(milliseconds: kDollyForwardMs),
+      reverse: Duration(milliseconds: kDollyReverseMs),
+      accent: kCyan,
+      bandCount: 18,
+      tearCount: 3,
+      sweepStrength: 0.26,
+      edgeStrength: 0.20,
+      revealGate: 0.42,
+    ),
   };
+}
+
+/// The dolly receive: opacity 0 through the travel beat (`revealGate`), then
+/// the standard CRT-signal composition runs on the remapped remainder.
+Widget _dollyReveal(
+  Animation<double> animation,
+  Widget child,
+  _CrtRouteSpec spec,
+) {
+  final gated = CurvedAnimation(
+    parent: animation,
+    curve: Interval(spec.revealGate, 1.0),
+  );
+  return FadeTransition(
+    opacity: Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: animation,
+        // A hard gate, then a fast ramp: invisible until the gate, fully
+        // present shortly after (the bands carry the texture of the reveal).
+        curve: Interval(spec.revealGate, spec.revealGate + 0.18),
+      ),
+    ),
+    child: _crtSignalTransition(gated, child, spec),
+  );
 }
 
 /// CRT power-on: from black, a dot → horizontal beam (the tube firing) → a
@@ -430,6 +477,7 @@ class _CrtRouteSpec {
     required this.edgeStrength,
     this.driftPx = 0,
     this.revealPulse = 0,
+    this.revealGate = 0,
   });
 
   final Duration forward;
@@ -441,4 +489,8 @@ class _CrtRouteSpec {
   final double edgeStrength;
   final double driftPx;
   final double revealPulse;
+
+  /// Fraction of the transition the incoming page stays fully invisible
+  /// (the dolly's travel beat). 0 = no gate (every other motion).
+  final double revealGate;
 }
