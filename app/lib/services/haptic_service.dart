@@ -239,6 +239,78 @@ class HapticService {
     }
   }
 
+  /// Whether the vibrator accepts custom waveform patterns — resolved once,
+  /// lazily, like [_hasAmplitude]. A vibrator without it would silently drop
+  /// (or throw on) `Vibration.vibrate(pattern:)`, so [bitPurr] degrades to the
+  /// plain selection tick there instead (Codex F5).
+  static bool? _hasCustomVibration;
+
+  Future<bool> _ensureCustomVibration() async {
+    final cached = _hasCustomVibration;
+    if (cached != null) return cached;
+    try {
+      return _hasCustomVibration =
+          (await Vibration.hasCustomVibrationsSupport()) == true;
+    } catch (_) {
+      return _hasCustomVibration = false;
+    }
+  }
+
+  /// Minimum spacing between two purrs — slightly over the envelope length so
+  /// a rapid re-tap can never cancel-restart the motor mid-envelope (restarts
+  /// stutter; see [boostSwell]'s doc). Purely time-based via [nowProvider].
+  static const Duration purrWindow = Duration(milliseconds: 300);
+
+  DateTime? _purrStartedAt;
+
+  /// BIT's press **purr** — the tactile twin of his cheer orbit: one soft,
+  /// gap-free ~280ms rise-and-fall envelope (peak amplitude well under the
+  /// reward tier — a creature response, not an event). Devices without
+  /// amplitude control get a designed soft double-pulse ("b-brr"), NEVER a
+  /// flat sustained buzz (the no-drone doctrine); devices without a raw
+  /// vibrator or without waveform support fall back to the plain selection
+  /// tick. Fires under reduced motion (action-tied haptic; haptics carry
+  /// their own Settings toggle).
+  ///
+  /// Returns whether a purr was issued — a call inside [purrWindow] of the
+  /// previous one is dropped (never restart the motor mid-envelope).
+  Future<bool> bitPurr() async {
+    if (!enabled) return false;
+    final now = nowProvider();
+    final started = _purrStartedAt;
+    if (started != null && now.difference(started) < purrWindow) return false;
+    _purrStartedAt = now;
+    try {
+      if (!await _ensureVibrator() || !await _ensureCustomVibration()) {
+        // No raw vibrator, or one that can't take waveform patterns — still
+        // one tactile response, still not a drone (Codex F5).
+        await HapticFeedback.selectionClick();
+        return true;
+      }
+      if (await _ensureAmplitudeControl()) {
+        // Gap-free segments (pattern[i] paired with intensities[i]): a soft
+        // rise to a low peak, decaying out — 280ms total.
+        await Vibration.vibrate(
+          pattern: const [0, 60, 60, 60, 60, 40],
+          intensities: const [0, 50, 105, 80, 45, 20],
+        );
+      } else {
+        // No amplitude control: two tiny pulses 60ms apart — reads as a soft
+        // "b-brr", categorically not a drone.
+        await Vibration.vibrate(pattern: const [0, 25, 60, 30]);
+      }
+    } catch (e) {
+      debugPrint('HapticService: bitPurr failed: $e');
+      // A throwing pattern path still owes ONE tactile response (Codex F5).
+      try {
+        await HapticFeedback.selectionClick();
+      } catch (_) {
+        // best effort
+      }
+    }
+    return true;
+  }
+
   /// Fire the haptic for a semantic [intent]. The dispatch seam shared widgets
   /// (e.g. `PixelButton`) call so a single `HapticIntent` value drives the feel;
   /// [HapticIntent.none] is a no-op opt-out.
