@@ -166,9 +166,11 @@ class _BitCompanionState extends State<BitCompanion>
 
   void _onTap() {
     if (_resting) return; // poking a tired BIT does nothing until he recovers
-    // BIT's press signature — a spoken "bi-di-bip?" (a character response, not
-    // a UI click), beside a light poke haptic. A resting BIT stays silent.
-    HapticService.instance.fireCoalesced(HapticIntent.selection);
+    // BIT's press signature — a spoken "bi-di-bip?" beside a shaped haptic
+    // PURR (the orbit's tactile twin — a creature response, not a UI click).
+    // The purr carries its own in-flight guard, so tap-mashing never restarts
+    // the motor mid-envelope. A resting BIT stays silent (guarded above).
+    unawaited(HapticService.instance.bitPurr());
     SfxService.instance.playUi(UiSound.bitChirp);
     if (widget.spamRestArmed) {
       final now = DateTime.now().millisecondsSinceEpoch;
