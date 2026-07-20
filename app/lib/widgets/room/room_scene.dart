@@ -122,6 +122,7 @@ class HomeRoomScene extends StatefulWidget {
     this.questWeeklyTotal = 0,
     this.questClaimable = 0,
     this.onViewQuests,
+    this.onViewQuestsFromBoard,
     this.questBoardPowered = true,
     this.questBoardOfflineLabel,
     this.onDormantPadTap,
@@ -171,6 +172,12 @@ class HomeRoomScene extends StatefulWidget {
   /// Tap on the wall board (or BIT's claimable line) → open the Quests page.
   final VoidCallback? onViewQuests;
 
+  /// Optional dedicated handler for the WALL BOARD's tap (the camera-dolly
+  /// path). Falls back to [onViewQuests] when null, so standalone/golden
+  /// hosts are unaffected. BIT's claimable bubble line always uses
+  /// [onViewQuests] — the camera moves only for the fixture itself.
+  final VoidCallback? onViewQuestsFromBoard;
+
   /// False = the earned-unlock locked state: the wall board renders dark/off
   /// (no bar, no pip, no claim cue). The tap still routes to [onViewQuests]
   /// (the shell's gate shows the invitation notice).
@@ -188,6 +195,60 @@ class HomeRoomScene extends StatefulWidget {
   /// Floor below which the composition would crush — the caller should not pass
   /// less, but we guard internally too.
   static const double minHeight = 380;
+
+  /// The room's load-bearing layout anchors, solved from the box size — the
+  /// SAME math the scene's build uses (build consumes this, so the two can
+  /// never drift). Public so the page-level camera can aim at fixtures
+  /// without duplicating layout constants.
+  ///
+  /// One horizon line drives the whole composition (the wall/floor seam); the
+  /// pad's CENTER sits on it and BIT floats a fixed 102·kx gap above the
+  /// pad's emitter. We solve for the horizon so BIT lands in the vertical
+  /// center of the room, then clamp so there is always floor below the pad.
+  static ({
+    double kx,
+    double cx,
+    double padCenterY,
+    double padTopY,
+    double bitCenterY,
+  }) anchorsFor(double width, double height) {
+    final h = height < minHeight ? minHeight : height;
+    final kx = (width / 340.0).clamp(0.85, 1.15);
+    final cx = width * 0.5;
+    final padH = 52 * kx;
+    final padBitGap = 102 * kx;
+    final maxPadCenterY = h - 92 * kx;
+    final padCenterY = (h * 0.5 + padBitGap).clamp(padBitGap, maxPadCenterY);
+    final padTopY = padCenterY - padH / 2;
+    final emitterY = padTopY + 4 * kx;
+    final bitCenterY = emitterY - 80 * kx;
+    return (
+      kx: kx,
+      cx: cx,
+      padCenterY: padCenterY,
+      padTopY: padTopY,
+      bitCenterY: bitCenterY,
+    );
+  }
+
+  /// Focal alignment of the quest board's center (the camera's dolly target),
+  /// in [Alignment] space for the given room box. Derived from the board's
+  /// placement: left 40·kx, top bitCenterY−16·kx, 65×72·kx.
+  static Alignment boardFocal(Size size) {
+    final a = anchorsFor(size.width, size.height);
+    final cxPx = (40 + 65 / 2) * a.kx;
+    final cyPx = a.bitCenterY - 16 * a.kx + (72 / 2) * a.kx;
+    return Alignment(
+      (cxPx / size.width) * 2 - 1,
+      (cyPx / size.height) * 2 - 1,
+    );
+  }
+
+  /// Focal alignment of the pad's center (the focus-push target).
+  static Alignment padFocal(Size size) {
+    final a = anchorsFor(size.width, size.height);
+    return Alignment(0, (a.padCenterY / size.height) * 2 - 1);
+  }
 
   @override
   State<HomeRoomScene> createState() => _HomeRoomSceneState();
@@ -244,6 +305,23 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
   /// voice bubble to the "I guess bro..." sigh. BitCompanion owns the pose + the
   /// timing; this is just its report so the bubble follows.
   bool _bitResting = false;
+
+  /// Pad press-light: lit while a finger is down on the pad (+ a ~90ms linger
+  /// so an instant tap still reads). Paint-state only — the pad never moves
+  /// (the room is one rigid depth plane).
+  bool _padPressed = false;
+  Timer? _padPressLinger;
+
+  void _setPadPressed(bool down) {
+    _padPressLinger?.cancel();
+    if (down) {
+      if (!_padPressed) setState(() => _padPressed = true);
+      return;
+    }
+    _padPressLinger = Timer(const Duration(milliseconds: 90), () {
+      if (mounted && _padPressed) setState(() => _padPressed = false);
+    });
+  }
 
   /// One-shot "a charge just landed" flash on the newly-lit meter segment — fired
   /// from [didUpdateWidget] when banked charges increase. Lazy + motion-only.
@@ -440,6 +518,7 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
   void dispose() {
     _ticker?.dispose();
     _igniteTimer?.cancel();
+    _padPressLinger?.cancel();
     _launch?.dispose();
     _homecoming?.dispose();
     _collect?.dispose();
@@ -673,31 +752,20 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
     return LayoutBuilder(
       builder: (context, c) {
         final w = c.maxWidth;
-        final kx = (w / 340.0).clamp(0.85, 1.15);
-        final cx = w * 0.5;
-
-        // One horizon line drives the whole composition so the wall/floor seam
-        // and the pad can't drift apart (coherence). The pad's CENTER sits on
-        // the horizon — a floating emitter dock anchored on the seam — and BIT
-        // floats a fixed gap above it. We solve for the horizon so BIT lands in
-        // the **vertical center** of the room, then clamp so there is always
-        // floor below the pad for the light pool.
+        // The load-bearing anchors come from the shared solver (the camera's
+        // focal helpers read the same math — see HomeRoomScene.anchorsFor).
+        final anchors = HomeRoomScene.anchorsFor(w, h);
+        final kx = anchors.kx;
+        final cx = anchors.cx;
         final padW = 150 * kx, padH = 52 * kx;
         final bitSize = 92 * kx;
-        // BIT center is always (padH/2 - 4 + 80)·kx = 102·kx above the pad
-        // center; invert that to place BIT at h/2.
-        final padBitGap = 102 * kx;
-        final maxPadCenterY = h - 92 * kx;
-        final padCenterY = (h * 0.5 + padBitGap).clamp(
-          padBitGap,
-          maxPadCenterY,
-        );
+        final padCenterY = anchors.padCenterY;
         final horizonY = padCenterY;
         final horizonFrac = horizonY / h;
-        final padTopY = padCenterY - padH / 2;
+        final padTopY = anchors.padTopY;
         final padBottomY = padCenterY + padH / 2;
         final emitterY = padTopY + 4 * kx;
-        final bitCenterY = emitterY - 80 * kx;
+        final bitCenterY = anchors.bitCenterY;
         final poolW = 220 * kx, poolH = 140 * kx;
         // The pool's bright mass centres ~⅔ down its box, so push the box up
         // until that bright region tucks behind the pad base. The pad (z5) is
@@ -843,7 +911,9 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
                             if (widget.questBoardPowered) {
                               SfxService.instance.playUi(UiSound.boardTap);
                             }
-                            widget.onViewQuests!();
+                            (widget.onViewQuestsFromBoard ??
+                                    widget.onViewQuests!)
+                                .call();
                           },
                     powered: widget.questBoardPowered,
                     semanticsLabel: widget.questBoardPowered
@@ -900,6 +970,11 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
                         : widget.dormantPadLabel,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
+                      onTapDown: (adv != null || widget.onDormantPadTap != null)
+                          ? (_) => _setPadPressed(true)
+                          : null,
+                      onTapUp: (_) => _setPadPressed(false),
+                      onTapCancel: () => _setPadPressed(false),
                       onTap: adv != null
                           ? _onPadTap
                           : (widget.onDormantPadTap == null
@@ -908,14 +983,27 @@ class _HomeRoomSceneState extends State<HomeRoomScene>
                       child: AnimatedBuilder(
                         animation:
                             _launch ?? const AlwaysStoppedAnimation<double>(0),
-                        child: Image.asset(
-                          'assets/room/bit_pad.png',
-                          fit: BoxFit.fill,
-                          filterQuality: FilterQuality.none,
-                          isAntiAlias: false,
-                          gaplessPlayback: true,
-                          errorBuilder: (context, error, stack) =>
-                              BitPad(width: padW, height: padH),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.asset(
+                              'assets/room/bit_pad.png',
+                              fit: BoxFit.fill,
+                              filterQuality: FilterQuality.none,
+                              isAntiAlias: false,
+                              gaplessPlayback: true,
+                              errorBuilder: (context, error, stack) =>
+                                  BitPad(width: padW, height: padH),
+                            ),
+                            if (_padPressed)
+                              IgnorePointer(
+                                // Press-light: one brightness step over the
+                                // pad face — the dock acknowledges the touch.
+                                child: ColoredBox(
+                                  color: kText.withValues(alpha: 0.08),
+                                ),
+                              ),
+                          ],
                         ),
                         builder: (context, child) {
                           // P1 ignition recoil kick (350–520ms).
