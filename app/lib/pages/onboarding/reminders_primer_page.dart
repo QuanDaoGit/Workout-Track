@@ -6,7 +6,9 @@ import '../../models/character.dart';
 import '../../services/haptic_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/notification_settings_service.dart';
+import '../../services/sfx_service.dart';
 import '../../services/simple_mode_service.dart';
+import '../../services/ui_sound.dart';
 import '../../services/unit_settings_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
@@ -90,6 +92,7 @@ class _RemindersPrimerPageState extends State<RemindersPrimerPage> {
     _guidanceSeeded = true;
     setState(() => _compact = value);
     HapticService.instance.selection();
+    SfxService.instance.playUi(UiSound.select);
     await SimpleModeService().setEnabled(value);
   }
 
@@ -381,6 +384,8 @@ class _NotNowButton extends StatelessWidget {
         child: HoldDepress(
           enabled: enabled,
           onTap: enabled ? onTap : null,
+          haptic: HapticIntent.selection,
+          sound: UiSound.tick,
           borderRadius: radius,
           child: Container(
             height: 52,

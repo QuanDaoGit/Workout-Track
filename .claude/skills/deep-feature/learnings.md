@@ -89,10 +89,19 @@ any MethodChannel throws (`LateInitializationError` on the platform `instance`, 
 unhandled async error that fails *every* test mounting that page. Wrap **every** plugin access in
 try/catch that degrades to a no-op/false (fail-open): this both keeps the subsystem from ever crashing
 boot / a workout (best-effort delivery) **and** keeps the calling page's widget tests green without
-per-test channel mocks. Prove a new subsystem's *logic* with a tiny injected interface (a fake
+per-test channel mocks. **But try/catch cannot fail-open a plugin whose CONSTRUCTOR kicks off an
+unawaited, MEMOIZED init future** (audioplayers' global scope): the MissingPluginException escapes the
+awaited chain into the test zone ("failed after it had already completed"), and once the memoized
+future holds an error, awaiting it from any *other* zone (a runZonedGuarded wrapper — which therefore
+CANNOT fix this) blocks forever at Dart's error-zone boundary → 30s timeouts. Remedy: **skip the
+platform layer entirely under `flutter test`** — detect via `Platform.environment['FLUTTER_TEST']`
+(the `bool.fromEnvironment` form is NOT defined by the tool) — and make a pre-platform
+recorder seam (`onPlayForTest`) the observable contract tests assert against. Prove a new subsystem's *logic* with a tiny injected interface (a fake
 recording calls) so the coordinator/decision code is tested with zero plugin involvement. *Seen: Tier-A
 rest-timer local notifications — `NotificationService` guarded, `RestNotificationCoordinator` tested via
-a `RestAlertScheduler` fake (2026-06).*
+a `RestAlertScheduler` fake (2026-06); the SFX micro channel's `AudioPool.create` leaked audioplayers'
+memoized global-init error into every suite tapping a `PixelButton` until the FLUTTER_TEST gate +
+recorder seam (2026-07).*
 
 ### Asset-dependent core surfaces
 **Rule:** A surface newly depending on bundled images needs per-image errorBuilder fallbacks + a manifest

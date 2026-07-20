@@ -295,6 +295,11 @@ shared `cancel()`, with an overshoot guard so a stale post-background resume sta
 **app-wide**: be generous with **COVERAGE** but disciplined with **INTENSITY/DURATION** — the broad
 layer is the *subtlest* tick (`selection`) via opt-in wrappers (default **silent**; never on passive
 scroll / informational chrome / disabled taps), heavier intents reserved for confirm/reward/destructive;
+**and NEVER ship the channel partially** — a few wired sites among many silent ones reads as *broken*,
+not restrained (the SFX v1 on-device verdict: "half baked, a little here a little there"); design the
+channel as a complete ROLE GRAMMAR (select/tick/confirm/warn/skip/toggle/…) fired structurally
+(wrapper defaults + drop-in button wrappers + a CI ban on the raw bypass class), with one owner per
+gesture + an arbiter window so specific sounds replace, never stack under, generic ones (2026-07);
 **"continuous" = a SHORT pulse-train ridden off the `AnimationController`'s own listener** (threshold
 cursor, forward-only, **≤3 pulses**) — never a parallel `Timer` (drift) or a multi-second drone (the
 reward feel peaks ~400ms per JCR); **rate-coalesce the broad layer** (drop repeats <30ms); reduced-motion

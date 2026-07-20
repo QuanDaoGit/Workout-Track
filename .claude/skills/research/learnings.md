@@ -24,7 +24,11 @@ clause via Codex, feature-drip review (2026-07).*
 
 ### Blended field missed → wrong sources (and wrong source *type*)
 **Rule:** Most app questions span 2+ fields (a "rewarded warm-up" is exercise-science **and** behavioral
-**and** competitor) — route to all. Also match the source **type** to the question: a **craft / how-it-
+**and** competitor) — route to all. **And every UX/feedback question carries a *context-of-use* leaf**
+(where/when it fires, what else occupies that channel): a gym feature's audio competes with the user's
+own earbuds music/podcast — a whole listening-context dimension the field sweep missed until Codex
+flagged it (interaction-SFX review, 2026-07); enumerate the channel's competing occupants before
+designing into it. Also match the source **type** to the question: a **craft / how-it-
 should-look-or-be-built** question needs technique sources (tutorials, breakdowns), **not stock-asset /
 catalog listings** — those name the artifact, they don't teach it. And **verify the deliverable actually
 embodies the craft** (a "pixel-art" mock with rounded corners + a blur glow doesn't). *Seen: a "best bar"
