@@ -150,6 +150,33 @@ void main() {
     });
   });
 
+  group('home ambience bed', () {
+    test('start records once, respects both gates, stop/start idempotent',
+        () async {
+      await SfxService.instance.startHomeAmbience();
+      await SfxService.instance.startHomeAmbience(); // already on → no-op
+      expect(played, ['audio/home_ambience.wav']);
+      expect(SfxService.instance.homeAmbienceOn, isTrue);
+      await SfxService.instance.stopHomeAmbience();
+      expect(SfxService.instance.homeAmbienceOn, isFalse);
+
+      SfxService.uiSoundsEnabled = false;
+      await SfxService.instance.startHomeAmbience();
+      expect(SfxService.instance.homeAmbienceOn, isFalse,
+          reason: 'the bed is UI-tier: the sub-toggle gates it');
+      SfxService.uiSoundsEnabled = true;
+      SfxService.enabled = false;
+      await SfxService.instance.startHomeAmbience();
+      expect(SfxService.instance.homeAmbienceOn, isFalse);
+    });
+
+    test('fade clamps and never throws while stopped', () {
+      SfxService.instance.setHomeAmbienceFade(1.4);
+      SfxService.instance.setHomeAmbienceFade(-0.2);
+      SfxService.instance.setHomeAmbienceFade(0.5);
+    });
+  });
+
   group('UiSoundSettingsService', () {
     test('defaults on, persists a flip', () async {
       expect(await UiSoundSettingsService().isEnabled(), isTrue);

@@ -8,6 +8,7 @@ import 'theme/app_fonts.dart';
 import 'theme/tokens.dart';
 
 import 'pages/boot_splash_page.dart';
+import 'services/app_route_observer.dart';
 import 'services/analytics_consent_service.dart';
 import 'services/analytics_service.dart';
 import 'services/demo_seed_service.dart';
@@ -71,6 +72,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      navigatorObservers: [appRouteObserver],
       home: const BootSplashPage(),
       builder: (context, child) => DecoratedBox(
         decoration: const BoxDecoration(

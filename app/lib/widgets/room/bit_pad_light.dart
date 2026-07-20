@@ -79,6 +79,9 @@ class BitPadLightPainter extends CustomPainter {
   }
 
   double _intensity() {
+    // NOTE: the home ambient bed's amplitude envelope is a port of this
+    // function (SFX audition round 6) — if this curve changes, regenerate the
+    // bed so light and sound stay in agreement.
     if (reduceMotion) return 0.85;
     final t = time.value;
     final tq = (t * 14).floorToDouble() / 14; // chunky ~14fps

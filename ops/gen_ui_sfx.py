@@ -306,6 +306,130 @@ def main() -> None:
               syllable(G6, G6 * 0.98, 0.060) + silence(0.025) +
               syllable(G6, C7 * 1.06, 0.130, vib=0.015), 0.15)
 
+    gen_home_ambience()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# home_ambience.wav — the Home room's bed (audition pick "PAD LIGHT", round 6.1,
+# 2026-07-19): a ~69Hz electric discharge-train buzz whose amplitude envelope is
+# a VERBATIM port of BitPadLightPainter._intensity() (bit_pad_light.dart — the
+# light pool's breath/jitter/dip curve at chunky 14fps; regenerate this asset if
+# that curve changes), an octave-coupled macro swell (rises brighter, sinks
+# darker, once per 8s loop), arc snaps fired at the light's dip onsets, and
+# room depth from lowpassed circular-delay reflections. TRUE STEREO, perfectly
+# loopable, authored at peak 0.05 — BELOW every kit sound (a bed, not a track).
+# ═════════════════════════════════════════════════════════════════════════════
+
+A_DUR = 8.0
+A_N = int(SR * A_DUR)
+
+
+def _qloop(f):
+    return round(f * A_DUR) / A_DUR
+
+
+def _train(period, brightness_hz, gain):
+    f0 = SR / period
+    kmax = max(1, int(brightness_hz / f0))
+    p = [0.0] * period
+    for k in range(1, kmax + 1):
+        g = gain / k
+        for i in range(period):
+            p[i] += math.sin(2 * math.pi * k * i / period) * g
+    return (p * (A_N // period + 1))[:A_N]
+
+
+def _hashn(x):
+    s = math.sin(x * 12.9898) * 43758.5453
+    return s - math.floor(s)
+
+
+def _light_env():
+    breath_hz = _qloop(1.6 / (2 * math.pi))
+    env = [0.0] * A_N
+    onsets = []
+    in_dip = False
+    for i in range(A_N):
+        t = i / SR
+        tq = math.floor(t * 14) / 14
+        breath = 0.80 + 0.20 * math.sin(2 * math.pi * breath_hz * tq)
+        jitter = 0.94 + 0.06 * _hashn(tq * 1.7)
+        dipping = _hashn(tq * 0.37 + 11) < 0.16
+        dip = (0.5 + 0.22 * _hashn(tq * 2.1 + 3)) if dipping else 1.0
+        if dipping and not in_dip:
+            onsets.append(i)
+        in_dip = dipping
+        env[i] = breath * jitter * dip
+    xf = int(0.4 * SR)
+    for i in range(xf):
+        w = i / xf
+        env[i] = env[i] * w + env[A_N - xf + i] * (1 - w)
+    return env, onsets
+
+
+def _reflect(sig, delay_s, gain, alpha):
+    d = int(delay_s * SR)
+    out = [0.0] * A_N
+    v = 0.0
+    for i in range(A_N):
+        s = sig[(i - d) % A_N]
+        v += alpha * (s - v)
+        out[i] = v * gain
+    return out
+
+
+def gen_home_ambience():
+    env, onsets = _light_env()
+    bright, dark = 6500, 2925
+    dkL = [a + b for a, b in zip(_train(320, dark, 0.55), _train(322, dark, 0.45))]
+    brL = [a + b for a, b in zip(_train(320, bright, 0.55), _train(322, bright, 0.45))]
+    dkR = [a + b for a, b in zip(_train(320, dark, 0.45), _train(324, dark, 0.55))]
+    brR = [a + b for a, b in zip(_train(320, bright, 0.45), _train(324, bright, 0.55))]
+    swell_hz = _qloop(0.125)
+    L = [0.0] * A_N
+    R = [0.0] * A_N
+    for i in range(A_N):
+        t = i / SR
+        up = 0.5 + 0.5 * math.sin(2 * math.pi * swell_hz * t - math.pi / 2)
+        e = env[i] * (0.55 + 0.45 * up)
+        L[i] = (dkL[i] * (1 - up) + brL[i] * up) * e
+        R[i] = (dkR[i] * (1 - up) + brR[i] * up) * e
+    crng = random.Random(907)
+    for k, at in enumerate(onsets):
+        pan = 0.25 if k % 2 == 0 else 0.75
+        for i in range(90):
+            t = i / SR
+            if at + i >= A_N:
+                break
+            v = crng.uniform(-1, 1) * math.exp(-t / 0.0015) * 0.5
+            L[at + i] += v * (1 - pan)
+            R[at + i] += v * pan
+    refL = _reflect(R, 0.023, 0.42, 0.10)
+    refR = _reflect(L, 0.041, 0.42, 0.08)
+    washL = _reflect(L, 0.130, 0.22, 0.03)
+    washR = _reflect(R, 0.155, 0.22, 0.03)
+    for i in range(A_N):
+        L[i] += refL[i] + washL[i]
+        R[i] += refR[i] + washR[i]
+    if not all(math.isfinite(s) for s in L[::997]):
+        raise ValueError("home_ambience: non-finite samples")
+    m = max(max(abs(s) for s in L), max(abs(s) for s in R))
+    k2 = 0.05 / m
+    path = os.path.join(_OUT_DIR, "home_ambience.wav")
+    with wave.open(path, "w") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        frames = bytearray()
+        for l, r in zip(L, R):
+            frames += struct.pack(
+                "<hh",
+                int(max(-1.0, min(1.0, l * k2)) * 32767),
+                int(max(-1.0, min(1.0, r * k2)) * 32767),
+            )
+        w.writeframes(bytes(frames))
+    print(f"wrote {path}  ({A_DUR:.2f}s stereo loop, peak 0.05)")
+
 
 if __name__ == "__main__":
     main()

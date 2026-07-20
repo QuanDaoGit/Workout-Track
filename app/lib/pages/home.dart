@@ -29,6 +29,7 @@ import '../services/profile_service.dart';
 import '../services/program_customization_service.dart';
 import '../services/program_service.dart';
 import '../services/quest_service.dart';
+import '../services/sfx_service.dart';
 import '../services/recovery_insight_service.dart';
 import '../services/rest_service.dart';
 import '../services/stat_engine.dart';
@@ -255,9 +256,14 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // rebuild so the quest card / wall board / expedition section power on the
     // moment their gate opens, not on the next data reload.
     FeatureGateService.revision.addListener(_onGateRevision);
-    _scrollController.addListener(
-      () => _roomScroll.value = _scrollController.offset,
-    );
+    _scrollController.addListener(() {
+      final offset = _scrollController.offset;
+      _roomScroll.value = offset;
+      // The room bed fades with scroll depth (the same signal the parallax
+      // reads): full in the room, quadratically gone by ~1.5 screens of cards.
+      final depth = (offset / 360.0).clamp(0.0, 1.0);
+      SfxService.instance.setHomeAmbienceFade((1 - depth) * (1 - depth));
+    });
     _storageSubscription = WorkoutStorageService.changes.listen((_) {
       if (!mounted) return;
       setState(() => _ongoingSessions = []);

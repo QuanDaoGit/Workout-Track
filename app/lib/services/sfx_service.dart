@@ -290,6 +290,66 @@ class SfxService {
   /// via the live-finish guard + `RestTimerService.cancel()`.
   Future<void> playRestGo() => playUi(UiSound.restGoExercise);
 
+  // ── Home ambience — the room's bed loop ────────────────────────────────────
+  // The "PAD LIGHT" bed (audition pick 2026-07-19): the pad light's flicker
+  // curve driving a low electric buzz, stereo, seamless 8s loop, authored at
+  // peak 0.05 — BELOW every kit sound. Its own looping player (the pooled
+  // micro channel and the ceremony channel never touch it). Gated by master
+  // Sound AND the UI-sounds sub-toggle; faded by the home scroll offset.
+
+  AudioPlayer? _ambience;
+  bool _ambienceOn = false;
+  double _ambienceFade = 1.0;
+
+  /// Base gain: a bed, not a track — background but still hearable.
+  static const double ambienceBaseVolume = 0.55;
+
+  /// Start the room bed (no-op if already running or gated off). Call when the
+  /// Home room becomes the active, visible surface.
+  Future<void> startHomeAmbience() async {
+    if (!enabled || !uiSoundsEnabled || _ambienceOn) return;
+    _ambienceOn = true;
+    onPlayForTest?.call('audio/home_ambience.wav');
+    if (_isFlutterTest) return;
+    try {
+      final p = _ambience ??= AudioPlayer()..setReleaseMode(ReleaseMode.loop);
+      await p.play(
+        AssetSource('audio/home_ambience.wav'),
+        volume: ambienceBaseVolume * _ambienceFade,
+      );
+    } catch (e) {
+      debugPrint('SfxService: startHomeAmbience failed: $e');
+    }
+  }
+
+  /// Stop the bed (leaving home / app backgrounded / a route covers the room).
+  Future<void> stopHomeAmbience() async {
+    if (!_ambienceOn) return;
+    _ambienceOn = false;
+    if (_isFlutterTest) return;
+    try {
+      await _ambience?.pause();
+    } catch (_) {
+      // best effort
+    }
+  }
+
+  /// Scroll-fade the bed: [fade] 0..1 where 1 = the room fully in view. The
+  /// caller supplies the curve (Home uses a quadratic on scroll depth).
+  void setHomeAmbienceFade(double fade) {
+    _ambienceFade = fade.clamp(0.0, 1.0);
+    if (_isFlutterTest || !_ambienceOn) return;
+    try {
+      _ambience?.setVolume(ambienceBaseVolume * _ambienceFade);
+    } catch (_) {
+      // best effort
+    }
+  }
+
+  /// Whether the bed is currently running (for tests / re-sync logic).
+  @visibleForTesting
+  bool get homeAmbienceOn => _ambienceOn;
+
   /// Restore every static + instance mutable knob this service exposes —
   /// cooldown stamps, variant cursors, injected clock, test recorder, pool
   /// caches — so one test's state can't silence or redirect the next (Codex).
@@ -305,6 +365,8 @@ class SfxService {
     _variantCursor.clear();
     _poolFutures.clear();
     _deadPools.clear();
+    _ambienceOn = false;
+    _ambienceFade = 1.0;
   }
 
   // ── Charge Ritual boost cues (dedicated channel) ────────────────────────────

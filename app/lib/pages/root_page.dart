@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import '../models/workout_models.dart';
 import '../services/analytics_service.dart';
 import '../services/exercise_catalog_service.dart';
+import '../services/app_route_observer.dart';
 import '../services/feature_gate_service.dart';
+import '../services/sfx_service.dart';
 import '../services/haptic_service.dart';
 import '../services/idle_session_guard.dart';
 import '../services/loot_drop_service.dart';
@@ -56,7 +58,8 @@ class RootPage extends StatefulWidget {
   State<RootPage> createState() => _RootPageState();
 }
 
-class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
+class _RootPageState extends State<RootPage>
+    with WidgetsBindingObserver, RouteAware {
   AppDestination _destination = AppDestination.home;
   Timer? _dockTimer;
   WorkoutSession? _ongoingSession;
@@ -116,6 +119,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       _showExpiredPausedSummaryIfNeeded();
       _showIdleRevealIfNeeded();
       unawaited(_evaluateGates());
+      _syncHomeAmbience();
     });
     if (widget.openWorkoutStarterOnLaunch) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _openFirstSession());
@@ -162,6 +166,8 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
+    unawaited(SfxService.instance.stopHomeAmbience());
     WidgetsBinding.instance.removeObserver(this);
     FeatureGateService.revision.removeListener(_onGateRevision);
     _restNotifCoordinator.detach();
@@ -265,11 +271,13 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       _viewingSelection = true;
     });
     _draft.begin(seed);
+    _syncHomeAmbience(); // the selection surface covers the room
   }
 
   void _cancelDraft() {
     _draft.clear();
     setState(() => _viewingSelection = false);
+    _syncHomeAmbience(); // the room is back in view
   }
 
   /// Fired by the embedded selection right after it launches the live session.
@@ -277,6 +285,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
     _draft.clear();
     setState(() => _viewingSelection = false);
     _loadOngoingSession();
+    _syncHomeAmbience();
   }
 
   TrainButtonMode _trainMode() {
@@ -299,6 +308,43 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       _showExpiredPausedSummaryIfNeeded();
       _showIdleRevealIfNeeded();
       unawaited(_evaluateGates());
+      _syncHomeAmbience();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      // Backgrounded: the room bed must never play under another app.
+      unawaited(SfxService.instance.stopHomeAmbience());
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) appRouteObserver.subscribe(this, route);
+  }
+
+  /// Any route pushed over the shell covers the room — the bed stops.
+  @override
+  void didPushNext() => unawaited(SfxService.instance.stopHomeAmbience());
+
+  /// The covering route popped — re-sync (starts only if home is the view).
+  @override
+  void didPopNext() => _syncHomeAmbience();
+
+  /// The Home room bed runs exactly while the room is the visible surface:
+  /// home destination, shell route current, not the selection view. Called at
+  /// every shell arming site (boot frame, resume, tab switch, push-return) —
+  /// idempotent both ways.
+  void _syncHomeAmbience() {
+    if (!mounted) return;
+    final onHome =
+        _destination == AppDestination.home &&
+        !_viewingSelection &&
+        (ModalRoute.of(context)?.isCurrent ?? true);
+    if (onHome) {
+      unawaited(SfxService.instance.startHomeAmbience());
+    } else {
+      unawaited(SfxService.instance.stopHomeAmbience());
     }
   }
 
@@ -384,6 +430,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
       _viewingSelection = false; // leave the selection view; the draft persists
     });
     _loadLootBadge();
+    _syncHomeAmbience();
   }
 
   void _reloadQuestAwarePages() {
@@ -684,6 +731,7 @@ class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
           _draft.requestCommit();
         } else {
           setState(() => _viewingSelection = true);
+          _syncHomeAmbience(); // selection re-covers the room
         }
         return;
       }
