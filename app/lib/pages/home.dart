@@ -62,8 +62,10 @@ import '../widgets/program_path_hud.dart';
 import '../widgets/pulse_color_text.dart';
 import '../widgets/radar_stat_icon.dart';
 import '../widgets/recovery_insight_sheet.dart';
+import '../services/app_route_observer.dart';
 import '../widgets/room/expedition_dispatch_sheet.dart';
 import '../widgets/room/room_scene.dart';
+import '../widgets/room/room_zoom_lens.dart';
 import '../widgets/screen_shake.dart';
 import '../widgets/strobe_flash.dart';
 import '../widgets/rest_icon.dart';
@@ -144,12 +146,19 @@ class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
     this.onViewQuests,
+    this.onViewQuestsFromBoard,
     this.onViewProfile,
     this.onViewWorkouts,
     this.onOpenShop,
   });
 
   final VoidCallback? onViewQuests;
+
+  /// The wall board's quest push. Returns whether the push actually started —
+  /// the room camera dollies only on real travel, never into the locked
+  /// notice (Codex F2). Null → the board falls back to [onViewQuests] with no
+  /// camera.
+  final bool Function()? onViewQuestsFromBoard;
   final VoidCallback? onViewProfile;
 
   /// Streak/LCK metric → workout history (Workout tab).
@@ -162,7 +171,13 @@ class HomePage extends StatefulWidget {
   HomePageState createState() => HomePageState();
 }
 
-class HomePageState extends State<HomePage> with WidgetsBindingObserver {
+/// Who currently owns the room camera. Route callbacks and dismissal handlers
+/// act ONLY on the engagement they started (Codex F1) — e.g. the dispatch
+/// sheet's own route push must never trigger the boardPush cover-reset.
+enum _CameraEngagement { none, boardPush, boardReturn, padSheet }
+
+class HomePageState extends State<HomePage>
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin, RouteAware {
   bool _loading = true;
   List<WorkoutSession> _ongoingSessions = [];
   int _totalXP = 0;
@@ -242,9 +257,48 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<double> _roomScroll = ValueNotifier<double>(0);
 
+  // ── Room camera (board dolly / pad focus-push) ────────────────────────────
+  // Doctrine: stateless while covered — the camera engages only inside the
+  // transition windows; any non-standard path (tab switch, rotation,
+  // backgrounding) finds the room at identity. Every mutation is scoped to
+  // the engagement that started it (Codex F1).
+  final RoomCamera _roomCamera = RoomCamera();
+  late final AnimationController _cameraCtrl;
+  _CameraEngagement _engagement = _CameraEngagement.none;
+  double _cameraTarget = 1.0;
+  Alignment _cameraFocal = Alignment.center;
+  bool _pendingBoardReturn = false;
+  Timer? _coverReset;
+  final GlobalKey _roomKey = GlobalKey();
+
+  void _driveCamera() {
+    final t = Curves.easeOutCubic.transform(_cameraCtrl.value);
+    _roomCamera.set(1.0 + (_cameraTarget - 1.0) * t, _cameraFocal);
+  }
+
+  void _disengageCamera() {
+    _cameraCtrl.stop();
+    _cameraCtrl.value = 0;
+    _engagement = _CameraEngagement.none;
+  }
+
+  bool get _reduceMotion => MediaQuery.of(context).disableAnimations;
+
+  Size? get _roomBoxSize {
+    final box = _roomKey.currentContext?.findRenderObject() as RenderBox?;
+    return (box?.hasSize ?? false) ? box!.size : null;
+  }
+
   @override
   void initState() {
     super.initState();
+    // Eager, never late-lazy: a dispose-before-first-build must not be the
+    // first touch of a ticker field (learnings: deactivated-ancestor crash).
+    _cameraCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: kDollyForwardMs),
+      reverseDuration: const Duration(milliseconds: kDollyReverseMs),
+    )..addListener(_driveCamera);
     // Cold open shows a regular line (never a wildcard — those only surface via
     // a rotation draw), picked at random so it isn't always the same greeting.
     if (bitRoomRegularAdvice.isNotEmpty) {
@@ -345,7 +399,21 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Camera lifecycle rides the SHELL route (Home is an IndexedStack child,
+    // not its own route). subscribe() is idempotent per (subscriber, route);
+    // RootPage's own subscription on the same route is unaffected.
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) appRouteObserver.subscribe(this, route);
+  }
+
+  @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
+    _coverReset?.cancel();
+    _cameraCtrl.dispose();
+    _roomCamera.dispose();
     WidgetsBinding.instance.removeObserver(this);
     FeatureGateService.revision.removeListener(_onGateRevision);
     _expeditionReturnTimer?.cancel();
@@ -353,6 +421,70 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _roomScroll.dispose();
     _storageSubscription?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didPushNext() {
+    // A route now covers the shell. ONLY a board dolly resets under cover
+    // (the pad's sheet is itself a route push and must keep its lean —
+    // Codex F1). Timing derives from the route constant (Codex F3); at that
+    // point the route is ≥95% opaque bands, so the silent snap can't show.
+    if (_engagement != _CameraEngagement.boardPush) return;
+    _coverReset?.cancel();
+    _coverReset = Timer(const Duration(milliseconds: kDollyForwardMs + 80), () {
+      if (!mounted || _engagement != _CameraEngagement.boardPush) return;
+      _disengageCamera();
+    });
+  }
+
+  @override
+  void didPopNext() {
+    _coverReset?.cancel();
+    if (_engagement == _CameraEngagement.boardPush) {
+      // Covered-and-back before the reset timer fired — clean up first.
+      _disengageCamera();
+    }
+    if (!_pendingBoardReturn) return;
+    _pendingBoardReturn = false;
+    if (_reduceMotion || _engagement != _CameraEngagement.none) return;
+    final size = _roomBoxSize;
+    if (size == null) return;
+    // Set the settle pose while the popping route still covers us (RouteAware
+    // fires at pop START), then ease home as its reverse fade plays — the
+    // pull-back half of the dolly.
+    _engagement = _CameraEngagement.boardReturn;
+    _cameraTarget = 1.06;
+    _cameraFocal = HomeRoomScene.boardFocal(size);
+    _cameraCtrl.value = 1.0;
+    _cameraCtrl.reverse().whenComplete(() {
+      if (mounted && _engagement == _CameraEngagement.boardReturn) {
+        _engagement = _CameraEngagement.none;
+      }
+    });
+  }
+
+  /// The wall board's tap. Authorization resolves FIRST — the callback returns
+  /// whether the push actually started (Codex F2) — and only then does the
+  /// camera engage, in the same tick (the push renders next frame, so motion
+  /// still starts on tap; the route's travel-beat hold-back guarantees the
+  /// zoom reads).
+  void _onBoardTap() {
+    final fromBoard = widget.onViewQuestsFromBoard;
+    if (!_questsUnlocked || fromBoard == null) {
+      widget.onViewQuests?.call();
+      return;
+    }
+    final pushed = fromBoard();
+    if (!pushed) return;
+    if (_reduceMotion || _engagement != _CameraEngagement.none) return;
+    final size = _roomBoxSize;
+    if (size == null) return;
+    _engagement = _CameraEngagement.boardPush;
+    _pendingBoardReturn = true;
+    _cameraTarget = 1.12;
+    _cameraFocal = HomeRoomScene.boardFocal(size);
+    _cameraCtrl.duration = const Duration(milliseconds: kDollyForwardMs);
+    _cameraCtrl.forward(from: 0);
   }
 
   void _onGateRevision() {
@@ -736,7 +868,7 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   /// Pad tapped while idle: open the console if a charge is ready, else nudge.
-  void _onPadDispatch() {
+  Future<void> _onPadDispatch() async {
     final state = _adventureState;
     if (state == null) return;
     final now = DateTime.now();
@@ -765,14 +897,41 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         (_characterClass != null
             ? defaultRouteForClass(_characterClass!).id
             : adventureRoutes.first.id);
-    showExpeditionDispatchSheet(
-      context,
-      charges: ui.charges,
-      vit: _vitality,
-      stats: _combatStats,
-      selectedRouteId: defaultRoute,
-      onSend: _dispatchExpedition,
-    );
+    // Focus-push: a subtle whole-room lean toward the pad while the sheet is
+    // up. The sheet is itself a route push, so the camera holds through
+    // didPushNext (only boardPush cover-resets — Codex F1) and reverses in
+    // finally on EVERY dismissal path (drag, scrim, back, programmatic —
+    // Codex F6).
+    final size = _roomBoxSize;
+    final engage =
+        !_reduceMotion &&
+        size != null &&
+        _engagement == _CameraEngagement.none;
+    if (engage) {
+      _engagement = _CameraEngagement.padSheet;
+      _cameraTarget = 1.05;
+      _cameraFocal = HomeRoomScene.padFocal(size);
+      _cameraCtrl.duration = const Duration(milliseconds: 180);
+      _cameraCtrl.forward(from: 0);
+    }
+    try {
+      await showExpeditionDispatchSheet(
+        context,
+        charges: ui.charges,
+        vit: _vitality,
+        stats: _combatStats,
+        selectedRouteId: defaultRoute,
+        onSend: _dispatchExpedition,
+      );
+    } finally {
+      if (engage && mounted && _engagement == _CameraEngagement.padSheet) {
+        _cameraCtrl.reverse().whenComplete(() {
+          if (mounted && _engagement == _CameraEngagement.padSheet) {
+            _engagement = _CameraEngagement.none;
+          }
+        });
+      }
+    }
   }
 
   /// Spend a charge. The service's null return is the source of truth; reloading
@@ -2288,33 +2447,42 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ),
             SliverToBoxAdapter(
-              child: HomeRoomScene(
-                height: roomHeight,
-                name: _profile.displayName,
-                level: _level,
-                title: _equippedTitle?.name ?? _rank,
-                titleColor: _equippedTitle?.color ?? kAmber,
-                scrollOffset: _roomScroll,
-                adventure: _buildRoomAdventure(),
-                onDispatchTap: _onPadDispatch,
-                onStatusTap: _openAdventure,
-                onCollect: () => _maybeRevealExpeditionReport(fromUserTap: true),
-                questWeeklyFilled: _questsUnlocked ? _weeklyQuestCompleted : 0,
-                questWeeklyTotal: _questsUnlocked ? _weeklyQuestTotal : 0,
-                questClaimable: _questsUnlocked ? _questClaimable : 0,
-                onViewQuests: widget.onViewQuests,
-                questBoardPowered: _questsUnlocked,
-                questBoardOfflineLabel:
-                    'Quest board, offline. '
-                    '${featureGateSpecs[FeatureGate.quests]!.lockedNotice}.',
-                onDormantPadTap: _adventureUnlocked
-                    ? null
-                    : () =>
-                          showFeatureLockedNotice(context, FeatureGate.adventure),
-                dormantPadLabel: _adventureUnlocked
-                    ? null
-                    : 'Expedition pad, offline. '
-                          '${featureGateSpecs[FeatureGate.adventure]!.lockedNotice}.',
+              // The camera lens scales the room's rendered layer for the
+              // board dolly / pad focus-push; identity (scale 1) paints the
+              // room untouched, so goldens and reduced motion are unaffected.
+              child: RoomZoomLens(
+                camera: _roomCamera,
+                child: HomeRoomScene(
+                  key: _roomKey,
+                  height: roomHeight,
+                  name: _profile.displayName,
+                  level: _level,
+                  title: _equippedTitle?.name ?? _rank,
+                  titleColor: _equippedTitle?.color ?? kAmber,
+                  scrollOffset: _roomScroll,
+                  adventure: _buildRoomAdventure(),
+                  onDispatchTap: _onPadDispatch,
+                  onStatusTap: _openAdventure,
+                  onCollect: () =>
+                      _maybeRevealExpeditionReport(fromUserTap: true),
+                  questWeeklyFilled: _questsUnlocked ? _weeklyQuestCompleted : 0,
+                  questWeeklyTotal: _questsUnlocked ? _weeklyQuestTotal : 0,
+                  questClaimable: _questsUnlocked ? _questClaimable : 0,
+                  onViewQuests: widget.onViewQuests,
+                  onViewQuestsFromBoard: _onBoardTap,
+                  questBoardPowered: _questsUnlocked,
+                  questBoardOfflineLabel:
+                      'Quest board, offline. '
+                      '${featureGateSpecs[FeatureGate.quests]!.lockedNotice}.',
+                  onDormantPadTap: _adventureUnlocked
+                      ? null
+                      : () => showFeatureLockedNotice(
+                            context, FeatureGate.adventure),
+                  dormantPadLabel: _adventureUnlocked
+                      ? null
+                      : 'Expedition pad, offline. '
+                            '${featureGateSpecs[FeatureGate.adventure]!.lockedNotice}.',
+                ),
               ),
             ),
             SliverPadding(

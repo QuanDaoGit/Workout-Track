@@ -43,6 +43,7 @@ class RoomZoomLens extends StatelessWidget {
         if (camera.scale <= 1.0) return c!;
         return ClipRect(
           child: Transform.scale(
+            key: const ValueKey('room_camera_zoom'),
             scale: camera.scale,
             alignment: camera.focal,
             filterQuality: FilterQuality.low,

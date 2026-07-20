@@ -664,12 +664,30 @@ class _RootPageState extends State<RootPage>
     _pushFaded((_) => const ShopPage());
   }
 
-  void _pushQuests() {
+  void _pushQuests({ArcadeRouteMotion motion = ArcadeRouteMotion.fade}) {
     if (!FeatureGateService.isUnlockedSync(FeatureGate.quests)) {
       showFeatureLockedNotice(context, FeatureGate.quests);
       return;
     }
-    _pushFaded((_) => QuestsPage(onQuestChanged: _reloadQuestAwarePages));
+    _pushFaded(
+      (_) => QuestsPage(onQuestChanged: _reloadQuestAwarePages),
+      motion: motion,
+    );
+  }
+
+  /// The home-room WALL BOARD's quest push — reports whether the push actually
+  /// started so the room camera engages only on real travel (Codex F2: never
+  /// zoom into a locked-notice path).
+  bool _pushQuestsFromBoard() {
+    if (!FeatureGateService.isUnlockedSync(FeatureGate.quests)) {
+      showFeatureLockedNotice(context, FeatureGate.quests);
+      return false;
+    }
+    _pushFaded(
+      (_) => QuestsPage(onQuestChanged: _reloadQuestAwarePages),
+      motion: ArcadeRouteMotion.dolly,
+    );
+    return true;
   }
 
   void _pushAdventure() {
@@ -688,10 +706,11 @@ class _RootPageState extends State<RootPage>
   /// quest-aware destinations and re-arm the idle/expired reveals — pushed pages
   /// no longer get reload-on-tab-switch, and while one is open the shell route is
   /// not current so a reveal would otherwise be starved (Codex #4, #5).
-  Future<void> _pushFaded(WidgetBuilder builder) async {
-    await Navigator.of(
-      context,
-    ).push(arcadeRoute(builder, motion: ArcadeRouteMotion.fade));
+  Future<void> _pushFaded(
+    WidgetBuilder builder, {
+    ArcadeRouteMotion motion = ArcadeRouteMotion.fade,
+  }) async {
+    await Navigator.of(context).push(arcadeRoute(builder, motion: motion));
     if (!mounted) return;
     _reloadQuestAwarePages();
     _showExpiredPausedSummaryIfNeeded();
@@ -746,6 +765,7 @@ class _RootPageState extends State<RootPage>
     HomePage(
       key: _homeKey,
       onViewQuests: _pushQuests,
+      onViewQuestsFromBoard: _pushQuestsFromBoard,
       onViewProfile: () => goTo(AppDestination.labs),
       onViewWorkouts: _pushLogs,
       onOpenShop: _openShop,
