@@ -1,9 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-import '../../services/haptic_service.dart';
 import '../../theme/tokens.dart';
 import '../companion/bit_core_engine.dart' show bitGlow;
 
@@ -61,6 +61,7 @@ class QuestBoardPainter extends CustomPainter {
     required this.glow,
     this.powered = true,
     this.lockGlow = 0.30,
+    this.press = false,
   });
 
   final int total;
@@ -77,6 +78,11 @@ class QuestBoardPainter extends CustomPainter {
   /// Padlock brightness 0..1 — a slow, low flicker from the host widget
   /// (static ~0.30 under reduced motion). Only consulted when unpowered.
   final double lockGlow;
+
+  /// True while a finger is down (plus a short linger) — the screen answers
+  /// with one brightness step. Paint-state feedback only: the fixture never
+  /// transforms (the room is one rigid depth plane).
+  final bool press;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -163,6 +169,12 @@ class QuestBoardPainter extends CustomPainter {
       // Keyhole punched back to the screen dark.
       rc(32, 36, 3, 2, _qbScr);
       rc(33, 38, 1, 3, _qbScr);
+      if (press) {
+        // Even sealed, the crate acknowledges the touch — the padlock blinks
+        // one step brighter.
+        cham(27, 33, 13, 10,
+            bitGlow.withValues(alpha: (a + 0.25).clamp(0.0, 1.0)), 1);
+      }
       bolts();
       canvas.restore();
       return;
@@ -284,6 +296,12 @@ class QuestBoardPainter extends CustomPainter {
       edge(5, 0.05 + 0.09 * g);
     }
 
+    if (press) {
+      // Press-light: the screen answers the finger — one washed brightness
+      // step over the recessed screen (a CRT taking the touch), no geometry.
+      rc(sx + 1, sy + 1, sw - 2, sh - 2, _qbCyHi.withValues(alpha: 0.10));
+    }
+
     bolts();
 
     canvas.restore();
@@ -296,7 +314,8 @@ class QuestBoardPainter extends CustomPainter {
       old.ready != ready ||
       old.glow != glow ||
       old.powered != powered ||
-      old.lockGlow != lockGlow;
+      old.lockGlow != lockGlow ||
+      old.press != press;
 }
 
 /// The wall fixture: a [QuestBoardPainter] at [width]×[height] (keep 9:10), with
@@ -335,6 +354,20 @@ class _QuestBoardState extends State<QuestBoard> with SingleTickerProviderStateM
   late final Ticker _ticker;
   bool _reduce = false;
   double _g = 0.6; // static claim level when not animating
+  bool _pressed = false;
+  Timer? _pressLinger;
+
+  void _setPressed(bool down) {
+    _pressLinger?.cancel();
+    if (down) {
+      if (!_pressed) setState(() => _pressed = true);
+      return;
+    }
+    // Hold the lit step ~90ms past release so an instant tap still reads.
+    _pressLinger = Timer(const Duration(milliseconds: 90), () {
+      if (mounted && _pressed) setState(() => _pressed = false);
+    });
+  }
 
   @override
   void initState() {
@@ -397,6 +430,7 @@ class _QuestBoardState extends State<QuestBoard> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    _pressLinger?.cancel();
     _ticker.dispose();
     super.dispose();
   }
@@ -420,6 +454,7 @@ class _QuestBoardState extends State<QuestBoard> with SingleTickerProviderStateM
         glow: claim ? _g : 0.0,
         powered: widget.powered,
         lockGlow: widget.powered ? 0.0 : _g,
+        press: _pressed,
       ),
     );
     final Widget board = widget.onTap != null
@@ -427,10 +462,14 @@ class _QuestBoardState extends State<QuestBoard> with SingleTickerProviderStateM
             button: true,
             label: label,
             child: GestureDetector(
-              onTap: () {
-                HapticService.instance.selection(); // glance at the board
-                widget.onTap!();
-              },
+              onTapDown: (_) => _setPressed(true),
+              onTapUp: (_) => _setPressed(false),
+              onTapCancel: () => _setPressed(false),
+              // One haptic owner per gesture: the HOST's tap closure fires the
+              // coalesced selection (the room already does) — the old internal
+              // `HapticService.instance.selection()` double-fired on every
+              // board tap and was removed (Codex F6).
+              onTap: widget.onTap,
               behavior: HitTestBehavior.opaque,
               child: ExcludeSemantics(child: content),
             ),
