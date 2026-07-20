@@ -10,7 +10,16 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-20-home-room-micro-interactions-design.md`
 
-**Codex plan-review gate:** run the prompt-carried adversarial review of THIS plan before Task 1 (deep-feature Stage 4); fold findings in.
+**Codex plan-review gate:** DONE (2026-07-20, verdict needs-attention → 6 findings, all folded in below):
+
+| # | Finding | Resolution in this plan |
+|---|---------|------------------------|
+| F1 high | One shared camera controller + mutable fields = no ownership; **the dispatch sheet is itself a route push**, so `didPushNext` fires on sheet-open and would reset the pad lean | `_CameraEngagement { none, boardPush, boardReturn, padSheet }` state in Task 9; every route callback / finally block acts ONLY on the engagement it owns; entry guarded on `none` |
+| F2 high | Camera engaged before the authoritative gate check (RootPage re-checks) | `onViewQuestsFromBoard` is now `bool Function()` — RootPage returns push-started truth; HomePage engages the camera only on `true` (same tick — the push renders next frame, motion still starts on tap) |
+| F3 med | 360ms wall-clock cover-reset vs route state | Timer scoped to `boardPush` ownership only; duration derived from the exported route constant (`kDollyForwardMs + 80`); residual jank-overrun risk accepted & documented (route ≥95% opaque at that point) |
+| F4 med | RouteAware/controller/timer disposal | Already in Task 9 Step 2 (unsubscribe, cancel timer, dispose controller + camera, mounted guards) — kept |
+| F5 med | Pattern-vibration-unsupported devices fall through to nothing | `bitPurr` gains a memoized `hasCustomVibrationsSupport` gate → selectionClick fallback; catch path also degrades to selectionClick. (Codex confirmed encodings: with `intensities` = gap-free per-segment amplitudes; without = wait/on alternation) |
+| F6 med | Pre-existing board double-haptic sits on the exact path being polished | Task 3 now deletes QuestBoard's internal `selection()` — the room closure's `fireCoalesced(selection)` is the single owner (one owner per gesture doctrine) |
 
 **File map:**
 - Create: `app/lib/widgets/room/room_zoom_lens.dart` (RoomCamera + RoomZoomLens)
@@ -107,7 +116,10 @@ Expected: FAIL — `bitPurr` isn't defined.
     if (started != null && now.difference(started) < purrWindow) return false;
     _purrStartedAt = now;
     try {
-      if (!await _ensureVibrator()) {
+      if (!await _ensureVibrator() || !await _ensureCustomVibration()) {
+        // No raw vibrator, or a vibrator that can't take waveform patterns —
+        // degrade to the plain selection tick (still one tactile response,
+        // still not a drone). (Codex F5)
         await HapticFeedback.selectionClick();
         return true;
       }
@@ -125,8 +137,29 @@ Expected: FAIL — `bitPurr` isn't defined.
       }
     } catch (e) {
       debugPrint('HapticService: bitPurr failed: $e');
+      // A throwing pattern path still owes ONE tactile response (Codex F5).
+      try {
+        await HapticFeedback.selectionClick();
+      } catch (_) {}
     }
     return true;
+  }
+```
+
+Also add the memoized capability check beside `_ensureAmplitudeControl`:
+
+```dart
+  static bool? _hasCustomVibration;
+
+  Future<bool> _ensureCustomVibration() async {
+    final cached = _hasCustomVibration;
+    if (cached != null) return cached;
+    try {
+      return _hasCustomVibration =
+          (await Vibration.hasCustomVibrationsSupport()) == true;
+    } catch (_) {
+      return _hasCustomVibration = false;
+    }
   }
 ```
 
@@ -325,14 +358,17 @@ In `dispose`: `_pressLinger?.cancel();` before `_ticker.dispose();`.
               onTapDown: (_) => _setPressed(true),
               onTapUp: (_) => _setPressed(false),
               onTapCancel: () => _setPressed(false),
-              onTap: () {
-                HapticService.instance.selection(); // glance at the board
-                widget.onTap!();
-              },
+              // One haptic owner per gesture: the HOST's tap closure fires the
+              // coalesced selection (the room already does) — the old internal
+              // `HapticService.instance.selection()` double-fired on every
+              // board tap and is removed here (Codex F6).
+              onTap: widget.onTap,
               behavior: HitTestBehavior.opaque,
               child: ExcludeSemantics(child: content),
             ),
 ```
+
+(Delete the now-unused `import '../../services/haptic_service.dart';` if nothing else in the file uses it.)
 
 - [ ] **Step 4: Run tests**
 
@@ -800,7 +836,17 @@ Expected: FAIL — `ArcadeRouteMotion.dolly` doesn't exist.
 
 (a) enum: `enum ArcadeRouteMotion { panel, flow, reveal, fade, powerOn, dolly }`
 
-(b) spec (add to `_specFor`):
+(b) exported timing constants (top-level, beside the enum — the HomePage
+cover-reset derives from these so route and camera can never drift, Codex F3):
+
+```dart
+/// The dolly route's timings — exported because the Home room's camera dolly
+/// and cover-reset must stay in lockstep with the route transition.
+const int kDollyForwardMs = 280;
+const int kDollyReverseMs = 190;
+```
+
+(c) spec (add to `_specFor`, consuming the constants):
 
 ```dart
     // The quest-board camera dolly's receive: the incoming page holds back
@@ -809,8 +855,8 @@ Expected: FAIL — `ArcadeRouteMotion.dolly` doesn't exist.
     // the zoomed room. Reverse is the pop settle window — the page clears
     // out early so the room's pull-back owns the tail.
     ArcadeRouteMotion.dolly => const _CrtRouteSpec(
-      forward: Duration(milliseconds: 280),
-      reverse: Duration(milliseconds: 190),
+      forward: Duration(milliseconds: kDollyForwardMs),
+      reverse: Duration(milliseconds: kDollyReverseMs),
       accent: kCyan,
       bandCount: 18,
       tearCount: 3,
@@ -909,12 +955,24 @@ git commit -m "feat(routes): ArcadeRouteMotion.dolly - travel-beat hold-back the
   }
 ```
 
-HomePage construction gains:
+HomePage construction gains the **truth-returning** board callback (Codex F2 —
+the camera engages only when the push actually starts):
 
 ```dart
-      onViewQuestsFromBoard: () =>
-          _pushQuests(motion: ArcadeRouteMotion.dolly),
+      onViewQuestsFromBoard: () {
+        if (!FeatureGateService.isUnlockedSync(FeatureGate.quests)) {
+          showFeatureLockedNotice(context, FeatureGate.quests);
+          return false;
+        }
+        _pushFaded(
+          (_) => QuestsPage(onQuestChanged: _reloadQuestAwarePages),
+          motion: ArcadeRouteMotion.dolly,
+        );
+        return true;
+      },
 ```
+
+(HomePage's param type for this is `bool Function()?` — see Task 9.)
 
 (Existing `onViewQuests: _pushQuests` still compiles — it becomes a closure `() => _pushQuests()` if the tear-off no longer matches `VoidCallback`; with the default param a tear-off is still assignable in Dart? It is NOT — change the call site to `onViewQuests: () => _pushQuests(),`.) Also update the feature-gate switch's `_pushQuests();` call (line ~249) — unchanged semantics with the default.
 
@@ -945,22 +1003,32 @@ State class: add `with RouteAware` to the existing mixin list (it already has Ti
   // ── Room camera (board dolly / pad focus-push) ────────────────────────────
   // Doctrine: stateless while covered — the camera engages only inside the
   // two transition windows and any non-standard path finds it at identity.
+  // Ownership (Codex F1): every camera mutation is scoped to the engagement
+  // that started it. Crucially, the dispatch SHEET is itself a route push, so
+  // didPushNext fires while the pad lean must keep holding — only a boardPush
+  // engagement may cover-reset.
   final RoomCamera _roomCamera = RoomCamera();
   late final AnimationController _cameraCtrl = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 280),
-    reverseDuration: const Duration(milliseconds: 190),
+    duration: const Duration(milliseconds: kDollyForwardMs),
+    reverseDuration: const Duration(milliseconds: kDollyReverseMs),
   )..addListener(_driveCamera);
+  _CameraEngagement _engagement = _CameraEngagement.none;
   double _cameraTarget = 1.0;
   Alignment _cameraFocal = Alignment.center;
   bool _pendingBoardReturn = false;
-  bool _padFocusActive = false;
   Timer? _coverReset;
   final GlobalKey _roomKey = GlobalKey();
 
   void _driveCamera() {
     final t = Curves.easeOutCubic.transform(_cameraCtrl.value);
     _roomCamera.set(1.0 + (_cameraTarget - 1.0) * t, _cameraFocal);
+  }
+
+  void _disengageCamera() {
+    _cameraCtrl.stop();
+    _cameraCtrl.value = 0;
+    _engagement = _CameraEngagement.none;
   }
 
   bool get _reduceMotion => MediaQuery.of(context).disableAnimations;
@@ -970,6 +1038,20 @@ State class: add `with RouteAware` to the existing mixin list (it already has Ti
     return (box?.hasSize ?? false) ? box!.size : null;
   }
 ```
+
+And the enum (top-level in `home.dart`, below the imports):
+
+```dart
+/// Who currently owns the room camera. Route callbacks and dismissal handlers
+/// act ONLY on the engagement they started (Codex F1) — e.g. the dispatch
+/// sheet's own route push must never trigger the boardPush cover-reset.
+enum _CameraEngagement { none, boardPush, boardReturn, padSheet }
+```
+
+`kDollyForwardMs = 280` / `kDollyReverseMs = 190` are exported from
+`arcade_route.dart` (add them there in Task 7 beside the dolly spec, and the
+spec consumes them: `forward: Duration(milliseconds: kDollyForwardMs)`), so the
+cover-reset timing below can never drift from the route (Codex F3).
 
 - [ ] **Step 2: RouteAware plumbing**
 
@@ -987,59 +1069,78 @@ RouteAware overrides:
 ```dart
   @override
   void didPushNext() {
-    // A route now covers the shell. Once it is fully opaque the camera resets
-    // silently — no transform is ever HELD as route state (any non-standard
-    // return finds the room at identity).
+    // A route now covers the shell. ONLY a board dolly resets under cover
+    // (the pad's sheet is itself a route push and must keep its lean —
+    // Codex F1). Timing derives from the route constant (Codex F3); the
+    // residual jank-overrun window is accepted: at that point the route is
+    // ≥95% opaque bands.
+    if (_engagement != _CameraEngagement.boardPush) return;
     _coverReset?.cancel();
-    _coverReset = Timer(const Duration(milliseconds: 360), () {
-      if (!mounted) return;
-      _cameraCtrl.stop();
-      _cameraCtrl.value = 0;
-    });
+    _coverReset = Timer(
+      const Duration(milliseconds: kDollyForwardMs + 80),
+      () {
+        if (!mounted || _engagement != _CameraEngagement.boardPush) return;
+        _disengageCamera();
+      },
+    );
   }
 
   @override
   void didPopNext() {
     _coverReset?.cancel();
+    if (_engagement == _CameraEngagement.boardPush) {
+      // Covered-and-back before the reset timer fired — clean up first.
+      _disengageCamera();
+    }
     if (!_pendingBoardReturn) return;
     _pendingBoardReturn = false;
-    if (_reduceMotion) return;
+    if (_reduceMotion || _engagement != _CameraEngagement.none) return;
     final size = _roomBoxSize;
     if (size == null) return;
-    // Set the settle pose while the popping route still covers us, then ease
-    // home as its 190ms reverse fade plays — the pull-back half of the dolly.
+    // Set the settle pose while the popping route still covers us (RouteAware
+    // fires at pop START — Codex-confirmed), then ease home as its reverse
+    // fade plays — the pull-back half of the dolly.
+    _engagement = _CameraEngagement.boardReturn;
     _cameraTarget = 1.06;
     _cameraFocal = HomeRoomScene.boardFocal(size);
     _cameraCtrl.value = 1.0;
-    _cameraCtrl.reverse();
+    _cameraCtrl.reverse().whenComplete(() {
+      if (mounted && _engagement == _CameraEngagement.boardReturn) {
+        _engagement = _CameraEngagement.none;
+      }
+    });
   }
 ```
 
 - [ ] **Step 3: The board handler** (near `_onPadDispatch`):
 
 ```dart
-  /// The wall board's tap: authorization FIRST (a locked board shows the
-  /// notice with zero camera), then the dolly + the push start in the same
-  /// tick — the route's travel-beat hold-back guarantees the zoom reads.
+  /// The wall board's tap. Authorization resolves FIRST — the callback returns
+  /// whether the push actually started (Codex F2) — and only then does the
+  /// camera engage, in the same tick (the push renders next frame, so motion
+  /// still starts on tap; the route's travel-beat hold-back guarantees the
+  /// zoom reads).
   void _onBoardTap() {
     final fromBoard = widget.onViewQuestsFromBoard;
     if (!_questsUnlocked || fromBoard == null) {
       widget.onViewQuests?.call();
       return;
     }
-    if (!_reduceMotion && !_padFocusActive) {
-      final size = _roomBoxSize;
-      if (size != null) {
-        _pendingBoardReturn = true;
-        _cameraTarget = 1.12;
-        _cameraFocal = HomeRoomScene.boardFocal(size);
-        _cameraCtrl.duration = const Duration(milliseconds: 280);
-        _cameraCtrl.forward(from: 0);
-      }
-    }
-    fromBoard();
+    final pushed = fromBoard();
+    if (!pushed) return;
+    if (_reduceMotion || _engagement != _CameraEngagement.none) return;
+    final size = _roomBoxSize;
+    if (size == null) return;
+    _engagement = _CameraEngagement.boardPush;
+    _pendingBoardReturn = true;
+    _cameraTarget = 1.12;
+    _cameraFocal = HomeRoomScene.boardFocal(size);
+    _cameraCtrl.duration = const Duration(milliseconds: kDollyForwardMs);
+    _cameraCtrl.forward(from: 0);
   }
 ```
+
+`HomePage` widget param: `final bool Function()? onViewQuestsFromBoard;`
 
 - [ ] **Step 4: Pad focus-push.** In `_onPadDispatch`, replace the tail (the `showExpeditionDispatchSheet(...)` call) with an engage/await/finally:
 
@@ -1049,13 +1150,14 @@ RouteAware overrides:
         (_characterClass != null
             ? defaultRouteForClass(_characterClass!).id
             : adventureRoutes.first.id);
-    if (_padFocusActive) return;
-    _padFocusActive = true;
     final size = _roomBoxSize;
-    final engage = !_reduceMotion && size != null;
+    final engage = !_reduceMotion &&
+        size != null &&
+        _engagement == _CameraEngagement.none;
     if (engage) {
+      _engagement = _CameraEngagement.padSheet;
       _cameraTarget = 1.05;
-      _cameraFocal = HomeRoomScene.padFocal(size!);
+      _cameraFocal = HomeRoomScene.padFocal(size);
       _cameraCtrl.duration = const Duration(milliseconds: 180);
       _cameraCtrl.forward(from: 0);
     }
@@ -1069,9 +1171,14 @@ RouteAware overrides:
         onSend: _dispatchExpedition,
       );
     } finally {
-      _padFocusActive = false;
-      if (engage && mounted) {
-        _cameraCtrl.reverse(); // every dismissal path lands here
+      // Every dismissal path (drag, scrim, back, programmatic) lands here —
+      // but only if the pad still OWNS the camera (Codex F1).
+      if (engage && mounted && _engagement == _CameraEngagement.padSheet) {
+        _cameraCtrl.reverse().whenComplete(() {
+          if (mounted && _engagement == _CameraEngagement.padSheet) {
+            _engagement = _CameraEngagement.none;
+          }
+        });
       }
     }
 ```
@@ -1116,7 +1223,10 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: HomePage(
         onViewQuests: () => plainCalls++,
-        onViewQuestsFromBoard: () => boardCalls++,
+        onViewQuestsFromBoard: () {
+          boardCalls++;
+          return true;
+        },
       ),
     ));
     await tester.runAsync(
