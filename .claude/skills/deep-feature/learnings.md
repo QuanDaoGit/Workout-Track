@@ -41,7 +41,15 @@ before its consumer leaves a stale reader. **Removing a derived *debuff/factor**
 computed-vs-cached diff. **Re-curving a value DERIVED from a stored source** (level←totalXP) is a
 *silent* migration — nothing stored changes, yet every threshold reading (level, rank) + every
 display/test/golden pinning it shifts: prove **monotonicity at each legacy boundary** (new ≥ old, so no
-consumer demotes) and repoint every pinned reading. **One shared singleton driven by 2+ phases** (a
+consumer demotes) and repoint every pinned reading; the version-gated recompute must run **before any
+other boot step that recomputes the same value** (an earlier recompute caches new-rule values the gate
+then misreads as legacy → double-scaling), and when the value must not regress a RANK, prefer a
+**source-domain top-up over an output floor** (a floor freezes the display until the source catches up
+— the exact wall a re-tune usually exists to remove). **When several parallel-derived values feed one
+comparative read** (a 3-axis radar), re-curve them with a **shared coefficient** or re-validate the
+comparative fixtures — a per-axis coefficient re-tune re-ranks the comparison even though each axis is
+individually fine (an END-only k=215 flipped every assassin readability fixture to END-led, caught only
+by regenerating the fixtures; 2026-07-22). **One shared singleton driven by 2+ phases** (a
 between-set vs between-exercise rest, both on `RestTimerService`) means a takeover/derived view gated
 **only on the singleton's *active* state** fires in the wrong phase — scope it with a per-phase flag set
 where *that* phase's source starts, and **"suppress" the view by cancelling the SOURCE, not hiding it**

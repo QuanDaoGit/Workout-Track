@@ -46,7 +46,7 @@ class _StatCardState extends State<StatCard> {
     if (value <= 0) return 0;
     // Rank-band scale (shared with the radar): each rank D/C/B/A/S fills an
     // equal 2 of the 10 cells, so months of training read as real progress
-    // instead of crawling toward the effectively-unreachable 1000 cap.
+    // instead of crawling toward the distant stat cap.
     return (StatRadarRead.rankBandFraction(value) * 10).ceil().clamp(0, 10);
   }
 
@@ -114,7 +114,7 @@ class _StatCardState extends State<StatCard> {
               text:
                   'STR is power, AGI is control, END is stamina. They grow '
                   'from saved training (volume and reps) and rank D->S '
-                  '(C 100, B 300, A 600, S 900).',
+                  '(C 1000, B 3000, A 6000, S 9000).',
             ),
             const SizedBox(height: 8),
             _InfoLine(

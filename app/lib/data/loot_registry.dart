@@ -139,13 +139,15 @@ const List<LootItem> lootRegistry = [
   LootItem(
     id: 'title_iron_warden',
     name: 'Iron Warden',
-    description: 'STR reached 400.',
+    description: 'STR reached 3000.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.uncommon,
     assetPath: '',
+    // v4 remaster: re-derived by equivalent unlock pacing (old 400 ≈ the same
+    // credit volume as new 3000 — the B-rank crossing), not a naive ×10.
     unlockRule: LootUnlockRule(
       kind: UnlockKind.statThreshold,
-      threshold: 400,
+      threshold: 3000,
       statKey: 'STR',
     ),
   ),
@@ -243,25 +245,28 @@ const List<LootItem> lootRegistry = [
   LootItem(
     id: 'title_legend',
     name: 'Living Legend',
-    description: 'Any stat reached 700.',
+    description: 'Any stat reached 8000.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.rare,
     assetPath: '',
+    // v4 remaster: old 700 ≈ new 8000 by equivalent credit volume.
     unlockRule: LootUnlockRule(
       kind: UnlockKind.anyStatThreshold,
-      threshold: 700,
+      threshold: 8000,
     ),
   ),
   LootItem(
     id: 'title_s_rank',
     name: 'S-Rank Warrior',
-    description: 'Any stat reached 800.',
+    description: 'Any stat reached rank S (9000).',
     category: LootCategory.titleBadge,
     rarity: LootRarity.epic,
     assetPath: '',
+    // v4 remaster: aligned to the actual S threshold — the title finally means
+    // what its name says (old 800 sat below the old S of 900).
     unlockRule: LootUnlockRule(
       kind: UnlockKind.anyStatThreshold,
-      threshold: 800,
+      threshold: 9000,
     ),
   ),
   LootItem(
@@ -279,11 +284,13 @@ const List<LootItem> lootRegistry = [
   LootItem(
     id: 'title_ironbit',
     name: 'IRONBIT',
-    description: 'All 4 stats above 600.',
+    // The rule evaluates the three growth stats (STR/AGI/END) — the old "4
+    // stats" copy was stale (VIT is a recovery meter, never a gate).
+    description: 'STR, AGI and END all above 6000.',
     category: LootCategory.titleBadge,
     rarity: LootRarity.epic,
     assetPath: '',
-    unlockRule: LootUnlockRule(kind: UnlockKind.allStatsAbove, threshold: 600),
+    unlockRule: LootUnlockRule(kind: UnlockKind.allStatsAbove, threshold: 6000),
   ),
   // Program-completion titles. Ruleless (no unlockRule) — granted imperatively
   // by ProgramService.evaluateCompletion when a program arc reaches its target,

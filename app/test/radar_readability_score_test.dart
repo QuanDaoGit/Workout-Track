@@ -303,7 +303,7 @@ String _protocolHash(List<dynamic> fixture) {
       'radar_only_v1',
       'radar_readability_cases_v1_2026-06-01',
       5000,
-      40,
+      400,
       visibleStats.join(','),
       caseParts,
     ].join('|'),

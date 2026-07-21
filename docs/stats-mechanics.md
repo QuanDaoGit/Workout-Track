@@ -1,6 +1,6 @@
 # Ironbit Stats Mechanics
 
-Last verified against code: 2026-06-12 (stats rules v3 — intensity currency).
+Last verified against code: 2026-07-22 (stats rules v4 — cube-root "stat remaster" on the ×10 scale).
 
 This document describes the current character-stat system as implemented in `StatEngine`, `XpService`, `RestService`, and `ProgressiveOverloadService`.
 
@@ -12,15 +12,16 @@ Ironbit's visible stat board has three graded capability stats, plus two separat
 
 | Stat | Meaning | Source | Scale |
 |---|---|---|---|
-| STR | Strength | Weighted logged kg-volume from strength-biased muscles | 10-1000 |
-| AGI | Agility | Weighted logged kg-volume from shoulders/core and support work | 10-1000 |
-| END | Endurance | Weighted logged reps, scaled logarithmically | 10-1000 |
+| STR | Strength | Weighted logged kg-volume from strength-biased muscles | 100-20000 |
+| AGI | Agility | Weighted logged kg-volume from shoulders/core and support work | 100-20000 |
+| END | Endurance | Weighted logged reps through the same cube-root curve | 100-20000 |
 | VIT | Vitality | Recovery and training-balance meter | 10-100 |
 | LCK | Luck | Weekly consistency streak (clean weeks on the training schedule) | 0-100 |
 
 `STR / AGI / END` are the radar stats. `VIT` and `LCK` render as separate rows because they are recovery/consistency meters, not build-shape stats.
 
-Workout-output stats start at `10`. LCK starts at `0`.
+Workout-output stats start at `100` (`StatEngine.baseOutputStatValue`). VIT floors at `10`
+(`StatEngine.vitalityFloor` — deliberately decoupled from the growth baseline). LCK starts at `0`.
 
 `DEF` has been fully removed. The engine no longer accumulates, stores, or deltas it, and it never appears in radar, detail rows, finish heroes, or product copy. Old local snapshots that still carry a `DEF` key decode harmlessly — the key is simply ignored.
 
@@ -56,13 +57,19 @@ The same grade helper is used for stat chips:
 
 | Grade | Threshold |
 |---|---:|
-| D | `< 100` |
-| C | `>= 100` |
-| B | `>= 300` |
-| A | `>= 600` |
-| S | `>= 900` |
+| D | `< 1000` |
+| C | `>= 1000` |
+| B | `>= 3000` |
+| A | `>= 6000` |
+| S | `>= 9000` |
 
-Stat values cap at `1000`, except VIT, which caps at `100`.
+Stat values cap at `20000` (`StatEngine.statCap`), except VIT, which caps at `100`. The headroom
+above S is deliberately unreachable in practice (~decades at the reference pace) so the number
+never hits a terminal freeze while staying ≤5 digits.
+
+Reference pacing (3×/wk PPL, ~820 STR credit/session): first session lands in C, B ≈ week 2,
+A ≈ 7 months, S ≈ 2 years. Per-session gains decay gently (~volume^-2/3): ~+140/session in B,
+~+33 in A, ~+14 at S — never the old log curve's collapse to +1/+0.
 
 ## STR / AGI Volume Formula
 
@@ -89,17 +96,24 @@ without a snapshot carry the last-known one forward, bottoming out at a
 deterministic `70kg` fallback. Snapshots are frozen at save: profile edits
 never rewrite the strength credit of past sessions.
 
-For STR / AGI, accumulated credit is converted with a logarithmic curve:
+For STR / AGI, accumulated credit is converted with a cube-root curve (v4):
 
 ```text
-stat gain from volume = floor(100 * ln(volume / 120 + 1))
-displayed stat = min(1000, 10 + stat gain)
+stat gain from volume = floor(160 * volume^(1/3))
+displayed stat = min(20000, 100 + stat gain)
 ```
 
-This gives fast early movement and slower late-game growth. The `120` scale
-(`StatEngine.volumeCurveScale`) replaced the tonnage-era `500` so a
-representative session keeps roughly the same early pacing in the new
-currency.
+Fast early movement, and late-game growth that slows but **never goes invisible** — the v3 log
+curve (`100·ln(V/120+1)`) flattened per-session gains to +1/+0 from ~stat 650, killing the
+visible-deltas competence hook for the most invested users. The cube root's per-session delta
+decays as `volume^(-2/3)`; no artificial per-session floor exists, so growth stays 100%
+work-driven through the anti-farm intensity currency.
+
+The STR/AGI and END coefficients (`StatEngine.statCurveCoefficient` /
+`enduranceCurveCoefficient`, both `160`) are **deliberately equal**: the radar's class identity
+comes from the muscle weights, and retuning END's coefficient alone re-ranks the axes (a 215 END
+k flipped every assassin readability fixture to END-led). The readability fixtures in
+`tool/radar_readability_cases.json` are the drift guard.
 
 ### Muscle-To-Visible-Stat Weights
 
@@ -133,11 +147,11 @@ Per set:
 
 ```text
 raw END points = sum(reps * rep_band_multiplier * muscle_END_weight)
-END gain = floor(100 * ln(raw_END_points / 150 + 1))
-displayed END = min(1000, 10 + END gain)
+END gain = floor(160 * raw_END_points^(1/3))
+displayed END = min(20000, 100 + END gain)
 ```
 
-This logarithmic scaling prevents END from capping for every normal 20-session history.
+Same cube-root family as STR/AGI (coefficient deliberately shared — see above).
 
 ## VIT Formula
 
@@ -229,13 +243,23 @@ Self-reported quiz experience does not seed stats. A level-1 user with no comple
 
 Calibration can seed capability only when it is derived from real logged workout sets. That workout-derived seed writes volume in the same currency the normal stat formula consumes.
 
+Tier targets (v4, `StrengthStandards.targetStatForTier`): untrained 500 (D), beginner 1200 (C),
+intermediate 4200 (B), advanced 6200 (just into A), elite **7800 (top-A — never S)**. Every tier
+is seeded low in its band so a calibrated user keeps **band-local runway**: early real workouts
+still visibly move the meter (advanced ≈ +30/session from day one; the old v3 targets seeded
+advanced/elite onto the flat part of the log curve, giving the most experienced lifters +1/+0
+sessions from their first day). S is earned through logged training here — a ~9-month march for
+an elite lifter — never handed out by calibration.
+
 Current constraints:
 
 - Calibration seed applies to the kg-volume seed path (`STR / AGI`). Back/biceps primaries return null from the seed mapping (they used to seed the retired `DEF`), so calibration doesn't seed them; their STR contribution comes from actual logged training.
-- END is not seeded, because it is rep-band derived.
+- END is not seeded by calibration (rep-band derived). The seed blob MAY carry an `END` entry in
+  endurance-point currency — written only by the v4 rules migration's rank-preserving top-up.
 - VIT is not seeded, because it is the recovery meter.
 - The seed composes with real training and is recomputed through the same stat curve.
-- Future seed writes should mark `calibration_seed_source_v1 = workout`.
+- Future seed writes should mark `calibration_seed_source_v1 = workout` (the self-reported-seed
+  cleanup one-shot skips workout-sourced seeds).
 
 ## Last-Session Delta
 
@@ -279,19 +303,31 @@ day, five per ISO week, max-anchored against clock rollback; clock-forward manip
 accepted offline trust boundary (consistent with quests/LCK) that still costs one real logged
 workout (≥1 set with reps) per dispatch.
 
-## Rules-Version Migration (Grandfather Floor)
+## Rules-Version Migration (v4: Rank-Preserving Top-Up)
 
-`StatEngine.statsRulesVersion` (currently `3`) is bumped whenever the stat
+`StatEngine.statsRulesVersion` (currently `4`) is bumped whenever the stat
 formula changes; `MigrationService.runStatsRecomputeIfRulesChanged` recomputes
-cached stats at app-update boot so a re-tune never lands mid-workout.
+cached stats at app-update boot so a re-tune never lands mid-workout. It runs
+**first among the stat-touching boot steps** — an earlier recompute would cache
+new-rules values the version gate would then misread as a legacy board
+(double-scaling).
 
-At the v3 migration (tonnage → intensity currency), the visible STR/AGI a user
-had already earned under the old rules is captured once as a **grandfather
-floor** (`combat_stat_floor_v1`). The engine clamps every later recompute to at
-least these values, so the rules change can never read as lost progress. Normal
-growth continues above the floor. The floor is only
-written when real completed sessions back the cached board; a cached value with
-no history behind it (corruption, cleared data) is recomputed away instead.
+The v4 remaster converts a legacy board by **rank, in the volume domain**: per
+growth stat, the legacy rank (from the cached value, old thresholds 100/300/
+600/900) maps to its new threshold, and if the v4 recompute lands below it, the
+missing **volume** is written as a top-up into the calibration-seed channel
+(END's top-up in endurance-point currency). This preserves rank without an
+output floor — a floor would freeze the displayed number until real volume
+caught up (the exact invisible-progress wall v4 removes); with a top-up, the
+very next session moves the stat. The recompute runs with the per-session
+delta suppressed, so the scale jump never reads as a fake earned gain. The
+conversion only applies when real completed sessions back the cached board; a
+cached value with no history behind it (corruption, cleared data) is recomputed
+away instead.
+
+The old v3 **grandfather floor** blob (`combat_stat_floor_v1`, old-unit values)
+is consumed into this conversion and removed. The engine's floor-clamp
+mechanism remains for any future re-tune that needs it.
 
 ## XP Mechanics
 
@@ -403,7 +439,7 @@ Important stat-related local keys:
 | `combat_stat_peaks` | historical per-stat peaks |
 | `combat_stat_last_delta` | latest-session stat delta |
 | `combat_stats_last_session_date` | last completed stat-producing session date |
-| `combat_stat_floor_v1` | grandfather floor from the v3 rules migration |
+| `combat_stat_floor_v1` | legacy v3 grandfather floor (consumed + removed by the v4 migration; mechanism kept for future re-tunes) |
 | `stats_rules_version_v1` | last stat-rules version the cache was computed under |
 | `calibration_seed_volumes_v1` | workout-derived calibration seed volume |
 | `workout_sessions` | saved workout history |

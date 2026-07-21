@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -165,6 +166,14 @@ class MigrationService {
   static Future<void> runClearSelfReportedStatSeedOnce() async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_clearSelfReportedSeedDoneKey) == true) return;
+    // A workout-derived seed (the modern calibration path, or the v4 remaster
+    // top-up) is legitimate earned/measured volume — never clear it. This
+    // one-shot only targets the retired SELF-REPORTED quiz seed.
+    if (prefs.getString(CalibrationService.calibrationSeedSourceKey) ==
+        CalibrationService.workoutSeedSource) {
+      await prefs.setBool(_clearSelfReportedSeedDoneKey, true);
+      return;
+    }
 
     await prefs.remove(StatEngine.calibrationSeedKey);
     await prefs.remove(CalibrationService.calibrationSessionCountKey);
@@ -177,43 +186,133 @@ class MigrationService {
 
   static const _statsRulesVersionKey = 'stats_rules_version_v1';
 
+  // Legacy (pre-v4) rank thresholds, frozen here for the one-time remaster
+  // conversion. The live thresholds moved ×10 in StatEngine.
+  static const _legacyRankC = 100;
+  static const _legacyRankB = 300;
+  static const _legacyRankA = 600;
+  static const _legacyRankS = 900;
+
   /// Recomputes cached combat stats whenever [StatEngine.statsRulesVersion]
   /// changes, so a re-tune of the stat formula surfaces at app-update boot — not
   /// as a surprise jump mid-workout. Version-gated (re-runs on every future
   /// bump), unlike the one-shot cleanups above.
   ///
-  /// Before the recompute, the visible STR/AGI a user already earned under the
-  /// old rules is captured once as a grandfather floor: the new currency must
-  /// never read as lost progress, so the engine clamps the board to at least
-  /// these values forever after (normal growth continues above them).
+  /// v4 remaster conversion: a legacy board's per-stat RANK is preserved via a
+  /// **volume top-up** written into the seed channel — never an output floor.
+  /// (A floor freezes the displayed number until real volume catches up —
+  /// exactly the invisible-progress wall v4 removes; a top-up keeps the very
+  /// next session moving the stat.) The old v3 floor blob is old-unit and is
+  /// consumed into the same conversion, then removed. The recompute runs with
+  /// the delta suppressed so the scale jump never reads as a fake earned gain.
+  ///
+  /// MUST run before any other boot step that calls `calculateAllStats()` —
+  /// an earlier recompute would cache v4-scale values that this conversion
+  /// would then misread as a legacy board (double-scaling). BootService orders
+  /// it accordingly.
   static Future<void> runStatsRecomputeIfRulesChanged() async {
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.getInt(_statsRulesVersionKey) == StatEngine.statsRulesVersion) {
-      return;
+    final storedVersion = prefs.getInt(_statsRulesVersionKey);
+    if (storedVersion == StatEngine.statsRulesVersion) return;
+
+    Map<String, int> rankTargets = const {};
+    if (storedVersion == null || storedVersion < 4) {
+      rankTargets = await _legacyRankTargets(prefs);
+      // Old-unit floor values are meaningless on the ×10 scale; their rank
+      // protection is folded into rankTargets above.
+      await prefs.remove(StatEngine.grandfatherFloorKey);
     }
-    if (prefs.getString(StatEngine.grandfatherFloorKey) == null) {
-      final cachedRaw = prefs.getString(StatEngine.combatStatsKey);
-      // Only grandfather a board that real completed sessions back. A cached
-      // value with no history behind it (corruption, cleared data) was never
-      // earned — recomputing it away is the correction, not lost progress.
-      if (cachedRaw != null && await _hasCompletedSessions(prefs)) {
-        final cached = jsonDecode(cachedRaw) as Map<String, dynamic>;
-        final floor = <String, int>{
-          for (final stat in const ['STR', 'AGI'])
-            if ((cached[stat] as num?) != null &&
-                (cached[stat] as num).toInt() > StatEngine.baseOutputStatValue)
-              stat: (cached[stat] as num).toInt(),
-        };
-        if (floor.isNotEmpty) {
-          await prefs.setString(
-            StatEngine.grandfatherFloorKey,
-            jsonEncode(floor),
-          );
-        }
+
+    final engine = StatEngine();
+    final stats = await engine.calculateAllStats(suppressDelta: true);
+
+    if (rankTargets.isNotEmpty) {
+      final seedRaw = prefs.getString(StatEngine.calibrationSeedKey);
+      final seed = <String, double>{};
+      if (seedRaw != null) {
+        try {
+          final decoded = jsonDecode(seedRaw) as Map<String, dynamic>;
+          decoded.forEach((key, value) {
+            if (value is num) seed[key] = value.toDouble();
+          });
+        } catch (_) {}
+      }
+      var changed = false;
+      rankTargets.forEach((stat, target) {
+        final current = stats[stat] ?? 0;
+        if (current >= target) return;
+        // Volume-domain top-up: enough credit (in the stat's own currency) to
+        // lift the recomputed board back to its legacy rank threshold.
+        final topUp = stat == 'END'
+            ? StatEngine.enduranceForStat(target) -
+                  StatEngine.enduranceForStat(current)
+            : StatEngine.volumeForStat(target) -
+                  StatEngine.volumeForStat(current);
+        if (topUp <= 0) return;
+        seed[stat] = (seed[stat] ?? 0) + topUp;
+        changed = true;
+      });
+      if (changed) {
+        await prefs.setString(
+          StatEngine.calibrationSeedKey,
+          jsonEncode(seed),
+        );
+        // The top-up is derived from real logged history — mark the seed
+        // workout-sourced so the self-reported-seed cleanup can never eat it.
+        await prefs.setString(
+          CalibrationService.calibrationSeedSourceKey,
+          CalibrationService.workoutSeedSource,
+        );
+        // Re-cache the board with the top-up applied (still suppressed).
+        await engine.calculateAllStats(suppressDelta: true);
       }
     }
-    await StatEngine().calculateAllStats();
+
     await prefs.setInt(_statsRulesVersionKey, StatEngine.statsRulesVersion);
+  }
+
+  /// Per growth stat, the v4 rank threshold matching the LEGACY rank of the
+  /// user's cached board (max of cached value and any old v3 floor). Empty when
+  /// no real completed sessions back the cache (a cached value with no history
+  /// behind it was never earned — recomputing it away is the correction).
+  static Future<Map<String, int>> _legacyRankTargets(
+    SharedPreferences prefs,
+  ) async {
+    final cachedRaw = prefs.getString(StatEngine.combatStatsKey);
+    if (cachedRaw == null || !await _hasCompletedSessions(prefs)) {
+      return const {};
+    }
+    Map<String, dynamic> cached;
+    Map<String, dynamic> oldFloor = const {};
+    try {
+      cached = jsonDecode(cachedRaw) as Map<String, dynamic>;
+    } catch (_) {
+      return const {};
+    }
+    final floorRaw = prefs.getString(StatEngine.grandfatherFloorKey);
+    if (floorRaw != null) {
+      try {
+        oldFloor = jsonDecode(floorRaw) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+    final targets = <String, int>{};
+    for (final stat in const ['STR', 'AGI', 'END']) {
+      final value = max(
+        (cached[stat] as num?)?.toInt() ?? 0,
+        (oldFloor[stat] as num?)?.toInt() ?? 0,
+      );
+      final target = value >= _legacyRankS
+          ? StatEngine.rankThresholdS
+          : value >= _legacyRankA
+          ? StatEngine.rankThresholdA
+          : value >= _legacyRankB
+          ? StatEngine.rankThresholdB
+          : value >= _legacyRankC
+          ? StatEngine.rankThresholdC
+          : 0;
+      if (target > 0) targets[stat] = target;
+    }
+    return targets;
   }
 
   static Future<bool> _hasCompletedSessions(SharedPreferences prefs) async {

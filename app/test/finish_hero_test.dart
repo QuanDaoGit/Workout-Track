@@ -32,9 +32,9 @@ void main() {
   );
 
   test('rank promotion is the top hero at Tier 3', () {
-    // STR 90 → 100 crosses D→C.
+    // STR 990 → 1000 crosses D→C.
     final sel = selectHero(
-      result(statDelta: {'STR': 10}, afterStats: {'STR': 100}),
+      result(statDelta: {'STR': 10}, afterStats: {'STR': 1000}),
     );
     expect(sel.hero.kind, HeroKind.rankPromotion);
     expect(sel.hero.tier, FinishTier.tier3);
@@ -153,7 +153,7 @@ void main() {
         oldTotalXP: 40,
         newTotalXP: 60, // a level-up that loses the ladder to the rank-up
         statDelta: {'STR': 10},
-        afterStats: {'STR': 100},
+        afterStats: {'STR': 1000},
         lootUnlocked: ['frame_x'],
       ),
     );
@@ -188,7 +188,7 @@ void main() {
         oldTotalXP: 40,
         newTotalXP: 60, // would be a level-up
         statDelta: {'STR': 10},
-        afterStats: {'STR': 100}, // would be a rank promo
+        afterStats: {'STR': 1000}, // would be a rank promo
       ),
     );
     expect(partial.hero.tier, FinishTier.tier1);
@@ -230,7 +230,7 @@ void main() {
   group('supportingGains (the STAT GAINS row)', () {
     test('a rank-up hero keeps its own stat — the +N must render somewhere', () {
       final sel = selectHero(
-        result(statDelta: {'STR': 10, 'AGI': 3}, afterStats: {'STR': 100}),
+        result(statDelta: {'STR': 10, 'AGI': 3}, afterStats: {'STR': 1000}),
       );
       expect(sel.hero.kind, HeroKind.rankPromotion);
       expect(

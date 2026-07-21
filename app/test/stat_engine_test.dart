@@ -43,10 +43,10 @@ void main() {
     ).calculateAllStats();
 
     expect(stats, {
-      'STR': 10,
-      'VIT': 10,
-      'AGI': 10,
-      'END': 10,
+      'STR': 100,
+      'VIT': 10, // VIT keeps its own 10–100 meter scale.
+      'AGI': 100,
+      'END': 100,
       'LCK': 0,
     });
   });
@@ -74,8 +74,8 @@ void main() {
         2 * StatEngine.intensityCreditForSet(0.65 * 70, 10);
     final expected = _statFromVolume(benchCredit + bodyweightCredit);
 
-    expect(stats['STR'], 10 + expected);
-    expect(stats['END'], 10 + _statFromEndurance(70));
+    expect(stats['STR'], 100 + expected);
+    expect(stats['END'], 100 + _statFromEndurance(70));
 
     await _seedSessions([
       _session(
@@ -88,10 +88,10 @@ void main() {
       catalog: catalog,
     ).calculateAllStats();
 
-    expect(capped['STR'], 1000);
+    expect(capped['STR'], StatEngine.statCap);
   });
 
-  test('calculates END from rep bands and caps at 1000', () async {
+  test('calculates END from rep bands and caps at statCap', () async {
     final now = DateTime(2026, 5, 14, 10);
     await _seedSessions([
       _session(
@@ -113,7 +113,7 @@ void main() {
       StatEngine.endurancePointsForSet(const SetEntry(weight: 50, reps: 5)),
       2.5,
     );
-    expect(stats['END'], 10 + _statFromEndurance(35));
+    expect(stats['END'], 100 + _statFromEndurance(35));
 
     await _seedSessions([
       _session(date: now, logs: [_log('bench', weight: 50, reps: 3000000)]),
@@ -124,7 +124,7 @@ void main() {
       catalog: catalog,
     ).calculateAllStats();
 
-    expect(capped['END'], 1000);
+    expect(capped['END'], StatEngine.statCap);
   });
 
   test(
@@ -148,7 +148,7 @@ void main() {
       // the workout target (Chest, STR-led), STR would dominate instead. AGI
       // rising above baseline and outweighing STR proves the exercise's own
       // primary muscle drove the stat.
-      expect(stats['AGI'], greaterThan(10));
+      expect(stats['AGI'], greaterThan(100));
       expect(stats['AGI'], greaterThan(stats['STR']!));
     },
   );
@@ -185,10 +185,10 @@ void main() {
     // bruiser -> STR, assassin -> AGI, tank -> END.
     final credit = StatEngine.intensityCreditForSet(100, 10);
     // STR: bruiser bench 1.0 + 0.2 bonus, assassin crunch 0.20, tank squat 0.22.
-    expect(stats['STR'], 10 + _statFromVolume(credit * (1.2 + 0.20 + 0.22)));
+    expect(stats['STR'], 100 + _statFromVolume(credit * (1.2 + 0.20 + 0.22)));
     // AGI: crunch 1.0 + 0.2 bonus, bench 0.12, squat 0.07.
-    expect(stats['AGI'], 10 + _statFromVolume(credit * (1.2 + 0.12 + 0.07)));
-    expect(stats['END'], 10 + _statFromEndurance(73));
+    expect(stats['AGI'], 100 + _statFromVolume(credit * (1.2 + 0.12 + 0.07)));
+    expect(stats['END'], 100 + _statFromEndurance(73));
     // VIT is the recovery meter now (not volume) — covered by its own tests.
   });
 
@@ -256,7 +256,7 @@ void main() {
           ..sort((a, b) => b.compareTo(a));
         expect(
           sortedValues.first - sortedValues[1],
-          greaterThanOrEqualTo(80),
+          greaterThanOrEqualTo(800),
           reason: '${entry.key} should be guessable in a 5-second radar read',
         );
         expect(
@@ -381,10 +381,10 @@ void main() {
     ).calculateAllStats();
 
     expect(stats, {
-      'STR': 10,
+      'STR': 100,
       'VIT': 10,
-      'AGI': 10,
-      'END': 10,
+      'AGI': 100,
+      'END': 100,
       'LCK': 0,
     });
   });
@@ -611,19 +611,19 @@ void main() {
   test('returns rank letters and colors on the widening ladder', () {
     final engine = StatEngine(catalog: catalog);
 
-    // Ladder: D <100, C 100, B 300, A 600, S 900.
-    expect(engine.getRank(99), 'D');
-    expect(engine.getRank(100), 'C');
-    expect(engine.getRank(299), 'C');
-    expect(engine.getRank(300), 'B');
-    expect(engine.getRank(600), 'A');
-    expect(engine.getRank(899), 'A');
-    expect(engine.getRank(900), 'S');
-    expect(engine.getRankColor(50), const Color(0xFF6B6B8A)); // D muted
-    expect(engine.getRankColor(150), Colors.white); // C
-    expect(engine.getRankColor(400), const Color(0xFF00BFFF)); // B cyan
-    expect(engine.getRankColor(650), const Color(0xFFFFD700)); // A amber
-    expect(engine.getRankColor(950), const Color(0xFF00FF9C)); // S neon
+    // Ladder: D <1000, C 1000, B 3000, A 6000, S 9000.
+    expect(engine.getRank(999), 'D');
+    expect(engine.getRank(1000), 'C');
+    expect(engine.getRank(2999), 'C');
+    expect(engine.getRank(3000), 'B');
+    expect(engine.getRank(6000), 'A');
+    expect(engine.getRank(8999), 'A');
+    expect(engine.getRank(9000), 'S');
+    expect(engine.getRankColor(500), const Color(0xFF6B6B8A)); // D muted
+    expect(engine.getRankColor(1500), Colors.white); // C
+    expect(engine.getRankColor(4000), const Color(0xFF00BFFF)); // B cyan
+    expect(engine.getRankColor(6500), const Color(0xFFFFD700)); // A amber
+    expect(engine.getRankColor(9500), const Color(0xFF00FF9C)); // S neon
   });
 
   test('legacy cached zero stats with no sessions read as baseline', () async {
@@ -635,8 +635,8 @@ void main() {
 
     final stats = await StatEngine(catalog: catalog).getStoredStats();
 
-    expect(stats['END'], 10);
-    expect(stats['STR'], 10);
+    expect(stats['END'], 100);
+    expect(stats['STR'], 100);
     expect(stats['LCK'], 0);
   });
 }
@@ -724,15 +724,16 @@ List<WorkoutSession> _scheduledSessions({
   return out;
 }
 
+// Independent mirrors of the v4 cube-root curve (an oracle the engine is
+// checked against, deliberately not calling the engine's own helpers).
 int _statFromVolume(double volume) {
-  return min(
-    1000,
-    (100 * log(volume / StatEngine.volumeCurveScale + 1)).floor(),
-  );
+  if (volume <= 0) return 0;
+  return min(20000, (160 * pow(volume, 1 / 3)).floor());
 }
 
 int _statFromEndurance(double endurancePoints) {
-  return min(1000, (100 * log(endurancePoints / 150 + 1)).floor());
+  if (endurancePoints <= 0) return 0;
+  return min(20000, (160 * pow(endurancePoints, 1 / 3)).floor());
 }
 
 List<_RadarReadabilityCase> _radarReadabilityCases() {

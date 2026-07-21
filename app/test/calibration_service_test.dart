@@ -48,7 +48,7 @@ void main() {
     'seed lands the stat in the intended tier/rank (with bodyweight)',
     () async {
       final now = DateTime(2026, 5, 14, 10);
-      // 100kg x 5 -> 1RM 116.67; at 80kg BW ratio 1.458 -> advanced -> target 650.
+      // 100kg x 5 -> 1RM 116.67; at 80kg BW ratio 1.458 -> advanced -> target 6200.
       final session = _session(now, [_log('bench', weight: 100, reps: 5)]);
       await _seedSessions([session]);
 
@@ -60,7 +60,7 @@ void main() {
       await svc.recordCalibrationWorkout(session, catalog: catalog);
 
       final stats = await engine(now).calculateAllStats();
-      expect(stats['STR'], 650);
+      expect(stats['STR'], 6200);
       expect(engine(now).getRank(stats['STR']!), 'A');
 
       final prefs = await SharedPreferences.getInstance();
@@ -73,7 +73,7 @@ void main() {
 
   test('intermediate ratio yields a felt D->B leap', () async {
     final now = DateTime(2026, 5, 14, 10);
-    // 100kg x 5 -> 1RM 116.67; at 110kg BW ratio 1.06 -> intermediate -> 420 (B).
+    // 100kg x 5 -> 1RM 116.67; at 110kg BW ratio 1.06 -> intermediate -> 4200 (B).
     final session = _session(now, [_log('bench', weight: 100, reps: 5)]);
     await _seedSessions([session]);
 
@@ -85,7 +85,7 @@ void main() {
     await svc.recordCalibrationWorkout(session, catalog: catalog);
 
     final stats = await engine(now).calculateAllStats();
-    expect(stats['STR'], 420);
+    expect(stats['STR'], 4200);
     expect(engine(now).getRank(stats['STR']!), 'B');
   });
 
@@ -110,7 +110,7 @@ void main() {
   test('no-bodyweight fallback caps at intermediate', () async {
     final now = DateTime(2026, 5, 14, 10);
     // Very heavy single -> would be elite with BW, but no BW means cap at
-    // intermediate (target 420 / rank B), never advanced/elite.
+    // intermediate (target 4200 / rank B), never advanced/elite.
     final session = _session(now, [_log('bench', weight: 200, reps: 5)]);
     await _seedSessions([session]);
 
@@ -119,7 +119,7 @@ void main() {
     await svc.recordCalibrationWorkout(session, catalog: catalog);
 
     final stats = await engine(now).calculateAllStats();
-    expect(stats['STR'], 420);
+    expect(stats['STR'], 4200);
     expect(engine(now).getRank(stats['STR']!), 'B');
     expect(
       StrengthStandards.tierForAbsolute1RM(1000),
@@ -183,10 +183,13 @@ void main() {
       final delta = await eng.getLastSessionDelta();
 
       // Calibrated STR survives the recompute (not erased by the new session).
-      expect(stats['STR'], 650);
-      // The new session touched AGI, not STR; the constant seed never appears
-      // as a per-session delta.
-      expect(delta.containsKey('STR'), isFalse);
+      expect(stats['STR'], greaterThanOrEqualTo(6200));
+      // The press session's small incidental STR credit (shoulders feed STR at
+      // 0.20×) may surface — but the CONSTANT seed must not: any STR delta stays
+      // marginal, never the ~6000-point seed jump. (Under the v4 cube-root
+      // curve every session visibly moves the number — that responsiveness is
+      // the feature.)
+      expect(delta['STR'] ?? 0, lessThan(50));
       expect(delta['AGI'], greaterThan(0));
     },
   );
@@ -210,7 +213,7 @@ void main() {
       expect(stats['STR'], StatEngine.baseOutputStatValue);
       expect(stats['AGI'], StatEngine.baseOutputStatValue);
       expect(stats['END'], StatEngine.baseOutputStatValue);
-      expect(stats['VIT'], StatEngine.baseOutputStatValue);
+      expect(stats['VIT'], StatEngine.vitalityFloor);
       expect(stats['LCK'], 0);
     });
   });

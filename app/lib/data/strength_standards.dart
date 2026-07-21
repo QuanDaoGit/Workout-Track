@@ -27,16 +27,20 @@ class StrengthStandards {
   static const double _femaleMultiplier = 0.65;
   static const double _blendMultiplier = 0.825; // midpoint of 1.0 and 0.65
 
-  /// Target combat stat (on the engine's 10–1000 scale) for each tier. Drives
-  /// the seed volume via [StatEngine.volumeForStat]. Tuned to land clean ranks
-  /// on the widening ladder (C=100, B=300, A=600, S=900) so calibration tiers
-  /// read as distinct grades up to a felt S for elite.
+  /// Target combat stat (on the engine's ×10 remaster scale, base 100) for
+  /// each tier. Drives the seed volume via [StatEngine.volumeForStat]. Tuned to
+  /// land clean ranks on the widening ladder (C=1000, B=3000, A=6000, S=9000)
+  /// while leaving every tier band-local RUNWAY — a calibrated user is seeded
+  /// low in their band, never at its ceiling, so early real workouts still
+  /// visibly move the meter. Elite deliberately lands top-A, never S: S is
+  /// earned through logged training here (a ~9-month march for an elite
+  /// lifter), not handed out by calibration.
   static int targetStatForTier(StrengthTier tier) => switch (tier) {
-    StrengthTier.untrained => 50, // D
-    StrengthTier.beginner => 120, // C
-    StrengthTier.intermediate => 420, // B
-    StrengthTier.advanced => 650, // A
-    StrengthTier.elite => 950, // S
+    StrengthTier.untrained => 500, // D
+    StrengthTier.beginner => 1200, // C
+    StrengthTier.intermediate => 4200, // B
+    StrengthTier.advanced => 6200, // just into A
+    StrengthTier.elite => 7800, // top-A — S stays earned
   };
 
   static double _multiplierForSex(UserProfileSex sex) => switch (sex) {

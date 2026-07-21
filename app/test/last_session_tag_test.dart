@@ -37,9 +37,9 @@ void main() {
   testWidgets('annotates a rank-up on a gain that crossed a threshold', (
     tester,
   ) async {
-    // STR 90 -> 100 crosses D -> C.
+    // STR 990 -> 1000 crosses D -> C.
     await tester.pumpWidget(
-      host(const LastSessionTag(delta: {'STR': 10}, stats: {'STR': 100})),
+      host(const LastSessionTag(delta: {'STR': 10}, stats: {'STR': 1000})),
     );
     await tester.pump();
 

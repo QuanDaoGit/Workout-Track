@@ -42,9 +42,9 @@ void main() {
     tester,
   ) async {
     const cases = [
-      (dominant: 'STR', stats: {'STR': 564, 'AGI': 346, 'END': 297}),
-      (dominant: 'AGI', stats: {'STR': 336, 'AGI': 512, 'END': 332}),
-      (dominant: 'END', stats: {'STR': 353, 'AGI': 319, 'END': 452}),
+      (dominant: 'STR', stats: {'STR': 5640, 'AGI': 3460, 'END': 2970}),
+      (dominant: 'AGI', stats: {'STR': 3360, 'AGI': 5120, 'END': 3320}),
+      (dominant: 'END', stats: {'STR': 3530, 'AGI': 3190, 'END': 4520}),
     ];
 
     for (final entry in cases) {
@@ -95,10 +95,10 @@ void main() {
     tester,
   ) async {
     const cases = [
-      (read: 'POWER', stats: {'STR': 564, 'AGI': 346, 'END': 297}),
-      (read: 'CONTROL', stats: {'STR': 336, 'AGI': 512, 'END': 332}),
-      (read: 'STAMINA', stats: {'STR': 353, 'AGI': 319, 'END': 452}),
-      (read: 'BALANCED', stats: {'STR': 300, 'AGI': 300, 'END': 300}),
+      (read: 'POWER', stats: {'STR': 5640, 'AGI': 3460, 'END': 2970}),
+      (read: 'CONTROL', stats: {'STR': 3360, 'AGI': 5120, 'END': 3320}),
+      (read: 'STAMINA', stats: {'STR': 3530, 'AGI': 3190, 'END': 4520}),
+      (read: 'BALANCED', stats: {'STR': 3000, 'AGI': 3000, 'END': 3000}),
     ];
 
     for (final entry in cases) {
@@ -179,7 +179,7 @@ void main() {
       );
 
       // Hidden state keeps progression math out of the quick-read panel.
-      expect(find.text('NEXT: STR -> [C] AT 100'), findsNothing);
+      expect(find.text('NEXT: STR -> [C] AT 1000'), findsNothing);
       expect(find.text('Train to shape your build'), findsNothing);
       expect(
         find.textContaining('STATUS: BALANCED - LOW VITALITY'),
@@ -217,7 +217,7 @@ void main() {
       expect(find.textContaining('STR POWER'), findsOneWidget);
       expect(find.textContaining('AGI CONTROL'), findsOneWidget);
       expect(find.textContaining('END STAMINA'), findsOneWidget);
-      expect(find.text('NEXT: STR -> [C] AT 100'), findsOneWidget);
+      expect(find.text('NEXT: STR -> [C] AT 1000'), findsOneWidget);
       // Detail rows are the capability trio STR/AGI/END → 3 [D] grades.
       // VIT (recovery meter) and LCK (diamonds) carry no letter grade.
       expect(find.text('[D]'), findsNWidgets(3));
@@ -406,12 +406,12 @@ void main() {
     );
 
     // AGI is lowest among visible STR/AGI/END (DEF/VIT excluded) → C at 100.
-    expect(find.text('NEXT: AGI -> [C] AT 100'), findsNothing);
+    expect(find.text('NEXT: AGI -> [C] AT 1000'), findsNothing);
 
     await tester.tap(find.text('[ SHOW DETAIL ]'));
     await tester.pumpAndSettle();
 
-    expect(find.text('NEXT: AGI -> [C] AT 100'), findsOneWidget);
+    expect(find.text('NEXT: AGI -> [C] AT 1000'), findsOneWidget);
   });
 
   testWidgets('StatCard info button explains the stat board', (tester) async {
@@ -425,11 +425,11 @@ void main() {
               width: 620,
               child: StatCard(
                 stats: {
-                  'STR': 900,
-                  'END': 900,
-                  'DEF': 900,
-                  'VIT': 900,
-                  'AGI': 900,
+                  'STR': 9000,
+                  'END': 9000,
+                  'DEF': 9000,
+                  'VIT': 100,
+                  'AGI': 9000,
                   'LCK': 0,
                 },
               ),
@@ -439,7 +439,7 @@ void main() {
       ),
     );
 
-    // All visible stats at S (>=900) → HOLD.
+    // All visible stats at S (>=9000) → HOLD.
     expect(find.text('NEXT: HOLD [S]'), findsNothing);
 
     await tester.tap(find.text('[ SHOW DETAIL ]'));
@@ -499,17 +499,16 @@ void main() {
           .toList();
     }
 
-    // Each rank D/C/B/A/S = 2 of 10 cells; promotions at 100/300/600/900. These
-    // differ from the old linear value/100 (e.g. 300→3, 900→9), so they pin the
-    // rank-band scale.
+    // Each rank D/C/B/A/S = 2 of 10 cells; promotions at 1000/3000/6000/9000.
+    // These differ from a linear value scale, so they pin the rank-band scale.
     expect(
-      await litCellsFor(50),
+      await litCellsFor(500),
       everyElement(1),
     ); // mid-D — early progress shows
-    expect(await litCellsFor(100), everyElement(2)); // just promoted to C
-    expect(await litCellsFor(300), everyElement(4)); // just promoted to B
-    expect(await litCellsFor(900), everyElement(8)); // S
-    expect(await litCellsFor(1000), everyElement(10)); // cap
+    expect(await litCellsFor(1000), everyElement(2)); // just promoted to C
+    expect(await litCellsFor(3000), everyElement(4)); // just promoted to B
+    expect(await litCellsFor(9000), everyElement(8)); // S
+    expect(await litCellsFor(10000), everyElement(10)); // full band
   });
 }
 

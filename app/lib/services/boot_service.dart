@@ -30,6 +30,11 @@ class BootService {
   Future<bool> run() async {
     try {
       await MigrationService.runOnce();
+      // Rules-version migration MUST precede every step that can call
+      // calculateAllStats(): an earlier recompute would cache new-rules values
+      // that the version gate would then misread as a legacy board
+      // (double-scaling the v4 remaster conversion).
+      await MigrationService.runStatsRecomputeIfRulesChanged();
       await MigrationService.runClearSelfReportedStatSeedOnce();
       await MigrationService.runEndStatBackfillOnce();
       await MigrationService.runTitleUnificationOnce();
@@ -38,7 +43,6 @@ class BootService {
       await MigrationService.runThemeLootCleanupOnce();
       await MigrationService.runShadowRemovalCleanupOnce();
       await MigrationService.runWeekdayAnchoredScheduleOnce();
-      await MigrationService.runStatsRecomputeIfRulesChanged();
       await MigrationService.runDecayRemovalOnce();
       // Grandfather existing installs into the feature-unlock ladder, then
       // seed the sync gate snapshot BEFORE the shell's first frame so the nav

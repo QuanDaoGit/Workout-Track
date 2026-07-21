@@ -16,9 +16,13 @@ void main() {
     () {
       final weeks = _simulate(weekdays: const [0, 1, 3, 4], weeks: 8);
 
+      // v4 pacing: Iron Warden (STR 3000, the B-crossing) lands ~week 3; the
+      // silver frame holds the ~16-session week-4 valley; week 5's beat is a
+      // level-up from the concave XP curve; Iron Will (25 sessions) week 7.
+      expect(_lootIdsForWeek(weeks, 3), contains('title_iron_warden'));
       expect(_lootIdsForWeek(weeks, 4), contains('frame_silver'));
-      expect(_lootIdsForWeek(weeks, 5), contains('title_iron_warden'));
-      expect(_kindsForWeek(weeks, 6), contains(MilestoneKind.levelUp));
+      expect(_kindsForWeek(weeks, 5), contains(MilestoneKind.levelUp));
+      expect(_lootIdsForWeek(weeks, 6), contains('frame_gold'));
       expect(_lootIdsForWeek(weeks, 7), contains('title_iron_will'));
 
       // Weeks 4–7 each surface a non-stat reward beat (silver frame at the
@@ -70,20 +74,23 @@ List<_WeekEvents> _simulate({required List<int> weekdays, required int weeks}) {
   final eventsByWeek = <int, List<MilestoneEvent>>{};
   final start = DateTime(2026, 1, 5); // Monday.
   var totalXP = 0;
-  final volumeSeed = StatEngine.volumeForStat(120);
+  // Beginner-calibrated seed on the v4 remaster scale.
+  final volumeSeed = StatEngine.volumeForStat(1200);
   final volumeByStat = <String, double>{
     'STR': volumeSeed,
-    'DEF': volumeSeed,
     'AGI': volumeSeed,
   };
-  var endurance = 0;
+  var endurance = 0.0;
 
   Map<String, int> currentStats(int lck) => {
     'STR': _statFromVolume(volumeByStat['STR']!),
-    'DEF': _statFromVolume(volumeByStat['DEF']!),
     'AGI': _statFromVolume(volumeByStat['AGI']!),
-    'END': min(1000, StatEngine.baseOutputStatValue + endurance),
-    'VIT': StatEngine.baseOutputStatValue,
+    'END': min(
+      StatEngine.statCap,
+      StatEngine.baseOutputStatValue +
+          StatEngine.enduranceGainFromPoints(endurance),
+    ),
+    'VIT': StatEngine.vitalityFloor,
     'LCK': lck,
   };
 
@@ -191,15 +198,13 @@ WorkoutSession _session({required DateTime date, required String muscle}) {
 }
 
 String _statForMuscle(String muscle) => switch (muscle) {
-  'Back' => 'DEF',
   'Shoulders' => 'AGI',
   _ => 'STR',
 };
 
 int _statFromVolume(double volume) => min(
-  1000,
-  StatEngine.baseOutputStatValue +
-      (100 * log(volume / StatEngine.volumeCurveScale + 1)).floor(),
+  StatEngine.statCap,
+  StatEngine.baseOutputStatValue + StatEngine.statGainFromVolume(volume),
 );
 
 List<MilestoneEvent> _eventsForWeek(List<_WeekEvents> weeks, int week) => weeks

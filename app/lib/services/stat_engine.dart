@@ -35,14 +35,23 @@ class StatEngine {
   /// v3: STR/AGI currency switched from raw tonnage (`reps × load`) to
   /// intensity-weighted e1RM-equivalent credit (see [intensityCreditForSet]);
   /// bodyweight sets use a per-movement %BW × per-session bodyweight snapshot
-  /// instead of a flat 40 kg; legs feed STR at 0.22 (was 0.10). Existing users
-  /// are protected by the grandfather floor (see [grandfatherFloorKey]).
-  static const statsRulesVersion = 3;
+  /// instead of a flat 40 kg; legs feed STR at 0.22 (was 0.10).
+  ///
+  /// v4 ("stat remaster"): the volume→stat transform moved from a saturating
+  /// log (`100·ln(V/120+1)`, which flattened per-session gains to +1/+0 from
+  /// ~stat 650) to a cube root on a ×10 scale (`k·∛V`, base 100, cap
+  /// [statCap]). Per-session gains now decay gently (~V^-2/3) and stay visible
+  /// for a training lifetime; ranks are ×10 (C 1000 / B 3000 / A 6000 /
+  /// S 9000). The credit *currency* is unchanged. Legacy boards migrate via a
+  /// rank-preserving volume top-up (see
+  /// `MigrationService.runStatsRecomputeIfRulesChanged`), never an output
+  /// floor, so the very next session always moves the number.
+  static const statsRulesVersion = 4;
 
-  /// One-time per-stat floor captured at the v3 rules migration: the visible
-  /// STR/AGI values a user had already earned under the tonnage rules. The
-  /// recompute under the new currency is clamped to never display less, so the
-  /// rules change cannot read as lost progress.
+  /// Per-stat display floor mechanism (legacy). The v3 tonnage→intensity
+  /// migration wrote old-unit floors here; the v4 remaster converts them into
+  /// rank-preserving volume top-ups and removes the key. The clamp mechanism
+  /// stays for any future re-tune that needs it.
   static const grandfatherFloorKey = 'combat_stat_floor_v1';
 
   static const outputStats = ['STR', 'VIT', 'AGI', 'END'];
@@ -51,14 +60,35 @@ class StatEngine {
   // VIT is no longer volume-derived — it's the recovery meter, out of the
   // kg-volume set.
   static const _kgVolumeStats = ['STR', 'AGI'];
-  static const baseOutputStatValue = 10;
-  static const _enduranceScale = 150.0;
 
-  /// Log-curve scale for the STR/AGI volume stats, in intensity-credit units
-  /// (see [intensityCreditForSet]). Retuned from 500 when the currency moved
-  /// off raw tonnage, so a representative session keeps roughly the same early
-  /// pacing. Public for pacing simulations and tests.
-  static const double volumeCurveScale = 120.0;
+  /// Growth-stat baseline (STR/AGI/END start here on the ×10 remaster scale).
+  /// VIT does NOT use this — it stays a 10–100 meter (see [vitalityFloor]).
+  static const baseOutputStatValue = 100;
+
+  /// VIT's own floor/baseline. Decoupled from [baseOutputStatValue] at the v4
+  /// remaster (which moved the growth baseline to 100 — reusing it would have
+  /// pinned the recovery meter at its cap).
+  static const vitalityFloor = 10;
+
+  /// Hard cap for the growth stats. S rank sits at [rankThresholdS]; the
+  /// headroom above it is deliberately unreachable in practice (~decades at the
+  /// reference pace) so the number never hits a terminal freeze, while staying
+  /// ≤5 digits for display legibility.
+  static const statCap = 20000;
+
+  /// Cube-root curve coefficients (v4): `stat = base + floor(k·∛credit)`.
+  /// Tuned for a 3×/wk reference lifter (~820 STR credit/session): first
+  /// session lands in C, B ≈ week 2, A ≈ 7 months, S ≈ 2 years — with the
+  /// per-session delta decaying gently (~V^-2/3) instead of the old log's
+  /// collapse to +0. Public for pacing simulations and tests.
+  ///
+  /// The two coefficients are DELIBERATELY equal: the radar's class identity
+  /// (assassin AGI-led / bruiser STR-led / tank END-led) comes from the muscle
+  /// weights, and retuning END's k alone re-ranks the axes — a 215 END k
+  /// flipped every assassin readability fixture to END-led. Keep them coupled;
+  /// the readability fixtures are the drift guard.
+  static const double statCurveCoefficient = 160.0;
+  static const double enduranceCurveCoefficient = 160.0;
 
   /// Epley reps cap for strength credit. Above ~12 reps the e1RM estimate
   /// stops being meaningful (and uncapped reps would let high-rep fluff farm
@@ -140,12 +170,13 @@ class StatEngine {
   }
 
   // Widening D/C/B/A/S grade ladder (no F). Small early gaps, large late gaps,
-  // so new lifters promote fast and veterans grind for S. All grades reachable
-  // under the 1000 stat cap (S at 900 leaves headroom). Tunable.
-  static const rankThresholdC = 100;
-  static const rankThresholdB = 300;
-  static const rankThresholdA = 600;
-  static const rankThresholdS = 900;
+  // so new lifters promote fast and veterans grind for S. Under the v4 cube-
+  // root curve every rank is genuinely reachable (S ≈ 2 years at the reference
+  // pace); [statCap] leaves headroom above S. Tunable.
+  static const rankThresholdC = 1000;
+  static const rankThresholdB = 3000;
+  static const rankThresholdA = 6000;
+  static const rankThresholdS = 9000;
 
   /// Returns rank letter for a given stat value.
   String getRank(int statValue) {
@@ -343,15 +374,21 @@ class StatEngine {
       }
     }
 
-    // Calibration seed volume (from the onboarding calibration workout) is
-    // expressed in the same kg-volume currency, so it composes with training
-    // and survives every recompute. Constant across before/after, so it does
-    // not leak into per-session deltas.
+    // Seed volume (the onboarding calibration seed, plus the v4 migration's
+    // rank-preserving top-up) is expressed in the same currency the curve
+    // consumes, so it composes with training and survives every recompute.
+    // Constant across before/after, so it does not leak into per-session
+    // deltas. END's entry is in endurance-point currency (written only by the
+    // v4 migration — calibration never seeds END).
     for (final stat in _kgVolumeStats) {
       final s = seed[stat];
       if (s != null && s > 0) {
         volumes[stat] = (volumes[stat] ?? 0) + s;
       }
+    }
+    final endSeed = seed['END'];
+    if (endSeed != null && endSeed > 0) {
+      endurance += endSeed;
     }
 
     return {
@@ -403,7 +440,7 @@ class StatEngine {
   }
 
   /// VIT = a rolling recovery-balance meter over the last [_vitalityWindowDays]
-  /// days (0–100, floor [baseOutputStatValue]). Rewards completing scheduled
+  /// days (0–100, floor [vitalityFloor]). Rewards completing scheduled
   /// training AND resting on rest days; mildly dings training on rest days
   /// (overtraining); scales down by how much of the scheduled training you
   /// actually did, so inactivity collapses it toward the floor. Public for
@@ -449,15 +486,12 @@ class StatEngine {
           break; // today, no verdict yet
       }
     }
-    if (considered == 0) return baseOutputStatValue;
+    if (considered == 0) return vitalityFloor;
     final raw = 100.0 * sumCredit / considered;
     final activityFactor = scheduledTraining == 0
         ? 1.0
         : min(1.0, completedScheduled / scheduledTraining);
-    return (raw * activityFactor)
-        .round()
-        .clamp(baseOutputStatValue, 100)
-        .toInt();
+    return (raw * activityFactor).round().clamp(vitalityFloor, 100).toInt();
   }
 
   String _primaryForLog(
@@ -623,40 +657,67 @@ class StatEngine {
     );
   }
 
-  int _statFromVolume(double volume) {
-    return min(1000, (100 * log(volume / volumeCurveScale + 1)).floor());
+  /// v4 growth curve: `gain = floor(k·∛credit)`, capped at [statCap]. The
+  /// cube root keeps per-session gains visible for a training lifetime
+  /// (decay ~V^-2/3) — no artificial per-session floor exists, so growth stays
+  /// 100% work-driven through the anti-farm intensity currency.
+  static int statGainFromVolume(double volume) =>
+      _gainForCurve(volume, statCurveCoefficient);
+
+  static int enduranceGainFromPoints(double endurancePoints) =>
+      _gainForCurve(endurancePoints, enduranceCurveCoefficient);
+
+  static int _gainForCurve(double volume, double k) {
+    if (volume <= 0) return 0;
+    return min(statCap, (k * pow(volume, 1 / 3)).floor());
   }
 
-  int _statFromEndurance(double endurancePoints) {
-    return min(
-      1000,
-      (100 * log(endurancePoints / _enduranceScale + 1)).floor(),
-    );
-  }
+  int _statFromVolume(double volume) => statGainFromVolume(volume);
 
-  /// Inverse of [_statFromVolume]: the kg volume that yields [targetStat]
-  /// (above the baseline of 10). Used to size calibration seeds in the same
-  /// currency the engine consumes. Clamped to non-negative.
-  static double volumeForStat(int targetStat) {
-    final above = targetStat - baseOutputStatValue;
+  int _statFromEndurance(double endurancePoints) =>
+      enduranceGainFromPoints(endurancePoints);
+
+  /// Inverse of [statGainFromVolume]: the kg-credit volume that yields
+  /// [targetStat] (above the baseline). Used to size calibration seeds and the
+  /// v4 migration top-up in the same currency the engine consumes. Clamped to
+  /// non-negative; targets at/above [statCap] resolve to the cap's volume.
+  static double volumeForStat(int targetStat) =>
+      _volumeForTarget(targetStat, statCurveCoefficient);
+
+  /// END-currency inverse of [enduranceGainFromPoints] (END rides its own
+  /// coefficient — the STR/AGI inverse would land END targets wrong).
+  static double enduranceForStat(int targetStat) =>
+      _volumeForTarget(targetStat, enduranceCurveCoefficient);
+
+  static double _volumeForTarget(int targetStat, double k) {
+    final above = min(targetStat, statCap) - baseOutputStatValue;
     if (above <= 0) return 0;
-    // +0.5 lands mid-band so the engine's floor() yields exactly [targetStat]
-    // rather than one below it.
-    return volumeCurveScale * (exp((above + 0.5) / 100) - 1);
+    // +0.5 lands mid-band; the verify-nudge below guards the floor()/fp-cbrt
+    // edge so the public curve can never come up one point short.
+    var volume = pow((above + 0.5) / k, 3).toDouble();
+    var guard = 0;
+    while (_gainForCurve(volume, k) < above && guard++ < 200) {
+      volume *= 1.0005;
+    }
+    return volume;
   }
+
+  /// Stats the seed blob may carry: STR/AGI in kg-credit currency, END in
+  /// endurance-point currency (v4 migration top-up only).
+  static const seedableStats = ['STR', 'AGI', 'END'];
 
   Map<String, double> _decodeSeed(String? raw) {
     final decoded = safeDecodeMap(raw, debugLabel: 'stat_seed');
     if (decoded == null) return const {};
     return {
       for (final entry in decoded.entries)
-        if (_kgVolumeStats.contains(entry.key) && entry.value is num)
+        if (seedableStats.contains(entry.key) && entry.value is num)
           entry.key: (entry.value as num).toDouble(),
     };
   }
 
   int _withOutputBaseline(int value) {
-    return min(1000, baseOutputStatValue + value);
+    return min(statCap, baseOutputStatValue + value);
   }
 
   Map<String, int> _mergePeaks(
@@ -688,7 +749,9 @@ class StatEngine {
   }
 
   Map<String, int> _emptyStats() => {
-    for (final stat in outputStats) stat: baseOutputStatValue,
+    for (final stat in outputStats)
+      // VIT is the 10–100 recovery meter, not a ×10-scale growth stat.
+      stat: stat == 'VIT' ? vitalityFloor : baseOutputStatValue,
     'LCK': 0,
   };
 

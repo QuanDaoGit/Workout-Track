@@ -481,13 +481,13 @@ void main() {
 
     test('rank is captured at dispatch from the stored board', () async {
       SharedPreferences.setMockInitialValues({
-        'combat_stats': '{"STR":350,"AGI":80,"END":120,"VIT":50,"LCK":2}',
+        'combat_stats': '{"STR":3500,"AGI":800,"END":1200,"VIT":50,"LCK":2}',
         'workout_sessions': jsonEncode([session('h', now).toJson()]),
       });
       final svc = service();
       await svc.grantChargeForSession(session('w', now));
       final e = await svc.dispatchExpedition('iron_vault');
-      expect(e!.rank, 'B'); // STR 350 → B (300–599)
+      expect(e!.rank, 'B'); // STR 3500 → B (3000–5999)
       expect(AdventureService.basePayoutForRank('B'), 18);
     });
 

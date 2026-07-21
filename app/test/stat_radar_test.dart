@@ -8,25 +8,26 @@ void main() {
   group('rankBandFraction', () {
     test('a corner lands on a ring at each rank promotion threshold', () {
       expect(StatRadarRead.rankBandFraction(0), 0.0);
-      expect(StatRadarRead.rankBandFraction(100), closeTo(0.2, 1e-9));
-      expect(StatRadarRead.rankBandFraction(300), closeTo(0.4, 1e-9));
-      expect(StatRadarRead.rankBandFraction(600), closeTo(0.6, 1e-9));
-      expect(StatRadarRead.rankBandFraction(900), closeTo(0.8, 1e-9));
-      expect(StatRadarRead.rankBandFraction(1000), closeTo(1.0, 1e-9));
+      expect(StatRadarRead.rankBandFraction(1000), closeTo(0.2, 1e-9));
+      expect(StatRadarRead.rankBandFraction(3000), closeTo(0.4, 1e-9));
+      expect(StatRadarRead.rankBandFraction(6000), closeTo(0.6, 1e-9));
+      expect(StatRadarRead.rankBandFraction(9000), closeTo(0.8, 1e-9));
+      expect(StatRadarRead.rankBandFraction(10000), closeTo(1.0, 1e-9));
     });
 
     test('interpolates within a band and clamps out-of-range', () {
       expect(
-        StatRadarRead.rankBandFraction(50),
+        StatRadarRead.rankBandFraction(500),
         closeTo(0.1, 1e-9),
       ); // mid-D band
       expect(StatRadarRead.rankBandFraction(-20), 0.0);
-      expect(StatRadarRead.rankBandFraction(1500), 1.0);
+      // Post-S values (up to StatEngine.statCap) read as a full pentagon.
+      expect(StatRadarRead.rankBandFraction(15000), 1.0);
     });
 
     test('is non-decreasing across the whole range', () {
       var prev = -1.0;
-      for (var v = 0; v <= 1000; v += 5) {
+      for (var v = 0; v <= 10000; v += 50) {
         final f = StatRadarRead.rankBandFraction(v);
         expect(f, greaterThanOrEqualTo(prev));
         prev = f;
@@ -64,7 +65,7 @@ void main() {
         await tester.pumpWidget(
           const MaterialApp(
             home: Scaffold(
-              body: StatRadar(stats: {'STR': 600, 'AGI': 120, 'END': 300}),
+              body: StatRadar(stats: {'STR': 6000, 'AGI': 1200, 'END': 3000}),
             ),
           ),
         );
@@ -72,7 +73,7 @@ void main() {
         expect(find.text('STR'), findsOneWidget);
         expect(find.text('AGI'), findsOneWidget);
         expect(find.text('END'), findsOneWidget);
-        // STR leads by >= 40, so it's the dominant (highlighted) axis.
+        // STR leads by >= 400, so it's the dominant (highlighted) axis.
         expect(
           find.byKey(const ValueKey('stat_radar_axis_STR_dominant')),
           findsOneWidget,

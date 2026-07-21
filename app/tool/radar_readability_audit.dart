@@ -263,7 +263,7 @@ void _auditStudyHtml(
     '<canvas id="canvas" width="290" height="260"></canvas>':
         'radar canvas dimensions',
     'const visibleAxes = ["STR", "AGI", "END"];': 'visible axis contract',
-    'const dominantLeadThreshold = 40;': 'dominant lead contract',
+    'const dominantLeadThreshold = 400;': 'dominant lead contract',
     'const studyMode = "$_studyMode";': 'study mode',
     'const fixtureVersion = "$_fixtureVersion";': 'fixture version',
     'const exposureMs = $_expectedExposureMs;': 'five-second exposure',

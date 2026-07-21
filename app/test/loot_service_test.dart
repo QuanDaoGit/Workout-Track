@@ -31,10 +31,10 @@ void main() {
 
     final missingVisibleGrowthStat = await service.evaluateUnlocks(
       stats: const {
-        'STR': 600,
-        'DEF': 600,
-        'AGI': 600,
-        'END': 10,
+        'STR': 6000,
+        'DEF': 6000,
+        'AGI': 6000,
+        'END': 100,
         'VIT': 100,
         'LCK': 100,
       },
@@ -44,10 +44,10 @@ void main() {
 
     final growthStats = await service.evaluateUnlocks(
       stats: const {
-        'STR': 600,
+        'STR': 6000,
         'DEF': 10,
-        'AGI': 600,
-        'END': 600,
+        'AGI': 6000,
+        'END': 6000,
         'VIT': 10,
         'LCK': 0,
       },
@@ -145,7 +145,7 @@ void main() {
     expect(await service.getEquippedItem(LootCategory.titleBadge), isNull);
 
     final granted = await service.evaluateUnlocks(
-      stats: const {'STR': 400, 'AGI': 0, 'END': 0},
+      stats: const {'STR': 3000, 'AGI': 0, 'END': 0},
       sessions: const [],
     );
 
@@ -160,7 +160,7 @@ void main() {
     final service = LootService();
 
     final granted = await service.evaluateUnlocks(
-      stats: const {'STR': 800, 'AGI': 100, 'END': 100},
+      stats: const {'STR': 9000, 'AGI': 100, 'END': 100},
       sessions: const [],
     );
 
@@ -178,7 +178,7 @@ void main() {
   test('a later title never overrides the worn first title', () async {
     final service = LootService();
     await service.evaluateUnlocks(
-      stats: const {'STR': 400, 'AGI': 0, 'END': 0},
+      stats: const {'STR': 3000, 'AGI': 0, 'END': 0},
       sessions: const [],
     );
     expect(
@@ -187,7 +187,7 @@ void main() {
     );
 
     await service.evaluateUnlocks(
-      stats: const {'STR': 800, 'AGI': 100, 'END': 100},
+      stats: const {'STR': 9000, 'AGI': 100, 'END': 100},
       sessions: const [],
     );
 
@@ -200,14 +200,14 @@ void main() {
   test('a user who cleared to No Title is not re-auto-equipped', () async {
     final service = LootService();
     await service.evaluateUnlocks(
-      stats: const {'STR': 400, 'AGI': 0, 'END': 0},
+      stats: const {'STR': 3000, 'AGI': 0, 'END': 0},
       sessions: const [],
     );
     await service.unequipCategory(LootCategory.titleBadge);
     expect(await service.getEquippedItem(LootCategory.titleBadge), isNull);
 
     await service.evaluateUnlocks(
-      stats: const {'STR': 800, 'AGI': 100, 'END': 100},
+      stats: const {'STR': 9000, 'AGI': 100, 'END': 100},
       sessions: const [],
     );
 

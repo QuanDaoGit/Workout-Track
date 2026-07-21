@@ -25,40 +25,40 @@ void main() {
 
     test('detects readable dominant builds', () {
       expect(
-        StatRadarRead.dominantAxis({'STR': 564, 'AGI': 346, 'END': 297}),
+        StatRadarRead.dominantAxis({'STR': 5640, 'AGI': 3460, 'END': 2970}),
         'STR',
       );
       expect(
-        StatRadarRead.buildRead({'STR': 564, 'AGI': 346, 'END': 297}),
+        StatRadarRead.buildRead({'STR': 5640, 'AGI': 3460, 'END': 2970}),
         'POWER',
       );
 
       expect(
-        StatRadarRead.dominantAxis({'STR': 336, 'AGI': 512, 'END': 332}),
+        StatRadarRead.dominantAxis({'STR': 3360, 'AGI': 5120, 'END': 3320}),
         'AGI',
       );
       expect(
-        StatRadarRead.buildRead({'STR': 336, 'AGI': 512, 'END': 332}),
+        StatRadarRead.buildRead({'STR': 3360, 'AGI': 5120, 'END': 3320}),
         'CONTROL',
       );
 
       expect(
-        StatRadarRead.dominantAxis({'STR': 353, 'AGI': 319, 'END': 454}),
+        StatRadarRead.dominantAxis({'STR': 3530, 'AGI': 3190, 'END': 4540}),
         'END',
       );
       expect(
-        StatRadarRead.buildRead({'STR': 353, 'AGI': 319, 'END': 454}),
+        StatRadarRead.buildRead({'STR': 3530, 'AGI': 3190, 'END': 4540}),
         'STAMINA',
       );
     });
 
     test('returns balanced for near ties', () {
       expect(
-        StatRadarRead.dominantAxis({'STR': 340, 'AGI': 320, 'END': 315}),
+        StatRadarRead.dominantAxis({'STR': 3400, 'AGI': 3200, 'END': 3150}),
         isNull,
       );
       expect(
-        StatRadarRead.buildRead({'STR': 340, 'AGI': 320, 'END': 315}),
+        StatRadarRead.buildRead({'STR': 3400, 'AGI': 3200, 'END': 3150}),
         'BALANCED',
       );
     });

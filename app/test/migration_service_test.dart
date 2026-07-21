@@ -96,7 +96,8 @@ void main() {
     final stored =
         jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
             as Map<String, dynamic>;
-    expect(stored['END'], 23);
+    // 15 reps @1.5 band = 22.5 END points → 100 + floor(160·∛22.5) = 551.
+    expect(stored['END'], 551);
     expect(prefs.getBool('migration_v2_end_stat_done'), isTrue);
 
     await prefs.setString(StatEngine.combatStatsKey, jsonEncode({'END': 0}));
@@ -161,7 +162,7 @@ void main() {
       expect(stored['STR'], StatEngine.baseOutputStatValue);
       expect(stored['AGI'], StatEngine.baseOutputStatValue);
       expect(stored['END'], StatEngine.baseOutputStatValue);
-      expect(stored['VIT'], StatEngine.baseOutputStatValue);
+      expect(stored['VIT'], StatEngine.vitalityFloor);
       expect(stored['LCK'], 0);
 
       await prefs.setString(

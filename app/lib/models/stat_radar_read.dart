@@ -2,7 +2,8 @@ class StatRadarRead {
   const StatRadarRead._();
 
   static const visibleStats = ['STR', 'AGI', 'END'];
-  static const dominantLeadThreshold = 40;
+  // 4% of the displayed 0–10000 radar band (was 40 of 1000 pre-remaster).
+  static const dominantLeadThreshold = 400;
   static const balancedMeaning = 'BALANCED';
   static const axisToClass = {
     'STR': 'bruiser',
@@ -37,7 +38,7 @@ class StatRadarRead {
   static String? dominantAxis(Map<String, int> stats) {
     final values = [
       for (final stat in visibleStats)
-        (stat: stat, value: (stats[stat] ?? 0).clamp(0, 1000)),
+        (stat: stat, value: (stats[stat] ?? 0).clamp(0, 20000)),
     ]..sort((a, b) => b.value.compareTo(a.value));
     if (values.first.value - values[1].value < dominantLeadThreshold) {
       return null;
@@ -47,14 +48,16 @@ class StatRadarRead {
 
   // Rank-band edges. Each of the five ranks (D/C/B/A/S) occupies an equal 1/5
   // slice. Interior values mirror StatEngine.rankThreshold{C,B,A,S}
-  // (100/300/600/900); cap 1000. Drift-guarded in test/stat_radar_test.dart.
-  static const _rankEdges = <int>[0, 100, 300, 600, 900, 1000];
+  // (1000/3000/6000/9000); the top band renders full from 10000 up (values may
+  // run to StatEngine.statCap). Drift-guarded in test/stat_radar_test.dart.
+  static const _rankEdges = <int>[0, 1000, 3000, 6000, 9000, 10000];
 
-  /// Maps a stat value (0..1000) to a fraction (0..1) on the rank-band scale:
-  /// each rank gets an equal slice, so early ranks read clearly and a value
-  /// lands on a boundary at each promotion (100/300/600/900). Continuous within
-  /// a band, clamped to [0, 1]. Shared by the stat radar (corner distance) and
-  /// the stat bars (cell fill) so the two views never diverge.
+  /// Maps a stat value to a fraction (0..1) on the rank-band scale: each rank
+  /// gets an equal slice, so early ranks read clearly and a value lands on a
+  /// boundary at each promotion (1000/3000/6000/9000). Continuous within a
+  /// band, clamped to [0, 1] (post-S values above the last edge read as a full
+  /// pentagon). Shared by the stat radar (corner distance) and the stat bars
+  /// (cell fill) so the two views never diverge.
   static double rankBandFraction(int value) {
     final v = value.clamp(0, _rankEdges.last);
     final slices = _rankEdges.length - 1; // 5

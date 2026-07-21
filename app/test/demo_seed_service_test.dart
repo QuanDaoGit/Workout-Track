@@ -78,10 +78,10 @@ void main() {
     await DemoSeedService.seedIntermediate(now: now);
 
     final stats = await StatEngine().getStoredStats();
-    // B starts at 300; intermediate should clear it on the trained lifts.
-    expect(stats['STR'], greaterThanOrEqualTo(300));
-    expect(stats['AGI'], greaterThanOrEqualTo(200));
-    // Still believable, not maxed.
-    expect(stats['STR'], lessThan(900));
+    // B starts at 3000; intermediate should clear it on the trained lifts.
+    expect(stats['STR'], greaterThanOrEqualTo(3000));
+    expect(stats['AGI'], greaterThanOrEqualTo(2000));
+    // Still believable, not S.
+    expect(stats['STR'], lessThan(9000));
   });
 }
