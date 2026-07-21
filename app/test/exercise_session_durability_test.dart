@@ -23,18 +23,27 @@ Future<void> _pumpActive(WidgetTester tester) async {
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  await pumpBounded(tester);
 }
 
 /// Logs one working set inside exercise 'a' (taps the tile, fills the row, taps
 /// the SAVE chip) and returns once the in-flight checkpoint has settled.
 Future<void> _logOneSetInA(WidgetTester tester) async {
   await tester.tap(find.text('a'));
-  await tester.pumpAndSettle();
+  await pumpBounded(tester);
   await tester.enterText(find.byType(TextField).at(0), '100');
   await tester.enterText(find.byType(TextField).at(1), '5');
   await tester.tap(find.widgetWithText(FilledButton, 'SAVE'));
   await tester.pump();
+  await tester.pump(const Duration(milliseconds: 200));
+}
+
+// The hub now hosts a perpetual-ticker BIT (frontier companion), so
+// pumpAndSettle never settles while ActiveWorkoutPage is mounted at any route
+// depth (Codex F1: mechanical rule, no covered-route exception). Bounded pumps.
+Future<void> pumpBounded(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 200));
   await tester.pump(const Duration(milliseconds: 200));
 }
 
@@ -68,7 +77,7 @@ void main() {
 
     // Back out without tapping Finish Exercise.
     await tester.pageBack();
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
 
     // The set survives...
     final ongoing = await WorkoutStorageService().getOngoingSession();
@@ -98,7 +107,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
 
     // Commit a working set.
     await tester.enterText(find.byType(TextField).at(0), '100');
@@ -123,16 +132,16 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ExerciseSessionPage(exercise: _exercise('a'))),
     );
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     expect(find.widgetWithText(FilledButton, 'SAVE'), findsOneWidget); // 1 row
 
     await tester.tap(find.text('+ ADD SET'));
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     expect(find.widgetWithText(FilledButton, 'SAVE'), findsNWidgets(2)); // 2 rows
     expect(find.byIcon(Icons.close_sharp), findsOneWidget); // only row 2 removable
 
     await tester.tap(find.byIcon(Icons.close_sharp));
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     expect(find.widgetWithText(FilledButton, 'SAVE'), findsOneWidget); // back to 1 row
   });
 
@@ -146,7 +155,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ExerciseSessionPage(exercise: _exercise('a'))),
     );
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
 
     // Lock Set 1, then add two more rows.
     await tester.enterText(find.byType(TextField).at(0), '100');
@@ -154,15 +163,15 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'SAVE'));
     await tester.pump();
     await tester.tap(find.text('+ ADD SET'));
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     await tester.tap(find.text('+ ADD SET'));
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     expect(find.byIcon(Icons.check_circle_sharp), findsOneWidget); // row 0 locked
     expect(find.byIcon(Icons.close_sharp), findsNWidgets(2)); // rows 1,2
 
     // Remove the middle row — the locked Set 1 must survive intact.
     await tester.tap(find.byIcon(Icons.close_sharp).first);
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     expect(find.byIcon(Icons.check_circle_sharp), findsOneWidget);
     expect(find.byIcon(Icons.close_sharp), findsOneWidget);
   });
@@ -208,18 +217,18 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
 
     // Chip present above Set 1.
     expect(find.textContaining('TRY:'), findsOneWidget);
 
     // Add a second row, then log Set 1.
     await tester.tap(find.text('+ ADD SET'));
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     await tester.enterText(find.byType(TextField).at(0), '60');
     await tester.enterText(find.byType(TextField).at(1), '8');
     await tester.tap(find.widgetWithText(FilledButton, 'SAVE').first);
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
 
     // The chip did not vanish — it followed down to the now-first-unlogged Set 2.
     expect(find.textContaining('TRY:'), findsOneWidget);
@@ -239,7 +248,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
 
     // Two locked rows → two saved-check icons, no save icons.
     expect(find.byIcon(Icons.check_circle_sharp), findsNWidgets(2));

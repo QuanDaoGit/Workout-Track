@@ -5,6 +5,7 @@ import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/pages/Workout session/active_workout.dart';
 import 'package:workout_track/services/exercise_kind_cache.dart';
 import 'package:workout_track/services/rest_timer_service.dart';
+import 'package:workout_track/widgets/companion/bit_mood_core.dart';
 import 'package:workout_track/widgets/rest_break_panel.dart';
 
 /// The between-exercise rest panel on the workout overview: it takes over the
@@ -38,6 +39,15 @@ WorkoutSession _resumeBothDone() => WorkoutSession(
   ],
 );
 
+// The hub now hosts a perpetual-ticker BIT (frontier companion), so
+// pumpAndSettle never settles while ActiveWorkoutPage is mounted at any route
+// depth (Codex F1: mechanical rule, no covered-route exception). Bounded pumps.
+Future<void> pumpBounded(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 200));
+  await tester.pump(const Duration(milliseconds: 200));
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -63,7 +73,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
   }
 
   Future<void> pumpResumeBothDone(WidgetTester tester) async {
@@ -81,13 +91,13 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
   }
 
   // Open [tile], log one set, then tap Finish Exercise (the genuine finish).
   Future<void> finishExercise(WidgetTester tester, String tile) async {
     await tester.tap(find.text(tile));
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     await tester.enterText(find.byType(TextField).at(0), '100');
     await tester.enterText(find.byType(TextField).at(1), '5');
     await tester.tap(find.widgetWithText(FilledButton, 'SAVE'));
@@ -109,6 +119,10 @@ void main() {
     expect(find.text('EXERCISES'), findsNothing);
     expect(find.text('NEXT · b'), findsOneWidget); // next un-cleared movement
     expect(RestTimerService.instance.current.value?.isActive, isTrue);
+    // Exactly one BIT during the takeover — the rest panel's. The hub list
+    // (and with it the frontier BIT) is structurally unmounted.
+    expect(find.byType(BitMoodCore), findsOneWidget);
+    expect(find.byKey(const ValueKey('frontier_bit')), findsNothing);
   });
 
   testWidgets('SKIP REST cancels the rest and restores the list', (
@@ -120,7 +134,7 @@ void main() {
 
     await tester.tap(find.text('SKIP REST'));
     await tester.pump(); // cancel → panel (and BIT's ticker) unmounts
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
 
     expect(RestTimerService.instance.current.value, isNull);
     expect(find.byType(RestBreakPanel), findsNothing);
@@ -133,13 +147,13 @@ void main() {
     await pumpFresh(tester);
     // Log a set inside 'a' (starts a between-set rest) then back out — NOT finish.
     await tester.tap(find.text('a'));
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     await tester.enterText(find.byType(TextField).at(0), '100');
     await tester.enterText(find.byType(TextField).at(1), '5');
     await tester.tap(find.widgetWithText(FilledButton, 'SAVE'));
     await tester.pump();
     await tester.pageBack();
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
 
     // The list stays — the between-set rest must not trigger the takeover.
     expect(find.byType(RestBreakPanel), findsNothing);
@@ -190,7 +204,7 @@ void main() {
     // End the rest → full bright header restores (no collapse affordance).
     await tester.tap(find.text('SKIP REST'));
     await tester.pump();
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     expect(find.text('ELAPSED'), findsOneWidget);
     expect(find.byIcon(Icons.expand_more_sharp), findsNothing);
     expect(find.byIcon(Icons.expand_less_sharp), findsNothing);

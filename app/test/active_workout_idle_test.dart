@@ -32,6 +32,15 @@ WorkoutSession _resumeWithOneSet() => WorkoutSession(
   ],
 );
 
+// The hub now hosts a perpetual-ticker BIT (frontier companion), so
+// pumpAndSettle never settles while ActiveWorkoutPage is mounted at any route
+// depth (Codex F1: mechanical rule, no covered-route exception). Bounded pumps.
+Future<void> pumpBounded(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 200));
+  await tester.pump(const Duration(milliseconds: 200));
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -59,7 +68,7 @@ void main() {
 
       // Cross the idle window — the reveal appears with all three actions.
       await tester.pump(const Duration(seconds: 2));
-      await tester.pumpAndSettle();
+      await pumpBounded(tester);
       expect(find.text('STILL TRAINING?'), findsOneWidget);
       expect(find.text('SAVE & FINISH'), findsOneWidget);
       expect(find.text('KEEP TRAINING'), findsOneWidget);
@@ -67,7 +76,7 @@ void main() {
 
       // KEEP TRAINING dismisses and re-arms (no reveal immediately after).
       await tester.tap(find.text('KEEP TRAINING'));
-      await tester.pumpAndSettle();
+      await pumpBounded(tester);
       expect(find.text('STILL TRAINING?'), findsNothing);
     },
   );
@@ -95,18 +104,18 @@ void main() {
         builder: (_) => const Scaffold(body: Text('OTHER')),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
 
     // Cross the idle window while covered → the reveal must NOT pop over it.
     await tester.pump(const Duration(seconds: 3));
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     expect(find.text('STILL TRAINING?'), findsNothing);
 
     // Uncover → the 1-minute re-poll catches up.
     navKey.currentState!.pop();
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     await tester.pump(const Duration(minutes: 1));
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     expect(find.text('STILL TRAINING?'), findsOneWidget);
   });
 
@@ -132,7 +141,7 @@ void main() {
         builder: (_) => const Scaffold(body: Text('OTHER')),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     // Arm the 1-minute re-poll (fires _onIdleTimeout while covered).
     await tester.pump(const Duration(seconds: 3));
 
@@ -140,9 +149,9 @@ void main() {
     await tester.pumpWidget(
       const MaterialApp(home: Scaffold(body: Text('GONE'))),
     );
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     await tester.pump(const Duration(minutes: 1));
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     expect(find.text('STILL TRAINING?'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -167,7 +176,7 @@ void main() {
     await tester.pump();
 
     await tester.pump(const Duration(seconds: 3));
-    await tester.pumpAndSettle();
+    await pumpBounded(tester);
     expect(find.text('STILL TRAINING?'), findsNothing);
   });
 }
