@@ -10,6 +10,15 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-21-rest-end-bit-flight-design.md`.
 
+## Codex plan review (2026-07-21) — needs-attention, 4 findings, all folded
+
+| # | Finding | Resolution (the committed code is the authority) |
+|---|---|---|
+| 1 (high) | Pending claimed before targets proven → seal silently lost on the swap race | `_launchFlight` only records a request + origin; the begin-gate runs from the **non-resting list's own build** via post-frame (structurally after layout), claims pending only when `begin()` accepts a valid finished-card target, else releases to the return-consumer (one fallback funnel) |
+| 2 (high) | Opening a DIFFERENT exercise leaves a stale pending → late unrelated strobe | `_openExercise` clears pending + the flight request **unconditionally** (any exercise open dismisses the rest context); encoded as a test |
+| 3 (med) | settleNow can't cancel scheduled callbacks → stale stamp/resurrection | Generation token (`_flightGen` host-side + `_gen` widget-side) captured by every delayed callback; settleNow/dispose/open bump it; all mutations require token match + mounted |
+| 4 (med) | Trigger oracle can't tell seal-beat from fallback | Tests assert trigger == 0 mid-flight (after list return, before b2) then == 1 after b2; StrobeFlash timers drained at test end; isolated `SessionBitFlight` widget test covers target-missing/settleNow; a two-action stress test asserts exactly one celebration owner |
+
 Key API facts (verified): `BitMoodCore(pose, size, freezeBob, reveal, blink, anticipation, idleAmp)` — pose morphs take 900ms (do NOT flip pose mid-flight; use `blink: true` for the stamp), `anticipation` 0..1 coil, `freezeBob` stills the idle; `StrobeFlash(trigger, …)` fires on trigger change, has NO internal RM gate (call sites own it); the rest panel's live-finish branch (the `<3s` overshoot check) is in `_RestBreakPanelState`'s ticker.
 
 ---

@@ -28,6 +28,8 @@ class RestBreakPanel extends StatefulWidget {
     super.key,
     required this.onSkip,
     this.nextExerciseName,
+    this.bitKey,
+    this.onNaturalEnd,
   });
 
   /// SKIP REST — cancels the rest and hands control back to the host so the
@@ -37,6 +39,16 @@ class RestBreakPanel extends StatefulWidget {
   /// Name of the next un-cleared exercise, shown so the user can eye the next
   /// movement without leaving rest. Omitted (line hidden) when null/empty.
   final String? nextExerciseName;
+
+  /// Optional key on BIT's subtree so the host can measure the rest BIT's
+  /// on-screen bounds — the rest-end flight's lift-off origin.
+  final GlobalKey? bitKey;
+
+  /// Fired on a LIVE natural rest expiry (the same <3s-overshoot gate that
+  /// owns the "go" haptic/sound), BEFORE the service cancel — so the host can
+  /// launch the rest-end flight while this panel (and its BIT) is still
+  /// mounted and measurable. Never fired for a stale/backgrounded expiry.
+  final VoidCallback? onNaturalEnd;
 
   @override
   State<RestBreakPanel> createState() => _RestBreakPanelState();
@@ -69,6 +81,9 @@ class _RestBreakPanelState extends State<RestBreakPanel> {
           unawaited(
             AnalyticsService.instance.logRestAction(AnalyticsValue.restFinish),
           );
+          // The flight origin must be measured while this panel is mounted —
+          // notify the host before cancel() swaps the list back in.
+          widget.onNaturalEnd?.call();
         }
         RestTimerService.instance.cancel();
       }
@@ -119,7 +134,10 @@ class _RestBreakPanelState extends State<RestBreakPanel> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const BitMoodCore(pose: BitPose.rest, reveal: 1, size: 96),
+          KeyedSubtree(
+            key: widget.bitKey,
+            child: const BitMoodCore(pose: BitPose.rest, reveal: 1, size: 96),
+          ),
           const SizedBox(height: kSpace3),
           Semantics(
             liveRegion: true,

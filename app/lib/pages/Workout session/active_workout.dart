@@ -26,6 +26,7 @@ import '../../widgets/arcade_route.dart';
 import '../../widgets/arcade_tap.dart';
 import '../../widgets/blinking_colon.dart';
 import '../../widgets/companion/bit_mood_core.dart';
+import '../../widgets/session_bit_flight.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/rest_break_panel.dart';
 import '../../widgets/strobe_flash.dart';
@@ -101,6 +102,30 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   // Collapsed by default during a rest takeover so the rest countdown is the one
   // live timer; the user can expand it to a dimmed (still-running) ELAPSED.
   bool _headerExpanded = false;
+
+  // Rest-end flight + the single-owner completion celebration (spec:
+  // 2026-07-21-rest-end-bit-flight-design.md). _pendingCelebrationId is the
+  // finished-but-uncelebrated exercise; it is claimed exactly once — by the
+  // flight's seal beat, the no-flight return consumer, or the immediate
+  // final-exercise path — and cancelled by ANY exercise open (a late strobe on
+  // an unrelated card reads stale; Codex). The flight request is only a
+  // request: pending is claimed AFTER the restored list lays out and the
+  // flight accepts a valid seal target, else it falls back to the consumer.
+  String? _pendingCelebrationId;
+  String? _stampTargetId;
+  FlightProfile? _flightRequest;
+  Rect? _flightOrigin;
+  bool _flightActive = false;
+  bool _returnConsumeScheduled = false;
+  int _flightGen = 0;
+  final GlobalKey _restBitKey = GlobalKey();
+  final GlobalKey _frontierSlotKey = GlobalKey();
+  final GlobalKey<SessionBitFlightState> _flightKey = GlobalKey();
+
+  bool get _reduceMotion {
+    final mq = MediaQuery.of(context);
+    return mq.disableAnimations || mq.accessibleNavigation;
+  }
 
   // Idle auto-save: the wall-clock of the last logged set (drives the 30-min
   // timeout) and the elapsed seconds captured at that moment (the credited
@@ -233,6 +258,11 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      // A backgrounded flight settles instantly (a stale mid-air BIT on
+      // resume would read broken).
+      _flightKey.currentState?.settleNow();
+    }
     if (state == AppLifecycleState.resumed) {
       setState(_updateElapsed);
       // The idle timer is suspended while backgrounded; re-arm it relative to
@@ -294,6 +324,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     // screen (shown by its own rest bar) — opening an exercise is unambiguous
     // intent, so there is no skip prompt and no silent cancel.
     _restAfterFinish = false;
+    // Opening ANY exercise dismisses the rest context — cancel the pending
+    // celebration and settle a live flight (a late strobe reads stale; Codex).
+    _cancelFlightAndCelebration();
     setState(() => _status[exercise.id] = _ExerciseStatus.inProgress);
     final sets = await Navigator.push<List<SetEntry>>(
       context,
@@ -325,7 +358,20 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       setState(() {
         _loggedSets[exercise.id] = sets;
         _status[exercise.id] = _ExerciseStatus.done;
-        _flashTriggers[exercise.id] = (_flashTriggers[exercise.id] ?? 0) + 1;
+        if (_allDone) {
+          // Final exercise: rest is suppressed and the list is immediately
+          // visible — celebrate now (under reduced motion the static cleared
+          // warmth is the signal; the strobe is exactly the flash RM opts out
+          // of).
+          if (!_reduceMotion) {
+            _flashTriggers[exercise.id] =
+                (_flashTriggers[exercise.id] ?? 0) + 1;
+          }
+        } else {
+          // Celebrated when it can be SEEN: the flight's seal beat, or the
+          // list-return consumer on the no-flight paths.
+          _pendingCelebrationId = exercise.id;
+        }
       });
       _registerActivity();
       // A genuine between-exercise rest — the takeover may now show; the session
@@ -374,6 +420,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     int? creditedElapsed,
     bool autoSavedAfterIdle = false,
   }) async {
+    _cancelFlightAndCelebration();
     _updateElapsed();
     if (_totalLoggedSets == 0) {
       showArcadeNotice(context, 'Save at least one set before finishing.');
@@ -523,6 +570,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     // RootPage on a near-simultaneous resume), stand down.
     if (!IdleSessionGuard.instance.claim(_sessionId)) return;
     _idleHandling = true;
+    _flightKey.currentState?.settleNow();
     await _drainCheckpoint();
     if (!mounted) {
       IdleSessionGuard.instance.release(_sessionId);
@@ -592,6 +640,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   Future<void> _savePartialAndQuit() async {
     if (_leaving) return;
     _leaving = true;
+    _cancelFlightAndCelebration();
     _updateElapsed();
     _timer?.cancel();
     _idleTimer?.cancel();
@@ -636,6 +685,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   Future<void> _pauseAndQuit() async {
     if (_leaving) return;
     _leaving = true;
+    _cancelFlightAndCelebration();
     _updateElapsed();
     _timer?.cancel();
     _idleTimer?.cancel();
@@ -677,6 +727,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   Future<void> _abandonAndShowSummary() async {
     if (_leaving) return;
     _leaving = true;
+    _cancelFlightAndCelebration();
     _updateElapsed();
     _timer?.cancel();
     _idleTimer?.cancel();
@@ -754,6 +805,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
   }
 
   Future<void> _confirmEndEarly() async {
+    _flightKey.currentState?.settleNow();
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -843,6 +895,80 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
           ],
         );
     }
+  }
+
+  /// Records a rest-end flight REQUEST (natural expiry or skip). The origin is
+  /// measured NOW — the rest panel (and its BIT) is still mounted — but the
+  /// pending celebration is NOT claimed yet: the begin-gate in the restored
+  /// list's build claims it only once the flight accepts a valid seal target
+  /// (Codex: never consume pending before targets are proven).
+  void _requestFlight(FlightProfile profile) {
+    if (_reduceMotion || _pendingCelebrationId == null) return;
+    final box = _restBitKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return;
+    _flightRequest = profile;
+    _flightOrigin = box.localToGlobal(Offset.zero) & box.size;
+    _flightActive = true; // reserves the frontier slot from the first frame
+  }
+
+  /// The begin-gate: runs post-frame from the restored (non-resting) list's
+  /// own build — structurally after that list's layout — so target keys are
+  /// resolvable. Claims the pending celebration only on acceptance.
+  void _armFlightGate() {
+    final gen = ++_flightGen;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || gen != _flightGen) return;
+      final profile = _flightRequest;
+      final origin = _flightOrigin;
+      final targetId = _pendingCelebrationId;
+      _flightRequest = null;
+      _flightOrigin = null;
+      if (profile == null || origin == null || targetId == null) {
+        if (mounted && _flightActive) setState(() => _flightActive = false);
+        return;
+      }
+      final cardKey = _exerciseKeys[targetId];
+      final started =
+          cardKey != null &&
+          (_flightKey.currentState?.begin(
+                originGlobal: origin,
+                finishedCardKey: cardKey,
+                frontierSlotKey: _frontierSlotKey,
+                profile: profile,
+              ) ??
+              false);
+      if (started) {
+        // Claimed: the seal beat owns the celebration now.
+        setState(() {
+          _stampTargetId = targetId;
+          _pendingCelebrationId = null;
+        });
+      } else {
+        // Release to the return consumer (one fallback funnel).
+        setState(() => _flightActive = false);
+      }
+    });
+  }
+
+  void _onFlightStamp() {
+    final id = _stampTargetId;
+    if (id == null || !mounted) return;
+    setState(() => _flashTriggers[id] = (_flashTriggers[id] ?? 0) + 1);
+  }
+
+  void _onFlightDone() {
+    _stampTargetId = null;
+    if (mounted && _flightActive) setState(() => _flightActive = false);
+  }
+
+  /// Cancels any pending celebration + settles a live flight (navigation,
+  /// dialogs, lifecycle). Safe anywhere; gen-bump invalidates queued gates.
+  void _cancelFlightAndCelebration() {
+    _flightGen++;
+    _pendingCelebrationId = null;
+    _flightRequest = null;
+    _flightOrigin = null;
+    _flightKey.currentState?.settleNow();
   }
 
   /// True exactly when the between-exercise rest panel is on screen (matches the
@@ -1035,7 +1161,11 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         ),
         body: SafeArea(
           top: false,
-          child: SingleChildScrollView(
+          child: SessionBitFlight(
+            key: _flightKey,
+            onStamp: _onFlightStamp,
+            onDone: _onFlightDone,
+            child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1078,7 +1208,15 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                     // the panel is suppressed and Finish Workout is reachable.
                     if (_restPanelActive(snap)) {
                       return RestBreakPanel(
+                        bitKey: _restBitKey,
+                        // Fired while the panel is still mounted (pre-cancel)
+                        // so the flight origin is measurable.
+                        onNaturalEnd: () =>
+                            _requestFlight(FlightProfile.natural),
                         onSkip: () {
+                          // User override: SKIP flies too — measure the origin
+                          // BEFORE cancel() unmounts the panel.
+                          _requestFlight(FlightProfile.skip);
                           RestTimerService.instance.cancel();
                           _restAfterFinish = false;
                           if (mounted) setState(() {});
@@ -1092,6 +1230,35 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                     final frontierId = _frontierExercise?.id;
                     final showFrontierBit =
                         MediaQuery.textScalerOf(context).scale(14) < 14 * 1.3;
+                    // Rest-end flight begin-gate / no-flight return consumer.
+                    // Running from THIS builder guarantees the restored list
+                    // lays out before the post-frame resolves target keys
+                    // (Codex: never claim the celebration before targets are
+                    // proven; one fallback funnel).
+                    if (_flightRequest != null) {
+                      _armFlightGate();
+                    } else if (_pendingCelebrationId != null &&
+                        !_flightActive &&
+                        !_returnConsumeScheduled) {
+                      _returnConsumeScheduled = true;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _returnConsumeScheduled = false;
+                        if (!mounted) return;
+                        final id = _pendingCelebrationId;
+                        if (id == null ||
+                            _flightActive ||
+                            _flightRequest != null) {
+                          return;
+                        }
+                        _pendingCelebrationId = null;
+                        if (!_reduceMotion) {
+                          setState(
+                            () => _flashTriggers[id] =
+                                (_flashTriggers[id] ?? 0) + 1,
+                          );
+                        }
+                      });
+                    }
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1145,15 +1312,47 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                                       children: [
                                         if (exercise.id == frontierId &&
                                             showFrontierBit) ...[
-                                          const ExcludeSemantics(
-                                            child: BitMoodCore(
-                                              key: ValueKey('frontier_bit'),
-                                              pose: BitPose.neutral,
-                                              reveal: 1,
-                                              size: 44,
-                                              idleAmp: 0.55,
+                                          // During a flight the slot stays
+                                          // reserved (no layout shift when BIT
+                                          // lands) and the in-card BIT is
+                                          // suppressed (never two BITs). On
+                                          // mount the idle amplitude ramps in
+                                          // (no-pop landing).
+                                          if (_flightActive)
+                                            SizedBox(
+                                              key: _frontierSlotKey,
+                                              width: 44,
+                                              height: 44,
+                                            )
+                                          else
+                                            KeyedSubtree(
+                                              key: _frontierSlotKey,
+                                              child: ExcludeSemantics(
+                                                child:
+                                                    TweenAnimationBuilder<
+                                                      double
+                                                    >(
+                                                      tween: Tween(
+                                                        begin: 0,
+                                                        end: 0.55,
+                                                      ),
+                                                      duration: const Duration(
+                                                        milliseconds: 400,
+                                                      ),
+                                                      builder: (_, amp, _) =>
+                                                          BitMoodCore(
+                                                            key: const ValueKey(
+                                                              'frontier_bit',
+                                                            ),
+                                                            pose: BitPose
+                                                                .neutral,
+                                                            reveal: 1,
+                                                            size: 44,
+                                                            idleAmp: amp,
+                                                          ),
+                                                    ),
+                                              ),
                                             ),
-                                          ),
                                           const SizedBox(width: kSpace2),
                                         ],
                                         Expanded(
@@ -1227,6 +1426,7 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                   },
                 ),
               ],
+            ),
             ),
           ),
         ),
