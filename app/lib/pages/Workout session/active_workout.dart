@@ -25,6 +25,7 @@ import '../../widgets/arcade_filled.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/arcade_tap.dart';
 import '../../widgets/blinking_colon.dart';
+import '../../widgets/companion/bit_mood_core.dart';
 import '../../widgets/pixel_button.dart';
 import '../../widgets/rest_break_panel.dart';
 import '../../widgets/strobe_flash.dart';
@@ -249,14 +250,19 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       widget.exercises.isNotEmpty &&
       widget.exercises.every((e) => _status[e.id] == _ExerciseStatus.done);
 
-  /// The next exercise not yet cleared (list order) — shown on the rest panel so
-  /// the user can eye the next movement during the break. Null when all cleared.
-  String? get _nextUndoneExerciseName {
+  /// The next exercise not yet cleared (list order) — the session's frontier.
+  /// One source of truth for the rest panel's NEXT line AND the frontier BIT,
+  /// so the two can never disagree. Null when all cleared.
+  Exercise? get _frontierExercise {
     for (final e in widget.exercises) {
-      if (_status[e.id] != _ExerciseStatus.done) return e.name;
+      if (_status[e.id] != _ExerciseStatus.done) return e;
     }
     return null;
   }
+
+  /// The frontier exercise's name — shown on the rest panel so the user can
+  /// eye the next movement during the break.
+  String? get _nextUndoneExerciseName => _frontierExercise?.name;
 
   int get _completedExerciseCount => widget.exercises
       .where((e) => _status[e.id] == _ExerciseStatus.done)
@@ -1080,6 +1086,12 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                         nextExerciseName: _nextUndoneExerciseName,
                       );
                     }
+                    // Frontier BIT: rides the first un-cleared card; hidden at
+                    // large text scales so the card never trades legibility
+                    // for charm (spec: >= 1.3).
+                    final frontierId = _frontierExercise?.id;
+                    final showFrontierBit =
+                        MediaQuery.textScalerOf(context).scale(14) < 14 * 1.3;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1099,8 +1111,24 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                               borderRadius: BorderRadius.circular(4),
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
-                                  color: kCard,
-                                  border: Border.all(color: kBorder),
+                                  // Cleared work stays visibly banked: a quiet
+                                  // neon wash + border, well below the enabled
+                                  // Finish button's action-neon.
+                                  color:
+                                      _status[exercise.id] ==
+                                          _ExerciseStatus.done
+                                      ? Color.alphaBlend(
+                                          kNeon.withValues(alpha: 0.05),
+                                          kCard,
+                                        )
+                                      : kCard,
+                                  border: Border.all(
+                                    color:
+                                        _status[exercise.id] ==
+                                            _ExerciseStatus.done
+                                        ? kNeon.withValues(alpha: 0.38)
+                                        : kBorder,
+                                  ),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: ArcadeTap(
@@ -1115,6 +1143,19 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                                     ),
                                     child: Row(
                                       children: [
+                                        if (exercise.id == frontierId &&
+                                            showFrontierBit) ...[
+                                          const ExcludeSemantics(
+                                            child: BitMoodCore(
+                                              key: ValueKey('frontier_bit'),
+                                              pose: BitPose.neutral,
+                                              reveal: 1,
+                                              size: 44,
+                                              idleAmp: 0.55,
+                                            ),
+                                          ),
+                                          const SizedBox(width: kSpace2),
+                                        ],
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment:
@@ -1156,6 +1197,24 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
                         ],
 
                         const SizedBox(height: 16),
+
+                        if (_allDone) ...[
+                          // The goal-gradient peak: BIT witnesses the finish.
+                          // Static dock — no travel animation (Codex F4); the
+                          // final card's StrobeFlash is the flash beat.
+                          const Center(
+                            child: ExcludeSemantics(
+                              child: BitMoodCore(
+                                key: ValueKey('session_bit_dock'),
+                                pose: BitPose.cheer,
+                                reveal: 1,
+                                size: 56,
+                                idleAmp: 0.55,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: kSpace3),
+                        ],
 
                         PixelButton(
                           label: 'Finish Workout',
