@@ -317,7 +317,12 @@ init runs many real-async service reads through a **process-wide keyed lock** (`
 section, stranding the static chain so every later same-process test that loads the page hangs on its
 loading gate (passes alone, deadlocks in-suite — nothing to do with prefs values); and wait for such a
 page via a **bounded poll-pump for a real widget** (`for … if (find.byType(X).isEmpty) runAsync(50ms)+pump`),
-never one fixed delay. *Seen: Simple Mode —
+never one fixed delay. (f) **Mounting a NEW perpetual-ticker widget (a companion idle) on an
+existing page invalidates every `pumpAndSettle` in every test file that mounts that page at ANY
+route depth** — dialog and pushed-route coverage included (covered-route TickerMode muting is an
+inference, not an invariant; Codex made the rule mechanical): sweep those files to a shared
+bounded-pump helper and prove it by running them under a strict `--timeout`, before shipping the
+widget. *Seen: Simple Mode —
 `_SelectionCheckbox` controller moved to `initState`; prefs leak cleared + instance-seeded; curated-skip
 driven via the awaited entry seed; two-state tests split to single-pump (2026-06); the arcade notice —
 two shop tests asserted after `pumpAndSettle` and found nothing, the bare-pump contract broke on an

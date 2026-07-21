@@ -160,6 +160,16 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
       motion keeps today's exact behavior (the purr stays — action-tied, own toggle). Deliberately
       trimmed by adversarial review: no overscroll stir, no time-of-day tint, gaze deferred. Spec:
       `docs/superpowers/specs/2026-07-20-home-room-micro-interactions-design.md`.
+- [x] Session-hub frontier BIT (2026-07-21) — the mid-workout hub is livelier through BIT woven
+      into the session's mechanics: a small faced `BitMoodCore` **rides the frontier exercise
+      card** (first un-cleared, the same NEXT the rest panel shows — one shared getter), cleared
+      cards keep a **quiet neon warmth** (banked work stays lit), and at all-clear BIT **docks in
+      cheer** above the enabled Finish button (the goal-gradient peak, witnessed). Wordless,
+      reactive-only, zero new taps/haptics/sounds; hidden at large text scales; the rest takeover
+      keeps its single BIT; reduced motion renders a still companion. Evidence-shaped: witness not
+      pace-partner (Köhler ghost-null), glance-only under fatigue, Clippy contrary honored.
+      Adversarial review cut the route rail, gutter, and travel beat. Spec:
+      `docs/superpowers/specs/2026-07-21-session-hub-bit-frontier-design.md`.
 - [x] Programs (`ProgramService`) — structured workout programs (PPL, Full Body, Upper/Lower).
 - [x] Onboarding — cinematic sequence: cold open → problem → solution → calibration quiz →
       avatar → name → class reveal → rank assessed → charge ritual → start gate.

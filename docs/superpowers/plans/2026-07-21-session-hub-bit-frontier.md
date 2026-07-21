@@ -10,11 +10,26 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-21-session-hub-bit-frontier-design.md` (approved).
 
+## Codex plan review (2026-07-21) — needs-attention, 4 findings, all resolved
+
+| # | Finding | Resolution folded into the tasks |
+|---|---|---|
+| 1 (high) | Covered-route TickerMode is an inference; dialog flows can hang | Task 3 is now MECHANICAL: every `pumpAndSettle` reachable after the hub mounts (incl. dialog flows) becomes bounded pumps — no "may stay" exception without a green strict-timeout run proving it |
+| 2 (med) | `Border ==` equality assertion is brittle / can match the wrong box | Warmth assertion anchored to the specific card: text → ancestor DecoratedBox → compare the BorderSide color/width fields + the wash color; also assert the non-done card kept `kBorder` |
+| 3 (med) | `find.widgetWithText(Row, 'a')` false positives | Unique fixture names (`alpha`/`bravo`) + structural proof: the frontier key is a descendant of the card containing the expected name, and NOT of the other card |
+| 4 (med) | Env-generated goldens are capture, not validation | Behavior assertions (reveal/pose/size/presence/scale) stay the primary gate; goldens are the supplementary rendered artifact — reuse the repo's existing font-loading golden harness, eyeball the PNGs, and the on-device sign-off remains the named gap |
+
 **Known hazard (drives Task 3):** `BitMoodCore` runs a perpetual `Ticker`. Once the hub always hosts one, **any `pumpAndSettle` while the hub is the top route hangs** (10-min timeout). The existing `active_workout_*` tests + `audit/screens_c_test.dart` + `exercise_session_durability_test.dart` use `pumpAndSettle` against this page and must be swept to bounded pumps. (Covered-route ticker behavior is uncertain — treat every `pumpAndSettle` in files that mount this page as suspect.)
 
 ---
 
 ### Task 1: New failing test file (the behavior contract)
+
+> **Codex F2/F3 amendment:** the code below is superseded on three points — fixture names are
+> unique (`alpha`/`bravo`), placement is proven structurally (frontier key is a descendant of the
+> named card's nearest `DecoratedBox`, and absent from the other card), and the warmth assertion
+> reads the named card's decoration and compares `BorderSide` fields + the wash color (also
+> asserting the non-done card kept `kBorder`). The committed test file is the authority.
 
 **Files:**
 - Test: `app/test/active_workout_bit_frontier_test.dart` (create)
@@ -361,7 +376,7 @@ The pattern (matches the rest-panel file's existing post-BIT idiom):
     await tester.pump(const Duration(milliseconds: 400));
 ```
 
-Rules: a `pumpAndSettle` while a *pushed* route (exercise session, summary, dialog) is on top may stay IF it demonstrably settles (covered-route tickers are muted by the route's TickerMode) — verify by running, don't assume. Any pump against the hub itself becomes bounded.
+Rule (mechanical, Codex F1): **every** `pumpAndSettle` at a point where `ActiveWorkoutPage` is mounted anywhere in the tree — top route, under a pushed route, or under a dialog — becomes bounded pumps. No covered-route exception unless a strict-timeout run proves that exact call settles.
 
 - [ ] **Step 3: Re-run the five files — all green**
 

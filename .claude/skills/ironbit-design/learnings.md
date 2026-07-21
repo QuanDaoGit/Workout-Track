@@ -252,7 +252,10 @@ single-pump files + poll until the loader clears, never a fixed delay (2026-06).
 golden wrapped in a bare `ColoredBox`/`Container` (no `Material`/`Scaffold` ancestor) paints the
 "no-Material" yellow debug underline under every `Text`** — it silently corrupts the visual proof
 while the test still passes; wrap the golden subject in a `Material` (a full-page golden inherits it
-from the page's own `Scaffold`) (2026-06).* **A custom chip that
+from the page's own `Scaffold`) (2026-06). **A page golden containing an asset-decoded image (an
+AppBar pixel icon) races the real-event-loop decode** — the same pump sequence rendered the icon in
+one variant and not the other within a single generation run, a guaranteed cross-run flake;
+`precacheImage` the asset via `tester.runAsync` before the golden frame (2026-07, hub goldens).* **A custom chip that
 supplies its own `Semantics(label:)` as the accessible name must set `excludeSemantics: true`** — else
 the child `Text` node merges in, doubling the screen-reader announcement *and* breaking
 `find.bySemanticsLabel` (exact-match) in tests. **A gesture-only affordance (long-press / swipe) is

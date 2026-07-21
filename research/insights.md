@@ -2,6 +2,40 @@
 
 > Seed document. Tag every item `[validated]`, `[assumption]`, or `[risk]`. Pre-launch = mostly assumptions.
 
+### Session-hub companion presence — a WITNESS that reacts, never a pace-partner; glance-only under fatigue (2026-07-21)
+Feeds the shipped session-hub frontier BIT (spec
+`docs/superpowers/specs/2026-07-21-session-hub-bit-frontier-design.md`). Wide (token-frugal)
+Standard-tier pass; **one combined Codex adversarial review of evidence + opinion** (verdict
+*needs-attention*, 5 findings: transfer-assumption gate, frontier state machine, gutter width,
+travel-vs-motion-doctrine, rail-duplicates-progress — all folded; the rail/gutter/travel were CUT),
+then a **plan review** (4 findings: mechanical bounded-pump rule, brittle Border equality,
+Row-finder false positives, env-golden capture — all folded). Reuses [[haptics-v2]] motion bands +
+the guild research's Köhler downgrade without re-searching.
+- `[validated, meta]` **Köhler motivation gain with software-generated exercise partners is real**
+  ([meta, 19 studies](https://journals.humankinetics.com/downloadpdf/journals/krj/12/3/article-p187.pdf);
+  [Feltz line RCT](https://pmc.ncbi.nlm.nih.gov/articles/PMC5703210/)) — BUT the guild research's
+  boundary holds: a fixed non-responsive ghost produced a NULL result, and comparison pressure
+  breaks anti-guilt → the companion is a **responsive witness** (reacts to what the user did),
+  never a pace-setter. Decision: BIT's hub presence carries no target, no pace, no judgment.
+- `[validated]` **Fatigued attention is glance-only**: association raises RPE; past the D/A
+  threshold attention is captured interoceptively ([attentional-style](https://pubmed.ncbi.nlm.nih.gov/8084691/);
+  intensity-mediated shift) → mid-workout surfaces must need zero reading; data-dense additions
+  rejected (the telemetry/body-map hub option died on this).
+- `[validated, craft]` **Aliveness = reactivity + varied idle, not existence** (companion-design
+  canon; converges with the Haptic Creature *animated-not-present* finding) → the established
+  float/plate-breathing idle + state-reactive pose IS the mechanism; no dialogue needed.
+- `[validated, contrary — load-bearing]` **Clippy family**: overeager/interrupting/chatty agents
+  get resented → reactive-only, nothing modal, zero new taps. **Between-sets competitor
+  consensus**: lifters prize "boringly efficient" mid-workout UX → the utilitarian core keeps
+  identical function; life goes only into dead pixels.
+- `[validated, classic]` **Goal-gradient** (Hull/Kivetz): motivation rises near the goal —
+  carried here by the companion's position (frontier) and mood (all-clear cheer), not another bar
+  (Codex: a rail would duplicate the progress bar's job).
+- `[assumption]` **Companion-on-a-TRACKER mid-session transfer + long-horizon novelty decay are
+  unevidenced.** Mitigations: BIT already lives mid-session on the rest takeover (in-product
+  precedent), presentation-layer only (trivially removable), calm idle + one once-per-session
+  event state; pre-launch prototype gate = product-owner on-device sign-off.
+
 ### Micro-interaction motion — zoom-to-fixture navigation + companion haptics: concurrency over serial, duration bands, vestibular gate (2026-07-20)
 Feeds the shipped home-room micro-interactions (board camera dolly / pad focus-push / BIT purr /
 press-light; spec `docs/superpowers/specs/2026-07-20-home-room-micro-interactions-design.md`).
