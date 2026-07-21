@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workout_track/models/workout_models.dart';
 import 'package:workout_track/pages/Workout session/workout_summary.dart';
+import 'package:workout_track/widgets/companion/session_ceremony.dart';
 import 'package:workout_track/widgets/xp_level_meter.dart';
 
 /// Phase 2: the staged reveal. The CTA is gated behind the cadence and a
@@ -62,14 +63,31 @@ void main() {
   testWidgets('CTA is gated behind the reveal; tap-to-continue skips to it', (
     tester,
   ) async {
-    // Normal motion: the staged cadence is running (only the 150ms beat has
-    // fired during the save window, so the CTA is still hidden).
+    // Normal motion: the Session-Complete ceremony owns the screen first and
+    // deliberately catches taps ABOVE the reveal's skip overlay — the designed
+    // contract is a two-stage skip: tap 1 skips the ceremony, tap 2 skips the
+    // staged reveal. (This test's original single-tap premise predates the
+    // ceremony layer.)
     await tester.pumpWidget(MaterialApp(home: summary()));
     await letSaveComplete(tester);
 
+    expect(find.byType(SessionCeremony), findsOneWidget);
+    expect(find.byType(FilledButton), findsNothing);
+
+    // Tap 1 — skip the ceremony; drain to inert so onFinished removes the
+    // overlay. The ceremony clock caps dt at 60ms per FRAME, so it needs many
+    // short pumps — one long pump advances it a single frame.
+    await tester.tap(find.byType(SessionCeremony));
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.byType(SessionCeremony), findsNothing);
+
+    // The staged reveal is now running: CTA still gated, its skip catcher up.
     expect(find.byType(FilledButton), findsNothing);
     expect(find.byKey(const ValueKey('finish_skip_overlay')), findsOneWidget);
 
+    // Tap 2 — skip the staged cadence.
     await tester.tap(find.byKey(const ValueKey('finish_skip_overlay')));
     await tester.pump();
 
