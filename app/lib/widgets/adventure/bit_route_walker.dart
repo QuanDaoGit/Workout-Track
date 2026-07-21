@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../companion/bit_core_engine.dart'
-    show addLampDot, bevelBlock, metal, outlinePass;
+    show addLampDot, bevelBlock, metal;
 
 /// BIT — the side-view hover-glide traveller for the expedition routes.
 ///
@@ -92,9 +92,10 @@ const List<Color> _ramp = [
 // Core-local screen well (shared by the well-carve and the drawn screen).
 const int _scrx = 5, _scry = 4, _scrw = 7, _scrh = 7;
 
-/* ---- the outline / bevel / lamp algorithms are the shared engine's
-   (`outlinePass` / `bevelBlock` / `addLampDot`) — only the side-view grids
-   below are bespoke to the walker. ---- */
+/* ---- the bevel / lamp algorithms are the shared engine's (`bevelBlock` /
+   `addLampDot`) — only the side-view grids below are bespoke to the walker.
+   (The reference's black `outlinePass` was dropped engine-wide: it only ever
+   filled the bevel-cut corner notches with pitch-black specks.) ---- */
 
 /* ---- side core: square rounded body mostly filled by the glowing screen with
    a thin metal bezel. Screen pushed to the forward (right) face; the left metal
@@ -121,7 +122,7 @@ List<List<String>> _buildSideCore() {
   g[8][1] = 'd';
   g[9][1] = 'k';
   g[7][2] = 'l';
-  return outlinePass(g);
+  return g;
 }
 
 final List<List<String>> _core = _buildSideCore();
@@ -129,19 +130,19 @@ final List<List<String>> _topPlate = () {
   final g = bevelBlock(13, 4, 2);
   addLampDot(g, 3, 1);
   addLampDot(g, 9, 1);
-  return outlinePass(g);
+  return g;
 }();
 final List<List<String>> _backPlate = () {
   final g = bevelBlock(5, 11, 2);
   addLampDot(g, 2, 2);
   addLampDot(g, 2, 8);
-  return outlinePass(g);
+  return g;
 }();
 final List<List<String>> _underVent = () {
   final g = bevelBlock(10, 3, 1);
   addLampDot(g, 2, 1);
   addLampDot(g, 7, 1);
-  return outlinePass(g);
+  return g;
 }();
 
 class _BitWalkPainter extends CustomPainter {

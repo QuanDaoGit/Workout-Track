@@ -141,7 +141,7 @@ const Map<BitMood, double> bitMoodSpread = {
 // ── grid builders (ported verbatim from bit-sprite.js) ──────────────────────
 // Public: these are the shared pixel-forging algorithms every BIT variant is
 // built with (the front-view core/plates here, the route walker's side-view
-// grids in `bit_route_walker.dart`), so bevel/outline style changes propagate.
+// grids in `bit_route_walker.dart`), so bevel/shade style changes propagate.
 
 /// Bevelled cut-corner metal block, top-left lit — the base form of every BIT
 /// body part.
@@ -188,39 +188,14 @@ List<List<String>> bevelBlock(int w, int h, int cut) {
   return s;
 }
 
-/// 1px near-black outline on transparent cells touching the form
-/// (4-connected).
-List<List<String>> outlinePass(List<List<String>> g) {
-  final h = g.length, w = g[0].length;
-  final out = [for (final r in g) [...r]];
-  // 4-connected (orthogonal only). An 8-connected pass also outlines diagonal
-  // neighbours, which paints protruding near-black `k` nubs at the plates' 45°
-  // cut corners (they catch against BIT's cyan bloom). Orthogonal-only keeps the
-  // crisp outline on flat edges while dropping those corner specks.
-  const dirs = [
-    [1, 0], [-1, 0], [0, 1], [0, -1],
-  ];
-  for (var y = 0; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      if (g[y][x] != '.') continue;
-      var adj = false;
-      for (final d in dirs) {
-        final nx = x + d[0], ny = y + d[1];
-        if (nx >= 0 &&
-            nx < w &&
-            ny >= 0 &&
-            ny < h &&
-            g[ny][nx] != '.' &&
-            g[ny][nx] != 'k') {
-          adj = true;
-          break;
-        }
-      }
-      if (adj) out[y][x] = 'k';
-    }
-  }
-  return out;
-}
+// NOTE (2026-07-21): the reference's `outlinePass` (a near-black `k` fill on
+// empty cells touching the form) was removed entirely. Because every grid's
+// flat edges sit flush against the bounding box, the outline could only ever
+// manifest INSIDE the 45° bevel-cut notches — 48 pitch-black corner specks
+// (12 core + 10+10 horizontal plates + 8+8 vertical plates) that squared off
+// the intended cut corners and read as dirt on lighter room walls. Dropping it
+// leaves genuine cut corners; the edge shade map (`L`/`l`/`M`/`d`) already
+// defines the border.
 
 /// Stamps a 2px lamp (`C` + trailing `c`) onto a grid.
 void addLampDot(List<List<String>> g, int x, int y) {
@@ -248,35 +223,35 @@ List<List<String>> _buildCore() {
   g[5][1] = 'k';
   g[10][1] = 'k';
   g[7][2] = 'l';
-  return outlinePass(g);
+  return g;
 }
 
 List<List<String>> _buildTopPlate() {
   final g = bevelBlock(18, 5, 3);
   addLampDot(g, 3, 3);
   addLampDot(g, 13, 3);
-  return outlinePass(g);
+  return g;
 }
 
 List<List<String>> _buildBottomPlate() {
   final g = bevelBlock(18, 5, 3);
   addLampDot(g, 3, 1);
   addLampDot(g, 13, 1);
-  return outlinePass(g);
+  return g;
 }
 
 List<List<String>> _buildLeftPlate() {
   final g = bevelBlock(5, 14, 2);
   addLampDot(g, 2, 2);
   addLampDot(g, 2, 11);
-  return outlinePass(g);
+  return g;
 }
 
 List<List<String>> _buildRightPlate() {
   final g = bevelBlock(5, 14, 2);
   addLampDot(g, 1, 2);
   addLampDot(g, 1, 11);
-  return outlinePass(g);
+  return g;
 }
 
 /// The 16×16 bevelled core grid (faceless — the inset screen is drawn by each
