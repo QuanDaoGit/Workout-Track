@@ -170,6 +170,18 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
       pace-partner (Köhler ghost-null), glance-only under fatigue, Clippy contrary honored.
       Adversarial review cut the route rail, gutter, and travel beat. Spec:
       `docs/superpowers/specs/2026-07-21-session-hub-bit-frontier-design.md`.
+- [x] Rest-end BIT flight (2026-07-21) — when the between-exercise rest ends (naturally OR via
+      SKIP), the rest panel's 96px BIT **flies** to the just-finished card (banked arc, scale by
+      path progress, CRT phosphor-afterimage trail), **seals** the card's top-right corner (the
+      single completion celebration — the StrobeFlash that was previously invisible behind the
+      takeover — plus BIT's one-shot blink), then **hops** into the frontier card's riding slot
+      (idle ramps in, no pop). ~770ms natural / ~690ms skip; the list is fully settled +
+      interactive from frame 1; overlay ignores all input; any state-changing action instantly
+      settles it. Single-owner celebration across every path (flight seal / no-flight return /
+      final-exercise immediate); reduced motion = no flight AND no strobe (the static cleared
+      warmth is the signal). Two Codex adversarial rounds shaped it (corner-seal target, skip
+      profile, gen-token settle contract, threshold-crossing stamp). Spec:
+      `docs/superpowers/specs/2026-07-21-rest-end-bit-flight-design.md`.
 - [x] Programs (`ProgramService`) — structured workout programs (PPL, Full Body, Upper/Lower).
 - [x] Onboarding — cinematic sequence: cold open → problem → solution → calibration quiz →
       avatar → name → class reveal → rank assessed → charge ritual → start gate.

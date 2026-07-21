@@ -67,7 +67,11 @@ never a raster that silently can't honour the doctrine; breathe on a *decoupled*
 amplitude ramp**, never a hard unfreeze (a live-sine resume pops). A **"weighty announcement"** needs an explicit **anticipation** wind-up (ease-in coil) + a brief
 peak **hold**, not a cold `easeOutBack` launch — and build the coil as an **in-domain input**, not blend
 **curve-extrapolation** (it throws unrelated fields out of range). Reach for the CRT/phosphor idioms,
-don't pick a louder shape. **Scroll/parallax on a pixel diorama:** drift only the **soft (gradient)
+don't pick a louder shape. **A once-per-animation side-effect (a celebration, a sound, a state
+commit) must fire on threshold-CROSSING (`t > phaseStart && !latched`), never on
+window-presence (`phaseStart < t ≤ phaseEnd`)** — a jumped/dropped frame skips the window
+entirely and silently loses the beat (a coarse test pump caught the flight's 120ms seal being
+skipped — exactly what a janky device does; 2026-07, rest-end flight). **Scroll/parallax on a pixel diorama:** drift only the **soft (gradient)
 layers** — fractionally translating a *crisp sprite* shimmers it (same grid-break as a non-integer
 upscale); keep sprites at scroll rate, clip + over-paint (a wall-colour underlay) so the drift never
 exposes a gap, and **gate the whole effect off under reduced motion** (WCAG 2.3.3 — it's a delight, not

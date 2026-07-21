@@ -2,6 +2,33 @@
 
 > Seed document. Tag every item `[validated]`, `[assumption]`, or `[risk]`. Pre-launch = mostly assumptions.
 
+### Rest-end companion flight — relocate the invisible celebration; brevity + rarity-tiering over spectacle (2026-07-21)
+Feeds the shipped rest-end BIT flight (spec `2026-07-21-rest-end-bit-flight-design.md`). Two
+prompt-carried Codex rounds (design 4 findings; choreography 7) + a plan round (4) — the trail
+particles, amber sparks, heavy slam, 1.5s duration, and skip-exclusion all died in review; the
+corner-seal target, skip profile split, gen-token settle contract, and threshold-crossing stamp
+were born there. Builds on [[session-hub-witness]]; reuses its whole evidence base.
+- `[validated, code-fact → design driver]` **The card's completion StrobeFlash fired while the
+  rest takeover covered the list — the celebration was invisible in every rest path.** The
+  flight's real job is relocating that beat to the first visible frame; the continuity flight is
+  the vehicle. Lesson: audit WHERE an existing celebration actually renders before adding a new
+  one.
+- `[craft, Duolingo]` Frequent per-item character celebrations are established practice in the
+  most successful habit app — but the big beat is rarity-tiered (perfect-lesson only) and
+  variation is invested deliberately ([Duolingo character animation](https://blog.duolingo.com/world-character-visemes/),
+  [streak milestone design](https://blog.duolingo.com/streak-milestone-design-animation/)) →
+  per-exercise beat stays ≤~770ms/one effect; the all-clear dock and summary ceremony stay the
+  big moments; variation deferred.
+- `[craft + settled]` Juice canon: decoration never delays input ([juicy effects](https://itch.io/blog/1059831/making-a-game-feel-juicy-with-simple-effects));
+  with IJHCS click-delay + the between-sets consensus → the list must be SETTLED + interactive
+  frame 1, the flight purely additive, every action instant-settling.
+- `[mixed, directional]` Celebration/novelty fatigue (~week-6 cliff, 90-day disengagement) →
+  brevity + one effect, not spectacle.
+- `[validated, engineering]` **A window-presence animation event (fire when a frame renders
+  inside beat N) silently skips on a frame jump** — fire on threshold-CROSSING instead; caught
+  live when a test's coarse pump jumped the 120ms seal window, which is exactly what a janky
+  device does.
+
 ### Session-hub companion presence — a WITNESS that reacts, never a pace-partner; glance-only under fatigue (2026-07-21)
 Feeds the shipped session-hub frontier BIT (spec
 `docs/superpowers/specs/2026-07-21-session-hub-bit-frontier-design.md`). Wide (token-frugal)
