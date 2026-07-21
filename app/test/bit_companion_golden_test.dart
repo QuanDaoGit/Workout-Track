@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:workout_track/theme/tokens.dart';
 import 'package:workout_track/widgets/companion/bit_companion.dart';
-import 'package:workout_track/widgets/companion/bit_sprite.dart' show BitMood;
+import 'package:workout_track/widgets/companion/bit_core_engine.dart'
+    show BitMood;
 
 /// Rendered-artifact proof for the animated companion BIT (the Flutter web
 /// preview can't screenshot here). Under reduced motion the idle clock is frozen

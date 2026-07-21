@@ -284,7 +284,6 @@ flutter:
     - assets/classes/sigils/
     - assets/classes/avatars/
     - assets/branding/
-    - assets/mascot/bit-sprites/
     - assets/room/
     - assets/body_diagram/render/
     - assets/body_diagram/render/front/

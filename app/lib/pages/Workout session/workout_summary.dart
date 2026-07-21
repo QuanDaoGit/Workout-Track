@@ -39,7 +39,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/arcade_filled.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/companion/bit_companion.dart';
-import '../../widgets/companion/bit_sprite.dart' show BitMood;
+import '../../widgets/companion/bit_core_engine.dart' show BitMood;
 import '../../widgets/companion/session_ceremony.dart';
 import '../../widgets/count_up_text.dart';
 import '../../widgets/floating_stat_number.dart';

@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../companion/bit_companion.dart' show paintBitSprite, bitNoise;
-import '../companion/bit_sprite.dart' show BitMood;
+import '../companion/bit_core_engine.dart' show BitMood;
 
 /// The **away-state hologram** — a faithful port of the handoff's `holo-bit.js`:
 /// BIT's **real sprite** (`paintBitSprite`, idle bob/blink from the room clock),

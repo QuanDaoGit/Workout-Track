@@ -8,7 +8,7 @@ import 'package:flutter/scheduler.dart';
 import '../../services/haptic_service.dart';
 import '../../services/sfx_service.dart';
 import '../../services/ui_sound.dart';
-import 'bit_sprite.dart' show BitMood;
+import 'bit_core_engine.dart';
 
 /// BIT as the room's living companion — a fully-painted, animated port of the
 /// prototype's `bit.js` (the companion engine, distinct from the faceless
@@ -22,8 +22,9 @@ import 'bit_sprite.dart' show BitMood;
 /// with its Semantics label. BIT is the single brightest thing in the room
 /// (handoff GUARDRAILS #2): the pad's cyan is deliberately held dimmer.
 ///
-/// The metal/screen palettes below are canonical procedural sprite-art (same
-/// status as `bit_boot.dart`'s `_metal`), not brand tokens.
+/// The metal/screen palettes and pixel grids come from `bit_core_engine.dart`
+/// — the single source of BIT's drawing — canonical procedural sprite-art, not
+/// brand tokens.
 class BitCompanion extends StatefulWidget {
   const BitCompanion({
     super.key,
@@ -274,223 +275,29 @@ class _BitCompanionState extends State<BitCompanion>
   }
 }
 
-// ── palette (verbatim from bit.js METAL) ─────────────────────────────────────
-const Map<String, Color> _metal = {
-  'k': Color(0xFF0B0B14),
-  'd': Color(0xFF1E1E2E),
-  'q': Color(0xFF0A0A12),
-  'm': Color(0xFF34344E),
-  'M': Color(0xFF2A2A40),
-  'l': Color(0xFF4B4B6E),
-  'L': Color(0xFF6E6E92),
-  'c': Color(0xFF15B8B0),
-  'C': Color(0xFF5EE8DD),
-};
-
-// Screen ramps (edge..centre), eye color, mouth, and plate-spread per mood.
-// BIT's light is a readout: NEUTRAL = its own turquoise identity; CHEER echoes
-// reward-amber; ALERT = dim turquoise (low power); REST = dim recovery-cyan.
-// (Colour pass: NEUTRAL was cyan→turquoise, CHEER was green→amber, ALERT was
-// amber→dim-turquoise — so BIT collides with no status hue.)
-const Map<BitMood, List<Color>> _ramps = {
-  BitMood.neutral: [
-    Color(0xFF0A5A5E), Color(0xFF0F9EA0), Color(0xFF23D6CC), Color(0xFF73F2E8),
-  ],
-  BitMood.cheer: [
-    Color(0xFF7A5200), Color(0xFFC99400), Color(0xFFFFD21F), Color(0xFFFFEC8C),
-  ],
-  BitMood.alert: [
-    Color(0xFF0B3A40), Color(0xFF0E6E70), Color(0xFF16A39A), Color(0xFF46D0C4),
-  ],
-  BitMood.rest: [
-    Color(0xFF06303E), Color(0xFF0A5570), Color(0xFF117CA8), Color(0xFF2C9AD8),
-  ],
-};
-const Map<BitMood, Color> _glow = {
-  BitMood.neutral: Color(0xFF17D6CC),
-  BitMood.cheer: Color(0xFFFFD700),
-  BitMood.alert: Color(0xFF0E6E70),
-  BitMood.rest: Color(0xFF0E4F74),
-};
-const Map<BitMood, Color> _eyeCol = {
-  BitMood.neutral: Color(0xFFFFFFFF),
-  BitMood.cheer: Color(0xFFFFFDF0),
-  BitMood.alert: Color(0xFFDFF7F2),
-  BitMood.rest: Color(0xFFCFEAF7),
-};
-const Map<BitMood, List<List<int>>> _eyes = {
-  BitMood.neutral: [[3, 3], [3, 4], [6, 3], [6, 4]],
-  BitMood.cheer: [[2, 2], [3, 2], [2, 3], [3, 3], [6, 2], [7, 2], [6, 3], [7, 3]],
-  BitMood.alert: [[2, 4], [3, 4], [6, 4], [7, 4]],
-  BitMood.rest: [[2, 5], [3, 5], [6, 5], [7, 5]],
-};
-const Map<BitMood, List<List<int>>> _blinkEyes = {
-  BitMood.neutral: [[3, 4], [6, 4]],
-  BitMood.cheer: [[2, 3], [3, 3], [6, 3], [7, 3]],
-  BitMood.alert: [[2, 4], [3, 4], [6, 4], [7, 4]],
-  BitMood.rest: [[2, 5], [3, 5], [6, 5], [7, 5]],
-};
-const Map<BitMood, List<List<int>>> _mouth = {
-  BitMood.neutral: [[4, 6], [5, 6]],
-  BitMood.cheer: [[4, 6], [5, 6], [4, 7], [5, 7]],
-  BitMood.alert: [[4, 6], [5, 6]],
-  BitMood.rest: [],
-};
-const Map<BitMood, double> _moodSpread = {
-  BitMood.neutral: 0,
-  BitMood.cheer: 4,
-  BitMood.alert: -1,
-  BitMood.rest: -1,
-};
-
-// ── grid builders (ported verbatim from bit.js / bit_boot.dart) ──────────────
-List<List<String>> _bevelBlock(int w, int h, int cut) {
-  bool inside(int x, int y) =>
-      x >= 0 &&
-      x < w &&
-      y >= 0 &&
-      y < h &&
-      (x + y) >= cut &&
-      ((w - 1 - x) + y) >= cut &&
-      (x + (h - 1 - y)) >= cut &&
-      ((w - 1 - x) + (h - 1 - y)) >= cut;
-  final g = List.generate(
-    h,
-    (y) => List.generate(w, (x) => inside(x, y) ? 'm' : '.'),
-  );
-  bool isIn(int x, int y) =>
-      x >= 0 && x < w && y >= 0 && y < h && g[y][x] != '.';
-  final s = [for (final r in g) [...r]];
-  for (var y = 0; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      if (g[y][x] == '.') continue;
-      final up = isIn(x, y - 1),
-          dn = isIn(x, y + 1),
-          lf = isIn(x - 1, y),
-          rt = isIn(x + 1, y);
-      if (!up) {
-        s[y][x] = 'L';
-      } else if (!dn) {
-        s[y][x] = 'd';
-      } else if (!lf) {
-        s[y][x] = 'l';
-      } else if (!rt) {
-        s[y][x] = 'M';
-      }
-    }
-  }
-  for (var y = 1; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      if (s[y][x] == 'm' && s[y - 1][x] == 'L') s[y][x] = 'l';
-    }
-  }
-  return s;
-}
-
-List<List<String>> _outlinePass(List<List<String>> g) {
-  final h = g.length, w = g[0].length;
-  final out = [for (final r in g) [...r]];
-  for (var y = 0; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      if (g[y][x] != '.') continue;
-      var adj = false;
-      for (final d in const [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        final nx = x + d[0], ny = y + d[1];
-        if (nx >= 0 &&
-            nx < w &&
-            ny >= 0 &&
-            ny < h &&
-            g[ny][nx] != '.' &&
-            g[ny][nx] != 'k') {
-          adj = true;
-          break;
-        }
-      }
-      if (adj) out[y][x] = 'k';
-    }
-  }
-  return out;
-}
-
-void _addDot(List<List<String>> g, int x, int y) {
-  if (y >= 0 && y < g.length && x >= 0 && x < g[0].length && g[y][x] != '.') {
-    g[y][x] = 'C';
-    if (x + 1 < g[0].length && g[y][x + 1] != '.') g[y][x + 1] = 'c';
-  }
-}
-
-List<List<String>> _buildCore() {
-  final g = _bevelBlock(16, 16, 3);
-  for (var y = 2; y <= 13; y++) {
-    for (var x = 2; x <= 13; x++) {
-      final ring = (x == 2 || x == 13 || y == 2 || y == 13);
-      if (x >= 3 && x <= 12 && y >= 3 && y <= 12) {
-        g[y][x] = 'q';
-      } else if (ring) {
-        g[y][x] = (x == 2 || y == 2) ? 'd' : 'k';
-      }
-    }
-  }
-  for (var y = 5; y <= 10; y++) {
-    g[y][1] = 'd';
-  }
-  g[5][1] = 'k';
-  g[10][1] = 'k';
-  g[7][2] = 'l';
-  return _outlinePass(g);
-}
-
-List<List<String>> _plateTop() {
-  final g = _bevelBlock(18, 5, 3);
-  _addDot(g, 3, 3);
-  _addDot(g, 13, 3);
-  return _outlinePass(g);
-}
-
-List<List<String>> _plateBottom() {
-  final g = _bevelBlock(18, 5, 3);
-  _addDot(g, 3, 1);
-  _addDot(g, 13, 1);
-  return _outlinePass(g);
-}
-
-List<List<String>> _plateLeft() {
-  final g = _bevelBlock(5, 14, 2);
-  _addDot(g, 2, 2);
-  _addDot(g, 2, 11);
-  return _outlinePass(g);
-}
-
-List<List<String>> _plateRight() {
-  final g = _bevelBlock(5, 14, 2);
-  _addDot(g, 1, 2);
-  _addDot(g, 1, 11);
-  return _outlinePass(g);
-}
-
+// ── engine-sourced sprite data ───────────────────────────────────────────────
+// The palette, grids, mood face tables, and easing all live in
+// `bit_core_engine.dart` — the single BIT drawing mechanic. This file keeps
+// only the companion's choreography. The companion positions plates by
+// home-offset + spread direction (bit.js's model); the offsets below are the
+// engine's docked seats ([plateRadius] from the core centre (20,20)) expressed
+// in that model.
 class _Plate {
-  _Plate(this.grid, int x, int y, this.dirX, this.dirY)
+  _Plate(this.grid, this.nvx, this.nvy, this.dirX, this.dirY)
     : hw = grid[0].length / 2,
-      hh = grid.length / 2 {
-    nvx = (x + hw) - 20; // home offset from core centre (20,20)
-    nvy = (y + hh) - 20;
-  }
+      hh = grid.length / 2;
   final List<List<String>> grid;
   final double hw, hh;
-  final double dirX, dirY;
-  late final double nvx, nvy;
+  final double nvx, nvy; // home offset from core centre
+  final double dirX, dirY; // spread direction
 }
 
-final List<List<String>> _coreGrid = _buildCore();
 final List<_Plate> _platesC = [
-  _Plate(_plateTop(), 11, 5, 0, -1),
-  _Plate(_plateBottom(), 11, 30, 0, 1),
-  _Plate(_plateLeft(), 5, 13, -1, 0),
-  _Plate(_plateRight(), 30, 13, 1, 0),
+  _Plate(plates[0].grid, 0, -plateRadius, 0, -1), // top
+  _Plate(plates[1].grid, 0, plateRadius, 0, 1), // bottom
+  _Plate(plates[2].grid, -plateRadius, 0, -1, 0), // left
+  _Plate(plates[3].grid, plateRadius, 0, 1, 0), // right
 ];
-
-double _easeInOutCubic(double t) =>
-    t < 0.5 ? 4 * t * t * t : 1 - math.pow(-2 * t + 2, 3).toDouble() / 2;
 
 double _noise(double t) {
   final s = math.sin(t * 12.9898) * 43758.5453;
@@ -516,7 +323,7 @@ void drawBitGrid(
   for (var y = 0; y < grid.length; y++) {
     final row = grid[y];
     for (var x = 0; x < row.length; x++) {
-      final col = sil ? const Color(0xFF08080E) : _metal[row[x]];
+      final col = sil ? const Color(0xFF08080E) : metal[row[x]];
       if (col == null) continue;
       paint.color = col;
       canvas.drawRect(Rect.fromLTWH((oxN + x) * s, (oyN + y) * s, s, s), paint);
@@ -567,11 +374,11 @@ void drawBitScreen(
   for (var y = 0; y < 10; y += 2) {
     px(0, y.toDouble(), 10, 1, const Color.fromRGBO(2, 8, 12, 0.18));
   }
-  final eyeCol = _eyeCol[mood]!;
-  for (final e in (blink ? _blinkEyes[mood]! : _eyes[mood]!)) {
+  final eyeCol = bitMoodEyeColor[mood]!;
+  for (final e in (blink ? bitMoodBlinkEyes[mood]! : bitMoodEyes[mood]!)) {
     px(e[0].toDouble(), e[1].toDouble(), 1, 1, eyeCol);
   }
-  for (final m in _mouth[mood]!) {
+  for (final m in bitMoodMouth[mood]!) {
     px(m[0].toDouble(), m[1].toDouble(), 1, 1, eyeCol);
   }
   if (cheer > 0.01) {
@@ -626,11 +433,11 @@ void paintCeremonyBit(
   final droop = surged ? 0.0 : 2.0; // _target === 'REST' ? 2 : 0
   final faceMood = mt >= 0.5 ? BitMood.cheer : BitMood.rest; // _mt >= 0.5
 
-  final restR = _ramps[BitMood.rest]!, cheerR = _ramps[BitMood.cheer]!;
+  final restR = bitMoodRamps[BitMood.rest]!, cheerR = bitMoodRamps[BitMood.cheer]!;
   final ramp = [
     for (var i = 0; i < 4; i++) Color.lerp(restR[i], cheerR[i], mt)!,
   ];
-  final glowCol = Color.lerp(_glow[BitMood.rest], _glow[BitMood.cheer], mt)!;
+  final glowCol = Color.lerp(bitMoodGlow[BitMood.rest], bitMoodGlow[BitMood.cheer], mt)!;
 
   // renderInst geometry.
   final sink = _jsRound(antic * 3);
@@ -665,7 +472,7 @@ void paintCeremonyBit(
 
   final spreadF = spread + breathe + cheer * 3 - antic * 3;
   final shake = cheer > 0.02 ? (_noise(tms / 20) - 0.5) * 2.4 * cheer : 0.0;
-  final theta = spinT > 0 ? _easeInOutCubic(spinT.clamp(0.0, 1.0)) * 2 * math.pi : 0.0;
+  final theta = spinT > 0 ? easeInOutCubic(spinT.clamp(0.0, 1.0)) * 2 * math.pi : 0.0;
   final cos = math.cos(theta), sin = math.sin(theta);
   const gx = 2.0, gy = 2.0;
   const ocx = gx + 20.0; // GX + CORE_CX
@@ -685,7 +492,7 @@ void paintCeremonyBit(
       _jsRound(ocy + rvy - p.hh + droop),
     );
   }
-  drawBitGrid(canvas, _coreGrid, s, gx + 12, gy + 12 + bob + sink);
+  drawBitGrid(canvas, coreGrid, s, gx + 12, gy + 12 + bob + sink);
   // Screen: sa = appear² · (1 − max(0,antic)·0.55); appear is 1 here.
   drawBitScreen(
     canvas,
@@ -715,7 +522,7 @@ void paintBitSprite(
   final bob = reduceMotion ? 0.0 : 1.5 * math.sin(tms / 390);
   final breathe = reduceMotion ? 0 : math.sin(tms / 610 + 1.3).round();
   final blink = !reduceMotion && ((tms / 1000) % 3.4) < 0.11;
-  final spreadF = (_moodSpread[mood] ?? 0).toDouble() + breathe;
+  final spreadF = (bitMoodSpread[mood] ?? 0).toDouble() + breathe;
   final droop = mood == BitMood.rest ? 2.0 : 0.0;
   const gx = 2, gy = 2, coreCx = 20.0, coreCy = 20.0;
   final ocx = gx + coreCx, ocy = gy + coreCy + bob;
@@ -729,13 +536,13 @@ void paintBitSprite(
     final ey = p.nvy + p.dirY * spreadF;
     drawBitGrid(canvas, p.grid, s, ocx + ex - p.hw, ocy + ey - p.hh + droop);
   }
-  drawBitGrid(canvas, _coreGrid, s, (gx + 12).toDouble(), gy + 12 + bob);
+  drawBitGrid(canvas, coreGrid, s, (gx + 12).toDouble(), gy + 12 + bob);
   drawBitScreen(
     canvas,
     s,
     (gx + 15).toDouble(),
     gy + 15 + bob,
-    _ramps[mood]!,
+    bitMoodRamps[mood]!,
     mood,
     blink,
     0,
@@ -807,7 +614,7 @@ class _BitCompanionPainter extends CustomPainter {
         : 0.0;
     final cheer = math.max(spinCheer, flashCheer);
     final blink = !reduceMotion && (t % 3.4) < 0.11;
-    final theta = _easeInOutCubic(spinT) * 2 * math.pi;
+    final theta = easeInOutCubic(spinT) * 2 * math.pi;
     final cos = math.cos(theta), sin = math.sin(theta);
 
     // Spam-tap easter egg: a smooth slump toward REST (eased). We lerp from the
@@ -825,21 +632,21 @@ class _BitCompanionPainter extends CustomPainter {
     final double restSpread;
     final double droop;
     if (inRest) {
-      final fromR = _ramps[mood]!, restR = _ramps[BitMood.rest]!;
+      final fromR = bitMoodRamps[mood]!, restR = bitMoodRamps[BitMood.rest]!;
       ramp = [
         for (var i = 0; i < 4; i++) Color.lerp(fromR[i], restR[i], morph)!,
       ];
-      glowCol = Color.lerp(_glow[mood], _glow[BitMood.rest], morph)!;
+      glowCol = Color.lerp(bitMoodGlow[mood], bitMoodGlow[BitMood.rest], morph)!;
       faceMood = morph >= 0.5 ? BitMood.rest : mood;
-      final fromSpread = (_moodSpread[mood] ?? 0).toDouble();
-      final toSpread = (_moodSpread[BitMood.rest] ?? -1).toDouble();
+      final fromSpread = (bitMoodSpread[mood] ?? 0).toDouble();
+      final toSpread = (bitMoodSpread[BitMood.rest] ?? -1).toDouble();
       restSpread = fromSpread + (toSpread - fromSpread) * morph;
       droop = 2.0 * morph; // BIT slumps
     } else {
-      ramp = _ramps[mood]!;
-      glowCol = _glow[mood]!;
+      ramp = bitMoodRamps[mood]!;
+      glowCol = bitMoodGlow[mood]!;
       faceMood = mood;
-      restSpread = (_moodSpread[mood] ?? 0).toDouble();
+      restSpread = (bitMoodSpread[mood] ?? 0).toDouble();
       droop = mood == BitMood.rest ? 2.0 : 0.0;
     }
 
@@ -884,7 +691,7 @@ class _BitCompanionPainter extends CustomPainter {
         ocy + rvy - p.hh + droop,
       );
     }
-    drawBitGrid(canvas, _coreGrid, s, (_gx + 12).toDouble(), _gy + 12 + bob);
+    drawBitGrid(canvas, coreGrid, s, (_gx + 12).toDouble(), _gy + 12 + bob);
     drawBitScreen(
       canvas,
       s,

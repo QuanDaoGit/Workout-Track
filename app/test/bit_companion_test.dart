@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:workout_track/widgets/companion/bit_companion.dart';
-import 'package:workout_track/widgets/companion/bit_sprite.dart' show BitMood;
+import 'package:workout_track/widgets/companion/bit_core_engine.dart'
+    show BitMood;
 
 /// Behavioral contract for the companion BIT: it announces itself, is a generous
 /// tap target, reacts to a tap, and stays a still, legible (still-announced)

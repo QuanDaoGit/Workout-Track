@@ -2,6 +2,9 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../companion/bit_core_engine.dart'
+    show addLampDot, bevelBlock, metal, outlinePass;
+
 /// BIT — the side-view hover-glide traveller for the expedition routes.
 ///
 /// A faithful Dart port of the handoff painter
@@ -70,20 +73,14 @@ class BitRouteWalker extends StatelessWidget {
 const double _nativeW = 40;
 const double _nativeH = 32;
 
-/* ---- BIT's canonical metal palette (cool machined blue-grey, zero warmth).
-   Raw Color literals are the documented procedural-sprite exception to the
-   tokens-only rule — these are BIT's identity palette, ported verbatim from
-   bit-walk.js (same exception the companion sprite uses). ---- */
-const Map<String, Color> _metal = {
-  'k': Color(0xFF0B0B14),
-  'd': Color(0xFF1E1E2E),
-  'q': Color(0xFF0A0A12),
-  'm': Color(0xFF34344E),
-  'M': Color(0xFF2A2A40),
-  'l': Color(0xFF4B4B6E),
-  'L': Color(0xFF6E6E92),
-  'c': Color(0xFF00BFFF),
-  'C': Color(0xFF5EE8FF),
+/* ---- BIT's canonical metal palette, sourced from the shared engine so the
+   body stays in lockstep with every other BIT surface. The two lamp tones are
+   bit-walk.js's deliberate travel-cyan override (the front-view sprite's lamps
+   are turquoise) — the one documented divergence, kept explicit here. ---- */
+final Map<String, Color> _metal = {
+  ...metal,
+  'c': const Color(0xFF00BFFF),
+  'C': const Color(0xFF5EE8FF),
 };
 const List<Color> _ramp = [
   Color(0xFF0A5E72),
@@ -95,94 +92,15 @@ const List<Color> _ramp = [
 // Core-local screen well (shared by the well-carve and the drawn screen).
 const int _scrx = 5, _scry = 4, _scrw = 7, _scrh = 7;
 
-/* ---- auto 1px outline on transparent cells touching the form ---- */
-List<List<String>> _outlinePass(List<List<String>> g) {
-  final h = g.length, w = g[0].length;
-  final out = [for (final r in g) [...r]];
-  const dirs = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ];
-  for (var y = 0; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      if (g[y][x] != '.') continue;
-      var adj = false;
-      for (final d in dirs) {
-        final nx = x + d[0], ny = y + d[1];
-        if (nx >= 0 &&
-            nx < w &&
-            ny >= 0 &&
-            ny < h &&
-            g[ny][nx] != '.' &&
-            g[ny][nx] != 'k') {
-          adj = true;
-          break;
-        }
-      }
-      if (adj) out[y][x] = 'k';
-    }
-  }
-  return out;
-}
-
-/* ---- bevelled rounded-rect metal block, top-left lit ---- */
-List<List<String>> _bevelBlock(int w, int h, int cut) {
-  bool inside(int x, int y) =>
-      x >= 0 &&
-      x < w &&
-      y >= 0 &&
-      y < h &&
-      (x + y) >= cut &&
-      ((w - 1 - x) + y) >= cut &&
-      (x + (h - 1 - y)) >= cut &&
-      ((w - 1 - x) + (h - 1 - y)) >= cut;
-  final g = List.generate(
-    h,
-    (y) => List.generate(w, (x) => inside(x, y) ? 'm' : '.'),
-  );
-  bool isIn(int x, int y) =>
-      x >= 0 && x < w && y >= 0 && y < h && g[y][x] != '.';
-  final sh = [for (final r in g) [...r]];
-  for (var y = 0; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      if (g[y][x] == '.') continue;
-      final up = isIn(x, y - 1),
-          dn = isIn(x, y + 1),
-          lf = isIn(x - 1, y),
-          rt = isIn(x + 1, y);
-      if (!up) {
-        sh[y][x] = 'L';
-      } else if (!dn) {
-        sh[y][x] = 'd';
-      } else if (!lf) {
-        sh[y][x] = 'l';
-      } else if (!rt) {
-        sh[y][x] = 'M';
-      }
-    }
-  }
-  for (var y = 1; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      if (sh[y][x] == 'm' && sh[y - 1][x] == 'L') sh[y][x] = 'l';
-    }
-  }
-  return sh;
-}
-
-void _dot(List<List<String>> g, int x, int y) {
-  if (y >= 0 && y < g.length && x >= 0 && x < g[y].length && g[y][x] != '.') {
-    g[y][x] = 'C';
-    if (x + 1 < g[y].length && g[y][x + 1] != '.') g[y][x + 1] = 'c';
-  }
-}
+/* ---- the outline / bevel / lamp algorithms are the shared engine's
+   (`outlinePass` / `bevelBlock` / `addLampDot`) — only the side-view grids
+   below are bespoke to the walker. ---- */
 
 /* ---- side core: square rounded body mostly filled by the glowing screen with
    a thin metal bezel. Screen pushed to the forward (right) face; the left metal
    reads as the "back of the head" so BIT faces the direction of travel. ---- */
 List<List<String>> _buildSideCore() {
-  final g = _bevelBlock(15, 15, 3);
+  final g = bevelBlock(15, 15, 3);
   for (var y = _scry - 1; y <= _scry + _scrh; y++) {
     for (var x = _scrx - 1; x <= _scrx + _scrw; x++) {
       if (y >= 0 && y < g.length && x >= 0 && x < g[y].length && g[y][x] != '.') {
@@ -203,27 +121,27 @@ List<List<String>> _buildSideCore() {
   g[8][1] = 'd';
   g[9][1] = 'k';
   g[7][2] = 'l';
-  return _outlinePass(g);
+  return outlinePass(g);
 }
 
 final List<List<String>> _core = _buildSideCore();
 final List<List<String>> _topPlate = () {
-  final g = _bevelBlock(13, 4, 2);
-  _dot(g, 3, 1);
-  _dot(g, 9, 1);
-  return _outlinePass(g);
+  final g = bevelBlock(13, 4, 2);
+  addLampDot(g, 3, 1);
+  addLampDot(g, 9, 1);
+  return outlinePass(g);
 }();
 final List<List<String>> _backPlate = () {
-  final g = _bevelBlock(5, 11, 2);
-  _dot(g, 2, 2);
-  _dot(g, 2, 8);
-  return _outlinePass(g);
+  final g = bevelBlock(5, 11, 2);
+  addLampDot(g, 2, 2);
+  addLampDot(g, 2, 8);
+  return outlinePass(g);
 }();
 final List<List<String>> _underVent = () {
-  final g = _bevelBlock(10, 3, 1);
-  _dot(g, 2, 1);
-  _dot(g, 7, 1);
-  return _outlinePass(g);
+  final g = bevelBlock(10, 3, 1);
+  addLampDot(g, 2, 1);
+  addLampDot(g, 7, 1);
+  return outlinePass(g);
 }();
 
 class _BitWalkPainter extends CustomPainter {

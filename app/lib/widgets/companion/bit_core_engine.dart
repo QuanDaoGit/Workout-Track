@@ -61,23 +61,20 @@ const Map<String, Color> dim = {
 };
 
 // ── canonical BIT face (single source of truth for the eyes/screen) ──────────
-// BIT's neutral expression, kept identical to the companion engine + the start-
-// gate sprite so the screen-3 reveal lands on the *same* face seen everywhere
-// else. Screen-local coords on the 10×10 inset (which sits at native (17,17)).
-// Raw colours are procedural sprite-art (documented exception, like [metal]).
+// BIT's expressions, shared by every renderer (the mood presence, the boot
+// reveal, the room companion, the ceremony, the hologram) so a face redraw
+// lands everywhere at once. Screen-local coords on the 10×10 inset (which sits
+// at native (17,17)). Raw colours are procedural sprite-art (documented
+// exception, like [metal]).
+
+/// BIT's expression. The screen ramp, eyes, mouth, and resting plate-spread all
+/// key off this — the body metal never changes, only the screen carries mood.
+enum BitMood { neutral, cheer, alert, rest }
+
 const Color bitEyeColor = Color(0xFFFFFFFF);
 // Neutral (calm, turquoise) — BIT's resting face.
 const List<Color> bitFaceRamp = [
   Color(0xFF0A5A5E), Color(0xFF0F9EA0), Color(0xFF23D6CC), Color(0xFF73F2E8),
-];
-const List<List<int>> _bitEyesOpen = [
-  [3, 3], [3, 4], [6, 3], [6, 4],
-];
-const List<List<int>> _bitEyesBlink = [
-  [3, 4], [6, 4],
-];
-const List<List<int>> _bitMouth = [
-  [4, 6], [5, 6],
 ];
 // Cheer (energetic, amber) — wide eyes + a grin, the screen-3 reveal burst.
 // Amber matches the mood system (cheer = reward/level-up colour); BIT then
@@ -87,18 +84,68 @@ const Color bitCheerGlow = Color(0xFFFFD700);
 const List<Color> bitCheerRamp = [
   Color(0xFF7A5200), Color(0xFFC99400), Color(0xFFFFD21F), Color(0xFFFFEC8C),
 ];
-const List<List<int>> _bitCheerEyes = [
-  [2, 2], [3, 2], [2, 3], [3, 3], [6, 2], [7, 2], [6, 3], [7, 3],
-];
-const List<List<int>> _bitCheerBlink = [
-  [2, 3], [3, 3], [6, 3], [7, 3],
-];
-const List<List<int>> _bitCheerMouth = [
-  [4, 6], [5, 6], [4, 7], [5, 7],
-];
+
+// Screen ramps (edge..centre), glow, eye colour, face cells, and plate-spread
+// per mood. BIT's light is a readout: NEUTRAL = its own turquoise identity;
+// CHEER echoes reward-amber; ALERT = dim turquoise (low power); REST = dim
+// recovery-cyan. (Colour pass: NEUTRAL was cyan→turquoise, CHEER was
+// green→amber, ALERT was amber→dim-turquoise — so BIT collides with no status
+// hue.)
+const Map<BitMood, List<Color>> bitMoodRamps = {
+  BitMood.neutral: bitFaceRamp,
+  BitMood.cheer: bitCheerRamp,
+  BitMood.alert: [
+    Color(0xFF0B3A40), Color(0xFF0E6E70), Color(0xFF16A39A), Color(0xFF46D0C4),
+  ],
+  BitMood.rest: [
+    Color(0xFF06303E), Color(0xFF0A5570), Color(0xFF117CA8), Color(0xFF2C9AD8),
+  ],
+};
+const Map<BitMood, Color> bitMoodGlow = {
+  BitMood.neutral: bitGlow,
+  BitMood.cheer: bitCheerGlow,
+  BitMood.alert: Color(0xFF0E6E70),
+  BitMood.rest: Color(0xFF0E4F74),
+};
+const Map<BitMood, Color> bitMoodEyeColor = {
+  BitMood.neutral: bitEyeColor,
+  BitMood.cheer: Color(0xFFFFFDF0),
+  BitMood.alert: Color(0xFFDFF7F2),
+  BitMood.rest: Color(0xFFCFEAF7),
+};
+const Map<BitMood, List<List<int>>> bitMoodEyes = {
+  BitMood.neutral: [[3, 3], [3, 4], [6, 3], [6, 4]],
+  BitMood.cheer: [[2, 2], [3, 2], [2, 3], [3, 3], [6, 2], [7, 2], [6, 3], [7, 3]],
+  BitMood.alert: [[2, 4], [3, 4], [6, 4], [7, 4]],
+  BitMood.rest: [[2, 5], [3, 5], [6, 5], [7, 5]],
+};
+const Map<BitMood, List<List<int>>> bitMoodBlinkEyes = {
+  BitMood.neutral: [[3, 4], [6, 4]],
+  BitMood.cheer: [[2, 3], [3, 3], [6, 3], [7, 3]],
+  BitMood.alert: [[2, 4], [3, 4], [6, 4], [7, 4]],
+  BitMood.rest: [[2, 5], [3, 5], [6, 5], [7, 5]],
+};
+const Map<BitMood, List<List<int>>> bitMoodMouth = {
+  BitMood.neutral: [[4, 6], [5, 6]],
+  BitMood.cheer: [[4, 6], [5, 6], [4, 7], [5, 7]],
+  BitMood.alert: [[4, 6], [5, 6]],
+  BitMood.rest: [],
+};
+const Map<BitMood, double> bitMoodSpread = {
+  BitMood.neutral: 0,
+  BitMood.cheer: 4,
+  BitMood.alert: -1,
+  BitMood.rest: -1,
+};
 
 // ── grid builders (ported verbatim from bit-sprite.js) ──────────────────────
-List<List<String>> _bevelBlock(int w, int h, int cut) {
+// Public: these are the shared pixel-forging algorithms every BIT variant is
+// built with (the front-view core/plates here, the route walker's side-view
+// grids in `bit_route_walker.dart`), so bevel/outline style changes propagate.
+
+/// Bevelled cut-corner metal block, top-left lit — the base form of every BIT
+/// body part.
+List<List<String>> bevelBlock(int w, int h, int cut) {
   bool inside(int x, int y) =>
       x >= 0 &&
       x < w &&
@@ -141,7 +188,9 @@ List<List<String>> _bevelBlock(int w, int h, int cut) {
   return s;
 }
 
-List<List<String>> _outlinePass(List<List<String>> g) {
+/// 1px near-black outline on transparent cells touching the form
+/// (4-connected).
+List<List<String>> outlinePass(List<List<String>> g) {
   final h = g.length, w = g[0].length;
   final out = [for (final r in g) [...r]];
   // 4-connected (orthogonal only). An 8-connected pass also outlines diagonal
@@ -173,7 +222,8 @@ List<List<String>> _outlinePass(List<List<String>> g) {
   return out;
 }
 
-void _addDot(List<List<String>> g, int x, int y) {
+/// Stamps a 2px lamp (`C` + trailing `c`) onto a grid.
+void addLampDot(List<List<String>> g, int x, int y) {
   if (y >= 0 && y < g.length && x >= 0 && x < g[0].length && g[y][x] != '.') {
     g[y][x] = 'C';
     if (x + 1 < g[0].length && g[y][x + 1] != '.') g[y][x + 1] = 'c';
@@ -181,7 +231,7 @@ void _addDot(List<List<String>> g, int x, int y) {
 }
 
 List<List<String>> _buildCore() {
-  final g = _bevelBlock(16, 16, 3);
+  final g = bevelBlock(16, 16, 3);
   for (var y = 2; y <= 13; y++) {
     for (var x = 2; x <= 13; x++) {
       final ring = (x == 2 || x == 13 || y == 2 || y == 13);
@@ -198,35 +248,35 @@ List<List<String>> _buildCore() {
   g[5][1] = 'k';
   g[10][1] = 'k';
   g[7][2] = 'l';
-  return _outlinePass(g);
+  return outlinePass(g);
 }
 
 List<List<String>> _buildTopPlate() {
-  final g = _bevelBlock(18, 5, 3);
-  _addDot(g, 3, 3);
-  _addDot(g, 13, 3);
-  return _outlinePass(g);
+  final g = bevelBlock(18, 5, 3);
+  addLampDot(g, 3, 3);
+  addLampDot(g, 13, 3);
+  return outlinePass(g);
 }
 
 List<List<String>> _buildBottomPlate() {
-  final g = _bevelBlock(18, 5, 3);
-  _addDot(g, 3, 1);
-  _addDot(g, 13, 1);
-  return _outlinePass(g);
+  final g = bevelBlock(18, 5, 3);
+  addLampDot(g, 3, 1);
+  addLampDot(g, 13, 1);
+  return outlinePass(g);
 }
 
 List<List<String>> _buildLeftPlate() {
-  final g = _bevelBlock(5, 14, 2);
-  _addDot(g, 2, 2);
-  _addDot(g, 2, 11);
-  return _outlinePass(g);
+  final g = bevelBlock(5, 14, 2);
+  addLampDot(g, 2, 2);
+  addLampDot(g, 2, 11);
+  return outlinePass(g);
 }
 
 List<List<String>> _buildRightPlate() {
-  final g = _bevelBlock(5, 14, 2);
-  _addDot(g, 1, 2);
-  _addDot(g, 1, 11);
-  return _outlinePass(g);
+  final g = bevelBlock(5, 14, 2);
+  addLampDot(g, 1, 2);
+  addLampDot(g, 1, 11);
+  return outlinePass(g);
 }
 
 /// The 16×16 bevelled core grid (faceless — the inset screen is drawn by each
@@ -257,6 +307,9 @@ double lerp(double a, double b, double t) => a + (b - a) * t;
 
 double easeInOutQuad(double t) =>
     t < 0.5 ? 2 * t * t : 1 - math.pow(-2 * t + 2, 2).toDouble() / 2;
+
+double easeInOutCubic(double t) =>
+    t < 0.5 ? 4 * t * t * t : 1 - math.pow(-2 * t + 2, 3).toDouble() / 2;
 
 /// easeOutBack — a fast launch out of a crouch that overshoots its target and
 /// settles back (Disney overshoot-and-settle).
@@ -355,10 +408,18 @@ void drawBitFace(
               bitEyeColor.withValues(alpha: a.clamp(0.0, 1.0)));
         }
       }
-      cells(blink ? _bitEyesBlink : _bitEyesOpen, eyeT * (1 - c));
-      cells(_bitMouth, eyeT * (1 - c) * 0.85);
-      cells(blink ? _bitCheerBlink : _bitCheerEyes, eyeT * c);
-      cells(_bitCheerMouth, eyeT * c * 0.9);
+      cells(
+        blink
+            ? bitMoodBlinkEyes[BitMood.neutral]!
+            : bitMoodEyes[BitMood.neutral]!,
+        eyeT * (1 - c),
+      );
+      cells(bitMoodMouth[BitMood.neutral]!, eyeT * (1 - c) * 0.85);
+      cells(
+        blink ? bitMoodBlinkEyes[BitMood.cheer]! : bitMoodEyes[BitMood.cheer]!,
+        eyeT * c,
+      );
+      cells(bitMoodMouth[BitMood.cheer]!, eyeT * c * 0.9);
     }
   }
 
