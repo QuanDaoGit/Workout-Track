@@ -71,20 +71,28 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: summary()));
     await letSaveComplete(tester);
 
+    // The on-mount save is REAL async — under parallel suite load the fixed
+    // window can lag, so poll (bounded) for the ceremony to mount. Happy path
+    // runs zero iterations.
+    for (var i = 0;
+        i < 40 && find.byType(SessionCeremony).evaluate().isEmpty;
+        i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 25)),
+      );
+      await tester.pump(const Duration(milliseconds: 25));
+    }
     expect(find.byType(SessionCeremony), findsOneWidget);
     expect(find.byType(FilledButton), findsNothing);
 
     // Tap 1 — skip the ceremony; drain to inert so onFinished removes the
     // overlay. The ceremony clock caps dt at 60ms per FRAME (many short pumps,
-    // never one long one), and its exit rides real async too — a bounded POLL,
-    // not a fixed frame count, keeps this robust under parallel suite load.
+    // never one long one); the drain is PURE fake-time — deterministic, and no
+    // runAsync window can arm stray real timers mid-flow.
     await tester.tap(find.byType(SessionCeremony));
     for (var i = 0;
-        i < 100 && find.byType(SessionCeremony).evaluate().isNotEmpty;
+        i < 200 && find.byType(SessionCeremony).evaluate().isNotEmpty;
         i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 10)),
-      );
       await tester.pump(const Duration(milliseconds: 50));
     }
     expect(find.byType(SessionCeremony), findsNothing);
@@ -101,6 +109,11 @@ void main() {
     expect(find.byType(FilledButton), findsOneWidget);
     expect(find.byKey(const ValueKey('finish_skip_overlay')), findsNothing);
 
+    // Drain the revealed state's one-shot timers (typewriter beats etc.) in
+    // fake time BEFORE disposal — the ceremony poll can exit early, and a
+    // still-pending one-shot trips teardown's pending-timer invariant.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 2));
     await tester.pumpWidget(const SizedBox()); // dispose, cancel reveal timers
   });
 }
