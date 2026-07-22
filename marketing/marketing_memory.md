@@ -18,7 +18,7 @@
 | Market / language | **Global English** |
 | Link in bio | https://ironbitbeta.netlify.app (waitlist / early-access landing) |
 | Founder voice | **Erik** — first-person for devlog / build-in-public |
-| Profile pic | **BIT drone core**, zoomed + tilted portrait (eye-dominant for the circle crop) — `assets/instagram/identity/pfp-bit.png` 640×640. Alts on file: `pfp-logo.png`, `pfp-bit-v1-original.png`; option sheet: `pfp-options.png`. |
+| Profile pic | **BIT drone core**, zoomed + tilted portrait (eye-dominant for the circle crop) — `assets/instagram/identity/pfp-bit.png` (380×380). Clean source portraits (transparent 2048², corrected-engine BIT, no outline specks — rotate/zoom these into a fresh pfp): `identity/bit-source/bit-portrait-neutral.png` (teal, matches current pfp) + `bit-portrait-cheer.png` (amber). Alts: `pfp-logo.png`, `pfp-bit-v1-original.png`; option sheet: `pfp-options.png`. |
 | Platform / CTA | **iOS-forward, waitlist CTA** (chosen 2026-07-10). Public framing: *"coming to iOS"* + join the waitlist. Never link a store — see guardrails. |
 | Posting | **Manual / free Meta Business Suite scheduling.** No API automation (chosen 2026-07-10 — marginal at 3–4 posts/wk). All content delivered finished; human presses publish. |
 
