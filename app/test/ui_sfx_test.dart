@@ -1,3 +1,4 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -266,6 +267,21 @@ void main() {
         played.where((a) => a.startsWith('audio/set_logged_')).length,
         1,
       );
+    });
+  });
+
+  group('global audio context', () {
+    test('constructs without tripping audioplayers\' own asserts', () {
+      // The platform call is test-skipped, but audioplayers VALIDATES the
+      // context with constructor asserts — so an invalid combination (e.g.
+      // iOS ambient + an explicit mixWithOthers option) only ever threw at
+      // runtime, where the catch logged it and silently dropped the Android
+      // audioFocus:none intent ("app sounds never pause the user's music").
+      // Constructing the real context here is the regression guard.
+      final context = SfxService.buildGlobalAudioContext();
+      expect(context.android.audioFocus, AndroidAudioFocus.none);
+      expect(context.android.usageType, AndroidUsageType.assistanceSonification);
+      expect(context.iOS.category, AVAudioSessionCategory.ambient);
     });
   });
 }

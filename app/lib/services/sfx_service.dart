@@ -178,22 +178,29 @@ class SfxService {
     }
   }();
 
+  /// The global context [applyGlobalAudioContext] applies. Public + pure so a
+  /// test can CONSTRUCT it: audioplayers validates the context with asserts in
+  /// the constructor, and the platform call below is test-skipped — so an
+  /// invalid combination only ever threw at runtime (caught + logged, which
+  /// silently dropped the Android audioFocus=none intent on the one platform
+  /// we ship). Constructing it in a test is the guard.
+  static AudioContext buildGlobalAudioContext() => AudioContext(
+    android: const AudioContextAndroid(
+      contentType: AndroidContentType.sonification,
+      usageType: AndroidUsageType.assistanceSonification,
+      audioFocus: AndroidAudioFocus.none,
+    ),
+    // Ambient already mixes with other audio and respects the silent switch;
+    // audioplayers asserts that `mixWithOthers` may only be passed EXPLICITLY
+    // for playback/playAndRecord/multiRoute, so the option must stay off here
+    // (passing it is what made this whole context fail to apply).
+    iOS: AudioContextIOS(category: AVAudioSessionCategory.ambient),
+  );
+
   Future<void> applyGlobalAudioContext() async {
     if (_isFlutterTest) return;
     try {
-      await AudioPlayer.global.setAudioContext(
-        AudioContext(
-          android: const AudioContextAndroid(
-            contentType: AndroidContentType.sonification,
-            usageType: AndroidUsageType.assistanceSonification,
-            audioFocus: AndroidAudioFocus.none,
-          ),
-          iOS: AudioContextIOS(
-            category: AVAudioSessionCategory.ambient,
-            options: const {AVAudioSessionOptions.mixWithOthers},
-          ),
-        ),
-      );
+      await AudioPlayer.global.setAudioContext(buildGlobalAudioContext());
     } catch (e) {
       debugPrint('SfxService: applyGlobalAudioContext failed: $e');
     }
