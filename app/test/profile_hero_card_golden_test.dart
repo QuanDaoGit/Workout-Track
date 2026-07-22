@@ -1,7 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workout_track/models/rest_models.dart';
 import 'package:workout_track/pages/profile_page.dart';
+import 'package:workout_track/services/rest_service.dart';
 import 'package:workout_track/widgets/pixel_loader.dart';
 
 /// Rendered-artifact lock for the redesigned Profile hero identity card
@@ -17,7 +21,27 @@ import 'package:workout_track/widgets/pixel_loader.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    // Weekday-independent by construction: with fully empty prefs the page's
+    // load runs ensureAutomaticRecoveryForToday, which on a planned rest
+    // weekday (default schedule trains Mon/Wed/Fri) grants recovery XP and
+    // paints a sliver of XP-bar fill — the golden would then depend on which
+    // day of the week the suite runs (it was baselined on a training day).
+    // Anchoring the auto-recovery start far in the future keeps the grant
+    // from ever firing; every other field matches RestState.defaults().
+    SharedPreferences.setMockInitialValues({
+      RestService.stateKey: jsonEncode(
+        const RestState(
+          trainingWeekdays: RestState.defaultTrainingWeekdays,
+          recoveryClaims: {},
+          protectedMissDateKeys: {},
+          shieldCharges: 0,
+          consecutiveSuccessfulWeeks: 0,
+          autoRecoveryStartKey: '2099-01-01',
+        ).toJson(),
+      ),
+    });
+  });
 
   testWidgets('profile hero card — the character is the visual hero', (
     tester,
