@@ -232,12 +232,16 @@ class MigrationService {
         rankTargets = _decodeIntMap(pendingRaw);
       } else {
         rankTargets = await _legacyRankTargets(prefs);
-        if (rankTargets.isNotEmpty) {
-          await prefs.setString(
-            _v4RankTargetsPendingKey,
-            jsonEncode(rankTargets),
-          );
-        }
+        // Persist the frozen targets UNCONDITIONALLY — including an empty map.
+        // A kill after the recompute below but before the version key commits
+        // must make the retry reuse THESE frozen targets (via the
+        // `pendingRaw != null` branch), not re-derive them from the by-then
+        // v4-scale cache — which would read a sub-rank-C board's converted
+        // (baseline-100+) values as legacy C/A/S and fabricate ranks.
+        await prefs.setString(
+          _v4RankTargetsPendingKey,
+          jsonEncode(rankTargets),
+        );
       }
       // Old-unit floor values are meaningless on the ×10 scale; their rank
       // protection is folded into rankTargets above.
@@ -337,12 +341,10 @@ class MigrationService {
         oldFloor = jsonDecode(floorRaw) as Map<String, dynamic>;
       } catch (_) {}
     }
+    int asInt(Object? v) => v is num ? v.toInt() : 0;
     final targets = <String, int>{};
     for (final stat in const ['STR', 'AGI', 'END']) {
-      final value = max(
-        (cached[stat] as num?)?.toInt() ?? 0,
-        (oldFloor[stat] as num?)?.toInt() ?? 0,
-      );
+      final value = max(asInt(cached[stat]), asInt(oldFloor[stat]));
       final target = value >= _legacyRankS
           ? StatEngine.rankThresholdS
           : value >= _legacyRankA

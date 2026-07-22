@@ -439,6 +439,10 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     int? creditedElapsed,
     bool autoSavedAfterIdle = false,
   }) async {
+    // Match every sibling exit (_savePartialAndQuit / _pauseAndQuit /
+    // _abandonAndShowSummary / _discardIdleNoReward): if another exit already
+    // claimed the leave, don't finalize a second time (double save / summary).
+    if (_leaving) return;
     _cancelFlightAndCelebration();
     _updateElapsed();
     if (_totalLoggedSets == 0) {

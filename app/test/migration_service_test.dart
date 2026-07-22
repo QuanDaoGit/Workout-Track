@@ -219,6 +219,101 @@ void main() {
     expect(second['STR'], 777);
   });
 
+  group('v4 remaster is crash-retry (double-scaling) safe', () {
+    // A light completed session so _hasCompletedSessions() is true — the
+    // precondition for the legacy-rank-target derivation to run at all.
+    final lightHistory = WorkoutSession(
+      id: 'h1',
+      date: DateTime(2026, 6, 1, 9),
+      muscleGroup: 'Chest',
+      targetDurationMinutes: 20,
+      actualDurationSeconds: 600,
+      exercises: const [
+        ExerciseLog(
+          exerciseId: 'bench',
+          exerciseName: 'Bench',
+          sets: [SetEntry(weight: 20, reps: 3)],
+        ),
+      ],
+      estimatedCalories: 40,
+    );
+
+    // combat_stats as it exists at the crash instant: calculateAllStats has
+    // ALREADY overwritten it with v4-SCALE values (baseline 100, ranks ×10) but
+    // the version key was not yet committed. Re-deriving legacy rank targets
+    // from THIS cache maps 100+ values as legacy C/A/S — the double-scaling bug.
+    const v4ScaleCache = {
+      'STR': 995, // >= legacy S (900) → would fabricate rankThresholdS (9000)
+      'AGI': 722, // >= legacy A (600) → would fabricate rankThresholdA (6000)
+      'END': 780,
+      'VIT': 60,
+      'LCK': 0,
+    };
+
+    test('with the frozen {} marker, the retry recomputes honestly (no rank fabrication)', () async {
+      SharedPreferences.setMockInitialValues({
+        'workout_sessions': jsonEncode([lightHistory.toJson()]),
+        StatEngine.combatStatsKey: jsonEncode(v4ScaleCache),
+        // The fix writes this frozen-empty marker BEFORE the recompute, so it is
+        // present at the crash instant. stats_rules_version_v1 is intentionally
+        // absent (the kill happened before it was committed).
+        'stats_v4_rank_targets_pending_v1': '{}',
+      });
+
+      await MigrationService.runStatsRecomputeIfRulesChanged();
+      final prefs = await SharedPreferences.getInstance();
+      final stored =
+          jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
+              as Map<String, dynamic>;
+
+      // Honest recompute from the light history — NOT vaulted toward the
+      // fabricated S/A ranks the un-frozen v4 cache would have produced.
+      expect(
+        (stored['STR'] as num) < StatEngine.rankThresholdA,
+        isTrue,
+        reason: 'STR ${stored['STR']} must not inflate toward S (9000)',
+      );
+      // No fabricated volume top-up was written into the seed channel, and the
+      // seed was not marked workout-sourced.
+      expect(prefs.getString(StatEngine.calibrationSeedKey), isNull);
+      expect(
+        prefs.getString(CalibrationService.calibrationSeedSourceKey),
+        isNull,
+      );
+      // Migration completed and cleaned up its marker.
+      expect(
+        prefs.getInt('stats_rules_version_v1'),
+        StatEngine.statsRulesVersion,
+      );
+      expect(prefs.containsKey('stats_v4_rank_targets_pending_v1'), isFalse);
+    });
+
+    test('WITHOUT the marker, the same crash instant re-derives from the v4 cache and inflates — the hazard the unconditional write closes', () async {
+      // The pre-fix crash state: a sub-rank-C first run wrote NO marker, so the
+      // retry has only the already-converted v4 cache to read. This
+      // characterizes exactly the corruption the unconditional marker write
+      // prevents (the fixed first run can never leave this state).
+      SharedPreferences.setMockInitialValues({
+        'workout_sessions': jsonEncode([lightHistory.toJson()]),
+        StatEngine.combatStatsKey: jsonEncode(v4ScaleCache),
+      });
+
+      await MigrationService.runStatsRecomputeIfRulesChanged();
+      final prefs = await SharedPreferences.getInstance();
+      final stored =
+          jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
+              as Map<String, dynamic>;
+
+      // STR from the light history is fabricated up to the S-rank target read
+      // off the already-converted cache — permanent, unearned inflation.
+      expect(
+        (stored['STR'] as num) >= StatEngine.rankThresholdA,
+        isTrue,
+        reason: 'without the marker STR ${stored['STR']} inflates',
+      );
+    });
+  });
+
   test('avatar seed migration gives existing characters a gendered default', () async {
     final prefs = await SharedPreferences.getInstance();
     // A pre-avatar-system install: character exists (female quiz answer),
