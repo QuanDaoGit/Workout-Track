@@ -100,6 +100,23 @@ void main() {
     );
   });
 
+  test('clock skew: a FUTURE lastActivityAt falls back to startedAt', () {
+    // Device clock changed / restored backup: without normalization the gap
+    // goes negative and the net is blind until the future timestamp passes.
+    final s = _session(
+      startedAt: t0,
+      lastActivityAt: t0.add(const Duration(days: 30)),
+    );
+    expect(resolve(s, const Duration(hours: 1)), IdleAction.ask);
+    expect(resolve(s, const Duration(days: 2)), IdleAction.autoSave);
+  });
+
+  test('clock skew: a fully-future row resolves none (conservative)', () {
+    final future = t0.add(const Duration(days: 30));
+    final s = _session(startedAt: future, lastActivityAt: future);
+    expect(resolve(s, const Duration(hours: 5)), IdleAction.none);
+  });
+
   test('the service constants alias the model windows (no drift)', () {
     expect(WorkoutStorageService.idleTimeout, WorkoutSession.idleWindow);
     expect(

@@ -218,7 +218,7 @@ class WorkoutStorageService {
     Duration? hardIdleTimeout,
   }) {
     if (!session.isOngoing || session.isPausedForResume) return IdleAction.none;
-    final gap = now.difference(session.idleAnchor);
+    final gap = now.difference(session.effectiveIdleAnchor(now));
     if (gap < (idleTimeout ?? WorkoutStorageService.idleTimeout)) {
       return IdleAction.none;
     }

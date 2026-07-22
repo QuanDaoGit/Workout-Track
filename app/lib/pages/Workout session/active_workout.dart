@@ -597,26 +597,35 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       return;
     }
     // Nothing logged — drop it silently (matching the cold-reopen path) rather
-    // than prompting over an empty session.
+    // than prompting over an empty session. The guard is held THROUGH the
+    // discard so the shell can never race a second resolution (Codex).
     if (_totalLoggedSets == 0) {
-      IdleSessionGuard.instance.release(_sessionId);
       unawaited(
         AnalyticsService.instance.logWorkoutDiscarded(
           AnalyticsValue.discardIdleZeroSets,
         ),
       );
-      await _discardIdleNoReward();
+      try {
+        await _discardIdleNoReward();
+      } finally {
+        IdleSessionGuard.instance.release(_sessionId);
+      }
       return;
     }
     // Past the hard boundary the session is no longer a question — bank it
     // with the credited-to-last-set duration, no dialog (the ask-forever loop
-    // is the 765-hour bug; same taxonomy as the shell's resolver).
+    // is the 765-hour bug; same taxonomy as the shell's resolver). The guard
+    // is held THROUGH finalization so the shell can never race a second
+    // resolution of the same row (Codex).
     if (DateTime.now().difference(_lastActivityAt) >= widget.hardIdleTimeout) {
-      IdleSessionGuard.instance.release(_sessionId);
-      await _goToSummary(
-        creditedElapsed: _lastActivitySeconds,
-        autoSavedAfterIdle: true,
-      );
+      try {
+        await _goToSummary(
+          creditedElapsed: _lastActivitySeconds,
+          autoSavedAfterIdle: true,
+        );
+      } finally {
+        IdleSessionGuard.instance.release(_sessionId);
+      }
       return;
     }
     final idleMinutes = DateTime.now()

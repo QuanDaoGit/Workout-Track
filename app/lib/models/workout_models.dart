@@ -355,12 +355,25 @@ class WorkoutSession {
   /// keeps them inside the timeout net instead of immortal; Codex).
   DateTime get idleAnchor => lastActivityAt ?? startedAt;
 
+  /// [idleAnchor] normalized against clock skew (Codex): a FUTURE
+  /// `lastActivityAt` (device clock changed, restored backup) would make the
+  /// idle gap negative and the timeout net blind until that timestamp passes —
+  /// fall back to `startedAt`; a fully-future row yields `now` (gap 0 —
+  /// conservative: never destroy or rebase data on an unreadable clock).
+  DateTime effectiveIdleAnchor(DateTime now) {
+    final anchor = idleAnchor;
+    if (!anchor.isAfter(now)) return anchor;
+    return startedAt.isAfter(now) ? now : startedAt;
+  }
+
   int elapsedSecondsForDisplay(DateTime now) {
     if (!isOngoing || isPausedForResume) return actualDurationSeconds;
     // An idle-timed-out session stops extrapolating wall clock (a month-old
     // forgotten session must never display 765 hours) — the credited duration
     // is the honest number.
-    if (now.difference(idleAnchor) >= idleWindow) return actualDurationSeconds;
+    if (now.difference(effectiveIdleAnchor(now)) >= idleWindow) {
+      return actualDurationSeconds;
+    }
     final live = now.difference(startedAt).inSeconds;
     return live > actualDurationSeconds ? live : actualDurationSeconds;
   }
@@ -373,7 +386,7 @@ class WorkoutSession {
     // start (the live wall clock is still meaningful); past the window the
     // clock rebases to the credited duration, exactly like a paused resume —
     // so a stale resume can never seed a poisoned elapsed/last-activity.
-    if (now.difference(idleAnchor) >= idleWindow) {
+    if (now.difference(effectiveIdleAnchor(now)) >= idleWindow) {
       return now.subtract(Duration(seconds: actualDurationSeconds));
     }
     return startedAt;

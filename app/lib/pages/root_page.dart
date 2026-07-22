@@ -516,82 +516,104 @@ class _RootPageState extends State<RootPage>
   Future<void> _showIdleRevealIfNeeded() async {
     if (_showingIdleReveal || IdleSessionGuard.instance.isHandling) return;
     if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
-    final session = await WorkoutStorageService().getIdleTimedOutSession();
-    if (session == null || !mounted) return;
+    final candidate = await WorkoutStorageService().getIdleTimedOutSession();
+    if (candidate == null || !mounted) return;
 
-    final action = WorkoutStorageService.resolveIdleAction(
-      session,
-      DateTime.now(),
-    );
-    if (action == IdleAction.autoDiscard) {
-      // Timed out with nothing logged — dropped silently (nothing to recover).
-      // Claimed like every idle side effect so a concurrently-alive session
-      // page can't race a second resolution (Codex).
-      if (!IdleSessionGuard.instance.claim(session.id)) return;
-      unawaited(
-        AnalyticsService.instance.logWorkoutDiscarded(
-          AnalyticsValue.discardIdleZeroSets,
-        ),
+    // Claim FIRST, then re-read + re-resolve against the current row — the
+    // pre-claim snapshot can be stale (Codex: the read-to-claim gap is
+    // unguarded; acting on it risks discarding a now-nonempty workout).
+    if (!IdleSessionGuard.instance.claim(candidate.id)) return;
+    var released = false;
+    void releaseGuard() {
+      if (released) return;
+      released = true;
+      IdleSessionGuard.instance.release(candidate.id);
+    }
+
+    try {
+      final sessions = await WorkoutStorageService().getSessions();
+      final fresh = sessions
+          .where((s) => s.id == candidate.id && s.isOngoing)
+          .toList();
+      if (fresh.isEmpty || !mounted) return; // resolved elsewhere meanwhile
+      final session = fresh.first;
+      final action = WorkoutStorageService.resolveIdleAction(
+        session,
+        DateTime.now(),
       );
-      await WorkoutStorageService().deleteSession(session.id);
-      IdleSessionGuard.instance.release(session.id);
-      if (!mounted) return;
-      _loadOngoingSession();
-      _reloadQuestAwarePages();
-      return;
-    }
-    if (action == IdleAction.autoSave) {
-      // Past the hard boundary: no longer a question — bank the work with the
-      // credited-to-last-set duration on its ORIGINAL day (sessionDate rides
-      // through the summary). Anti-guilt: kept, not scolded.
-      if (!IdleSessionGuard.instance.claim(session.id)) return;
-      _showingIdleReveal = true;
-      await _saveIdleSession(session);
-      _showingIdleReveal = false;
-      IdleSessionGuard.instance.release(session.id);
-      if (mounted) {
-        showArcadeNotice(context, 'Workout banked — saved up to your last set.');
-      }
-      return;
-    }
-
-    if (!IdleSessionGuard.instance.claim(session.id)) return;
-    _showingIdleReveal = true;
-    final last = session.lastActivityAt;
-    final idleMinutes = last == null
-        ? WorkoutStorageService.idleTimeout.inMinutes
-        : DateTime.now()
-              .difference(last)
-              .inMinutes
-              .clamp(WorkoutStorageService.idleTimeout.inMinutes, 1 << 30);
-    final choice = await showIdleSessionDialog(
-      context,
-      hasSets: true,
-      resumeLabel: 'RESUME WORKOUT',
-      idleMinutes: idleMinutes,
-    );
-    IdleSessionGuard.instance.release(session.id);
-    _showingIdleReveal = false;
-    if (!mounted) return;
-    switch (choice) {
-      case IdleSessionChoice.save:
-        await _saveIdleSession(session);
-      case IdleSessionChoice.resume:
-        await _resumeOngoingSession(session);
-      case IdleSessionChoice.discard:
+      if (action == IdleAction.none) return;
+      if (action == IdleAction.autoDiscard) {
+        // Timed out with nothing logged — dropped silently.
         unawaited(
           AnalyticsService.instance.logWorkoutDiscarded(
-            AnalyticsValue.discardUser,
+            AnalyticsValue.discardIdleZeroSets,
           ),
         );
         await WorkoutStorageService().deleteSession(session.id);
-        await ProgramService().clearOngoingProgramSession(session.id);
+        releaseGuard();
         if (!mounted) return;
         _loadOngoingSession();
         _reloadQuestAwarePages();
-      case null:
-        // Dismissed without choosing — leave it; the next open re-offers.
-        break;
+        return;
+      }
+      if (action == IdleAction.autoSave) {
+        // Past the hard boundary: no longer a question — bank the work with
+        // the credited-to-last-set duration on its ORIGINAL day (sessionDate
+        // rides through the summary). Anti-guilt: kept, not scolded. The
+        // guard is held until the save path fully unwinds (Codex).
+        _showingIdleReveal = true;
+        await _saveIdleSession(session);
+        if (mounted) {
+          showArcadeNotice(
+            context,
+            'Workout banked — saved up to your last set.',
+          );
+        }
+        return;
+      }
+
+      _showingIdleReveal = true;
+      final last = session.lastActivityAt;
+      final idleMinutes = last == null
+          ? WorkoutStorageService.idleTimeout.inMinutes
+          : DateTime.now()
+                .difference(last)
+                .inMinutes
+                .clamp(WorkoutStorageService.idleTimeout.inMinutes, 1 << 30);
+      final choice = await showIdleSessionDialog(
+        context,
+        hasSets: true,
+        resumeLabel: 'RESUME WORKOUT',
+        idleMinutes: idleMinutes,
+      );
+      releaseGuard();
+      _showingIdleReveal = false;
+      if (!mounted) return;
+      switch (choice) {
+        case IdleSessionChoice.save:
+          await _saveIdleSession(session);
+        case IdleSessionChoice.resume:
+          await _resumeOngoingSession(session);
+        case IdleSessionChoice.discard:
+          unawaited(
+            AnalyticsService.instance.logWorkoutDiscarded(
+              AnalyticsValue.discardUser,
+            ),
+          );
+          await WorkoutStorageService().deleteSession(session.id);
+          await ProgramService().clearOngoingProgramSession(session.id);
+          if (!mounted) return;
+          _loadOngoingSession();
+          _reloadQuestAwarePages();
+        case null:
+          // Dismissed without choosing — leave it; the next open re-offers.
+          break;
+      }
+    } finally {
+      // Failure-path safety: an exception anywhere above must never leave the
+      // guard claimed or this shell suppressing future idle checks (Codex).
+      _showingIdleReveal = false;
+      releaseGuard();
     }
   }
 
