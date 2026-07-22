@@ -13,8 +13,11 @@ Exercise _exercise(String id) => Exercise(
 
 /// A resumed session carrying one logged set, so the page boots with
 /// `_loggedSets` populated (hasSets == true) without navigating to log one.
-WorkoutSession _resumeWithOneSet() => WorkoutSession(
-  id: 'r1',
+/// [id] must be unique per test: the process-wide IdleSessionGuard is keyed by
+/// session id, and an earlier test ending mid-claim would silently veto a
+/// later test's idle handling for the same id.
+WorkoutSession _resumeWithOneSet({String id = 'r1'}) => WorkoutSession(
+  id: id,
   date: DateTime.now(),
   startedAt: DateTime.now().subtract(const Duration(minutes: 3)),
   muscleGroup: 'Chest',
@@ -179,4 +182,10 @@ void main() {
     await pumpBounded(tester);
     expect(find.text('STILL TRAINING?'), findsNothing);
   });
+
+  // The hard-boundary auto-bank scenario lives in its own file
+  // (active_workout_hard_timeout_test.dart): its summary save runs through the
+  // process-wide prefsWriteLock, which an earlier same-isolate test's teardown
+  // can strand mid-critical-section (the KeyedLock trap) — one isolate keeps
+  // it deterministic.
 }

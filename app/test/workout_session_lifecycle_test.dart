@@ -125,11 +125,23 @@ void main() {
   test('paused resumable sessions freeze elapsed time and resume clock', () {
     final startedAt = DateTime(2026, 5, 14, 9);
     final now = DateTime(2026, 5, 14, 12);
-    final live = _session(
+    // A live session INSIDE the idle window keeps extrapolating wall clock.
+    final freshLive = _session(
       date: startedAt,
       startedAt: startedAt,
       isPartial: true,
       seconds: 600,
+      lastActivityAt: now.subtract(const Duration(minutes: 5)),
+    );
+    // Past the idle window the clock freezes to the credited duration — a
+    // forgotten session must never display (or resume into) wall-clock hours
+    // (the 765h bug).
+    final staleLive = _session(
+      date: startedAt,
+      startedAt: startedAt,
+      isPartial: true,
+      seconds: 600,
+      lastActivityAt: now.subtract(const Duration(hours: 2)),
     );
     final paused = _session(
       date: startedAt,
@@ -141,7 +153,13 @@ void main() {
       seconds: 600,
     );
 
-    expect(live.elapsedSecondsForDisplay(now), 10800);
+    expect(freshLive.elapsedSecondsForDisplay(now), 10800);
+    expect(freshLive.resumeStartTime(now), startedAt);
+    expect(staleLive.elapsedSecondsForDisplay(now), 600);
+    expect(
+      staleLive.resumeStartTime(now),
+      now.subtract(const Duration(minutes: 10)),
+    );
     expect(paused.elapsedSecondsForDisplay(now), 600);
     expect(
       paused.resumeStartTime(now),
@@ -398,7 +416,10 @@ void main() {
       );
     });
 
-    test('never trips a legacy (null lastActivityAt) ongoing session', () async {
+    test('a legacy (null lastActivityAt) session anchors on startedAt', () async {
+      // Policy reversed with the hard-timeout boundary (Codex): legacy rows
+      // are no longer immortal — their idle age anchors on startedAt, so the
+      // 765h class of forgotten session is inside the net regardless of era.
       final storage = WorkoutStorageService();
       final start = DateTime(2026, 5, 14, 9);
       await storage.replaceOngoingSession(
@@ -406,9 +427,15 @@ void main() {
       );
       expect(
         await storage.getIdleTimedOutSession(
-          now: start.add(const Duration(hours: 5)),
+          now: start.add(const Duration(minutes: 29)),
         ),
         isNull,
+      );
+      expect(
+        (await storage.getIdleTimedOutSession(
+          now: start.add(const Duration(hours: 5)),
+        ))?.id,
+        'legacy',
       );
     });
 

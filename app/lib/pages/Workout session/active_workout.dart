@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../../theme/app_fonts.dart';
@@ -51,6 +52,7 @@ class ActiveWorkoutPage extends StatefulWidget {
     this.prescriptions = const {},
     this.programSwaps,
     this.idleTimeout = WorkoutStorageService.idleTimeout,
+    this.hardIdleTimeout = WorkoutStorageService.hardIdleTimeout,
   });
 
   final String muscleGroup;
@@ -78,6 +80,12 @@ class ActiveWorkoutPage extends StatefulWidget {
   /// Inactivity window before the idle auto-save reveal. Overridable in tests;
   /// defaults to the production 30-minute constant.
   final Duration idleTimeout;
+
+  /// The hard boundary: past this idle age the session auto-finalizes (banked
+  /// with the credited-to-last-set duration) instead of asking — the
+  /// ask-forever loop is what let a forgotten session reach 765 hours.
+  /// Overridable in tests.
+  final Duration hardIdleTimeout;
 
   @override
   State<ActiveWorkoutPage> createState() => _ActiveWorkoutPageState();
@@ -311,6 +319,17 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     (sum, sets) => sum + sets.where((s) => !s.isWarmup).length,
   );
 
+  /// Defense-in-depth credit clamp: elapsed credited to storage/economy can
+  /// never exceed the last logged set plus the hard idle boundary. Invisible
+  /// in every legitimate flow (nobody finishes 12h after their last set); it
+  /// exists so a stale wall clock can never bank 765 hours of time-XP even if
+  /// a future path leaks past the funnel (Codex: hard bound, not the 30-min
+  /// window, so an honest long cooldown is never truncated).
+  int get _clampedElapsedCredit => math.min(
+    _elapsedSeconds,
+    _lastActivitySeconds + widget.hardIdleTimeout.inSeconds,
+  );
+
   String get _elapsedMinutes =>
       (_elapsedSeconds ~/ 60).toString().padLeft(2, '0');
 
@@ -434,8 +453,9 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
     await _drainCheckpoint();
     if (!mounted) return;
     // Idle auto-save credits time only up to the last logged set; a normal
-    // finish credits the live elapsed.
-    final elapsed = creditedElapsed ?? _elapsedSeconds;
+    // finish credits the live elapsed, hard-clamped so a stale wall clock can
+    // never inflate time-XP/calories.
+    final elapsed = creditedElapsed ?? _clampedElapsedCredit;
     final summary = arcadeRoute(
       (_) => WorkoutSummaryPage(
         muscleGroup: widget.muscleGroup,
@@ -588,6 +608,17 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
       await _discardIdleNoReward();
       return;
     }
+    // Past the hard boundary the session is no longer a question — bank it
+    // with the credited-to-last-set duration, no dialog (the ask-forever loop
+    // is the 765-hour bug; same taxonomy as the shell's resolver).
+    if (DateTime.now().difference(_lastActivityAt) >= widget.hardIdleTimeout) {
+      IdleSessionGuard.instance.release(_sessionId);
+      await _goToSummary(
+        creditedElapsed: _lastActivitySeconds,
+        autoSavedAfterIdle: true,
+      );
+      return;
+    }
     final idleMinutes = DateTime.now()
         .difference(_lastActivityAt)
         .inMinutes
@@ -655,11 +686,11 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         muscleGroup: widget.muscleGroup,
         targetMuscleGroups: _targetMuscleGroups,
         targetDurationMinutes: widget.durationMinutes,
-        actualDurationSeconds: _elapsedSeconds,
+        actualDurationSeconds: _clampedElapsedCredit,
         exercises: logs,
         estimatedCalories: CalorieService.estimateCaloriesForGroups(
           _targetMuscleGroups,
-          _elapsedSeconds,
+          _clampedElapsedCredit,
         ),
         isPartial: true,
         selectedExerciseIds: widget.exercises.map((e) => e.id).toList(),
@@ -704,11 +735,11 @@ class _ActiveWorkoutPageState extends State<ActiveWorkoutPage>
         muscleGroup: widget.muscleGroup,
         targetMuscleGroups: _targetMuscleGroups,
         targetDurationMinutes: widget.durationMinutes,
-        actualDurationSeconds: _elapsedSeconds,
+        actualDurationSeconds: _clampedElapsedCredit,
         exercises: logs,
         estimatedCalories: CalorieService.estimateCaloriesForGroups(
           _targetMuscleGroups,
-          _elapsedSeconds,
+          _clampedElapsedCredit,
         ),
         isPartial: true,
         isPausedForResume: true,

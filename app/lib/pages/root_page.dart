@@ -22,6 +22,7 @@ import '../services/workout_draft_controller.dart';
 import '../services/workout_storage_service.dart';
 import '../theme/tokens.dart';
 import '../widgets/arcade_filled.dart';
+import '../widgets/arcade_notice.dart';
 import '../widgets/arcade_route.dart';
 import '../widgets/arcade_tap.dart';
 import '../widgets/feature_gate_notice.dart';
@@ -518,17 +519,39 @@ class _RootPageState extends State<RootPage>
     final session = await WorkoutStorageService().getIdleTimedOutSession();
     if (session == null || !mounted) return;
 
-    final hasSets = session.exercises.any((log) => log.sets.isNotEmpty);
-    if (!hasSets) {
+    final action = WorkoutStorageService.resolveIdleAction(
+      session,
+      DateTime.now(),
+    );
+    if (action == IdleAction.autoDiscard) {
+      // Timed out with nothing logged — dropped silently (nothing to recover).
+      // Claimed like every idle side effect so a concurrently-alive session
+      // page can't race a second resolution (Codex).
+      if (!IdleSessionGuard.instance.claim(session.id)) return;
       unawaited(
         AnalyticsService.instance.logWorkoutDiscarded(
           AnalyticsValue.discardIdleZeroSets,
         ),
       );
       await WorkoutStorageService().deleteSession(session.id);
+      IdleSessionGuard.instance.release(session.id);
       if (!mounted) return;
       _loadOngoingSession();
       _reloadQuestAwarePages();
+      return;
+    }
+    if (action == IdleAction.autoSave) {
+      // Past the hard boundary: no longer a question — bank the work with the
+      // credited-to-last-set duration on its ORIGINAL day (sessionDate rides
+      // through the summary). Anti-guilt: kept, not scolded.
+      if (!IdleSessionGuard.instance.claim(session.id)) return;
+      _showingIdleReveal = true;
+      await _saveIdleSession(session);
+      _showingIdleReveal = false;
+      IdleSessionGuard.instance.release(session.id);
+      if (mounted) {
+        showArcadeNotice(context, 'Workout banked — saved up to your last set.');
+      }
       return;
     }
 

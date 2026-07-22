@@ -17,6 +17,10 @@ import 'warmup_reward_service.dart';
 
 enum MissionFinishState { none, completed, endedEarly }
 
+/// What the idle funnel does with a timed-out live session — resolved ONLY by
+/// [WorkoutStorageService.resolveIdleAction].
+enum IdleAction { none, ask, autoSave, autoDiscard }
+
 class WorkoutStorageService {
   static const String _sessionsKey = 'workout_sessions';
   static const String _lastCompletedDateKey = 'last_completed_date';
@@ -25,7 +29,13 @@ class WorkoutStorageService {
   /// A live session that goes this long without a new logged set is treated as
   /// idle and offered for auto-save on the next app open/resume (or by the
   /// active page's foreground timer). See [getIdleTimedOutSession].
-  static const Duration idleTimeout = Duration(minutes: 30);
+  static const Duration idleTimeout = WorkoutSession.idleWindow;
+
+  /// Past this idle age a live session auto-finalizes (banked with the
+  /// credited-to-last-set duration, or dropped if it logged nothing) instead
+  /// of being asked about — the ask-forever loop is what let a forgotten
+  /// session reach 765 hours.
+  static const Duration hardIdleTimeout = WorkoutSession.hardIdleWindow;
   static final StreamController<void> _changes =
       StreamController<void>.broadcast();
 
@@ -184,24 +194,59 @@ class WorkoutStorageService {
     });
   }
 
-  /// The most-idle live session eligible for idle auto-save: ongoing,
-  /// **not** an explicit Save&Exit pause (those use the midnight `autoDiscardAt`
-  /// path), with a trusted `lastActivityAt` at least [idleTimeout] in the past.
-  /// Legacy rows (null `lastActivityAt`) are never auto-timed-out.
+  /// What the idle funnel should do with [session] at [now] — the ONE resolver
+  /// both reveal sites (the shell's cold-case check and the active page's own
+  /// timer) consume, so the ask/auto taxonomy can never diverge (two paths
+  /// handling one event must share one resolver).
+  ///
+  /// - [IdleAction.none] — not ongoing, an explicit Save&Exit pause (those use
+  ///   the midnight `autoDiscardAt` path), or inside the idle window.
+  /// - [IdleAction.autoDiscard] — idle-timed-out with zero working sets:
+  ///   nothing to recover, dropped silently (existing behavior).
+  /// - [IdleAction.ask] — idle-timed-out with work, still inside the hard
+  ///   boundary: offer SAVE / RESUME / DISCARD.
+  /// - [IdleAction.autoSave] — past [hardIdleTimeout]: no longer a question;
+  ///   bank it with the credited-to-last-set duration (anti-guilt: the work is
+  ///   kept, nothing is asked about a month-old workout).
+  ///
+  /// Legacy rows (null `lastActivityAt`) anchor their idle age on `startedAt`
+  /// via [WorkoutSession.idleAnchor] — inside the net, never immortal (Codex).
+  static IdleAction resolveIdleAction(
+    WorkoutSession session,
+    DateTime now, {
+    Duration? idleTimeout,
+    Duration? hardIdleTimeout,
+  }) {
+    if (!session.isOngoing || session.isPausedForResume) return IdleAction.none;
+    final gap = now.difference(session.idleAnchor);
+    if (gap < (idleTimeout ?? WorkoutStorageService.idleTimeout)) {
+      return IdleAction.none;
+    }
+    final hasSets = session.exercises.any((log) => log.sets.isNotEmpty);
+    if (!hasSets) return IdleAction.autoDiscard;
+    if (gap < (hardIdleTimeout ?? WorkoutStorageService.hardIdleTimeout)) {
+      return IdleAction.ask;
+    }
+    return IdleAction.autoSave;
+  }
+
+  /// The most-idle live session the idle funnel must handle
+  /// ([resolveIdleAction] != none). Filtering rides the same resolver — one
+  /// source of truth for eligibility.
   Future<WorkoutSession?> getIdleTimedOutSession({
     DateTime? now,
     Duration? idleTimeout,
   }) async {
-    final threshold = idleTimeout ?? WorkoutStorageService.idleTimeout;
     final currentTime = now ?? DateTime.now();
     final sessions = await getSessions();
     final timedOut = sessions.where((session) {
-      final last = session.lastActivityAt;
-      return session.isOngoing &&
-          !session.isPausedForResume &&
-          last != null &&
-          !currentTime.isBefore(last.add(threshold));
-    }).toList()..sort((a, b) => a.lastActivityAt!.compareTo(b.lastActivityAt!));
+      return resolveIdleAction(
+            session,
+            currentTime,
+            idleTimeout: idleTimeout,
+          ) !=
+          IdleAction.none;
+    }).toList()..sort((a, b) => a.idleAnchor.compareTo(b.idleAnchor));
     return timedOut.isEmpty ? null : timedOut.first;
   }
 

@@ -337,15 +337,46 @@ class WorkoutSession {
   bool targetsMuscle(String muscleGroup) =>
       hasTargetMuscle(targetMuscleGroups, muscleGroup);
 
+  /// The idle window after which a live session stops being trusted as "still
+  /// in progress": the wall clock freezes/rebases to the credited duration and
+  /// the idle auto-save funnel arms. Single source of truth —
+  /// `WorkoutStorageService.idleTimeout` aliases this.
+  static const Duration idleWindow = Duration(minutes: 30);
+
+  /// The hard boundary: past this much idle the session is no longer a
+  /// question — it auto-finalizes with the honest credited duration (or is
+  /// dropped if it logged nothing). An order of magnitude beyond any real
+  /// workout, so it can never clip a genuine one.
+  /// `WorkoutStorageService.hardIdleTimeout` aliases this.
+  static const Duration hardIdleWindow = Duration(hours: 12);
+
+  /// The idle anchor: the last logged set when known, else the session start
+  /// (legacy rows without `lastActivityAt` — anchoring them on `startedAt`
+  /// keeps them inside the timeout net instead of immortal; Codex).
+  DateTime get idleAnchor => lastActivityAt ?? startedAt;
+
   int elapsedSecondsForDisplay(DateTime now) {
     if (!isOngoing || isPausedForResume) return actualDurationSeconds;
+    // An idle-timed-out session stops extrapolating wall clock (a month-old
+    // forgotten session must never display 765 hours) — the credited duration
+    // is the honest number.
+    if (now.difference(idleAnchor) >= idleWindow) return actualDurationSeconds;
     final live = now.difference(startedAt).inSeconds;
     return live > actualDurationSeconds ? live : actualDurationSeconds;
   }
 
   DateTime resumeStartTime(DateTime now) {
-    if (!isPausedForResume) return startedAt;
-    return now.subtract(Duration(seconds: actualDurationSeconds));
+    if (isPausedForResume) {
+      return now.subtract(Duration(seconds: actualDurationSeconds));
+    }
+    // A killed-and-recovered session inside the idle window keeps its true
+    // start (the live wall clock is still meaningful); past the window the
+    // clock rebases to the credited duration, exactly like a paused resume —
+    // so a stale resume can never seed a poisoned elapsed/last-activity.
+    if (now.difference(idleAnchor) >= idleWindow) {
+      return now.subtract(Duration(seconds: actualDurationSeconds));
+    }
+    return startedAt;
   }
 
   Map<String, dynamic> toJson() => {
