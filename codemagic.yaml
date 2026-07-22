@@ -31,18 +31,25 @@ workflows:
     integrations:
       app_store_connect: ironbit_asc      # must match the ASC API key name in Codemagic
     environment:
-      ios_signing:
-        distribution_type: app_store       # TestFlight / App Store distribution profile
-        bundle_identifier: com.erik.ironbit
       vars:
         APP_STORE_APPLE_ID: 6793704146     # numeric Apple ID for the com.erik.ironbit App Store Connect record
+        BUNDLE_ID: com.erik.ironbit
       flutter: stable
       xcode: latest
       cocoapods: default
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Set up code signing (fetch/create profiles via the ASC API key)
+      - name: Initialize a clean keychain
+        script: keychain initialize
+      - name: Fetch or create the App Store signing certificate + profile (ASC key)
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+      - name: Add the distribution certificate to the keychain
+        script: keychain add-certificates
+      - name: Apply the provisioning profile to the Xcode project
         script: xcode-project use-profiles
       - name: Static analysis gate
         script: flutter analyze
