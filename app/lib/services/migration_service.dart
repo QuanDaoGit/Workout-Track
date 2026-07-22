@@ -210,6 +210,15 @@ class MigrationService {
   /// an earlier recompute would cache v4-scale values that this conversion
   /// would then misread as a legacy board (double-scaling). BootService orders
   /// it accordingly.
+  /// Crash-safety marker: the v4 rank targets, frozen from the LEGACY cached
+  /// board before any recompute can overwrite it. A kill mid-migration leaves
+  /// the version key unset, so the next boot retries — and a retry that
+  /// re-derived targets from the by-then v4-scale cache would read e.g. a
+  /// 3000 (new B) as a legacy S and inflate the board (double-scaling).
+  /// Re-applying top-ups against the frozen targets instead converges: a
+  /// landed top-up makes current >= target, so nothing further is added.
+  static const _v4RankTargetsPendingKey = 'stats_v4_rank_targets_pending_v1';
+
   static Future<void> runStatsRecomputeIfRulesChanged() async {
     final prefs = await SharedPreferences.getInstance();
     final storedVersion = prefs.getInt(_statsRulesVersionKey);
@@ -217,10 +226,30 @@ class MigrationService {
 
     Map<String, int> rankTargets = const {};
     if (storedVersion == null || storedVersion < 4) {
-      rankTargets = await _legacyRankTargets(prefs);
+      final pendingRaw = prefs.getString(_v4RankTargetsPendingKey);
+      if (pendingRaw != null) {
+        // A prior run was killed mid-conversion — reuse its frozen targets.
+        rankTargets = _decodeIntMap(pendingRaw);
+      } else {
+        rankTargets = await _legacyRankTargets(prefs);
+        if (rankTargets.isNotEmpty) {
+          await prefs.setString(
+            _v4RankTargetsPendingKey,
+            jsonEncode(rankTargets),
+          );
+        }
+      }
       // Old-unit floor values are meaningless on the ×10 scale; their rank
       // protection is folded into rankTargets above.
       await prefs.remove(StatEngine.grandfatherFloorKey);
+      // A pre-v4 seed that is NOT workout-derived is the retired self-reported
+      // quiz seed. Drop it rather than blessing it below (the top-up marks the
+      // seed workout-sourced, which would exempt it from the self-reported
+      // cleanup forever); the rank top-up restores any legitimately-shown rank.
+      if (prefs.getString(CalibrationService.calibrationSeedSourceKey) !=
+          CalibrationService.workoutSeedSource) {
+        await prefs.remove(StatEngine.calibrationSeedKey);
+      }
     }
 
     final engine = StatEngine();
@@ -269,6 +298,19 @@ class MigrationService {
     }
 
     await prefs.setInt(_statsRulesVersionKey, StatEngine.statsRulesVersion);
+    await prefs.remove(_v4RankTargetsPendingKey);
+  }
+
+  static Map<String, int> _decodeIntMap(String raw) {
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      return {
+        for (final entry in decoded.entries)
+          if (entry.value is num) entry.key: (entry.value as num).toInt(),
+      };
+    } catch (_) {
+      return const {};
+    }
   }
 
   /// Per growth stat, the v4 rank threshold matching the LEGACY rank of the

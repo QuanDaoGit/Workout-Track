@@ -201,6 +201,88 @@ void main() {
     expect(after['STR'], greaterThan(before));
   });
 
+  test('v4 migration survives a mid-conversion kill without double-scaling '
+      '(frozen rank targets)', () async {
+    final now = DateTime(2026, 6, 1, 10);
+    final prefs = await SharedPreferences.getInstance();
+    await _seedSessions([
+      for (var i = 0; i < 10; i++)
+        _session(now.subtract(Duration(days: i + 1)), [
+          _log('bench', weight: 20, reps: 25, sets: 3),
+        ], id: 'light-$i'),
+    ]);
+    await prefs.setString(
+      StatEngine.combatStatsKey,
+      jsonEncode({'STR': 480, 'VIT': 80, 'AGI': 350, 'END': 200, 'LCK': 2}),
+    );
+
+    await MigrationService.runStatsRecomputeIfRulesChanged();
+    final converted =
+        jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
+            as Map<String, dynamic>;
+
+    // Simulate a kill AFTER the seed top-up landed but BEFORE the version key
+    // was written. Every real crash window leaves the frozen-targets marker in
+    // place (it is written before the first recompute), so reconstruct that
+    // state: version unset + marker present + v4-scale cache. The retry must
+    // NOT re-derive targets from the (now v4-scale) cached board — 3000 would
+    // read as an old-S and inflate the user to 9000.
+    await prefs.remove('stats_rules_version_v1');
+    await prefs.setString(
+      'stats_v4_rank_targets_pending_v1',
+      jsonEncode({'STR': 3000, 'AGI': 3000, 'END': 1000}),
+    );
+    await MigrationService.runStatsRecomputeIfRulesChanged();
+
+    final retried =
+        jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
+            as Map<String, dynamic>;
+    expect(retried['STR'], converted['STR']);
+    expect(retried['AGI'], converted['AGI']);
+    expect(retried['END'], converted['END']);
+    expect(retried['STR'], lessThan(StatEngine.rankThresholdA));
+    // The completed migration cleans up its crash marker.
+    expect(prefs.getString('stats_v4_rank_targets_pending_v1'), isNull);
+  });
+
+  test('v4 migration drops a legacy self-reported seed instead of blessing '
+      'it as workout-sourced', () async {
+    final now = DateTime(2026, 6, 1, 10);
+    final prefs = await SharedPreferences.getInstance();
+    await _seedSessions([
+      _session(now.subtract(const Duration(days: 1)), [
+        _log('bench', weight: 40, reps: 8, sets: 3),
+      ]),
+    ]);
+    // An ancient quiz-era install: a huge self-reported seed (no workout
+    // source marker) showing an inflated board the user never earned past B.
+    await prefs.setString(
+      StatEngine.calibrationSeedKey,
+      jsonEncode({'STR': 500000.0}),
+    );
+    await prefs.setString(
+      StatEngine.combatStatsKey,
+      jsonEncode({'STR': 480, 'VIT': 80, 'AGI': 20, 'END': 30, 'LCK': 0}),
+    );
+
+    await MigrationService.runStatsRecomputeIfRulesChanged();
+
+    final stored =
+        jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
+            as Map<String, dynamic>;
+    // The quiz seed's excess is gone: the board holds exactly the legacy RANK
+    // (B), not the 500k-volume stat the self-reported seed would have kept.
+    expect(stored['STR'], greaterThanOrEqualTo(StatEngine.rankThresholdB));
+    expect(stored['STR'], lessThan(StatEngine.rankThresholdA));
+    // And the later self-reported cleanup can't eat the rank top-up: the new
+    // seed is marked workout-sourced, so the one-shot skips it.
+    await MigrationService.runClearSelfReportedStatSeedOnce();
+    final after =
+        jsonDecode(prefs.getString(StatEngine.combatStatsKey)!)
+            as Map<String, dynamic>;
+    expect(after['STR'], stored['STR']);
+  });
+
   test('v4 migration never promotes a legacy D-rank board', () async {
     final now = DateTime(2026, 6, 1, 10);
     final prefs = await SharedPreferences.getInstance();
