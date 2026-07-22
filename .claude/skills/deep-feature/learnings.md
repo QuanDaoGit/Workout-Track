@@ -105,7 +105,12 @@ CANNOT fix this) blocks forever at Dart's error-zone boundary → 30s timeouts. 
 platform layer entirely under `flutter test`** — detect via `Platform.environment['FLUTTER_TEST']`
 (the `bool.fromEnvironment` form is NOT defined by the tool) — and make a pre-platform
 recorder seam (`onPlayForTest`) the observable contract tests assert against. Prove a new subsystem's *logic* with a tiny injected interface (a fake
-recording calls) so the coordinator/decision code is tested with zero plugin involvement. *Seen: Tier-A
+recording calls) so the coordinator/decision code is tested with zero plugin involvement. **The fail-open
+catch + test-env skip combine into a blind spot for plugin CONFIG objects:** a library that validates its
+config with constructor asserts throws *inside* the catch at runtime (feature silently off, one debug log)
+while the FLUTTER_TEST gate means no test ever constructs it — extract the config into a **pure public
+builder and construct it in a test** (the constructor asserts ARE the testable validation surface); prove
+red-green with the invalid combo. *Seen: Tier-A
 rest-timer local notifications — `NotificationService` guarded, `RestNotificationCoordinator` tested via
 a `RestAlertScheduler` fake (2026-06); the SFX micro channel's `AudioPool.create` leaked audioplayers'
 memoized global-init error into every suite tapping a `PixelButton` until the FLUTTER_TEST gate +
