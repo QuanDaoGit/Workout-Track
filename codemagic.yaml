@@ -64,10 +64,12 @@ workflows:
           flutter build ipa --release \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
-      # Artifact globs are matched from the clone root, so include the app/ prefix.
-      - app/build/ios/ipa/*.ipa
+      # Recursive glob so the IPA is collected wherever it lands (with
+      # working_directory: app it is at app/build/ios/ipa/) — the earlier
+      # app/-prefixed path matched nothing, so publishing found no artifact to
+      # upload ("No artifacts were found") and nothing reached TestFlight.
+      - '**/*.ipa'
       - /tmp/xcodebuild_logs/*.log
-      - app/flutter_drive.log
     publishing:
       app_store_connect:
         auth: integration
