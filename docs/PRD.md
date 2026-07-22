@@ -182,6 +182,15 @@ Local only via `shared_preferences` with JSON serialization. No Firebase, no log
       warmth is the signal). Two Codex adversarial rounds shaped it (corner-seal target, skip
       profile, gen-token settle contract, threshold-crossing stamp). Spec:
       `docs/superpowers/specs/2026-07-21-rest-end-bit-flight-design.md`.
+- [x] Hard session-timeout boundary (2026-07-22) — a forgotten live workout can never run forever
+      (the user-hit 765-hour session). One `IdleAction` resolver shared by both idle-reveal sites:
+      30 min idle still ASKS (save/resume/discard), but past **12 h** (`hardIdleTimeout`) the
+      session **auto-banks** with the credited-to-last-set duration on its ORIGINAL day — kept,
+      never scolded, one calm notice. The ongoing-session clock rebases to credited time past the
+      idle window (display, resume, and XP all read it — no wall-clock extrapolation), every
+      finalize path hard-clamps credited elapsed, and legacy rows anchor on `startedAt` instead of
+      being immortal. Existing stuck sessions heal on next open. Codex-reviewed (4 findings:
+      legacy anchor, guard-claimed auto paths, clamp at the hard bound, original-day attribution).
 - [x] Programs (`ProgramService`) — structured workout programs (PPL, Full Body, Upper/Lower).
 - [x] Onboarding — cinematic sequence: cold open → problem → solution → calibration quiz →
       avatar → name → class reveal → rank assessed → charge ritual → start gate.
