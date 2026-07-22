@@ -78,11 +78,17 @@ Helper on `HomePageState`:
 and `animateTo(target, duration, Curves.easeOutCubic)`. Skipped when reduce-motion, no clients, or
 no room box — the exact pre-feature behavior (WCAG 2.3.3 fallback contract).
 
-- **Board** (`_onBoardTap`, after the camera engages in the same tick): board center
-  (`HomeRoomScene.boardFocal` geometry) → **0.5** of the viewport, duration `kDollyForwardMs`,
-  concurrent with the dolly; the route's travel-beat hold-back already covers the window. Return
-  (`didPopNext` settle): scroll is **left where it is** — the board push is navigation ("you went
-  to the board, you come back at the board"); the settle pose is room-relative so it stays valid.
+- **Board** (`_onBoardTap`) — **SERIAL, user-directed 2026-07-23** (the concurrent scroll+dolly
+  shipped first and read as one rushed move on device): when the board needs centering, the
+  scroll **tracks first** (starting on tap, so the response is still instant — the fluency
+  principle is preserved by the track itself; `kBoardTrackMs` 340ms, ease-in-out so it reads
+  deliberate), and only on its completion do the route push + 1.12 dolly fire as the original
+  same-tick beat (the travel-beat hold-back runs against the dolly unchanged). No scroll needed
+  (the common at-the-top case) → the original same-tick push+dolly, zero added latency. Re-taps
+  during the track are ignored (`_boardFocusInFlight`); authorization still resolves before any
+  camera (locked → notice, no motion). Return (`didPopNext` settle): scroll is **left where it
+  is** — the board push is navigation ("you went to the board, you come back at the board"); the
+  settle pose is room-relative so it stays valid.
 - **Pad** (`_onPadDispatch`, on engage): record the pre-engage offset; pad center
   (`anchorsFor().padCenterY`) → **0.44** of the viewport (optical center of the strip that stays
   visible above the dispatch sheet; a true 0.5 puts the pad at the sheet's top edge on small

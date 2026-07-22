@@ -11,6 +11,11 @@ enum ArcadeRouteMotion { panel, flow, reveal, fade, powerOn, dolly }
 const int kDollyForwardMs = 280;
 const int kDollyReverseMs = 190;
 
+/// The board camera's serial pre-scroll ("track to the board, THEN dolly in"
+/// — user-directed 2026-07-23): a touch longer than the dolly so the track
+/// reads as its own deliberate beat, not a flick.
+const int kBoardTrackMs = 340;
+
 Route<T> arcadeRoute<T>(
   WidgetBuilder builder, {
   ArcadeRouteMotion motion = ArcadeRouteMotion.panel,

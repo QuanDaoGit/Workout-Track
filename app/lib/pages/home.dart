@@ -266,6 +266,10 @@ class HomePageState extends State<HomePage>
   double _padPreScrollOffset = 0;
   bool _dispatchedFromSheet = false;
 
+  // True while the board's serial pre-scroll tracks (re-taps ignored; the
+  // push + dolly fire from its completion).
+  bool _boardFocusInFlight = false;
+
   // ── Room camera (board dolly / pad focus-push) ────────────────────────────
   // Doctrine: stateless while covered — the camera engages only inside the
   // transition windows; any non-standard path (tab switch, rotation,
@@ -298,29 +302,40 @@ class HomePageState extends State<HomePage>
     return (box?.hasSize ?? false) ? box!.size : null;
   }
 
-  /// The scroll half of a camera move: glide the scroll so the room fixture at
-  /// [fixtureRoomY] (room-local px) rests at [fraction] of the viewport height,
-  /// clamped to the extents ("as centered as the scroll allows" — a target
-  /// already in place produces no motion). Always CONCURRENT with the zoom,
-  /// never serial before it (research: motion starts on tap), and never called
-  /// under reduced motion — the camera doesn't engage at all there.
-  void _focusScroll({
+  /// Where the scroll would have to sit for the room fixture at [fixtureRoomY]
+  /// (room-local px) to rest at [fraction] of the viewport height, clamped to
+  /// the extents ("as centered as the scroll allows"). Null when the scroll
+  /// can't move or is already in place (< 2px) — a no-op target.
+  double? _focusScrollTarget({
     required double fixtureRoomY,
     required double fraction,
-    required Duration duration,
   }) {
     final room = _roomKey.currentContext?.findRenderObject() as RenderBox?;
     final viewport = context.findRenderObject() as RenderBox?;
-    if (room == null || !room.hasSize) return;
-    if (viewport == null || !viewport.hasSize) return;
-    if (!_scrollController.hasClients) return;
+    if (room == null || !room.hasSize) return null;
+    if (viewport == null || !viewport.hasSize) return null;
+    if (!_scrollController.hasClients) return null;
     final fixtureY = room.localToGlobal(Offset(0, fixtureRoomY)).dy;
     final desiredY = viewport.localToGlobal(Offset.zero).dy +
         viewport.size.height * fraction;
     final pos = _scrollController.position;
     final target =
         (pos.pixels + (fixtureY - desiredY)).clamp(0.0, pos.maxScrollExtent);
-    if ((target - pos.pixels).abs() < 2) return;
+    if ((target - pos.pixels).abs() < 2) return null;
+    return target;
+  }
+
+  /// The scroll half of the PAD's camera move — CONCURRENT with the focus-push
+  /// (one track+push gesture; the board's is serial, see [_onBoardTap]). Never
+  /// called under reduced motion — the camera doesn't engage at all there.
+  void _focusScroll({
+    required double fixtureRoomY,
+    required double fraction,
+    required Duration duration,
+  }) {
+    final target =
+        _focusScrollTarget(fixtureRoomY: fixtureRoomY, fraction: fraction);
+    if (target == null) return;
     _scrollController.animateTo(
       target,
       duration: duration,
@@ -502,36 +517,72 @@ class HomePageState extends State<HomePage>
     });
   }
 
-  /// The wall board's tap. Authorization resolves FIRST — the callback returns
-  /// whether the push actually started (Codex F2) — and only then does the
-  /// camera engage, in the same tick (the push renders next frame, so motion
-  /// still starts on tap; the route's travel-beat hold-back guarantees the
-  /// zoom reads).
+  /// The wall board's tap. Two beats, SERIAL (user-directed 2026-07-23 — the
+  /// concurrent scroll+dolly read as one rushed move): when the board needs
+  /// centering, the scroll TRACKS to it first (starting on tap, so the
+  /// response is still instant), and only then does the push + dolly zoom in
+  /// — the route's travel-beat hold-back runs against the dolly as before.
+  /// With no scroll needed (the common at-the-top case) it is the original
+  /// same-tick push + dolly. Authorization still resolves before any camera
+  /// (Codex F2: never zoom into a locked-notice path) — the locked/no-camera
+  /// gates push immediately with zero motion.
   void _onBoardTap() {
     final fromBoard = widget.onViewQuestsFromBoard;
     if (!_questsUnlocked || fromBoard == null) {
       widget.onViewQuests?.call();
       return;
     }
+    if (_boardFocusInFlight) return;
+    final size = _roomBoxSize;
+    if (_reduceMotion || _engagement != _CameraEngagement.none ||
+        size == null) {
+      fromBoard();
+      return;
+    }
+    final target = _focusScrollTarget(
+      fixtureRoomY: (HomeRoomScene.boardFocal(size).y + 1) / 2 * size.height,
+      fraction: 0.5,
+    );
+    if (target == null) {
+      _boardPushAndDolly(fromBoard, size);
+      return;
+    }
+    // Track first — a touch longer than the dolly and ease-in-out, so it
+    // reads as a deliberate camera move, not a flick. Left in place on
+    // return ("you went to the board, you come back at the board").
+    _boardFocusInFlight = true;
+    _scrollController
+        .animateTo(
+          target,
+          duration: const Duration(milliseconds: kBoardTrackMs),
+          curve: Curves.easeInOutCubic,
+        )
+        .whenComplete(() {
+          _boardFocusInFlight = false;
+          if (!mounted) return;
+          final size2 = _roomBoxSize;
+          if (_reduceMotion || _engagement != _CameraEngagement.none ||
+              size2 == null) {
+            fromBoard();
+            return;
+          }
+          _boardPushAndDolly(fromBoard, size2);
+        });
+  }
+
+  /// The original same-tick push + dolly beat: authorization resolves FIRST —
+  /// the callback returns whether the push actually started (Codex F2) — and
+  /// only then does the camera engage, in the same tick (the push renders
+  /// next frame; the route's travel-beat hold-back guarantees the zoom reads).
+  void _boardPushAndDolly(bool Function() fromBoard, Size size) {
     final pushed = fromBoard();
     if (!pushed) return;
-    if (_reduceMotion || _engagement != _CameraEngagement.none) return;
-    final size = _roomBoxSize;
-    if (size == null) return;
     _engagement = _CameraEngagement.boardPush;
     _pendingBoardReturn = true;
     _cameraTarget = 1.12;
     _cameraFocal = HomeRoomScene.boardFocal(size);
     _cameraCtrl.duration = const Duration(milliseconds: kDollyForwardMs);
     _cameraCtrl.forward(from: 0);
-    // The dolly's scroll half: center the board so the move reads as one
-    // track+push into the fixture. Left in place on return — the board push
-    // is navigation ("you went to the board, you come back at the board").
-    _focusScroll(
-      fixtureRoomY: (HomeRoomScene.boardFocal(size).y + 1) / 2 * size.height,
-      fraction: 0.5,
-      duration: const Duration(milliseconds: kDollyForwardMs),
-    );
   }
 
   void _onGateRevision() {
