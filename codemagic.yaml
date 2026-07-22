@@ -35,7 +35,7 @@ workflows:
         distribution_type: app_store       # TestFlight / App Store distribution profile
         bundle_identifier: com.erik.ironbit
       vars:
-        APP_STORE_APPLE_ID: 0000000000     # <-- replace with your app's numeric Apple ID
+        APP_STORE_APPLE_ID: 6793704146     # numeric Apple ID for the com.erik.ironbit App Store Connect record
       flutter: stable
       xcode: latest
       cocoapods: default
