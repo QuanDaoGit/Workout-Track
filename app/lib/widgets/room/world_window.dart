@@ -1,15 +1,35 @@
 import 'package:flutter/material.dart';
 
-/// Time-of-day buckets for the world-window.
+/// Time-of-day buckets for the world-window. The names are historical; each
+/// maps to the sky the art actually paints:
+///   morning   → sunrise  (sun low on the horizon, warm orange)
+///   noon      → daylight (bright blue, sun high)
+///   afternoon → sunset   (sun setting, golden dusk)
+///   evening   → night    (crescent moon + stars, dark navy)
 enum RoomTimeOfDay { morning, noon, afternoon, evening }
 
-/// Maps a wall-clock time to one of the four window states.
+/// Maps the wall-clock hour to the window's sky.
+///
+/// Tuned to an *average* day, season-agnostic: it roughly anchors to
+/// equinox-style timing (sunrise ~06:00, solar noon ~12:00, sunset ~18:00) as a
+/// neutral baseline — an approximation, since real wall-clock sky time drifts
+/// with longitude-in-timezone and DST, which doesn't matter for decorative art.
+/// Crucially, night
+/// (the moon frame) now owns every dark hour — including across midnight,
+/// through pre-dawn — instead of the old table that painted a sunrise at 00:00.
+///
+///   00:00–05:59  night     (dark, pre-dawn)
+///   06:00–08:59  sunrise
+///   09:00–16:59  daylight
+///   17:00–18:59  sunset
+///   19:00–23:59  night
 RoomTimeOfDay roomTimeOfDayNow([DateTime? now]) {
   final h = (now ?? DateTime.now()).hour;
-  if (h < 11) return RoomTimeOfDay.morning;
-  if (h < 16) return RoomTimeOfDay.noon;
-  if (h < 19) return RoomTimeOfDay.afternoon;
-  return RoomTimeOfDay.evening;
+  if (h < 6) return RoomTimeOfDay.evening; // pre-dawn night
+  if (h < 9) return RoomTimeOfDay.morning; // sunrise
+  if (h < 17) return RoomTimeOfDay.noon; // daylight
+  if (h < 19) return RoomTimeOfDay.afternoon; // sunset
+  return RoomTimeOfDay.evening; // night
 }
 
 /// The room's world-window — pixel-art decor on the wall that shifts by time of
