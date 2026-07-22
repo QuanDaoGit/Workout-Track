@@ -99,6 +99,72 @@ void main() {
     expect(animatingDioramas(tester), 0);
   });
 
+  testWidgets('successful GO pops the map back to the root route', (
+    tester,
+  ) async {
+    await seed(AdventureState(charges: 1));
+    // Push the map over a base route: the dispatch payoff is the home room's
+    // launch send-off, so GO must collapse back to the shell no matter the
+    // stacking (popUntil-to-root, the summary's return idiom).
+    await tester.runAsync(() async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AdventurePage()),
+                  ),
+                  child: const Text('OPEN MAP'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    });
+    await tester.tap(find.text('OPEN MAP'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350)); // push transition
+    expect(find.byType(AdventurePage), findsOneWidget);
+    // _load is real-async prefs work — poll (bounded) until the stage loads.
+    for (
+      var i = 0;
+      i < 30 && find.byType(PixelLoader).evaluate().isNotEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.byType(PixelLoader), findsNothing);
+
+    await tester.tap(find.text('IRON VAULT'));
+    await tester.pump();
+    await tester.tap(find.textContaining('GO ON ADVENTURE'));
+    // The dispatch is real-async prefs work — poll (bounded) until the pop
+    // lands instead of guessing one fixed delay.
+    for (
+      var i = 0;
+      i < 30 && find.byType(AdventurePage).evaluate().isNotEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.pump(const Duration(milliseconds: 350)); // pop transition
+    expect(
+      find.byType(AdventurePage),
+      findsNothing,
+      reason: 'a successful dispatch returns to the shell for the send-off',
+    );
+    expect(find.text('OPEN MAP'), findsOneWidget);
+  });
+
   testWidgets('weekly-capped: armed shows GO disabled with a reason', (
     tester,
   ) async {

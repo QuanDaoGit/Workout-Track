@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/adventure_routes.dart';
@@ -351,8 +352,17 @@ class AdventureService {
         weekCount: weekCount + 1,
       ),
     );
+    // One-shot UI signal: a live dispatch just happened (the service is the
+    // single dispatch authority, so both entry points — the pad sheet and the
+    // map — inherit it). The shell listens to land on Home for the send-off.
+    dispatchTick.value++;
     return expedition;
   });
+
+  /// Bumped once per successful [dispatchExpedition] — a cosmetic UI beacon
+  /// (never persisted, never authoritative). The shell uses it to bring the
+  /// home room on stage so the launch send-off is actually seen.
+  static final ValueNotifier<int> dispatchTick = ValueNotifier<int>(0);
 
   String? _rollFind(Random rng) {
     if (rng.nextDouble() >= findChance) return null;

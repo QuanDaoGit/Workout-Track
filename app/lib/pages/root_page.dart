@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/workout_models.dart';
+import '../services/adventure_service.dart';
 import '../services/analytics_service.dart';
 import '../services/exercise_catalog_service.dart';
 import '../services/app_route_observer.dart';
@@ -101,6 +102,7 @@ class _RootPageState extends State<RootPage>
     _loadOngoingSession();
     _loadLootBadge();
     FeatureGateService.revision.addListener(_onGateRevision);
+    AdventureService.dispatchTick.addListener(_onExpeditionDispatched);
     _dockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_ongoingSession != null && mounted) setState(() {});
       _loadOngoingSession();
@@ -171,6 +173,7 @@ class _RootPageState extends State<RootPage>
     unawaited(SfxService.instance.stopHomeAmbience());
     WidgetsBinding.instance.removeObserver(this);
     FeatureGateService.revision.removeListener(_onGateRevision);
+    AdventureService.dispatchTick.removeListener(_onExpeditionDispatched);
     _restNotifCoordinator.detach();
     _dockTimer?.cancel();
     _storageSubscription?.cancel();
@@ -181,6 +184,14 @@ class _RootPageState extends State<RootPage>
 
   void _onGateRevision() {
     if (mounted) setState(() {});
+  }
+
+  /// A live expedition dispatch just happened (pad sheet or the map). Land the
+  /// shell on Home so the room's launch send-off has a stage — the switch
+  /// happens while the map route still covers the shell (silent under cover);
+  /// a pad-sheet dispatch is already on Home, where this is a no-op re-entry.
+  void _onExpeditionDispatched() {
+    if (mounted) goTo(AppDestination.home);
   }
 
   /// Re-evaluates the earned gates (cheap reads of existing stores) and then

@@ -257,6 +257,15 @@ class HomePageState extends State<HomePage>
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<double> _roomScroll = ValueNotifier<double>(0);
 
+  // Serialization spine for _loadData (see its doc — Codex F2).
+  Future<void> _loadChain = Future<void>.value();
+
+  // The pad-sheet engagement's scroll half: where the user was before the
+  // focus glide (restored on a no-dispatch dismissal), and whether this sheet
+  // actually dispatched (then _dispatchExpedition owns the re-stage to 0).
+  double _padPreScrollOffset = 0;
+  bool _dispatchedFromSheet = false;
+
   // ── Room camera (board dolly / pad focus-push) ────────────────────────────
   // Doctrine: stateless while covered — the camera engages only inside the
   // transition windows; any non-standard path (tab switch, rotation,
@@ -287,6 +296,36 @@ class HomePageState extends State<HomePage>
   Size? get _roomBoxSize {
     final box = _roomKey.currentContext?.findRenderObject() as RenderBox?;
     return (box?.hasSize ?? false) ? box!.size : null;
+  }
+
+  /// The scroll half of a camera move: glide the scroll so the room fixture at
+  /// [fixtureRoomY] (room-local px) rests at [fraction] of the viewport height,
+  /// clamped to the extents ("as centered as the scroll allows" — a target
+  /// already in place produces no motion). Always CONCURRENT with the zoom,
+  /// never serial before it (research: motion starts on tap), and never called
+  /// under reduced motion — the camera doesn't engage at all there.
+  void _focusScroll({
+    required double fixtureRoomY,
+    required double fraction,
+    required Duration duration,
+  }) {
+    final room = _roomKey.currentContext?.findRenderObject() as RenderBox?;
+    final viewport = context.findRenderObject() as RenderBox?;
+    if (room == null || !room.hasSize) return;
+    if (viewport == null || !viewport.hasSize) return;
+    if (!_scrollController.hasClients) return;
+    final fixtureY = room.localToGlobal(Offset(0, fixtureRoomY)).dy;
+    final desiredY = viewport.localToGlobal(Offset.zero).dy +
+        viewport.size.height * fraction;
+    final pos = _scrollController.position;
+    final target =
+        (pos.pixels + (fixtureY - desiredY)).clamp(0.0, pos.maxScrollExtent);
+    if ((target - pos.pixels).abs() < 2) return;
+    _scrollController.animateTo(
+      target,
+      duration: duration,
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
@@ -485,6 +524,14 @@ class HomePageState extends State<HomePage>
     _cameraFocal = HomeRoomScene.boardFocal(size);
     _cameraCtrl.duration = const Duration(milliseconds: kDollyForwardMs);
     _cameraCtrl.forward(from: 0);
+    // The dolly's scroll half: center the board so the move reads as one
+    // track+push into the fixture. Left in place on return — the board push
+    // is navigation ("you went to the board, you come back at the board").
+    _focusScroll(
+      fixtureRoomY: (HomeRoomScene.boardFocal(size).y + 1) / 2 * size.height,
+      fraction: 0.5,
+      duration: const Duration(milliseconds: kDollyForwardMs),
+    );
   }
 
   void _onGateRevision() {
@@ -496,7 +543,19 @@ class HomePageState extends State<HomePage>
   bool get _adventureUnlocked =>
       FeatureGateService.isUnlockedSync(FeatureGate.adventure);
 
-  Future<void> _loadData() async {
+  /// All home loads run serialized (Codex F2): the launch flip-edge detection
+  /// below compares the committed [_adventureState] against the fresh read —
+  /// concurrent loads (the push-return `.then` racing the storage-change
+  /// listener) could consume the only idle→out edge or double-stage it.
+  Future<void> _loadData() {
+    final run = _loadChain.then((_) => _loadDataInner());
+    // A failed load must not kill the chain for every later load.
+    _loadChain = run.then<void>((_) {}, onError: (_) {});
+    return run;
+  }
+
+  Future<void> _loadDataInner() async {
+    if (!mounted) return;
     final all = await WorkoutStorageService().getSessions();
     final restService = RestService();
     final programService = ProgramService();
@@ -636,6 +695,35 @@ class HomePageState extends State<HomePage>
         suggestedMissionRewardGems = quest.rewardGems;
         break;
       }
+    }
+
+    // A live dispatch just happened elsewhere (the map auto-return / the
+    // ceremony path): the committed state had no pending, the fresh read is
+    // OUT with one. Stage the room BEFORE committing so the launch plays
+    // on-screen — the send-off fires only on a didUpdateWidget flip, never a
+    // cold mount. Jump the scroll home (silent: `.then` fires at pop start,
+    // so the popping route still covers the snap), then give a scrolled-away
+    // room sliver one frame to remount with the OLD idle state (beyond
+    // cacheExtent it was disposed — a same-frame commit would cold-mount it
+    // as `out` and no launch would ever play). The pad-sheet flow never
+    // enters here scrolled: _dispatchExpedition re-stages to 0 first.
+    final adventureNow = DateTime.now();
+    final freshlyOut = adventureState?.pending != null &&
+        adventureUiStateOf(
+              adventureState!,
+              adventureNow,
+              currentWeekIso: isoWeekKey(adventureNow),
+            ).phase ==
+            AdventurePhase.out;
+    final liveDispatch = _adventureState != null &&
+        _adventureState!.pending == null &&
+        freshlyOut;
+    if (liveDispatch &&
+        _scrollController.hasClients &&
+        _scrollController.offset > 1.0) {
+      _scrollController.jumpTo(0);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
     }
 
     setState(() {
@@ -913,6 +1001,20 @@ class HomePageState extends State<HomePage>
       _cameraFocal = HomeRoomScene.padFocal(size);
       _cameraCtrl.duration = const Duration(milliseconds: 180);
       _cameraCtrl.forward(from: 0);
+      // The focus-push's scroll half: seat the pad at 0.44 of the viewport —
+      // the optical center of the strip that stays visible ABOVE the dispatch
+      // sheet (a true 0.5 puts it at the sheet's edge on small viewports).
+      // Without this the pad sits low enough that the sheet covers it and the
+      // push is invisible.
+      _padPreScrollOffset =
+          _scrollController.hasClients ? _scrollController.offset : 0;
+      _dispatchedFromSheet = false;
+      _focusScroll(
+        fixtureRoomY: HomeRoomScene.anchorsFor(size.width, size.height)
+            .padCenterY,
+        fraction: 0.44,
+        duration: const Duration(milliseconds: 180),
+      );
     }
     try {
       await showExpeditionDispatchSheet(
@@ -930,18 +1032,50 @@ class HomePageState extends State<HomePage>
             _engagement = _CameraEngagement.none;
           }
         });
+        // The scroll reverses with the camera — except after a dispatch,
+        // where _dispatchExpedition already re-staged the room at the top for
+        // the launch ascent (Codex F1: one ordered owner per beat).
+        if (!_dispatchedFromSheet && _scrollController.hasClients) {
+          _scrollController.animateTo(
+            _padPreScrollOffset.clamp(
+              0.0,
+              _scrollController.position.maxScrollExtent,
+            ),
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+          );
+        }
       }
     }
   }
 
-  /// Spend a charge. The service's null return is the source of truth; reloading
-  /// flips the room to `out`, which plays the launch overlay.
+  /// Spend a charge (the pad sheet's onSend). The service's null return is the
+  /// source of truth. On success the launch is staged as ONE ordered sequence
+  /// (Codex F1) while the sheet still holds the screen: glide the scroll home
+  /// so the ascent/exit-pop can't clip, THEN reload — the room (mounted, idle,
+  /// on stage) receives the idle→out flip and plays the send-off as the sheet
+  /// falls away. Under reduced motion no launch plays, so no re-stage either.
   Future<bool> _dispatchExpedition(String routeId) async {
     final expedition = await AdventureService().dispatchExpedition(routeId);
     if (!mounted) return expedition != null;
-    if (expedition == null) _showArcadeSnack('CANNOT DISPATCH RIGHT NOW');
+    if (expedition == null) {
+      _showArcadeSnack('CANNOT DISPATCH RIGHT NOW');
+      await _loadData();
+      return false;
+    }
+    _dispatchedFromSheet = true;
+    if (!_reduceMotion &&
+        _scrollController.hasClients &&
+        _scrollController.offset > 1.0) {
+      await _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+      );
+      if (!mounted) return true;
+    }
     await _loadData();
-    return expedition != null;
+    return true;
   }
 
   void _showArcadeSnack(String message) {

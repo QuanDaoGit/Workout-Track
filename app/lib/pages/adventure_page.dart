@@ -96,14 +96,22 @@ class _AdventurePageState extends State<AdventurePage> {
     setState(() => _busy = true);
     final expedition = await AdventureService().dispatchExpedition(route.id);
     if (!mounted) return;
+    if (expedition != null) {
+      // A dispatch's payoff is the home room's launch send-off, so GO returns
+      // to the shell instead of staying on a dimmed stage. popUntil (the
+      // summary's return-to-root idiom) collapses every stacking — including
+      // the stale map a report's CHANGE ORDERS can leave underneath — and
+      // every route above the shell on this path is expedition-owned. _busy
+      // stays latched: the page is leaving, nothing may re-arm.
+      Navigator.of(context).popUntil((r) => r.isFirst);
+      return;
+    }
     setState(() {
       _busy = false;
       _armedRouteId = null;
       _showBreakdown = false;
     });
-    if (expedition == null) {
-      showArcadeNotice(context, 'CANNOT DISPATCH RIGHT NOW');
-    }
+    showArcadeNotice(context, 'CANNOT DISPATCH RIGHT NOW');
     await _load();
   }
 
