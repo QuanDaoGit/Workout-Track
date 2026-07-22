@@ -75,10 +75,16 @@ void main() {
     expect(find.byType(FilledButton), findsNothing);
 
     // Tap 1 — skip the ceremony; drain to inert so onFinished removes the
-    // overlay. The ceremony clock caps dt at 60ms per FRAME, so it needs many
-    // short pumps — one long pump advances it a single frame.
+    // overlay. The ceremony clock caps dt at 60ms per FRAME (many short pumps,
+    // never one long one), and its exit rides real async too — a bounded POLL,
+    // not a fixed frame count, keeps this robust under parallel suite load.
     await tester.tap(find.byType(SessionCeremony));
-    for (var i = 0; i < 30; i++) {
+    for (var i = 0;
+        i < 100 && find.byType(SessionCeremony).evaluate().isNotEmpty;
+        i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
       await tester.pump(const Duration(milliseconds: 50));
     }
     expect(find.byType(SessionCeremony), findsNothing);
