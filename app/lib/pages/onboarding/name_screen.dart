@@ -11,6 +11,7 @@ import '../../services/character_service.dart';
 import '../../services/profile_service.dart';
 import '../../services/program_service.dart';
 import '../../services/rest_service.dart';
+import '../../services/sfx_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_route.dart';
 import '../../widgets/motion/arcade_name_field.dart';
@@ -113,10 +114,18 @@ class _NameScreenState extends State<NameScreen>
 
   void _handleNameChanged(String value) {
     final nextValid = _isValid(value);
+    // Rising edge only: the button arms here (label flips to 'I AM {NAME}',
+    // PowerOn ramps to full — or snaps in one frame under reduced motion). Fire
+    // the vow-arm cue once on the false->true transition so it doesn't re-tick on
+    // every keystroke while the name stays valid.
+    final armed = nextValid && !_valid;
     setState(() {
       _valid = nextValid;
       if (_showError) _showError = false;
     });
+    if (armed) {
+      SfxService.instance.playOnbNameArm(reduced: _reduceMotion);
+    }
   }
 
   bool _isValid(String value) {
@@ -140,6 +149,11 @@ class _NameScreenState extends State<NameScreen>
     // from the quiz's sex answer and editable later from the profile).
     final name = _trimmedName;
     final draft = widget.draft.copyWith(characterName: name);
+    // The understated character-birth period — the single audio owner for this
+    // gesture (PixelButton's generic keycap tick is suppressed via sound:false
+    // below). Past the `if (!_valid)` return + the `_committing` guard, so it
+    // only sounds on a real commit and can't double-fire; also covers onSubmitted.
+    SfxService.instance.playOnbNameCommitted();
     setState(() => _committing = true);
     final character = Character(
       name: name,
@@ -339,6 +353,9 @@ class _NameScreenState extends State<NameScreen>
               disabledColor: disabledFill,
               disabledBorderColor: kBorder,
               disabledLabelColor: kDim,
+              // The onboarding commit cue (playOnbNameCommitted in _submit) owns
+              // this gesture's audio — suppress PixelButton's default keycap tick.
+              sound: false,
               onPressed: _valid && !_committing ? _submit : null,
             ),
           );

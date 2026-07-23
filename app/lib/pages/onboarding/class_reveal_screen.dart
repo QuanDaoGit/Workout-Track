@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/calibration_quiz_models.dart';
 import '../../models/character_class.dart';
+import '../../services/sfx_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/class_sprite.dart';
@@ -71,15 +72,22 @@ class _ClassRevealScreenState extends State<ClassRevealScreen>
     if (_reduceMotion) {
       _complete = true;
       _controller.value = 1;
+      // Settled: fire the identity seal once at mount (no gate tick — the
+      // commit button is instantly tappable). Tank voicing for all classes.
+      SfxService.instance.playOnbClassSeal();
       return;
     }
 
     _controller.forward(from: 0);
     _schedule(Duration(milliseconds: _timeline.heroStart), () {
+      SfxService.instance.playOnbClassSeal(); // the 120ms identity SLAM
       setState(() {
         _strobeTrigger++;
         _shakeTrigger++;
       });
+    });
+    _schedule(Duration(milliseconds: _timeline.buttonStart), () {
+      SfxService.instance.playOnbClassGateTick(); // 'I AM <CLASS>' arms
     });
   }
 

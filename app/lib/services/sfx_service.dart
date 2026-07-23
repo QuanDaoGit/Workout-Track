@@ -88,11 +88,9 @@ class SfxService {
   Future<void> playCeremonyChime() =>
       _play('audio/ceremony_chime.wav', volume: 0.7);
 
-  /// The **landing impact thud** as BIT slams into its seat (t=2550ms) — a
-  /// sub-bass pitch-drop punch + dust-burst noise (user-directed upgrade of
-  /// the handoff's quiet 210 Hz blip: a strong landing, not a beep).
-  Future<void> playCeremonyLand() =>
-      _play('audio/ceremony_land.wav', volume: 0.8);
+  /// The **landing thud** as BIT sets into its seat — delegates to the reusable
+  /// [playLand] (the canonical flight/land audio; see the "root place" below).
+  Future<void> playCeremonyLand() => playLand();
 
   /// The **feature-unlock fanfare** — the NEW SYSTEM ONLINE victory hit at the
   /// unlock ceremony's surge (t=500ms): a power-on riser into a rising C-major
@@ -102,12 +100,72 @@ class SfxService {
   Future<void> playUnlockFanfare() =>
       _play('audio/unlock_fanfare.wav', volume: 0.75);
 
-  /// The **banked-flight dash fwoosh** (t=1050ms) — a square-wave doppler
-  /// pitch ride (with vibrato) over a quiet noise air-layer, tracking the
-  /// flight's speed curve; authored to fade to silence by 1.40s so the landing
-  /// hit never cuts live energy (Codex F3).
-  Future<void> playCeremonyFlight() =>
-      _play('audio/ceremony_flight.wav', volume: 0.7);
+  /// The **banked flight** as BIT arcs toward its seat — delegates to the
+  /// reusable [playFlight].
+  Future<void> playCeremonyFlight() => playFlight();
+
+  // ── Reusable flight → land ceremony audio (the "root place") ────────────────
+  // The canonical banked-flight + landing-thud pair, reused wherever BIT flies
+  // into a seat: the session-complete ceremony, the onboarding gift reveal, and
+  // any future surface. Fire [playFlight] when the arc starts and [playLand] on
+  // touchdown. Regenerate both assets via `ops/gen_flight_land_sfx.py` (V5
+  // "arcade dash" flight + V4 "servo latch" land — audition 2026-07-23; the old
+  // rising pitch-glide read as a slide-whistle, so the fresh flight is a noise
+  // dash + a discrete stab and the land is a mechanical drone-core latch).
+  Future<void> playFlight() => _play('audio/ceremony_flight.wav', volume: 0.7);
+  Future<void> playLand() => _play('audio/ceremony_land.wav', volume: 0.8);
+
+  // ── Onboarding narrative SFX (bespoke event-cues, ceremony-grade) ───────────
+  // One-shots on the ceremony channel; each fires at its beat's animation edge.
+  // Assets from `ops/gen_onboarding_sfx.py`; the WAV peaks ARE the loudness
+  // ladder (interaction < event < ceremony), so one uniform play volume
+  // preserves it. Reduced-motion callers pass the settled variant where one
+  // exists — audio may still carry a stilled beat (onboarding SFX doctrine,
+  // docs/superpowers/specs/2026-07-23-onboarding-sfx-doctrine-and-backlog-design.md).
+  static const double _onbVol = 0.8;
+  Future<void> _playOnb(String asset) => _play('audio/$asset.wav', volume: _onbVol);
+
+  /// CRT "boot the cabinet" power-on — the app's first sound (welcome→cold open).
+  Future<void> playOnbCrtBoot({bool reduced = false}) =>
+      _playOnb(reduced ? 'onb_crt_boot_settled' : 'onb_crt_boot');
+
+  /// BIT face-reveal power-up (solution screen — the emotional peak).
+  Future<void> playOnbFaceReveal({bool reduced = false}) =>
+      _playOnb(reduced ? 'onb_face_reveal_settled' : 'onb_face_reveal');
+
+  /// The class-reveal identity SEAL. Product decision (2026-07-23): the Tank
+  /// voicing plays for ALL classes.
+  Future<void> playOnbClassSeal() => _playOnb('onb_class_seal_tank');
+
+  /// The soft tap-tier tick when the `I AM <CLASS>` commit button arms.
+  Future<void> playOnbClassGateTick() => _playOnb('onb_class_gate_tick');
+
+  /// The self-naming vow ARM (validity power-on). [variant] rotates 1..3 for a
+  /// re-arming user; reduced motion plays the resolved seal.
+  Future<void> playOnbNameArm({int variant = 0, bool reduced = false}) =>
+      _playOnb(reduced ? 'onb_name_arm_rm' : 'onb_name_arm_${(variant % 3) + 1}');
+
+  /// The understated character-birth period on the commit press.
+  Future<void> playOnbNameCommitted() => _playOnb('onb_name_committed');
+
+  /// The rank verdict STAMP (post-first-workout First-Win reveal).
+  Future<void> playOnbRankAssessed() => _playOnb('onb_rank_assessed');
+
+  /// Loader 'system waking' blip (calibration + program loaders).
+  Future<void> playOnbBoot() => _playOnb('onb_boot');
+
+  /// The readback confirm-ladder [rung] 1..4 (a piece of YOU assembled).
+  Future<void> playOnbConfirm(int rung) =>
+      _playOnb('onb_confirm_${rung.clamp(1, 4)}');
+
+  /// Calibration COMPLETE resolve chord.
+  Future<void> playOnbResolve() => _playOnb('onb_resolve');
+
+  /// Program READY resolve chord.
+  Future<void> playOnbReady() => _playOnb('onb_ready');
+
+  /// Program 'matching…' sparse thinking texture (program loader only).
+  Future<void> playOnbSeekClimb() => _playOnb('onb_seek_climb');
 
   // ── Interaction tier — the pooled low-latency micro channel ────────────────
   // Unlike the ceremony channel above (one player, interrupt-on-play), these
@@ -131,6 +189,12 @@ class SfxService {
   /// in widget tests) — so tests assert plays without the plugin.
   @visibleForTesting
   static void Function(String assetPath)? onPlayForTest;
+
+  /// Test seam for the background-teardown / resume-rewarm lifecycle: fires the
+  /// action tag ('release' | 'warm') BEFORE the platform work (which is
+  /// test-skipped), so a test can assert the pool lifecycle without real audio.
+  @visibleForTesting
+  static void Function(String action)? onUiPoolActionForTest;
 
   /// Broad-layer rate limit: a machine-gunned button can't stack ticks.
   static const Duration uiTapCooldown = Duration(milliseconds: 60);
@@ -211,6 +275,7 @@ class SfxService {
   /// every per-asset failure is swallowed and the pool marked dead so playback
   /// degrades to silence, never a throw into boot.
   Future<void> warmUpUiPools() async {
+    onUiPoolActionForTest?.call('warm');
     if (_isFlutterTest) return;
     final assets = kUiSoundSpecs.values.expand((s) => s.assets);
     for (final asset in assets) {
@@ -224,13 +289,51 @@ class SfxService {
     }
   }
 
+  /// Dispose every pooled UI-sound player and drop the caches — called when the
+  /// app is **backgrounded** ([AppLifecycleState.paused]).
+  ///
+  /// This is the guarantee behind the iOS resume-replay fix: retained AVPlayers
+  /// (see [_pool]) re-fire in a burst when iOS reactivates the shared audio
+  /// session on the next foreground, so leaving nothing loaded means there is
+  /// nothing to replay. [warmUpUiPools] rebuilds the pools on resume (and any
+  /// tap lazily recreates its own pool regardless). Fail-open: a dispose
+  /// failure is logged, never thrown into the lifecycle callback.
+  Future<void> releaseUiPools() async {
+    onUiPoolActionForTest?.call('release');
+    if (_isFlutterTest) return;
+    final pending = _poolFutures.values.toList();
+    _poolFutures.clear();
+    // A transient load failure shouldn't permanently deaden an asset across the
+    // next foreground — clear so re-warm can retry (it re-marks a still-bad one).
+    _deadPools.clear();
+    for (final future in pending) {
+      try {
+        await (await future).dispose();
+      } catch (e) {
+        debugPrint('SfxService: releaseUiPools dispose failed: $e');
+      }
+    }
+  }
+
   Future<AudioPool> _pool(String asset) =>
       // `??=` with a synchronous RHS is race-free: two rapid first taps share
       // one create future instead of building two pools.
       _poolFutures[asset] ??= AudioPool.create(
         source: AssetSource(asset),
         maxPlayers: 2,
-        playerMode: PlayerMode.lowLatency,
+        // darwin (iOS/macOS): `setPlayerMode` is a NO-OP there ("only one
+        // player mode"), so lowLatency buys nothing native — it only makes
+        // AudioPool.start SKIP its completion→stop bookkeeping, leaking a
+        // still-loaded AVPlayer on every play. Those retained players re-fire
+        // when iOS reactivates the audio session on foreground (the
+        // resume-replay burst this whole teardown path exists to stop — see
+        // [releaseUiPools]). mediaPlayer has identical native latency on
+        // darwin AND lets the pool reuse/release its players, so nothing
+        // accumulates. Android keeps lowLatency: there it maps to SoundPool
+        // (genuine low latency, self-managing — no leak, no replay).
+        playerMode: (Platform.isIOS || Platform.isMacOS)
+            ? PlayerMode.mediaPlayer
+            : PlayerMode.lowLatency,
       );
 
   Future<void> _playPooled(String asset) async {
@@ -366,6 +469,7 @@ class SfxService {
     uiSoundsEnabled = true;
     nowProvider = DateTime.now;
     onPlayForTest = null;
+    onUiPoolActionForTest = null;
     _lastMicroAt = null;
     _lastNonMicroAt = null;
     _lastConfirmAt.clear();
@@ -424,6 +528,7 @@ class SfxService {
   Future<void> _play(String assetPath, {double volume = 1.0}) async {
     debugOnPlay?.call(assetPath);
     if (!enabled) return;
+    if (_isFlutterTest) return; // never construct audioplayers under flutter_test
 
     // Interrupt + release any chime still playing.
     final previous = _current;

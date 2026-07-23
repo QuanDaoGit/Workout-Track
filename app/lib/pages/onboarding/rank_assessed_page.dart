@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../services/stat_engine.dart';
+import '../../services/sfx_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/pixel_button.dart';
@@ -38,6 +39,9 @@ class _RankAssessedPageState extends State<RankAssessedPage> {
         _shake++;
         _strobe++;
       });
+      // Rank verdict stamp — the ONLY non-visual signal here (no haptic today).
+      // Not motion-gated: the Timer + shake + strobe fire in both normal + reduced.
+      SfxService.instance.playOnbRankAssessed();
     });
   }
 

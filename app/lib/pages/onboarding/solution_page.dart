@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/haptic_service.dart';
+import '../../services/sfx_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_bar.dart';
 import '../../widgets/companion/bit_boot.dart' show BitVoiceWaveform;
@@ -85,6 +86,9 @@ class _SolutionViewState extends State<SolutionView>
   static const _bloomBurstMs = <double>[1340, 1540, 1740];
   int _bloomPulses = 0;
   bool _bloomFired = false;
+  // One-shot for the BIT face-reveal cue (shared by the animated inhale edge and
+  // the reduced/settled path) so no rebuild or path-cross can replay it.
+  bool _faceRevealFired = false;
 
   @override
   void initState() {
@@ -115,6 +119,12 @@ class _SolutionViewState extends State<SolutionView>
       // surge). Guarded by `_bloomFired` (a true one-shot) so a re-run of
       // didChangeDependencies (a MediaQuery/theme change) can never replay it.
       if (!_bloomFired) HapticService.instance.reward();
+      // Settled arrival: one face-reveal cue (settled variant) beside the single
+      // reward haptic. Guarded so a re-run of didChangeDependencies can't replay.
+      if (!_faceRevealFired) {
+        _faceRevealFired = true;
+        SfxService.instance.playOnbFaceReveal(reduced: true);
+      }
       _complete = true;
       _bloomFired = true;
       _bloomPulses = _bloomBurstMs.length;
@@ -134,6 +144,13 @@ class _SolutionViewState extends State<SolutionView>
   void _maybeFireBloom() {
     if (_bloomFired || _reducedMotion) return;
     final ms = _introController.value * SolutionView._totalMs;
+    // Face-reveal cue rides the anticipation INHALE edge (asset t=0 == controller
+    // ~520ms; the apex is baked at asset 0.82s, so START at the inhale, not the
+    // bloom). One-shot so a stuttered/repeated frame can't replay it.
+    if (!_faceRevealFired && ms >= SolutionView._inhaleStartMs) {
+      _faceRevealFired = true;
+      SfxService.instance.playOnbFaceReveal();
+    }
     // Fire every burst beat the frame crossed (while-loop: a stuttered frame
     // still lands all three), then mark the burst spent.
     while (_bloomPulses < _bloomBurstMs.length && ms >= _bloomBurstMs[_bloomPulses]) {

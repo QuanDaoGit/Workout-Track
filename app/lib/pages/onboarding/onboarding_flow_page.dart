@@ -10,6 +10,7 @@ import '../../services/analytics_service.dart';
 import '../../services/body_goal_service.dart';
 import '../../services/calibration_service.dart';
 import '../../services/class_service.dart';
+import '../../services/sfx_service.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/arcade_route.dart';
 import 'calibration_loading_page.dart';
@@ -276,9 +277,11 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage>
       AnalyticsService.instance.logOnboardingStep(AnalyticsValue.stepColdOpen),
     );
     if (_reduceMotion) {
+      SfxService.instance.playOnbCrtBoot(reduced: true);
       setState(() => _step = _Step.coldOpen);
       return;
     }
+    SfxService.instance.playOnbCrtBoot();
     setState(() => _transition = _OnboardingTransition.boot);
     _transitionController
       ..duration = const Duration(milliseconds: 1000)

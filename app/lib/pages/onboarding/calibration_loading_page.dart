@@ -8,6 +8,7 @@ import '../../models/body_goal_models.dart';
 import '../../models/calibration_quiz_models.dart';
 import '../../models/character_class.dart';
 import '../../models/unit_models.dart';
+import '../../services/sfx_service.dart';
 import '../../services/unit_settings_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
@@ -59,6 +60,8 @@ class _CalibrationLoadingPageState extends State<CalibrationLoadingPage>
   bool _workDone = false;
   bool _minTimeDone = false;
   bool _complete = false;
+  bool _confirmsArmed = false;
+  final List<bool> _confirmFired = [false, false, false, false];
 
   bool get _reduceMotion {
     final media = MediaQuery.of(context);
@@ -79,7 +82,7 @@ class _CalibrationLoadingPageState extends State<CalibrationLoadingPage>
             _minTimeDone = true;
             _maybeComplete();
           }
-        });
+        })..addListener(_handleTick);
   }
 
   @override
@@ -102,6 +105,9 @@ class _CalibrationLoadingPageState extends State<CalibrationLoadingPage>
       _maybeComplete();
       return;
     }
+    // Animated path: 'system waking' boot blip + arm the confirm-ladder listener.
+    _confirmsArmed = true;
+    SfxService.instance.playOnbBoot();
     _controller.forward(from: 0);
   }
 
@@ -109,11 +115,29 @@ class _CalibrationLoadingPageState extends State<CalibrationLoadingPage>
     if (_complete || !mounted) return;
     if (_workDone && _minTimeDone) {
       setState(() => _complete = true);
+      // Calibration COMPLETE resolve chord (fires in both animated + reduced).
+      SfxService.instance.playOnbResolve();
+    }
+  }
+
+  // Readback confirm-ladder: rungs 1..4 fire on the frame their step doneAtMs
+  // threshold (700/1500/2250/3100ms) is crossed — the same edges the ✓ latches
+  // in _buildBody. Armed only on the animated path, so the reduced-motion
+  // value=1 notify is a no-op (no 4-confirm burst).
+  void _handleTick() {
+    if (!_confirmsArmed || _complete) return;
+    final elapsedMs = (_controller.value.clamp(0.0, 1.0) * _minDisplayMs).round();
+    for (var i = 0; i < _confirmFired.length; i++) {
+      if (!_confirmFired[i] && elapsedMs >= _steps[i].doneAtMs) {
+        _confirmFired[i] = true;
+        SfxService.instance.playOnbConfirm(i + 1);
+      }
     }
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_handleTick);
     _controller.dispose();
     super.dispose();
   }

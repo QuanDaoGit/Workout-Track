@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/body_goal_models.dart';
 import '../../models/calibration_quiz_models.dart';
+import '../../services/sfx_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
 
@@ -32,12 +33,18 @@ class _ProgramLoadingPageState extends State<ProgramLoadingPage>
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: _normalDuration,
-  )..addStatusListener(_handleStatus);
+  )
+    ..addStatusListener(_handleStatus)
+    ..addListener(_handleTick);
 
   Timer? _completeTimer;
   bool _started = false;
   bool _completed = false;
   bool _ignoreStatusCompletion = false;
+  // Onboarding SFX fire-once guards (crossing-based, driven by _handleTick).
+  final List<bool> _confirmFired = [false, false, false, false];
+  bool _seekFired = false;
+  bool _readyFired = false;
 
   bool get _reduceMotion {
     final media = MediaQuery.of(context);
@@ -54,11 +61,16 @@ class _ProgramLoadingPageState extends State<ProgramLoadingPage>
       _ignoreStatusCompletion = true;
       _controller.value = 1;
       _ignoreStatusCompletion = false;
+      // Static PROGRAM READY: the ready chord is the ONLY cue (no boot/confirm/seek).
+      _readyFired = true;
+      SfxService.instance.playOnbReady();
       _completeTimer = Timer(_reducedMotionPause, _finish);
       return;
     }
 
     _completeTimer = Timer(_normalDuration, _finish);
+    // Ring spin-up: 'system waking' boot blip on the same edge forward() starts.
+    SfxService.instance.playOnbBoot();
     _controller.forward(from: 0);
   }
 
@@ -66,6 +78,7 @@ class _ProgramLoadingPageState extends State<ProgramLoadingPage>
   void dispose() {
     _completeTimer?.cancel();
     _controller.removeStatusListener(_handleStatus);
+    _controller.removeListener(_handleTick);
     _controller.dispose();
     super.dispose();
   }
@@ -74,6 +87,42 @@ class _ProgramLoadingPageState extends State<ProgramLoadingPage>
     if (_ignoreStatusCompletion) return;
     if (status == AnimationStatus.completed) {
       _finish();
+    }
+  }
+
+  // Fire onboarding cues on the animation-frame edge where each visual beat
+  // crosses its threshold (never on build). Fire-once via the guard flags;
+  // reduced motion fires its single cue in didChangeDependencies instead.
+  void _handleTick() {
+    if (_completed || _reduceMotion) return;
+    final elapsedMs =
+        (_controller.value.clamp(0.0, 1.0) * _normalDuration.inMilliseconds)
+            .round();
+
+    // Readback confirm ladder — rungs 1..3 for the first three status lines. The
+    // 4th line ('Matching program…') is voiced by the seek climb below, NOT a 4th
+    // pip: on the single ceremony channel confirm(4) + seek fire the same frame,
+    // so seek (the forging texture) owns that beat cleanly (Codex should-fix).
+    for (var i = 0; i < 3; i++) {
+      if (!_confirmFired[i] && elapsedMs >= _StatusStack._activationMs[i]) {
+        _confirmFired[i] = true;
+        SfxService.instance.playOnbConfirm(i + 1);
+      }
+    }
+
+    // Readback -> forging: the long 'matching…' climb begins (~1450ms) — the sound
+    // for the 4th status line. Its asset self-silences ~0.45s before READY, so the
+    // ready chord at 4650ms only ever cuts silence (no audible clip).
+    if (!_seekFired && elapsedMs >= _StatusStack._activationMs.last) {
+      _seekFired = true;
+      SfxService.instance.playOnbSeekClimb();
+    }
+
+    // PROGRAM READY edge (~4650ms = _normalDuration - _readyWindowMs).
+    if (!_readyFired &&
+        elapsedMs >= _normalDuration.inMilliseconds - _readyWindowMs) {
+      _readyFired = true;
+      SfxService.instance.playOnbReady();
     }
   }
 

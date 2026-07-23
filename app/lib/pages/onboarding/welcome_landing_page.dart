@@ -2,8 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../services/sfx_service.dart';
+import '../../services/sound_settings_service.dart';
 import '../../theme/app_fonts.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/arcade_filled.dart';
 import '../../widgets/pixel_button.dart';
 
 /// The app's front door — the first onboarding screen, before the cold open.
@@ -36,6 +39,18 @@ class _WelcomeLandingViewState extends State<WelcomeLandingView>
     duration: const Duration(milliseconds: 360),
   );
   bool _departing = false;
+
+  // Early sound control (onboarding SFX doctrine W0): audio is default-ON, but a
+  // discoverable mute lives here on the first screen — before any cue escalates
+  // and before Settings is reachable — persisted to the SAME master Sound key.
+  bool _soundOn = SfxService.enabled;
+
+  Future<void> _toggleSound() async {
+    final next = !_soundOn;
+    setState(() => _soundOn = next);
+    SfxService.enabled = next;
+    await SoundSettingsService().setEnabled(next);
+  }
 
   bool get _reduceMotion {
     final media = MediaQuery.of(context);
@@ -167,6 +182,9 @@ class _WelcomeLandingViewState extends State<WelcomeLandingView>
                     chrome(
                       PixelButton(
                         label: 'GET STARTED',
+                        // The CRT boot is the app's first SOUND (it subsumes this
+                        // tap); keep the press haptic, silence its keycap tick.
+                        sound: false,
                         onPressed: _onGetStarted,
                       ),
                     ),
@@ -176,6 +194,9 @@ class _WelcomeLandingViewState extends State<WelcomeLandingView>
                       PixelButton(
                         label: 'SIGN IN',
                         secondary: true,
+                        // Silent (haptic kept): the CRT boot must be the app's
+                        // FIRST sound — no tick on any welcome control precedes it.
+                        sound: false,
                         onPressed: () {},
                       ),
                     ),
@@ -192,6 +213,30 @@ class _WelcomeLandingViewState extends State<WelcomeLandingView>
                     ),
                     const SizedBox(height: kSpace3),
                   ],
+                ),
+              ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: SafeArea(
+                child: Opacity(
+                  opacity: chromeOpacity,
+                  child: IgnorePointer(
+                    ignoring: departing,
+                    child: ArcadeIconButton(
+                      onPressed: _toggleSound,
+                      sound: false, // a mute control shouldn't editorialize
+                      tooltip: _soundOn ? 'Sound: on' : 'Sound: off',
+                      icon: Icon(
+                        _soundOn
+                            ? Icons.volume_up_sharp
+                            : Icons.volume_off_sharp,
+                        color: kMutedText,
+                        size: 22,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
