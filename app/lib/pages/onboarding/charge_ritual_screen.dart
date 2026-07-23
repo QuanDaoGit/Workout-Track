@@ -72,7 +72,7 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
   late final ChargeRitualEngine _engine;
   Ticker? _ticker;
   Duration _lastTick = Duration.zero;
-  double _elapsedMs = 0; // wall-clock (pausable) — drives the delayed skip
+  double _elapsedMs = 0; // wall-clock (pausable) — drives the held-frame dwell
   double _animClock = 0; // seconds (pausable) — ambient pour/pulse sines
 
   VideoPlayerController? _video;
@@ -83,6 +83,7 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
   double?
   _holdStartMs; // pausable wall-clock ms stamped when the hold gate lands
   double? _reelStartMs; // pausable clock stamped when the reel phase begins
+  bool _heldFrameReached = false; // latched once the START BOOSTING gate is shown
   bool _boostCued =
       false; // latched once the boost cue / pour begins (never un-cues)
   bool _thankYouSkipped = false; // tap-to-skip the thank-you read dwell
@@ -474,9 +475,6 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     final ignited = phase == ChargeRitualPhase.ignited;
     final accent = (pouring || ignited) ? kNeon : kAmber;
     final reelPlaying = phase == ChargeRitualPhase.reel;
-    // Skip is reachable once the opening beat has landed — including during the
-    // user-gated "START BOOSTING" wait (so the paused ritual is never a trap).
-    final skipVisible = !ignited && _elapsedMs >= 3000;
 
     // Entry: power-on (Beat A) + picture brightness (dim through B, ramps in C).
     final entryV = _reduceMotion ? 1.0 : _entry.value;
@@ -503,6 +501,14 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
         phase == ChargeRitualPhase.preroll &&
         entryV >= _beatC &&
         (_video?.value.isInitialized ?? false);
+    if (boostReady) _heldFrameReached = true;
+
+    // Skip is a whole-ritual escape, pre-armed with the held frame (Codex F2) —
+    // reachable the moment the START BOOSTING gate is shown, never a raw timer
+    // that could pop in mid-reel. Reduced motion has no held frame but lands
+    // straight on `reelDone` (the still hold state).
+    final skipVisible =
+        !ignited && (_heldFrameReached || reelDone || _reduceMotion);
 
     // BIT is silent during the reel (Change A): the intro lines are relocated
     // to the self-paced held-frame wait (pre-reel), post-reel thank-you → boost

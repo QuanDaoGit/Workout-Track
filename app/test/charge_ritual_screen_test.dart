@@ -86,24 +86,14 @@ void main() {
     },
   );
 
-  testWidgets('skip is delayed (~3s) then routes to the gate', (tester) async {
-    // Reduced so the Start Gate settles instantly (no pending reveal Timers);
-    // the delayed-skip gate reads wall-clock elapsed, independent of motion.
+  testWidgets('skip is armed and routes to the gate', (tester) async {
     await pumpRitual(tester, reduced: true);
     await tester.pump();
-
-    // Hidden immediately.
-    expect(find.textContaining('continue without charging'), findsNothing);
-
-    // A single long pump advances wall-clock (the skip gate reads raw elapsed).
-    await tester.pump(const Duration(milliseconds: 3200));
     expect(find.textContaining('continue without charging'), findsOneWidget);
-
     await tester.tap(find.textContaining('continue without charging'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400)); // route (flow)
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
-
     expect(find.byType(StartGateScreen), findsOneWidget);
   });
 
@@ -223,8 +213,9 @@ void main() {
 
     expect(find.byType(ChargeRitualScreen), findsOneWidget);
     expect(find.text('CHARGING'), findsOneWidget);
-    // Still early — the skip stays hidden.
-    expect(find.textContaining('continue without charging'), findsNothing);
+    // The failed-video watchdog lands on `reelDone` — skip is pre-armed, not
+    // gated to the old 3s raw timer.
+    expect(find.textContaining('continue without charging'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -278,5 +269,31 @@ void main() {
 
     // While the reel plays the bubble slot renders nothing — BIT is silent.
     expect(find.byType(BitSpeechBubble), findsNothing);
+  });
+
+  // Task A2: genuinely reaches the pre-reel held frame via the fake video
+  // platform (see the Task A1 comment above) rather than relying on the
+  // failed-video watchdog's incidental `reelDone` — a faithful test of the
+  // pre-armed latch, not just "some path makes skip appear early".
+  testWidgets('skip is armed on the held frame and never first-appears during the reel', (
+    tester,
+  ) async {
+    final originalPlatform = VideoPlayerPlatform.instance;
+    VideoPlayerPlatform.instance = FakeVideoPlayerPlatform();
+    addTearDown(() => VideoPlayerPlatform.instance = originalPlatform);
+
+    await pumpRitual(tester, reduced: false);
+    await tester.pump();
+    await advance(tester, 1000); // entry reaches the held frame (Beat C) well before 3s
+
+    // Skip is already reachable on the held frame (pre-armed), not gated to 3s.
+    expect(find.text('START BOOSTING'), findsOneWidget);
+    expect(find.textContaining('continue without charging'), findsOneWidget);
+
+    // Pressing START into the reel — skip was already visible, so it never
+    // first-appears mid-reel (no pop-in).
+    await tester.tap(find.text('START BOOSTING'));
+    await tester.pump();
+    expect(find.textContaining('continue without charging'), findsOneWidget);
   });
 }
