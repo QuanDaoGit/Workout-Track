@@ -296,4 +296,22 @@ void main() {
     await tester.pump();
     expect(find.textContaining('continue without charging'), findsOneWidget);
   });
+
+  // Task B1: reduced motion has no reel, so `_chromeLight` must be pinned to
+  // 1.0 (no dimming) — the WCAG fallback contract.
+  testWidgets('reduced motion keeps chrome fully lit (no dimming)', (
+    tester,
+  ) async {
+    await pumpRitual(tester, reduced: true);
+    await tester.pump();
+    final op = tester.widgetList<Opacity>(
+      find.byKey(const ValueKey('reel_chrome_dim')),
+    );
+    // Guard against a vacuous pass (an empty match set trivially satisfies the
+    // loop below) — at least the header's dim wrapper must exist.
+    expect(op, isNotEmpty);
+    for (final o in op) {
+      expect(o.opacity, 1.0);
+    }
+  });
 }

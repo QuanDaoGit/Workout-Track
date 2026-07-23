@@ -60,10 +60,10 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
   // Held-frame BIT intro: line 1 on entry, line 2 after this dwell (self-paced —
   // both live on the START BOOSTING wait so nothing competes with the reel).
   static const int _kIntroLine2Ms = 3200;
-  // NOTE (deviation from the plan's Step 3, which bundles this Phase A constant
-  // with two Phase-B-only ones, `_kChromeDimFloor`/`_kReelDimRampMs`): this
-  // session implements Phase A only (Task A1/A2), so those two are deferred to
-  // Phase B's own task — adding them here now would be unused (analyze warning).
+  // Lights-down: decorative chrome opacity floor while the reel plays, and the
+  // ramp length for fading down (reel start) / back up (the hold).
+  static const double _kChromeDimFloor = 0.30;
+  static const int _kReelDimRampMs = 500;
   // exit sub-ranges
   static const double _exFreeze = 0.14; // hold the final frame
   static const double _exRecedeEnd = 0.60; // picture -> scrim done
@@ -476,6 +476,28 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     final accent = (pouring || ignited) ? kNeon : kAmber;
     final reelPlaying = phase == ChargeRitualPhase.reel;
 
+    // Lights-down: decoration fades to the floor as the reel starts, and back up
+    // as the user holds the boost (mapped to the final pour 0.9→1.0). Between the
+    // reel end and the hold it stays at the floor (cinema mood until effort earns
+    // the lights back). Reduced motion / no reel → always fully lit.
+    double chromeLight;
+    if (_reduceMotion) {
+      chromeLight = 1.0;
+    } else if (reelPlaying) {
+      final t = ((_elapsedMs - (_reelStartMs ?? _elapsedMs)) / _kReelDimRampMs)
+          .clamp(0.0, 1.0);
+      chromeLight = 1.0 + (_kChromeDimFloor - 1.0) * t; // 1.0 → floor
+    } else if (pouring) {
+      final up = ((charge - 0.9) / 0.1).clamp(0.0, 1.0);
+      chromeLight = _kChromeDimFloor + (1.0 - _kChromeDimFloor) * up; // floor → 1.0
+    } else if (ignited) {
+      chromeLight = 1.0;
+    } else if (reelDone) {
+      chromeLight = _kChromeDimFloor; // exit recede + thank-you dwell stay dim
+    } else {
+      chromeLight = 1.0; // preroll / held frame — fully lit
+    }
+
     // Entry: power-on (Beat A) + picture brightness (dim through B, ramps in C).
     final entryV = _reduceMotion ? 1.0 : _entry.value;
     final powerOn = (entryV / _beatA).clamp(0.0, 1.0);
@@ -540,7 +562,11 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _ChargeHeader(charged: ignited),
+          Opacity(
+            key: const ValueKey('reel_chrome_dim'),
+            opacity: chromeLight,
+            child: _ChargeHeader(charged: ignited),
+          ),
           const SizedBox(height: kSpace3),
           Center(
             child: ConstrainedBox(
@@ -584,6 +610,7 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
               bitLine: bitLine,
               bitPose: bitHyped ? BitPose.cheer : BitPose.neutral,
               showBubble: !reelPlaying,
+              chromeLight: chromeLight,
             ),
           ),
           const Spacer(),
@@ -912,6 +939,7 @@ class _PowerZone extends StatelessWidget {
     required this.bitLine,
     required this.bitPose,
     required this.showBubble,
+    required this.chromeLight,
   });
 
   final double charge;
@@ -923,6 +951,7 @@ class _PowerZone extends StatelessWidget {
   final String bitLine;
   final BitPose bitPose;
   final bool showBubble;
+  final double chromeLight;
 
   @override
   Widget build(BuildContext context) {
@@ -936,7 +965,9 @@ class _PowerZone extends StatelessWidget {
             boxShadow: reelDone
                 ? [
                     BoxShadow(
-                      color: accent.withValues(alpha: 0.18 + 0.16 * pulse),
+                      color: accent.withValues(
+                        alpha: (0.18 + 0.16 * pulse) * chromeLight,
+                      ),
                       blurRadius: 8,
                       spreadRadius: -2,
                     ),
@@ -955,31 +986,35 @@ class _PowerZone extends StatelessWidget {
                   child: CustomPaint(painter: _PourStreamPainter(clock)),
                 ),
               ),
-            Column(
-              children: [
-                Semantics(
-                  excludeSemantics: true,
-                  child: SizedBox(
-                    height: 84,
-                    child: pouring && !reduceMotion
-                        ? _GlowWrap(child: _bit())
-                        : _bit(),
+            Opacity(
+              opacity: chromeLight,
+              child: Column(
+                children: [
+                  Semantics(
+                    excludeSemantics: true,
+                    child: SizedBox(
+                      height: 84,
+                      child: pouring && !reduceMotion
+                          ? _GlowWrap(child: _bit())
+                          : _bit(),
+                    ),
                   ),
-                ),
-                const SizedBox(height: kSpace2),
-                SizedBox(
-                  height: 40, // reserve the bubble's line box so BIT doesn't jump
-                  child: showBubble
-                      ? BitSpeechBubble(
-                          key: ValueKey(bitLine),
-                          text: bitLine,
-                          tailDirection: BitTailDirection.none,
-                          typewriter: !reduceMotion,
-                          fontSize: 12,
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ],
+                  const SizedBox(height: kSpace2),
+                  SizedBox(
+                    height:
+                        40, // reserve the bubble's line box so BIT doesn't jump
+                    child: showBubble
+                        ? BitSpeechBubble(
+                            key: ValueKey(bitLine),
+                            text: bitLine,
+                            tailDirection: BitTailDirection.none,
+                            typewriter: !reduceMotion,
+                            fontSize: 12,
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
