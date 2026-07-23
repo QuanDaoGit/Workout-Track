@@ -96,19 +96,22 @@ class _StartGateScreenState extends State<StartGateScreen> {
   }
 
   void _scheduleSequence() {
-    // Cumulative ms offsets from screen enter (per §5 of the build prompt).
-    _step(150, () => _cardFrameVisible = true);
-    _step(350, () => _avatarVisible = true); // 150 + 200
-    _step(550, () => _nameTyping = true); // + 200
-    _step(730, () => _untitledVisible = true); // + 180
-    _step(880, () => _badgesVisible = true); // + 150 (triggers StrobeFlash)
-    _step(1130, () => _xpBarVisible = true); // + 250
-    _step(1280, () => _countersVisible = true); // + 150
-    _step(1580, () => _promptTyping = true); // + 300 stillness beat
-    _step(2030, () => _subtextVisible = true); // + 450 (typed prompt window)
-    _step(2230, () => _primaryOn = true); // + 200
-    _step(2330, () => _secondaryOn = true); // + 100 overlap
-    _step(2530, () => _completed = true); // + 200 (buttons interactive)
+    // Cumulative ms offsets from screen enter, re-ordered payoff-first: the
+    // hero avatar + name are the peak and land first, then the identity
+    // details stagger in beneath, then BIT, then the CTAs (see Phase C of the
+    // reel→gate cinematic plan).
+    _step(120, () => _cardFrameVisible = true); // frame fades in under the hero
+    _step(120, () => _avatarVisible = true); // the face is the peak — first
+    _step(360, () => _nameTyping = true);
+    _step(560, () => _untitledVisible = true);
+    _step(720, () => _badgesVisible = true); // "system online" strobe
+    _step(980, () => _xpBarVisible = true);
+    _step(1120, () => _countersVisible = true);
+    _step(1420, () => _promptTyping = true); // BIT arrives
+    _step(1900, () => _subtextVisible = true);
+    _step(2100, () => _primaryOn = true);
+    _step(2200, () => _secondaryOn = true);
+    _step(2400, () => _completed = true);
   }
 
   void _skipToEnd() {
@@ -180,53 +183,16 @@ class _StartGateScreenState extends State<StartGateScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildCharacterCard(character, reduceMotion),
-                    const SizedBox(height: 32),
-                    // BIT embodies here — powers on below the character card and
-                    // delivers its first name-drop. Gated on the existing reveal
-                    // flags (_promptTyping / _subtextVisible) so it shows on the
-                    // timed, tap-skip, and reduce-motion paths alike; StrobeFlash
-                    // is the one-shot "online" beat (no new timers).
-                    SizedBox(
-                      height: 80,
-                      child: !_promptTyping
-                          ? const SizedBox.shrink()
-                          : StrobeFlash(
-                              trigger: _promptTyping,
-                              color: kNeon,
-                              opacity: 0.2,
-                              toggles: 1,
-                              toggleMs: 80,
-                              borderRadius: BorderRadius.circular(kCardRadius),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // The living, painted core — breathing plates +
-                                  // glow, reduced-motion-safe — the same companion
-                                  // engine the cold open / quiz / loader carry.
-                                  const BitMoodCore(
-                                    pose: BitPose.neutral,
-                                    reveal: 1,
-                                    size: 56,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: AnimatedOpacity(
-                                      duration: const Duration(
-                                        milliseconds: 200,
-                                      ),
-                                      opacity: _subtextVisible ? 1.0 : 0.0,
-                                      child: BitSpeechBubble(
-                                        text: bitPrompt,
-                                        emphasis: addressed,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                    ),
                     const Spacer(),
+                    _buildHero(character, reduceMotion),
+                    const SizedBox(height: 8),
+                    // BIT embodies here — powers on below the hero and delivers
+                    // its first name-drop. Settled values in this phase (Phase
+                    // D wires the hyped charge-arrival line/pose); gated on the
+                    // existing reveal flags so it shows on the timed, tap-skip,
+                    // and reduce-motion paths alike.
+                    _buildBitRow(bitPrompt, BitPose.neutral, addressed),
+                    const Spacer(flex: 2),
                     Semantics(
                       button: true,
                       label: 'Start workout',
@@ -276,177 +242,189 @@ class _StartGateScreenState extends State<StartGateScreen> {
     );
   }
 
-  Widget _buildCharacterCard(Character character, bool reduceMotion) {
+  /// Focal hero: a large centered framed pixel face owning the vertical
+  /// center, with the identity strip (name · untitled · badges · XP bar ·
+  /// counters) compressed beneath the portrait. Reuses the same reveal flags
+  /// as before (`_avatarVisible` … `_countersVisible`), only the composition
+  /// and reveal order changed (Phase C of the reel→gate cinematic plan).
+  Widget _buildHero(Character character, bool reduceMotion) {
     final clazz = character.calibration.clazz;
     return Semantics(
       label:
           'Character: ${character.characterName}, ${clazz.displayName}, Recruit, Level 1',
       container: true,
       child: AnimatedOpacity(
+        // Frame fades in under the hero, alongside the avatar itself.
         duration: const Duration(milliseconds: 180),
         opacity: _cardFrameVisible ? 1.0 : 0.0,
-        child: Container(
-          decoration: BoxDecoration(
-            color: kCard,
-            border: Border.all(color: kBorder),
-            borderRadius: BorderRadius.circular(kCardRadius),
-          ),
-          padding: const EdgeInsets.all(kSpace4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AnimatedOpacity(
-                    duration: const Duration(milliseconds: 180),
-                    opacity: _avatarVisible ? 1.0 : 0.0,
-                    child: Container(
-                      width: 96,
-                      height: 96,
-                      decoration: BoxDecoration(
-                        // Neutral identity frame (matches the Profile avatar
-                        // frame); the class is conveyed elsewhere, not by tinting
-                        // the user's own face.
-                        border: Border.all(color: kBorderVariant),
-                        borderRadius: BorderRadius.circular(kCardRadius),
-                        color: kBg,
-                      ),
-                      child: Center(
-                        child: IronbitAvatar(
-                          spec: widget.avatarSpec,
-                          size: 80,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          height: 28,
-                          child: !_nameTyping
-                              ? const SizedBox.shrink()
-                              : (reduceMotion
-                                    ? Text(
-                                        character.characterName,
-                                        style: const TextStyle(
-                                          fontFamily: 'PressStart2P',
-                                          fontSize: 22,
-                                          color: kText,
-                                        ),
-                                      )
-                                    : TypewriterText(
-                                        character.characterName,
-                                        charMs: 30,
-                                        style: const TextStyle(
-                                          fontFamily: 'PressStart2P',
-                                          fontSize: 22,
-                                          color: kText,
-                                        ),
-                                      )),
-                        ),
-                        const SizedBox(height: 5),
-                        AnimatedOpacity(
-                          duration: const Duration(milliseconds: 150),
-                          opacity: _untitledVisible ? 1.0 : 0.0,
-                          child: Text(
-                            'untitled',
-                            style: AppFonts.shareTechMono(
-                              color: kMutedText,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        // Badges hard-reveal (no fade) with a single StrobeFlash
-                        // pulse when they appear ("system online" beat).
-                        if (_badgesVisible)
-                          StrobeFlash(
-                            trigger: _badgesVisible,
-                            color: kNeon,
-                            opacity: 0.25,
-                            toggles: 1,
-                            toggleMs: 80,
-                            borderRadius: BorderRadius.circular(kCardRadius),
-                            child: Row(
-                              children: [
-                                const _IdentityBadge(
-                                  label: 'RECRUIT',
-                                  color: kMutedText,
-                                ),
-                                const SizedBox(width: 8),
-                                const _IdentityBadge(
-                                  label: 'LV.1',
-                                  color: kNeon,
-                                ),
-                              ],
+        child: Column(
+          children: [
+            // Focal hero: a large framed pixel face (echoes the Profile hero
+            // card).
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 180),
+              opacity: _avatarVisible ? 1.0 : 0.0,
+              child: Container(
+                width: 148,
+                height: 148,
+                decoration: BoxDecoration(
+                  border: Border.all(color: kBorderVariant),
+                  borderRadius: BorderRadius.circular(kCardRadius),
+                  color: kBg,
+                ),
+                child: Center(
+                  child: IronbitAvatar(spec: widget.avatarSpec, size: 132),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 28,
+              child: !_nameTyping
+                  ? const SizedBox.shrink()
+                  : (reduceMotion
+                        ? Text(
+                            character.characterName,
+                            style: const TextStyle(
+                              fontFamily: 'PressStart2P',
+                              fontSize: 22,
+                              color: kText,
                             ),
                           )
-                        else
-                          const SizedBox(height: 22),
-                      ],
+                        : TypewriterText(
+                            character.characterName,
+                            charMs: 30,
+                            style: const TextStyle(
+                              fontFamily: 'PressStart2P',
+                              fontSize: 22,
+                              color: kText,
+                            ),
+                          )),
+            ),
+            const SizedBox(height: 4),
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 150),
+              opacity: _untitledVisible ? 1.0 : 0.0,
+              child: Text(
+                'untitled',
+                style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
+              ),
+            ),
+            const SizedBox(height: 6),
+            if (_badgesVisible)
+              StrobeFlash(
+                trigger: _badgesVisible,
+                color: kNeon,
+                opacity: 0.25,
+                toggles: 1,
+                toggleMs: 80,
+                borderRadius: BorderRadius.circular(kCardRadius),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    _IdentityBadge(label: 'RECRUIT', color: kMutedText),
+                    SizedBox(width: 8),
+                    _IdentityBadge(label: 'LV.1', color: kNeon),
+                  ],
+                ),
+              )
+            else
+              const SizedBox(height: 22),
+            const SizedBox(height: 10),
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 150),
+              opacity: _xpBarVisible ? 1.0 : 0.0,
+              child: Container(
+                height: 8,
+                decoration: BoxDecoration(
+                  color: kBorder,
+                  borderRadius: BorderRadius.circular(kCardRadius),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 150),
+              opacity: _countersVisible ? 1.0 : 0.0,
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '0 / 50 XP',
+                        style: AppFonts.shareTechMono(
+                          color: kMutedText,
+                          fontSize: 12,
+                        ),
+                      ),
+                      // Endowed progress: reframe "0 rewards" as a quest already
+                      // in progress (mirrors the `side_first_workout` quest).
+                      Text(
+                        '1 QUEST ACTIVE',
+                        style: AppFonts.shareTechMono(
+                          color: kAmber,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '▸ First Forge · save your first workout',
+                    style: AppFonts.shareTechMono(
+                      color: kMutedText,
+                      fontSize: 11,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
-              AnimatedOpacity(
-                duration: const Duration(milliseconds: 150),
-                opacity: _xpBarVisible ? 1.0 : 0.0,
-                child: Container(
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: kBorder,
-                    borderRadius: BorderRadius.circular(kCardRadius),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              AnimatedOpacity(
-                duration: const Duration(milliseconds: 150),
-                opacity: _countersVisible ? 1.0 : 0.0,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '0 / 50 XP',
-                          style: AppFonts.shareTechMono(
-                            color: kMutedText,
-                            fontSize: 12,
-                          ),
-                        ),
-                        // Endowed progress: reframe "0 rewards" as a quest already
-                        // in progress (mirrors the `side_first_workout` quest).
-                        Text(
-                          '1 QUEST ACTIVE',
-                          style: AppFonts.shareTechMono(
-                            color: kAmber,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '▸ First Forge · save your first workout',
-                      style: AppFonts.shareTechMono(
-                        color: kMutedText,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  /// BIT's guide row beneath the hero — the living, painted core (breathing
+  /// plates + glow, reduced-motion-safe) + its speech bubble. Extracted
+  /// verbatim from the pre-Phase-C composition; gated on the same
+  /// `_promptTyping` / `_subtextVisible` reveal flags. In this phase it is
+  /// always called with the settled values (Phase D wires the hyped
+  /// charge-arrival line/pose).
+  Widget _buildBitRow(String bitLine, BitPose bitPose, String addressed) {
+    return SizedBox(
+      height: 80,
+      child: !_promptTyping
+          ? const SizedBox.shrink()
+          : StrobeFlash(
+              trigger: _promptTyping,
+              color: kNeon,
+              opacity: 0.2,
+              toggles: 1,
+              toggleMs: 80,
+              borderRadius: BorderRadius.circular(kCardRadius),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // The living, painted core — breathing plates + glow,
+                  // reduced-motion-safe — the same companion engine the cold
+                  // open / quiz / loader carry.
+                  BitMoodCore(pose: bitPose, reveal: 1, size: 56),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: _subtextVisible ? 1.0 : 0.0,
+                      child: BitSpeechBubble(
+                        text: bitLine,
+                        emphasis: addressed,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }
