@@ -54,11 +54,16 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
   static const double _beatC = 0.72; // ease-in starts; play()+beginReel() here
   static const double _dimBrightness = 0.30; // held-frame dim level
   static const double _audioTailMs = 550; // reel-end audio fade window
-  // BIT dialogue timing (narrates alongside the reel)
-  static const int _kMessageStartMs =
-      4000; // reel pos where coach's message begins
+  // BIT dialogue timing (post-reel thank-you → boost dwell)
   static const double _kHoldThankYouMs =
       3800; // thank-you dwell: type-out (~0.7s) + ~3s read → boost cue (tap skips)
+  // Held-frame BIT intro: line 1 on entry, line 2 after this dwell (self-paced —
+  // both live on the START BOOSTING wait so nothing competes with the reel).
+  static const int _kIntroLine2Ms = 3200;
+  // NOTE (deviation from the plan's Step 3, which bundles this Phase A constant
+  // with two Phase-B-only ones, `_kChromeDimFloor`/`_kReelDimRampMs`): this
+  // session implements Phase A only (Task A1/A2), so those two are deferred to
+  // Phase B's own task — adding them here now would be unused (analyze warning).
   // exit sub-ranges
   static const double _exFreeze = 0.14; // hold the final frame
   static const double _exRecedeEnd = 0.60; // picture -> scrim done
@@ -77,6 +82,7 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
   double _lastVolume = -1; // throttle setVolume() calls
   double?
   _holdStartMs; // pausable wall-clock ms stamped when the hold gate lands
+  double? _reelStartMs; // pausable clock stamped when the reel phase begins
   bool _boostCued =
       false; // latched once the boost cue / pour begins (never un-cues)
   bool _thankYouSkipped = false; // tap-to-skip the thank-you read dwell
@@ -228,6 +234,9 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     // where _exitStarted is already true, still captures it.
     if (phase == ChargeRitualPhase.hold && _holdStartMs == null) {
       _holdStartMs = _elapsedMs;
+    }
+    if (phase == ChargeRitualPhase.reel && _reelStartMs == null) {
+      _reelStartMs = _elapsedMs;
     }
     // Latch the boost cue once the pour begins, so an early pour that drains
     // back to hold (hold ⇄ pouring) never regresses BIT to the thank-you line.
@@ -464,6 +473,7 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
     final pouring = phase == ChargeRitualPhase.pouring;
     final ignited = phase == ChargeRitualPhase.ignited;
     final accent = (pouring || ignited) ? kNeon : kAmber;
+    final reelPlaying = phase == ChargeRitualPhase.reel;
     // Skip is reachable once the opening beat has landed — including during the
     // user-gated "START BOOSTING" wait (so the paused ritual is never a trap).
     final skipVisible = !ignited && _elapsedMs >= 3000;
@@ -494,16 +504,20 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
         entryV >= _beatC &&
         (_video?.value.isInitialized ?? false);
 
-    // BIT narrates alongside the reel: intro/message split by video position,
-    // post-reel thank-you → boost by a clock dwell. pouring/ignited keep priority
-    // (charge feedback). [boost]/[BOOSTING] render amber + shaky.
-    final videoPosMs = _video?.value.position.inMilliseconds ?? 0;
+    // BIT is silent during the reel (Change A): the intro lines are relocated
+    // to the self-paced held-frame wait (pre-reel), post-reel thank-you → boost
+    // advances by a clock dwell. pouring/ignited keep priority (charge feedback).
+    // [boost]/[BOOSTING] render amber + shaky.
     final holdElapsedMs = _elapsedMs - (_holdStartMs ?? _elapsedMs);
     // Boost cue = the dwell elapsed OR a pour has begun (latched) — so a release
     // back to hold before the dwell keeps the boost copy, never the thank-you.
     final boostCued =
         _boostCued || _thankYouSkipped || holdElapsedMs >= _kHoldThankYouMs;
     final bitHyped = ignited || pouring || (reelDone && boostCued);
+    final heldElapsedMs = _elapsedMs; // pre-play clock (0 at mount, ticks in preroll)
+    final introLine = heldElapsedMs < _kIntroLine2Ms
+        ? 'say hi to our coach, jack mercer.'
+        : "let's listen to his message together.";
     final bitLine = ignited
         ? "fully charged. let's keep moving."
         : pouring
@@ -512,9 +526,7 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
         ? (boostCued
               ? "alright warrior, let's [boost] this up and start strong."
               : 'thank you for the message, coach.')
-        : (videoPosMs < _kMessageStartMs
-              ? 'say hi to our coach, jack mercer.'
-              : "let's listen to his message together.");
+        : introLine;
 
     return Semantics(
       label:
@@ -565,6 +577,7 @@ class _ChargeRitualScreenState extends State<ChargeRitualScreen>
               reduceMotion: _reduceMotion,
               bitLine: bitLine,
               bitPose: bitHyped ? BitPose.cheer : BitPose.neutral,
+              showBubble: !reelPlaying,
             ),
           ),
           const Spacer(),
@@ -892,6 +905,7 @@ class _PowerZone extends StatelessWidget {
     required this.reduceMotion,
     required this.bitLine,
     required this.bitPose,
+    required this.showBubble,
   });
 
   final double charge;
@@ -902,6 +916,7 @@ class _PowerZone extends StatelessWidget {
   final bool reduceMotion;
   final String bitLine;
   final BitPose bitPose;
+  final bool showBubble;
 
   @override
   Widget build(BuildContext context) {
@@ -946,12 +961,17 @@ class _PowerZone extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: kSpace2),
-                BitSpeechBubble(
-                  key: ValueKey(bitLine),
-                  text: bitLine,
-                  tailDirection: BitTailDirection.none,
-                  typewriter: !reduceMotion,
-                  fontSize: 12,
+                SizedBox(
+                  height: 40, // reserve the bubble's line box so BIT doesn't jump
+                  child: showBubble
+                      ? BitSpeechBubble(
+                          key: ValueKey(bitLine),
+                          text: bitLine,
+                          tailDirection: BitTailDirection.none,
+                          typewriter: !reduceMotion,
+                          fontSize: 12,
+                        )
+                      : const SizedBox.shrink(),
                 ),
               ],
             ),

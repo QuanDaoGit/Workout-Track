@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 import 'package:workout_track/models/body_goal_models.dart';
 import 'package:workout_track/models/calibration_quiz_models.dart';
 import 'package:workout_track/models/character.dart';
@@ -10,6 +11,9 @@ import 'package:workout_track/pages/onboarding/charge_ritual_screen.dart';
 import 'package:workout_track/pages/onboarding/start_gate_screen.dart';
 import 'package:workout_track/services/sfx_service.dart';
 import 'package:workout_track/widgets/companion/bit_mood_core.dart';
+import 'package:workout_track/widgets/companion/bit_speech_bubble.dart';
+
+import 'helpers/fake_video_platform.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -222,5 +226,57 @@ void main() {
     // Still early — the skip stays hidden.
     expect(find.textContaining('continue without charging'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  // Task A1: these two drive `reduced: false` with a FAKE video platform (the
+  // repo's existing `helpers/fake_video_platform.dart`, already used by other
+  // widget tests for the same reason) so `VideoPlayerController.initialize()`
+  // actually succeeds. Without it, `_initVideo` fails synchronously in this
+  // test host (no platform video registered) and the existing failure-watchdog
+  // (`_engine.finishReel()`) jumps the phase straight from `preroll` to `hold`
+  // before the first pump even resolves — so the genuine pre-reel held frame
+  // (and the reel phase itself) can never be observed. The fake platform lets
+  // these tests exercise the real intended states instead of a placebo.
+  testWidgets('held frame shows the first intro line, then the second after a dwell', (
+    tester,
+  ) async {
+    final originalPlatform = VideoPlayerPlatform.instance;
+    VideoPlayerPlatform.instance = FakeVideoPlayerPlatform();
+    addTearDown(() => VideoPlayerPlatform.instance = originalPlatform);
+
+    await pumpRitual(tester, reduced: false);
+    await tester.pump();
+    // Well before the held-frame dwell, but past the ~440ms the typewriter
+    // (22ms/char) needs to reveal the "say hi to our coach" substring.
+    await advance(tester, 600);
+
+    // The START BOOSTING gate is up and BIT delivers the first invitation line.
+    expect(find.textContaining('say hi to our coach'), findsOneWidget);
+    expect(find.textContaining("listen to his message"), findsNothing);
+
+    // After the held-frame dwell the second line arrives (still pre-play).
+    await advance(tester, 3400); // > _kIntroLine2Ms (3200)
+    expect(find.textContaining("listen to his message"), findsOneWidget);
+  });
+
+  testWidgets('the BIT speech bubble is hidden while the reel plays', (tester) async {
+    final originalPlatform = VideoPlayerPlatform.instance;
+    VideoPlayerPlatform.instance = FakeVideoPlayerPlatform();
+    addTearDown(() => VideoPlayerPlatform.instance = originalPlatform);
+
+    await pumpRitual(tester, reduced: false);
+    await tester.pump();
+    await advance(tester, 1400); // video initializes; entry eases to Beat C
+
+    // On the held frame (pre-play) the bubble IS present, delivering the intro.
+    expect(find.text('START BOOSTING'), findsOneWidget);
+    expect(find.byType(BitSpeechBubble), findsOneWidget);
+
+    // Press START BOOSTING to begin playback (Beat C fade-in + reel phase).
+    await tester.tap(find.text('START BOOSTING'));
+    await tester.pump();
+
+    // While the reel plays the bubble slot renders nothing — BIT is silent.
+    expect(find.byType(BitSpeechBubble), findsNothing);
   });
 }
