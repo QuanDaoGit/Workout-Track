@@ -96,4 +96,35 @@ void main() {
     expect(find.text('START WORKOUT'), findsOneWidget);
     expect(find.text('EXPLORE FIRST'), findsOneWidget);
   });
+
+  testWidgets('the arrival never fabricates XP and BIT settles from hyped', (
+    tester,
+  ) async {
+    await pump(tester, reduced: false);
+    await tester.pump(); // post-frame kicks off _scheduleSequence + _arrival
+
+    // Just past the BIT row reveal (1420ms) BIT should be hyped, not settled.
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(find.textContaining('fully charged'), findsOneWidget);
+    expect(find.textContaining('What should we do first'), findsNothing);
+
+    // Drive past the settle point (_kBitSettleMs = 3200ms from schedule start).
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 80));
+    }
+    // The XP readout is unchanged — no fake progress was granted.
+    expect(find.textContaining('0 / 50 XP'), findsOneWidget);
+    // BIT has settled to the guiding prompt (hyped line gone).
+    expect(find.textContaining('What should we do first'), findsOneWidget);
+    expect(find.textContaining('fully charged'), findsNothing);
+  });
+
+  testWidgets('reduced motion shows the settled gate with no hyped line', (
+    tester,
+  ) async {
+    await pump(tester, reduced: true);
+    await tester.pump();
+    expect(find.textContaining('What should we do first'), findsOneWidget);
+    expect(find.textContaining('fully charged'), findsNothing);
+  });
 }

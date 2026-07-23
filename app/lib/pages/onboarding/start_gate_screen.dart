@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -41,7 +42,15 @@ class StartGateScreen extends StatefulWidget {
   State<StartGateScreen> createState() => _StartGateScreenState();
 }
 
-class _StartGateScreenState extends State<StartGateScreen> {
+class _StartGateScreenState extends State<StartGateScreen>
+    with TickerProviderStateMixin {
+  // The one-shot charge-arrival surge duration (frame ignite + name lerp +
+  // XP shimmer), and the screen-enter offset at which BIT's hyped arrival
+  // line settles to the guiding prompt (Phase D of the reel→gate cinematic
+  // plan — lands ~1.8s after the BIT row reveals at 1420ms).
+  static const int _kArrivalMs = 900;
+  static const int _kBitSettleMs = 3200;
+
   // Reveal flags driving the auto-sequence (see §5 of the build prompt).
   bool _cardFrameVisible = false;
   bool _avatarVisible = false;
@@ -56,6 +65,15 @@ class _StartGateScreenState extends State<StartGateScreen> {
   bool _secondaryOn = false;
   bool _completed = false;
 
+  // Full-motion-only: the poured charge arriving on the hero (frame glow +
+  // name color lerp + XP-bar shimmer) and BIT's hyped arrival line before it
+  // settles to the guiding prompt.
+  late final AnimationController _arrival = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: _kArrivalMs),
+  );
+  bool _bitHyped = false;
+
   final List<Timer> _timers = [];
   bool _skipDispatched = false;
 
@@ -67,12 +85,15 @@ class _StartGateScreenState extends State<StartGateScreen> {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // TalkBack / reduce-motion users land on the sustained state instantly.
+      // TalkBack / reduce-motion users land on the sustained state instantly
+      // — no arrival surge, no hyped line (WCAG fallback, byte-identical).
       final mq = MediaQuery.of(context);
       if (mq.accessibleNavigation || mq.disableAnimations) {
         _skipToEnd();
         return;
       }
+      _bitHyped = true;
+      _arrival.forward();
       _scheduleSequence();
     });
   }
@@ -82,6 +103,7 @@ class _StartGateScreenState extends State<StartGateScreen> {
     for (final t in _timers) {
       t.cancel();
     }
+    _arrival.dispose();
     super.dispose();
   }
 
@@ -112,6 +134,7 @@ class _StartGateScreenState extends State<StartGateScreen> {
     _step(2100, () => _primaryOn = true);
     _step(2200, () => _secondaryOn = true);
     _step(2400, () => _completed = true);
+    _step(_kBitSettleMs, () => _bitHyped = false); // "fully charged" → prompt
   }
 
   void _skipToEnd() {
@@ -135,6 +158,7 @@ class _StartGateScreenState extends State<StartGateScreen> {
       _primaryOn = true;
       _secondaryOn = true;
       _completed = true;
+      _bitHyped = false;
     });
   }
 
@@ -169,6 +193,8 @@ class _StartGateScreenState extends State<StartGateScreen> {
       name: character.characterName,
     );
     final bitPrompt = 'What should we do first, $addressed?';
+    final bitLine = _bitHyped ? 'fully charged, $addressed.' : bitPrompt;
+    final bitPose = _bitHyped ? BitPose.cheer : BitPose.neutral;
 
     return PopScope(
       canPop: false,
@@ -201,17 +227,13 @@ class _StartGateScreenState extends State<StartGateScreen> {
                                 _buildHero(character, reduceMotion),
                                 const SizedBox(height: 24),
                                 // BIT embodies here — powers on below the hero
-                                // and delivers its first name-drop. Settled
-                                // values in this phase (Phase D wires the hyped
-                                // charge-arrival line/pose); gated on the
-                                // existing reveal flags so it shows on the
-                                // timed, tap-skip, and reduce-motion paths
-                                // alike.
-                                _buildBitRow(
-                                  bitPrompt,
-                                  BitPose.neutral,
-                                  addressed,
-                                ),
+                                // and delivers its first name-drop, arriving
+                                // hyped (cheer) then settling to the guiding
+                                // prompt (neutral) via `_bitHyped`; gated on
+                                // the existing reveal flags so it shows on
+                                // the timed, tap-skip, and reduce-motion
+                                // paths alike.
+                                _buildBitRow(bitLine, bitPose, addressed),
                               ],
                             ),
                           ),
@@ -286,46 +308,73 @@ class _StartGateScreenState extends State<StartGateScreen> {
         child: Column(
           children: [
             // Focal hero: a large framed pixel face (echoes the Profile hero
-            // card).
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 180),
-              opacity: _avatarVisible ? 1.0 : 0.0,
-              child: Container(
-                width: 148,
-                height: 148,
-                decoration: BoxDecoration(
-                  border: Border.all(color: kBorderVariant),
-                  borderRadius: BorderRadius.circular(kCardRadius),
-                  color: kBg,
-                ),
-                child: Center(
-                  child: IronbitAvatar(spec: widget.avatarSpec, size: 132),
-                ),
+            // card). The poured charge arrives here (Phase D): the frame
+            // ignites in neon then cools as `_arrival` runs 0→1 — full
+            // motion only (reduced motion never starts `_arrival`, so
+            // `ignite` stays 0 and the boxShadow is a no-op empty list).
+            AnimatedBuilder(
+              animation: _arrival,
+              builder: (context, child) {
+                final ignite = math.sin(_arrival.value * math.pi); // 0→1→0
+                return AnimatedOpacity(
+                  duration: const Duration(milliseconds: 180),
+                  opacity: _avatarVisible ? 1.0 : 0.0,
+                  child: Container(
+                    width: 148,
+                    height: 148,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: kBorderVariant),
+                      borderRadius: BorderRadius.circular(kCardRadius),
+                      color: kBg,
+                      boxShadow: neonGlow(
+                        color: kNeon,
+                        opacity: 0.55 * ignite,
+                        blur: 22 * ignite,
+                      ),
+                    ),
+                    child: child,
+                  ),
+                );
+              },
+              child: Center(
+                child: IronbitAvatar(spec: widget.avatarSpec, size: 132),
               ),
             ),
             const SizedBox(height: 14),
-            SizedBox(
-              height: 28,
-              child: !_nameTyping
-                  ? const SizedBox.shrink()
-                  : (reduceMotion
-                        ? Text(
-                            character.characterName,
-                            style: const TextStyle(
-                              fontFamily: 'PressStart2P',
-                              fontSize: 22,
-                              color: kText,
-                            ),
-                          )
-                        : TypewriterText(
-                            character.characterName,
-                            charMs: 30,
-                            style: const TextStyle(
-                              fontFamily: 'PressStart2P',
-                              fontSize: 22,
-                              color: kText,
-                            ),
-                          )),
+            AnimatedBuilder(
+              animation: _arrival,
+              builder: (context, _) {
+                final nameColor = reduceMotion
+                    ? kText
+                    : Color.lerp(
+                        kNeon,
+                        kText,
+                        Curves.easeOut.transform(_arrival.value),
+                      )!;
+                return SizedBox(
+                  height: 28,
+                  child: !_nameTyping
+                      ? const SizedBox.shrink()
+                      : (reduceMotion
+                            ? Text(
+                                character.characterName,
+                                style: const TextStyle(
+                                  fontFamily: 'PressStart2P',
+                                  fontSize: 22,
+                                  color: kText,
+                                ),
+                              )
+                            : TypewriterText(
+                                character.characterName,
+                                charMs: 30,
+                                style: TextStyle(
+                                  fontFamily: 'PressStart2P',
+                                  fontSize: 22,
+                                  color: nameColor,
+                                ),
+                              )),
+                );
+              },
             ),
             const SizedBox(height: 4),
             AnimatedOpacity(
@@ -360,11 +409,47 @@ class _StartGateScreenState extends State<StartGateScreen> {
             AnimatedOpacity(
               duration: const Duration(milliseconds: 150),
               opacity: _xpBarVisible ? 1.0 : 0.0,
-              child: Container(
+              // The charge conducts through the bar as it reveals — ONE
+              // moving neon strip over the bar's fixed track. The bar's
+              // VALUE never changes (still 0/50); this is decoration only,
+              // never fabricated progress.
+              child: SizedBox(
                 height: 8,
-                decoration: BoxDecoration(
-                  color: kBorder,
-                  borderRadius: BorderRadius.circular(kCardRadius),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: kBorder,
+                        borderRadius: BorderRadius.circular(kCardRadius),
+                      ),
+                    ),
+                    if (!reduceMotion)
+                      AnimatedBuilder(
+                        animation: _arrival,
+                        builder: (context, _) {
+                          final t = _arrival.value;
+                          if (t <= 0 || t >= 1) return const SizedBox.shrink();
+                          return Align(
+                            alignment: Alignment(-1 + 2 * t, 0),
+                            child: FractionallySizedBox(
+                              widthFactor: 0.28,
+                              heightFactor: 1,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: kNeon.withValues(
+                                    alpha: 0.5 * math.sin(t * math.pi),
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                    kCardRadius,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
                 ),
               ),
             ),
