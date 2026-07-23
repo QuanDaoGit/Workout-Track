@@ -183,16 +183,42 @@ class _StartGateScreenState extends State<StartGateScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Spacer(),
-                    _buildHero(character, reduceMotion),
-                    const SizedBox(height: 8),
-                    // BIT embodies here — powers on below the hero and delivers
-                    // its first name-drop. Settled values in this phase (Phase
-                    // D wires the hyped charge-arrival line/pose); gated on the
-                    // existing reveal flags so it shows on the timed, tap-skip,
-                    // and reduce-motion paths alike.
-                    _buildBitRow(bitPrompt, BitPose.neutral, addressed),
-                    const Spacer(flex: 2),
+                    // Centered middle band (hero + BIT). It vertically centers
+                    // when there's room and scrolls when large text / a short
+                    // viewport would otherwise overflow — the CTAs below stay
+                    // anchored at the bottom, outside the scroll.
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => SingleChildScrollView(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: constraints.maxHeight,
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildHero(character, reduceMotion),
+                                const SizedBox(height: 24),
+                                // BIT embodies here — powers on below the hero
+                                // and delivers its first name-drop. Settled
+                                // values in this phase (Phase D wires the hyped
+                                // charge-arrival line/pose); gated on the
+                                // existing reveal flags so it shows on the
+                                // timed, tap-skip, and reduce-motion paths
+                                // alike.
+                                _buildBitRow(
+                                  bitPrompt,
+                                  BitPose.neutral,
+                                  addressed,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     Semantics(
                       button: true,
                       label: 'Start workout',
@@ -277,7 +303,7 @@ class _StartGateScreenState extends State<StartGateScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
             SizedBox(
               height: 28,
               child: !_nameTyping
@@ -310,7 +336,7 @@ class _StartGateScreenState extends State<StartGateScreen> {
                 style: AppFonts.shareTechMono(color: kMutedText, fontSize: 13),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
             if (_badgesVisible)
               StrobeFlash(
                 trigger: _badgesVisible,
@@ -330,7 +356,7 @@ class _StartGateScreenState extends State<StartGateScreen> {
               )
             else
               const SizedBox(height: 22),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
             AnimatedOpacity(
               duration: const Duration(milliseconds: 150),
               opacity: _xpBarVisible ? 1.0 : 0.0,

@@ -16,8 +16,11 @@ void main() {
   Character character() => Character(
     name: 'Nova',
     calibration: const CalibrationResult(
-      goal: BodyGoal.cut, freq: TrainingFreq.mid, exp: Experience.beginner,
-      bodyWeightKg: 72, sex: UserProfileSex.preferNotToSay,
+      goal: BodyGoal.cut,
+      freq: TrainingFreq.mid,
+      exp: Experience.beginner,
+      bodyWeightKg: 72,
+      sex: UserProfileSex.preferNotToSay,
       clazz: CharacterClass.assassin,
     ),
     classConfirmedAt: DateTime(2026, 5, 29, 12),
@@ -25,10 +28,18 @@ void main() {
     createdAt: DateTime(2026, 5, 29, 12),
   );
 
-  Future<void> pump(WidgetTester tester, {required bool reduced}) => tester.pumpWidget(
+  Future<void> pump(
+    WidgetTester tester, {
+    required bool reduced,
+    double textScale = 1.0,
+  }) => tester.pumpWidget(
     MaterialApp(
       builder: (context, child) => MediaQuery(
-        data: MediaQueryData(disableAnimations: reduced), child: child!,
+        data: MediaQueryData(
+          disableAnimations: reduced,
+          textScaler: TextScaler.linear(textScale),
+        ),
+        child: child!,
       ),
       home: StartGateScreen(character: character()),
     ),
@@ -47,6 +58,41 @@ void main() {
     expect(find.text('RECRUIT'), findsOneWidget);
     expect(find.text('LV.1'), findsOneWidget);
     expect(find.textContaining('0 / 50 XP'), findsOneWidget);
+    expect(find.text('START WORKOUT'), findsOneWidget);
+    expect(find.text('EXPLORE FIRST'), findsOneWidget);
+  });
+
+  testWidgets('the hero gate is overflow-safe under large text (1.3x)', (
+    tester,
+  ) async {
+    // The 148px hero + identity strip must not clip when text scales up: the
+    // centered middle band scrolls instead. An unhandled RenderFlex overflow
+    // throws during layout, so a null takeException proves no clipping.
+    await pump(tester, reduced: true, textScale: 1.3);
+    await tester.pump(); // post-frame skip-to-end
+    expect(tester.takeException(), isNull);
+
+    // The hero stays at full size (we absorb overflow by scrolling, never by
+    // shrinking the portrait), and both CTAs remain reachable at the bottom.
+    final avatar = tester.widget<IronbitAvatar>(find.byType(IronbitAvatar));
+    expect(avatar.size, greaterThanOrEqualTo(120));
+    expect(find.text('START WORKOUT'), findsOneWidget);
+    expect(find.text('EXPLORE FIRST'), findsOneWidget);
+  });
+
+  testWidgets('the hero gate is overflow-safe on a short viewport', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pump(tester, reduced: true, textScale: 1.15);
+    await tester.pump(); // post-frame skip-to-end
+    expect(tester.takeException(), isNull);
+
+    // CTAs stay anchored/reachable even when the middle band must scroll.
     expect(find.text('START WORKOUT'), findsOneWidget);
     expect(find.text('EXPLORE FIRST'), findsOneWidget);
   });
