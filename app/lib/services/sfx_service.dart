@@ -129,9 +129,15 @@ class SfxService {
   Future<void> playOnbCrtBoot({bool reduced = false}) =>
       _playOnb(reduced ? 'onb_crt_boot_settled' : 'onb_crt_boot');
 
-  /// BIT face-reveal power-up (solution screen — the emotional peak).
+  /// The solution-screen power-up (re-homed 2026-07-25 to the LEVEL-UP beat — it
+  /// fires when the demo bar fills to LV 2, no longer on the face reveal).
   Future<void> playOnbFaceReveal({bool reduced = false}) =>
       _playOnb(reduced ? 'onb_face_reveal_settled' : 'onb_face_reveal');
+
+  /// BIT's FACE-REVEAL cue (solution screen, the emotional peak) — an electric
+  /// spark that blooms into a breath of BIT's own formant voice (the friend
+  /// waking). Fires as the eyes begin opening; the pop lands on the surge.
+  Future<void> playOnbFaceSpark() => _playOnb('onb_face_spark');
 
   /// The class-reveal identity SEAL. Product decision (2026-07-23): the Tank
   /// voicing plays for ALL classes.
@@ -166,6 +172,70 @@ class SfxService {
 
   /// Program 'matching…' sparse thinking texture (program loader only).
   Future<void> playOnbSeekClimb() => _playOnb('onb_seek_climb');
+
+  // ── BIT voice — the drone-core boot + a PER-CHARACTER speech voice ──────────
+  // Product-owner sign-off (2026-07-23) to widen BIT's voice beyond the one-off
+  // bit_chirp. The boot is a ceremony-channel one-shot; the per-character voice
+  // (formant vox, low + electric) rides the POOLED low-latency channel (rotating
+  // 5 pitch variants) so rapid typed characters overlap instead of cutting each
+  // other. Rides the master Sound toggle only (a narrative cue, not the UI tier).
+  static const List<String> _bitVoiceAssets = [
+    'audio/onb_bit_voice_1.wav',
+    'audio/onb_bit_voice_2.wav',
+    'audio/onb_bit_voice_3.wav',
+    'audio/onb_bit_voice_4.wav',
+    'audio/onb_bit_voice_5.wav',
+  ];
+
+  /// Min gap between voice blips — a typed character can't stack faster than a
+  /// blip (also collapses several chars crossed in one frame to a single blip).
+  static const Duration bitVoiceMinGap = Duration(milliseconds: 38);
+  int _bitVoiceCursor = 0;
+  DateTime? _lastBitVoiceAt;
+
+  /// BIT's drone-core power-on (cold-open wake tap). Also warms the voice pools
+  /// so BIT's speech, a beat later, has no first-blip latency.
+  Future<void> playOnbBitBoot({bool reduced = false}) {
+    warmUpBitVoicePools();
+    return _playOnb(reduced ? 'onb_bit_boot_settled' : 'onb_bit_boot');
+  }
+
+  /// Pre-create the pooled BIT-voice players (fire-and-forget; no-op in tests).
+  Future<void> warmUpBitVoicePools() async {
+    if (_isFlutterTest) return;
+    for (final a in [..._bitVoiceAssets, 'audio/onb_bit_babble.wav']) {
+      try {
+        await _pool(a);
+      } catch (e) {
+        _poolFutures.remove(a);
+        _deadPools.add(a);
+        debugPrint('SfxService: bit-voice pool warm-up failed for $a: $e');
+      }
+    }
+  }
+
+  /// One BIT speech blip — fire per revealed non-space character. Rotates the 5
+  /// pitch variants; the min-gap keeps rapid typing from machine-gunning.
+  Future<void> playOnbBitVoice() {
+    if (!enabled) return Future<void>.value();
+    final now = nowProvider();
+    final last = _lastBitVoiceAt;
+    if (last != null && now.difference(last) < bitVoiceMinGap) {
+      return Future<void>.value();
+    }
+    _lastBitVoiceAt = now;
+    final idx = _bitVoiceCursor % _bitVoiceAssets.length;
+    _bitVoiceCursor++;
+    return _playPooled(_bitVoiceAssets[idx]);
+  }
+
+  /// A short spoken burst for a NON-typed BIT line (the faded "I am BIT" line;
+  /// reduced-motion lines) — a pre-rendered 3-blip babble on the pooled channel
+  /// so it coexists with the boot without cutting it.
+  Future<void> playOnbBitBabble() {
+    if (!enabled) return Future<void>.value();
+    return _playPooled('audio/onb_bit_babble.wav');
+  }
 
   // ── Interaction tier — the pooled low-latency micro channel ────────────────
   // Unlike the ceremony channel above (one player, interrupt-on-play), these
@@ -216,6 +286,12 @@ class SfxService {
   final Map<String, Future<AudioPool>> _poolFutures = {};
   final Set<String> _deadPools = {};
 
+  /// True from background ([releaseUiPools]) until resume ([warmUpUiPools]) — a
+  /// UI sound that fires while backgrounded must NOT lazily recreate a pool the
+  /// teardown just disposed (a new loaded player would survive to replay on the
+  /// next foreground, the exact bug releaseUiPools exists to prevent — Codex).
+  bool _uiPoolsSuspended = false;
+
   /// Route ALL app audio into a mix-with-others sonification context.
   ///
   /// audioplayers' Android default is `AUDIOFOCUS_GAIN` + `USAGE_MEDIA` — every
@@ -254,11 +330,16 @@ class SfxService {
       usageType: AndroidUsageType.assistanceSonification,
       audioFocus: AndroidAudioFocus.none,
     ),
-    // Ambient already mixes with other audio and respects the silent switch;
-    // audioplayers asserts that `mixWithOthers` may only be passed EXPLICITLY
-    // for playback/playAndRecord/multiRoute, so the option must stay off here
-    // (passing it is what made this whole context fail to apply).
-    iOS: AudioContextIOS(category: AVAudioSessionCategory.ambient),
+    // iOS: `playback` so the arcade SFX play even when the ring/silent switch is
+    // ON (game-standard — product decision 2026-07-24), BUT with `mixWithOthers`
+    // so we still never interrupt the user's music/podcast (the "don't hijack
+    // your audio" doctrine holds cross-platform). audioplayers allows
+    // `mixWithOthers` explicitly only for playback/playAndRecord/multiRoute —
+    // `playback` satisfies that, so the context applies cleanly.
+    iOS: AudioContextIOS(
+      category: AVAudioSessionCategory.playback,
+      options: const {AVAudioSessionOptions.mixWithOthers},
+    ),
   );
 
   Future<void> applyGlobalAudioContext() async {
@@ -276,6 +357,7 @@ class SfxService {
   /// degrades to silence, never a throw into boot.
   Future<void> warmUpUiPools() async {
     onUiPoolActionForTest?.call('warm');
+    _uiPoolsSuspended = false; // resumed — pooled UI SFX may build again
     if (_isFlutterTest) return;
     final assets = kUiSoundSpecs.values.expand((s) => s.assets);
     for (final asset in assets) {
@@ -300,6 +382,9 @@ class SfxService {
   /// failure is logged, never thrown into the lifecycle callback.
   Future<void> releaseUiPools() async {
     onUiPoolActionForTest?.call('release');
+    // Block lazy pool recreation until resume — a UI sound firing while
+    // backgrounded must not survive the teardown into the next foreground.
+    _uiPoolsSuspended = true;
     if (_isFlutterTest) return;
     final pending = _poolFutures.values.toList();
     _poolFutures.clear();
@@ -338,7 +423,9 @@ class SfxService {
 
   Future<void> _playPooled(String asset) async {
     onPlayForTest?.call(asset);
-    if (_isFlutterTest || _deadPools.contains(asset)) return;
+    if (_isFlutterTest || _uiPoolsSuspended || _deadPools.contains(asset)) {
+      return;
+    }
     try {
       final pool = await _pool(asset);
       await pool.start();
@@ -460,6 +547,11 @@ class SfxService {
   @visibleForTesting
   bool get homeAmbienceOn => _ambienceOn;
 
+  /// Whether pooled UI SFX are suspended (backgrounded, pre-resume) — a test
+  /// seam for the recreation-race guard.
+  @visibleForTesting
+  bool get uiPoolsSuspended => _uiPoolsSuspended;
+
   /// Restore every static + instance mutable knob this service exposes —
   /// cooldown stamps, variant cursors, injected clock, test recorder, pool
   /// caches — so one test's state can't silence or redirect the next (Codex).
@@ -476,6 +568,7 @@ class SfxService {
     _variantCursor.clear();
     _poolFutures.clear();
     _deadPools.clear();
+    _uiPoolsSuspended = false;
     _ambienceOn = false;
     _ambienceFade = 1.0;
   }

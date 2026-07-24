@@ -9,14 +9,18 @@ import '../../widgets/companion/bit_core_engine.dart' show bitGlow;
 import '../../widgets/companion/bit_mood_core.dart';
 import '../../widgets/pixel_button.dart';
 
+/// Letters/digits fire BIT's per-character speech blip (spaces/punctuation stay
+/// silent — they're the pauses in speech).
+final _bitSpeakChar = RegExp(r'[A-Za-z0-9]');
+
 /// Screen 3 — the Solution. The **emotional peak** of the onboarding intro and
 /// the payoff to Screen 2's low: the companion **BIT**, carried in still slumped
 /// (rest), **bursts into a cheer face** (energetic, amber — eyes open, a grin,
 /// plates spread) as he says *"HERE, EVERY REP LEVELS YOU UP"*, then **settles to
 /// a steady neutral** (turquoise) for *"YOU WILL KEEP COMING BACK FOR MORE"*.
-/// Now present, he runs a small **level-up preview** (fills then resets — a
-/// demonstration, never an earned reward). Only the CTA advances; a background
-/// tap completes the intro.
+/// Only **after** both lines land does he run a small **level-up preview** (fills
+/// then resets — a demonstration, never an earned reward). Only the CTA advances;
+/// a background tap completes the intro.
 ///
 /// The cheer burst → neutral settle is the focal beat (one phosphor-soft glow
 /// surge + one haptic; no rapid strobe/shake). Reduced motion renders the
@@ -29,9 +33,10 @@ class SolutionView extends StatefulWidget {
   static const designWidth = 390.0;
   static const designHeight = 844.0;
 
-  // Intro timeline (ms within a ~3700ms controller). The weighty power-up:
-  // carry-in → anticipation INHALE → surge → peak HOLD → settle. Tunable knobs.
-  static const _totalMs = 3700;
+  // Intro timeline (ms within a ~6750ms controller). The weighty power-up:
+  // carry-in → anticipation INHALE → surge → peak HOLD → settle → BIT speaks
+  // both lines (paced, per-character) → the level-up preview. Tunable knobs.
+  static const _totalMs = 6750;
   static const _inhaleStartMs = 520; // the coil begins to gather (ease in)
   static const _inhalePeakMs = 760; // deepest inhale; pose flips rest→cheer here
   static const _surgeStartMs = 760; // (== inhale peak) the surge fires
@@ -41,18 +46,25 @@ class SolutionView extends StatefulWidget {
   static const _bloomAtMs = 1340; // the surge punch — glow surge + haptic
   static const _blinkStartMs = 1380; // one blink — the "sign of life"
   static const _blinkEndMs = 1540;
-  static const _settleStartMs = 1920; // peak-hold done → cheer → neutral settle
-  static const _idleRampEndMs = 2320; // idle bob/breathe faded back to full
+  static const _settleStartMs = 2650; // in the STOP (after line 1) → cheer→neutral
+  static const _idleRampEndMs = 3010; // idle bob/breathe faded back to full
+  // BIT SPEAKS FIRST, PACED — line 1 (cheer, the face reveals on "HERE"), a real
+  // STOP, then line 2 (neutral). Each line types at ~58ms/char — SLOWER than the
+  // 38ms voice min-gap (SfxService.bitVoiceMinGap), so EVERY letter's blip plays:
+  // a faster reveal machine-guns past the gate and drops blips (not per-character).
+  // This is the audition rate the walkthrough uses, so the app matches it.
   static const _line1StartMs = 880; // "HERE, EVERY REP / LEVELS YOU UP" (cheer)
-  static const _line1EndMs = 1720;
-  static const _line2StartMs = 2000; // "YOU WILL KEEP COMING / BACK FOR MORE"
-  static const _line2EndMs = 2840;
-  static const _demoStartMs = 1100; // the level preview fills (with line 1)…
-  static const _demoFillEndMs = 1720;
-  static const _demoHoldMs = 1880; // …shows LV 2 briefly…
-  static const _demoResetEndMs = 2200; // …then resets to locked (honest)
-  static const _ctaStartMs = 3000;
-  static const _ctaEndMs = 3400;
+  static const _line1EndMs = 2560; // 29 chars × ~58ms
+  static const _line2StartMs = 3010; // ~450ms stop, then "YOU WILL KEEP COMING…"
+  static const _line2EndMs = 4980; // 34 chars × ~58ms
+  // The level-up preview appears ONLY AFTER BIT finishes both lines (fills → LV 2
+  // → resets to locked: a demonstration, honest — nothing earned before training).
+  static const _demoStartMs = 5280; // a beat after the last word, then it appears
+  static const _demoFillEndMs = 5840;
+  static const _demoHoldMs = 6020; // …holds LV 2 (the payoff)…
+  static const _demoResetEndMs = 6280; // …then resets to locked (honest)
+  static const _ctaStartMs = 6340;
+  static const _ctaEndMs = 6700;
 
   // BIT rises from the Screen-2 carry-in home up to its Screen-3 stage as it
   // bursts (motivates the rise; leaves room for the lines + preview below).
@@ -86,9 +98,17 @@ class _SolutionViewState extends State<SolutionView>
   static const _bloomBurstMs = <double>[1340, 1540, 1740];
   int _bloomPulses = 0;
   bool _bloomFired = false;
-  // One-shot for the BIT face-reveal cue (shared by the animated inhale edge and
-  // the reduced/settled path) so no rebuild or path-cross can replay it.
+  // One-shot for the ceremony power-up SFX (onb_face_reveal). It now lands with
+  // the LEVEL-UP — when the bar finishes filling to LV 2 — not on the face reveal.
+  // Shared by the animated path (_maybeFireCeremony) and the reduced/settled path.
   bool _faceRevealFired = false;
+  // One-shot for the FACE-REVEAL spark cue (onb_face_spark), fired at reveal-start
+  // on the animated path only (reduced motion gets the single settled cue).
+  bool _faceSparkFired = false;
+  // BIT speaks per-character as each line types — one blip per newly-revealed
+  // letter, off the same counts the visible text uses (frame-exact sync).
+  int _line1Voiced = 0;
+  int _line2Voiced = 0;
 
   @override
   void initState() {
@@ -97,6 +117,8 @@ class _SolutionViewState extends State<SolutionView>
       if (status == AnimationStatus.completed) _finishIntro();
     });
     _introController.addListener(_maybeFireBloom);
+    _introController.addListener(_bitVoiceTick);
+    _introController.addListener(_maybeFireCeremony);
   }
 
   @override
@@ -136,6 +158,9 @@ class _SolutionViewState extends State<SolutionView>
 
   @override
   void dispose() {
+    _introController.removeListener(_maybeFireBloom);
+    _introController.removeListener(_bitVoiceTick);
+    _introController.removeListener(_maybeFireCeremony);
     _introController.dispose();
     _ctaPulseController.dispose();
     super.dispose();
@@ -144,15 +169,17 @@ class _SolutionViewState extends State<SolutionView>
   void _maybeFireBloom() {
     if (_bloomFired || _reducedMotion) return;
     final ms = _introController.value * SolutionView._totalMs;
-    // Face-reveal cue rides the anticipation INHALE edge (asset t=0 == controller
-    // ~520ms; the apex is baked at asset 0.82s, so START at the inhale, not the
-    // bloom). One-shot so a stuttered/repeated frame can't replay it.
-    if (!_faceRevealFired && ms >= SolutionView._inhaleStartMs) {
-      _faceRevealFired = true;
-      SfxService.instance.playOnbFaceReveal();
+    // The FACE-REVEAL cue: an electric spark that blooms into BIT's own voice,
+    // fired as the eyes begin opening (its pop lands on the surge). Distinct from
+    // the level-up ceremony (_maybeFireCeremony). One-shot.
+    if (!_faceSparkFired && ms >= SolutionView._revealStartMs) {
+      _faceSparkFired = true;
+      SfxService.instance.playOnbFaceSpark();
     }
-    // Fire every burst beat the frame crossed (while-loop: a stuttered frame
-    // still lands all three), then mark the burst spent.
+    // The reward-haptic burst still rides the cheer apex (the face reveal); only
+    // the ceremony SFX moved to the level-up (see _maybeFireCeremony). Fire every
+    // burst beat the frame crossed (while-loop: a stuttered frame still lands all
+    // three), then mark the burst spent.
     while (_bloomPulses < _bloomBurstMs.length && ms >= _bloomBurstMs[_bloomPulses]) {
       _bloomPulses++;
       HapticService.instance.reward();
@@ -160,12 +187,60 @@ class _SolutionViewState extends State<SolutionView>
     if (_bloomPulses >= _bloomBurstMs.length) _bloomFired = true;
   }
 
+  // The ceremony power-up SFX now lands with the LEVEL-UP, not the face reveal: it
+  // fires once the bar has finished filling to LV 2 (_demoFillEndMs) — the "level
+  // up!" beat. One-shot so a stuttered/repeated frame can't replay it.
+  void _maybeFireCeremony() {
+    if (_faceRevealFired || _reducedMotion) return;
+    final ms = _introController.value * SolutionView._totalMs;
+    if (ms >= SolutionView._demoFillEndMs) {
+      _faceRevealFired = true;
+      SfxService.instance.playOnbFaceReveal();
+    }
+  }
+
+  // Fire one voice blip per newly-revealed letter of each line (spaces/newlines/
+  // punctuation stay silent — the pauses in speech). Off the same _countFor the
+  // visible text uses, so audio and the on-screen letter are frame-locked.
+  void _bitVoiceTick() {
+    if (_reducedMotion || _complete) return;
+    final ms = _introController.value * SolutionView._totalMs;
+    final l1 = _countFor(
+        ms, SolutionView._line1StartMs, SolutionView._line1EndMs, _line1.length);
+    final l2 = _countFor(
+        ms, SolutionView._line2StartMs, SolutionView._line2EndMs, _line2.length);
+    while (_line1Voiced < l1) {
+      _voiceChar(_line1, _line1Voiced);
+      _line1Voiced++;
+    }
+    while (_line2Voiced < l2) {
+      _voiceChar(_line2, _line2Voiced);
+      _line2Voiced++;
+    }
+  }
+
+  void _voiceChar(String s, int i) {
+    if (i < 0 || i >= s.length) return;
+    if (_bitSpeakChar.hasMatch(s[i])) SfxService.instance.playOnbBitVoice();
+  }
+
   void _finishIntro() {
     if (_complete) return;
     _introController.stop();
-    _introController.value = 1;
+    // Settle + arm EVERY one-shot guard BEFORE jumping the controller to 1, so
+    // the listeners (which fire on `value = 1`) all early-return. Otherwise an
+    // early background-tap skip drains the whole timeline in one frame — stacking
+    // the face-spark + level-up ceremony, all three bloom haptics, and a bulk
+    // voice loop (Codex/self review). A skip then gets exactly ONE settled cue.
     _complete = true;
     _bloomFired = true;
+    _bloomPulses = _bloomBurstMs.length;
+    _faceSparkFired = true;
+    if (!_faceRevealFired) {
+      _faceRevealFired = true;
+      SfxService.instance.playOnbFaceReveal(reduced: true);
+    }
+    _introController.value = 1;
     if (!_reducedMotion && !_ctaPulseController.isAnimating) {
       _ctaPulseController.repeat(reverse: true);
     }
@@ -271,6 +346,11 @@ class _SolutionViewState extends State<SolutionView>
             (ms >= SolutionView._line2StartMs && ms < SolutionView._line2EndMs));
 
     final demo = _demoState(ms);
+    // The level-up meter APPEARS only after BIT finishes talking (fades in at the
+    // demo start), then stays put in the settled state. Hidden through the lines.
+    final demoOpacity = _complete
+        ? 1.0
+        : ((ms - SolutionView._demoStartMs) / 200).clamp(0.0, 1.0);
 
     final ctaT = _complete
         ? 1.0
@@ -334,7 +414,7 @@ class _SolutionViewState extends State<SolutionView>
           right: 0,
           child: ExcludeSemantics(
             child: Opacity(
-              opacity: reveal.clamp(0.0, 1.0),
+              opacity: demoOpacity,
               child: _LevelDemoMeter(fill: demo.$1, levelTwo: demo.$2),
             ),
           ),

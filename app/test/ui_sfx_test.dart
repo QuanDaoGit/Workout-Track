@@ -178,6 +178,36 @@ void main() {
     });
   });
 
+  group('UI pool lifecycle (background teardown / resume re-warm)', () {
+    // The fix for the iOS resume-replay burst: on background the pooled
+    // UI-sound players are disposed (nothing left for iOS to re-fire when the
+    // audio session reactivates on foreground), then re-warmed on resume. The
+    // platform dispose/create is test-skipped, so the `onUiPoolActionForTest`
+    // seam — fired before that skip — IS the observable contract here.
+    test('release then warm both run their contract and never throw', () async {
+      final actions = <String>[];
+      SfxService.onUiPoolActionForTest = actions.add;
+      addTearDown(() => SfxService.onUiPoolActionForTest = null);
+
+      // Background → foreground, the root_page lifecycle order.
+      await SfxService.instance.releaseUiPools();
+      // Suspended between background and resume — pooled UI SFX can't recreate a
+      // pool that would survive the teardown into the next foreground (Codex).
+      expect(SfxService.instance.uiPoolsSuspended, isTrue);
+      await SfxService.instance.warmUpUiPools();
+      expect(SfxService.instance.uiPoolsSuspended, isFalse);
+
+      expect(actions, ['release', 'warm']);
+    });
+
+    test('release is idempotent and safe with no pools built', () async {
+      // Calling it twice (e.g. paused → paused without an intervening resume)
+      // must stay a safe no-op, never throwing into the lifecycle callback.
+      await SfxService.instance.releaseUiPools();
+      await SfxService.instance.releaseUiPools();
+    });
+  });
+
   group('UiSoundSettingsService', () {
     test('defaults on, persists a flip', () async {
       expect(await UiSoundSettingsService().isEnabled(), isTrue);
@@ -273,15 +303,19 @@ void main() {
   group('global audio context', () {
     test('constructs without tripping audioplayers\' own asserts', () {
       // The platform call is test-skipped, but audioplayers VALIDATES the
-      // context with constructor asserts — so an invalid combination (e.g.
-      // iOS ambient + an explicit mixWithOthers option) only ever threw at
-      // runtime, where the catch logged it and silently dropped the Android
-      // audioFocus:none intent ("app sounds never pause the user's music").
-      // Constructing the real context here is the regression guard.
+      // context with constructor asserts — so an invalid combination throws at
+      // construction (which the runtime catch would log while silently dropping
+      // the whole context). iOS uses `playback` + an explicit `mixWithOthers`
+      // (plays even when the silent switch is on, but still mixes with the
+      // user's audio); that combination is valid. This is the regression guard.
       final context = SfxService.buildGlobalAudioContext();
       expect(context.android.audioFocus, AndroidAudioFocus.none);
       expect(context.android.usageType, AndroidUsageType.assistanceSonification);
-      expect(context.iOS.category, AVAudioSessionCategory.ambient);
+      expect(context.iOS.category, AVAudioSessionCategory.playback);
+      expect(
+        context.iOS.options,
+        contains(AVAudioSessionOptions.mixWithOthers),
+      );
     });
   });
 }

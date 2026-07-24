@@ -11,12 +11,17 @@ class TypewriterText extends StatefulWidget {
     this.style,
     this.charMs = 40,
     this.textAlign,
+    this.onChar,
   });
 
   final String text;
   final TextStyle? style;
   final int charMs;
   final TextAlign? textAlign;
+
+  /// Fired with each newly-revealed character (used to drive BIT's per-character
+  /// speech voice). Default null = no callback.
+  final void Function(String char)? onChar;
 
   @override
   State<TypewriterText> createState() => _TypewriterTextState();
@@ -50,7 +55,9 @@ class _TypewriterTextState extends State<TypewriterText> {
         t.cancel();
         return;
       }
+      final ch = widget.text[_count];
       setState(() => _count++);
+      widget.onChar?.call(ch);
     });
   }
 

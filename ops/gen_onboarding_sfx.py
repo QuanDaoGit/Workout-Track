@@ -18,8 +18,9 @@ Deterministic. Re-run after any edit:
 
 Assets (write_wav peak on the loudness ladder in parens):
     onb_crt_boot / _settled          (0.32 / 0.28) — the cabinet powers on (first sound)
-    onb_face_reveal / _v2 / _v3       (0.32 / 0.33 / 0.30) — BIT reveals its face (the peak)
+    onb_face_reveal / _v2 / _v3       (0.32 / 0.33 / 0.30) — the power-up (now the LEVEL-UP beat)
     onb_face_reveal_settled           (0.24) — reduced-motion arrival
+    onb_face_spark                    (0.30) — BIT's FACE REVEAL (spark -> formant-voice bloom)
     onb_class_seal_{bruiser,assassin,tank} (0.33) — the class identity SEAL
     onb_class_gate_tick               (0.10) — 'I AM <CLASS>' commit becomes tappable
     onb_name_arm_1..3 / _rm           (0.24) — the self-naming vow arming
@@ -375,6 +376,55 @@ def bit_face_reveal_settled(seed=41):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# BEAT: face_spark — BIT's FACE REVEAL cue (2026-07-25). A separate, short cue for
+# the eyes-open moment (the ceremony power-up above was re-homed to the level-up
+# beat). "A1d" from the spark/pop audition: an electric spark that BLOOMS into a
+# breath of BIT's OWN voice — the friend waking. Asset t=0 == controller ~820ms
+# (reveal start); the pop lands ~1340ms (the surge), then the formant 'aah' blooms.
+# ═══════════════════════════════════════════════════════════════════════════════
+def bit_face_spark(seed=41):
+    crk = 0.52
+    # 1 — CRACKLE fizz building toward the pop (rides the eyes opening): bandpass-
+    #     swept noise, a 3ms sample-and-hold flicker (grain, not hiss), amp rising.
+    n = int(crk * SR)
+    bed = sweep_noise(n, 1500, 3400, 0.75, seed)
+    rng = random.Random(seed + 9)
+    hold, held = int(0.003 * SR), 0.0
+    fizz = []
+    for i in range(n):
+        if i % hold == 0:
+            held = 0.35 + 0.65 * abs(rng.uniform(-1, 1))
+        fizz.append(bed[i] * (0.08 + 0.34 * ((i / n) ** 1.9)) * held)
+    # 2 — the warm POP on the surge: a low body thump + a bright electric spark + a
+    #     soft tonal glint (the "catch" of life).
+    nb = int(0.055 * SR)
+    body = [s * 0.55 for s in
+            apply_env(bl_square(glide(210, 85, 0.055), 0.9), env_ad(nb, 0.002, 0.055, 4.5))]
+    ns = int(0.024 * SR)
+    spark = [s * 0.42 for s in
+             apply_env(noise_bp(ns, 3600, q=1.1, seed=seed + 3), env_ad(ns, 0.0015, 0.024, 6.0))]
+    ng = int(0.05 * SR)
+    glint = [s * 0.06 for s in apply_env(tri_wave([C6] * ng), env_ad(ng, 0.003, 0.05, 3.0))]
+    pop = mix(body, spark, glint)
+    # 3 — the BLOOM: a soft rising FORMANT 'aah' G5->C6 (a low square + an upper
+    #     ~2.4x resonance == the bit_voice formant colour) — BIT's own voice waking.
+    na = int(0.30 * SR)
+    fr = glide(G5, C6, 0.30)
+    aenv = env_ad(na, 0.04, 0.30, 2.4)
+    fade = int(0.08 * SR)
+    for i in range(na - fade, na):
+        aenv[i] *= (na - i) / fade
+    aah = [s * 0.40 for s in
+           apply_env(mix(bl_square(fr, 0.6), bl_square([f * 2.4 for f in fr], 0.28)), aenv)]
+    return mix(
+        silence(0.92),                       # length anchor
+        fizz,                                # @0.00 crackle
+        silence(crk) + pop,                  # @0.52 pop (== the surge)
+        silence(crk + 0.03) + aah,           # @0.55 the formant bloom
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # BEAT: class_reveal — the identity SEAL (struck-then-rings), class-coloured.
 # Buffer t=0 == the 120ms slam. (workflow recipe, verbatim)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -607,6 +657,71 @@ def onboarding_seek_climb(dur=3.2):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# BIT VOICE family — the drone-core boot (cold-open wake tap) + a PER-CHARACTER
+# speech voice (cold open + problem typewriters). Product-owner sign-off
+# (2026-07-23) to widen BIT's voice beyond the one-off bit_chirp. Audition picks:
+# boot = "electric hum-up"; voice = "formant vox" (low + electric + serious —
+# square-rich so a low fundamental still carries on phone speakers).
+# ═══════════════════════════════════════════════════════════════════════════════
+_BITV_FUNDS = [175.0, 195.0, 210.0, 185.0, 222.0]   # low, per-variant intonation
+
+
+def _fade_out(sig, fade_s):
+    f = max(1, int(fade_s * SR))
+    nn = len(sig)
+    for i in range(max(0, nn - f), nn):
+        sig[i] *= (nn - i) / f
+    return sig
+
+
+def bit_boot():
+    """Electric hum-up: crackle flickers -> a rising filtered-noise whir + a low
+    tone -> a bright pop + tri settle. BIT the drone-core waking (~1.0s)."""
+    flick = []
+    for k in range(4):
+        d = 0.02
+        b = apply_env(noise_bp(int(d * SR), 1500 + k * 300, q=0.6, seed=70 + k),
+                      env_ad(int(d * SR), 0.001, d, 5))
+        flick += [s * 0.5 for s in b] + silence(0.03 + 0.01 * k)
+    nw = int(0.6 * SR)
+    whir = [s * 0.35 for s in apply_env(sweep_noise(nw, 400, 2400, 0.6, 88),
+                                        [(0.15 + 0.85 * (i / nw)) for i in range(nw)])]
+    tone = [s * 0.4 for s in apply_env(bl_square(glide(120, 500, 0.6), 0.5),
+                                       [(0.1 + 0.9 * (i / nw)) for i in range(nw)])]
+    pop = apply_env(noise_bp(int(0.02 * SR), 2600, q=0.6, seed=99), env_ad(int(0.02 * SR), 0.001, 0.02, 5))
+    stone = apply_env(tri_wave([E6] * int(0.14 * SR), 0.6), env_ad(int(0.14 * SR), 0.004, 0.14, 3.5))
+    return _fade_out(flick + mix(whir, tone) +
+                     mix([s * 0.5 for s in pop], silence(0.01) + [s * 0.5 for s in stone]), 0.04)
+
+
+def bit_boot_settled():
+    """Reduced-motion boot: a short single power-on blip + settle chord (~0.26s)."""
+    rise = apply_env(bl_square(glide(400, C6, 0.12), 0.6), env_ad(int(0.12 * SR), 0.01, 0.12, 2))
+    chord = mix(apply_env(bl_square([C6] * int(0.14 * SR), 0.5), env_ad(int(0.14 * SR), 0.004, 0.14, 3)),
+                apply_env(bl_square([E6] * int(0.14 * SR), 0.35), env_ad(int(0.14 * SR), 0.004, 0.14, 3)))
+    return _fade_out(rise + chord, 0.03)
+
+
+def bit_voice(fund):
+    """One PER-CHARACTER speech blip — FORMANT VOX: a low square + an upper
+    resonance (~2.4x) for a low 'vowel'/vocal electric quality (~52ms). Rotated
+    across [_BITV_FUNDS] for speech-like intonation."""
+    n = int(0.052 * SR)
+    fr = glide(fund * 1.12, fund, 0.052)
+    v1 = bl_square(fr, 0.75)
+    v2 = bl_square([x * 2.4 for x in fr], 0.32)
+    return _fade_out(apply_env(mix(v1, v2), env_ad(n, 0.003, 0.052, 5)), 0.008)
+
+
+def bit_babble():
+    """A short spoken burst for a NON-typed BIT line (the faded 'I am BIT' line;
+    reduced-motion lines) — 3 formant blips ~64ms apart, since there are no
+    per-character reveals to ride."""
+    return (bit_voice(195.0) + silence(0.012) + bit_voice(175.0)
+            + silence(0.012) + bit_voice(210.0))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 def main():
     print("generating onboarding SFX ->", _OUT_DIR)
     # crt_boot
@@ -618,6 +733,8 @@ def main():
     write_wav("onb_face_reveal_v3",
               bit_face_reveal(peak_body=0.30, triad_curve=4.5, sparkle_gain=0.4, seed=17), 0.30)
     write_wav("onb_face_reveal_settled", bit_face_reveal_settled(), 0.24)
+    # face_spark — the eyes-open cue (spark that blooms into BIT's own voice)
+    write_wav("onb_face_spark", bit_face_spark(), 0.30)
     # class_reveal
     for k in ("bruiser", "assassin", "tank"):
         write_wav(f"onb_class_seal_{k}", build_class_reveal_seal(k), 0.33)
@@ -636,6 +753,12 @@ def main():
     write_wav("onb_resolve", onboarding_resolve(False), 0.16)
     write_wav("onb_ready", onboarding_resolve(True), 0.16)
     write_wav("onb_seek_climb", onboarding_seek_climb(), 0.06)
+    # BIT voice family (audition picks: electric hum-up boot + formant-vox voice)
+    write_wav("onb_bit_boot", bit_boot(), 0.28)
+    write_wav("onb_bit_boot_settled", bit_boot_settled(), 0.26)
+    for i, f in enumerate(_BITV_FUNDS, 1):
+        write_wav(f"onb_bit_voice_{i}", bit_voice(f), 0.12)
+    write_wav("onb_bit_babble", bit_babble(), 0.14)
     print("done.")
 
 

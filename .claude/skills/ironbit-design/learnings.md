@@ -114,7 +114,23 @@ collapse than power-*on*, against the usual "exits faster") when the user asks f
 effect gets its **own controller** (a reused one couples its timing onto unrelated readers), and a cue that
 must survive the route (the ignition SFX) needs its **own audio channel**, not the shared single-player a
 next-screen sound would cut. *(2026-07, Charge Ritual power-cycle climax — Codex plan review + a golden
-caught the solid-bright-fill flash.)*
+caught the solid-bright-fill flash.)* **A DORMANT/resting hero (a sleeping mascot, an off/standby object)
+reads DEAD + SAD unless it (a) carries a *sub-pixel sleeping-breath* (a slow tiny float + a slow glow-breathe;
+a frozen dormant sprite with only a static ember is a lifeless prop, not a resting-alive presence), and
+(b) has a *cozy standby* glow — warmer/brighter than a dead-off blip, but still dim (a resting pool of light,
+not a faint dead ring). The breath must vanish the instant the wake starts (`off→false`) so it can't spend a
+staged wake reveal, and be gated off under reduced motion (a still, cozy-lit frame — never a dead one).**
+**Compose the first-impression HERO or it reads sad/lonely, no matter the sprite:** never CRAM a caption onto
+the hero sprite (Gestalt proximity — a zero-gap label is clutter; give it a deliberate gap, or GROUP it with
+the wordmark as a header, off the sprite); and don't strand a small dim subject in one big *unmotivated* void
+(a small subject in vast empty space literally reads *loneliness/isolation* — photography composition, but it
+transfers). Fix by balancing the negative space into *purposeful zones* (grouped header ↑ · hero centered ·
+CTAs anchored ↓), so gaps read as intentional separation, not dead space; keep the neon CTA the one bright
+action but give the hero enough warm presence to co-anchor, not be out-competed into a sad afterthought.
+*Seen: the merged cold-open LANDING shipped a dim frozen BIT alone in a top-heavy void with the tagline
+jammed on its plates → user "feels terrible, sad · text too cramped to BIT"; fixed by grouping the tagline
+into the header, balancing the three zones, and giving dormant BIT a sleeping-breath + cozier standby, all
+within a Codex-operationalized "still asleep" boundary — research skill + Codex needs-attention, 2026-07-24.*
 
 ### Contrast by luminance, not hue
 **Rule:** Legibility of particles/text/icons on a fill is driven by **luminance** contrast. On a
@@ -150,14 +166,20 @@ Pick ONE hero, isolate it (whitespace/size/position), rank the rest; group relat
 weighted common-region panels, never one box per element ("cage of rectangles"). **Section-consistency:**
 peers at the *same* tier must share a grouping treatment (all framed or all not) — a lone unframed peer
 beside framed ones reads as *accidental*; weight differs *across* tiers (a hero sub-label may stay
-unframed), never *within* one. *Seen: Home muted brand vs neon CTA (2026-06); the mission card then
+unframed), never *within* one. **This is cross-modal: the heaviest CUE (sound/haptic/motion) must sit on
+the *emotional* peak. RELOCATING a peak's cue onto a lesser beat leaves the peak under-dressed — an
+anticlimax — so re-provision the vacated peak with its own cue, and give two cues on adjacent beats
+*distinct textures* (a spark-that-blooms vs a melodic power-up) so they read as two beats, not one blur.** *Seen: Home muted brand vs neon CTA (2026-06); the mission card then
 over-corrected to one flat grey → re-tiered to a white hero + framed PATH panel + neon action; a bare
 NEXT row beside the framed PATH read orphaned → gave NEXT a lighter common-region panel via the same
 `ArcadeCard` primitive, weighted under PATH (2026-06). **De-chroming a prestige cue can silently sink
 it below the noise:** collapsing the profile's two stacked LV/RANK chips into one typographic stamp
 line nearly demoted CHAMPION into level-metadata — fix is to keep the *meaning-bearing* cue (rank) the
 **sole accent + a size/weight lead** and mute the detail (level), not average both peers to equal-grey
-(2026-06).*
+(2026-06). Moving the solution-screen ceremony SFX off the face reveal onto the level-up left the
+emotional PEAK silent (user: "not ceremonious enough") → gave the reveal its own distinct
+spark-that-blooms cue (electric pop → a breath of BIT's own formant voice), keeping the melodic power-up
+on the level-up so the two beats stay distinct (2026-07-25).*
 
 ### No redundant chrome bands
 **Rule:** Don't add a label/hint strip that restates what an adjacent surface already shows — it
